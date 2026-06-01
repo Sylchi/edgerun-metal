@@ -1,5 +1,65 @@
 # EdgeRun Authorization & Resource Model
 
+## Honest Authority Model
+
+EdgeRun does not grant symbolic access and then arbitrate a hidden shared pool
+later. A user grant is an allocation contract: if RAM, durable flush capacity,
+identity access, display, input, clock, or Tor role authority is granted, the
+kernel allocates that resource in full for the app and records the receipt. If
+the grant is missing or capacity is unavailable, the capability does not exist
+for that app.
+
+WASM apps do not get ambient sockets, process-global filesystem access, DNS,
+password databases, or host networking calls. Apps route through the Tor
+protocol and must use the device relay for nonlocal communication. Apps may
+manage their own Tor-compatible routing only inside their granted authority.
+
+Authentication is not a password prompt added to content after the fact.
+Authority is carried by identities, requirements, receipts, grants, and sealed
+objects:
+
+- App content can be sealed by the app through SDK tooling.
+- User data is sealed for the USER identity.
+- Device data is sealed for the DEVICE identity.
+- Object requirements describe who may move, decrypt, verify, or flush the data.
+
+Agents and implementations must not replace this model with conventional OS
+assumptions such as paths as authority, sockets as networking capability,
+overcommitted resources, implicit shared caches, or password-based ambient
+authorization. Keeping resources and data requirements explicit is the security
+boundary.
+
+## Implementation Truth Check
+
+The model is true only when each boundary below is enforced by host-side code,
+not merely described by app-side helpers or documentation.
+
+| Boundary | Current state | Required host-side enforcement |
+| --- | --- | --- |
+| WASM ambient authority | Partly enforced. The current host import table exposes only DA surface imports; no raw route, storage, TCP, filesystem, DNS, or POSIX imports are exported to WASM. | Keep all app authority behind explicit imports backed by grants. Any new import must name the grant/receipt it consumes and fail closed without it. |
+| Memory ownership | Partly enforced. WASM `memory.grow` cannot exceed the runtime memory buffer; JIT rejects grow through the same explicit boundary. DA app launch now binds each registered app slot to its own full runtime memory allocation instead of a shared buffer. | Add the host grant registry and page allocator so the runtime memory buffer itself comes only from a signed allocation receipt, and release/revoke it deterministically. |
+| Durable storage | Not yet enforced for apps. The persistent store is an append-only block-backed WAL, but it is not yet gated by app flush receipts or sealed object requirements. | Add `er_flush` admission: dirty app RAM objects may enter durable store only with app identity, valid grant receipt, durable capacity, object requirements, and TPM-mediated flush key. |
+| Object requirements | Partly enforced. Host object code validates and hashes requirement fields and object envelopes structurally. | Enforce requirements at every move/decrypt/verify/flush boundary, including portability, confidentiality, integrity, lifetime, visibility, and access. |
+| Data sealing | Partly implemented in app-side SDK concepts and host crypto primitives. | Bind app/user/device sealing to TPM-mediated key release where available; reject private durable data that lacks the required envelope. |
+| Routing | Partly enforced. Local identity routing is local-first; unknown valid identities use the kernel public relay path by default. Raw route/circuit authority is not exported to WASM. | Add grant-backed Tor role/session imports for the SDK. Apps may manage Tor-compatible routing only inside granted route handles and must use the device relay for nonlocal communication. |
+| Kernel public relay and domain authority | Partial Tor client/onion-service pieces exist; relay/domain authority operation is not complete. | Implement public relay identity, AUTHENTICATE, certificate validation, descriptor/domain authority state, relay-side CREATE2/EXTEND2, SENDME/window accounting, and deterministic tests. |
+| Resource contention | Not true until grants allocate real capacity. | Never overcommit granted resources. Admission must fail when full capacity cannot be reserved. No hidden shared caches, spillover, or best-effort downgrade. |
+| Receipts | App-side receipt/grant structures exist. Host-side receipt registry is not yet authoritative. | Make kernel-created receipts canonical objects for grant creation, allocation, routing, flush, reclaim, and revocation. |
+
+Before enabling untrusted WASM apps, the minimum host-side chain is:
+
+1. Parse app manifest and compute APP identity from the loaded WASM bytes.
+2. Create or locate the signed user grant receipt.
+3. Reserve the full memory, durable flush capacity, route handles, device handles,
+   and execution ticks named by the receipt.
+4. Construct the WASM runtime from that owned allocation only.
+5. Export only grant-backed imports to the app.
+6. Route nonlocal identity traffic through the device relay.
+7. Admit durable objects only through explicit flush, object requirements, and
+   TPM-mediated sealing where available.
+8. Emit receipts for grant creation, allocation, routing, flush, reclaim, and
+   revocation.
+
 ## Principals
 
 Every actor in the system has a 32-byte BLAKE3 identity bound to a TPM seed:

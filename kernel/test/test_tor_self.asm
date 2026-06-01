@@ -393,13 +393,16 @@ _start:
     ASSERT_MEM_EQ [rel hsdir_fetch_expected], [rel req_buf], hsdir_fetch_expected_len
 
 ; ================================================================
-; Test 12: identity route requires registered relay forwarding
+; Test 12: kernel public relay is the default IPC path for remote identities
 ; ================================================================
     TEST_DEBUG_LABEL "12"
     lea     rdi, [rel route_hash]
     lea     rsi, [rel route_cell]
     call    er_route_send
-    ASSERT_RDX ERROR_LOCAL_NOT_FOUND
+    ASSERT_RDX 0
+    lea     rax, [rel route_cell]
+    ASSERT_EQ qword [rel last_relay_data], rax
+    ASSERT_EQ dword [rel last_relay_len], LOCAL_CELL_SIZE
 
     lea     rdi, [rel route_hash]
     call    er_route_register_relay
@@ -458,6 +461,10 @@ _start:
     ASSERT_EQ eax, 0
     ASSERT_RDX 0
 
+    mov     edi, TOR_ROLE_EXIT
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+
     mov     dword [rel circuit_create_count], 0
     call    er_tor_init
     ASSERT_EQ eax, -1
@@ -465,6 +472,10 @@ _start:
     ASSERT_EQ dword [rel circuit_create_count], 1
     ASSERT_MEM_EQ [rel guard_fingerprint], [rel last_circuit_node_id], 20
     ASSERT_MEM_EQ [rel guard_onion_key], [rel last_circuit_onion_key], 32
+    call    er_tor_get_role
+    ASSERT_EQ eax, TOR_ROLE_EXIT
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_OR_RELAY | TOR_CAP_EXIT
 
 %ifdef TOR_BENCH
 ; ================================================================

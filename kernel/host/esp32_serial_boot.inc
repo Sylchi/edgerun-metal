@@ -104,9 +104,40 @@
 %define MEM_END_ENTRY_POINT     4
 %define MEM_END_DATA_BYTES      8
 
+; ---- FLASH_BEGIN parameters ----
+; Data payload: 4 x 32-bit words
+;   [0] total_size       ; total bytes to write
+;   [1] num_packets      ; number of data packets
+;   [2] packet_size      ; max bytes per data packet
+;   [3] flash_offset     ; SPI flash destination offset
+%define FLASH_BEGIN_TOTAL_SIZE  0
+%define FLASH_BEGIN_NUM_PACKETS 4
+%define FLASH_BEGIN_PACKET_SIZE 8
+%define FLASH_BEGIN_OFFSET      12
+%define FLASH_BEGIN_DATA_BYTES  16
+
+; ---- FLASH_DATA parameters ----
+; Data payload: 4 x 32-bit words + raw data
+;   [0] data_size        ; bytes of data in this packet
+;   [1] sequence_num     ; 0-based sequence number
+;   [2-3] reserved       ; zero
+;   [16..] data          ; raw bytes to write
+%define FLASH_DATA_SIZE         0
+%define FLASH_DATA_SEQUENCE     4
+%define FLASH_DATA_HEADER_BYTES 16
+
+; ---- FLASH_END parameters ----
+; Data payload: 1 x 32-bit word
+;   [0] reboot_flag      ; 0 = reboot after write, 1 = stay in loader
+%define FLASH_END_REBOOT_FLAG   0
+%define FLASH_END_DATA_BYTES    4
+
 ; ---- Default values ----
 %define ESP_DEFAULT_BAUD        115200
 %define ESP_MEM_PACKET_SIZE     16384   ; 16KB per packet (fits in IRAM)
+%define ESP_FLASH_PACKET_SIZE   1024    ; ROM flash block size
+%define ESP_DEFAULT_FLASH_OFF   0x00010000
+%define ESP32S3_IRAM_ENTRY      0x40374000
 %define ESP_SYNC_TIMEOUT_MS     100
 %define ESP_RESPONSE_TIMEOUT_MS 3000
 
@@ -257,20 +288,6 @@
 %define SYS_nanosleep           35
 %define SYS_openat              257
 
-; ---- Helper: build a command packet header in a buffer ----
-; Args: buf (rdi), command (sil), data_size (edx)
-; Clobbers: eax, ecx
-; Returns: header at [rdi], rax = total packet size (header + data_size + 2 for SLIP ENDs)
-%macro build_packet_header 0
-    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
-    mov     byte [rdi + PKT_COMMAND], sil
-    mov     [rdi + PKT_SIZE], dx          ; size (16-bit LE)
-    xor     eax, eax
-    mov     [rdi + PKT_CHECKSUM], eax     ; checksum = 0 (most commands)
-    mov     eax, PKT_HEADER_BYTES
-    add     eax, edx
-%endmacro
-
 ; ---- Helper: SLIP-encode a buffer into another buffer ----
 ; Args: src (rdi), src_len (esi), dst (rdx)
 ; Returns: rax = encoded length
@@ -378,27 +395,6 @@
     mov     [rdi + MEM_BEGIN_NUM_PACKETS], edx
     mov     [rdi + MEM_BEGIN_PACKET_SIZE], ecx
     mov     [rdi + MEM_BEGIN_MEM_OFFSET], r8d
-%endmacro
-
-; ---- Helper: build MEM_DATA payload ----
-; Args: buf (rdi), data_size (esi), seq_num (edx), data_ptr (rcx)
-; Clobbers: r8, r9
-%macro build_mem_data 0
-    mov     [rdi + MEM_DATA_SIZE], esi
-    mov     [rdi + MEM_DATA_SEQUENCE], edx
-    mov     dword [rdi + 8], 0
-    mov     dword [rdi + 12], 0
-    ; Copy data into payload
-    lea     r8, [rdi + MEM_DATA_HEADER_BYTES]
-    xor     r9d, r9d
-.%%copy:
-    cmp     r9d, esi
-    jae     .%%done
-    mov     al, [rcx + r9]
-    mov     [r8 + r9], al
-    inc     r9d
-    jmp     .%%copy
-.%%done:
 %endmacro
 
 ; ---- Helper: build MEM_END payload ----

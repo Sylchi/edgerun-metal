@@ -418,8 +418,17 @@
     test    rdx, rdx
     jnz     .corrupt_error
     push    rax
-    call    reader_read_byte        ; table_index (LEB, but table index is small)
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32    ; table_index
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     pop     r15                     ; type_index -> r15
     ; Pop function index from stack
     call    exec_stack_pop
@@ -1291,8 +1300,17 @@
 ; Table ops
 ; =================================================================+
 .op_table_get:
-    call    reader_read_byte   ; table index (skip, only table 0 supported)
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     call    exec_stack_pop
     jc      .underflow_error
     cmp     rax, [table_min]
@@ -1303,8 +1321,17 @@
     jmp     .dispatch_next
 
 .op_table_set:
-    call    reader_read_byte
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     call    exec_stack_pop   ; value
     jc      .underflow_error
     push    rax
@@ -2354,10 +2381,20 @@
     je      .ext_memory_copy
     cmp     eax, EXT_MEMORY_FILL
     je      .ext_memory_fill
+    cmp     eax, EXT_TABLE_INIT
+    je      .ext_table_init
+    cmp     eax, EXT_ELEM_DROP
+    je      .ext_elem_drop
+    cmp     eax, EXT_TABLE_COPY
+    je      .ext_table_copy
+    cmp     eax, EXT_TABLE_GROW
+    je      .ext_table_grow
+    cmp     eax, EXT_TABLE_SIZE
+    je      .ext_table_size
+    cmp     eax, EXT_TABLE_FILL
+    je      .ext_table_fill
 
-    ; All other extended opcodes (table ops) - unsupported for now
-    er_err  ERROR_UNSUPPORTED
-    jmp     .error_return
+    jmp     .unsupported_error
 
 ; ==================================================================
 ; Saturating truncation ops (0xfc prefix, opcodes 0-7)
@@ -2583,8 +2620,17 @@
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
     pop     rsi
-    call    reader_read_byte ; memory index (0)
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     pop     r15             ; segment index
     ; Pop dest, src, count from stack
     call    exec_stack_pop  ; n
@@ -2605,9 +2651,11 @@
     imul    r10, DATA_SEGMENT_SIZE
     mov     rbx, r10
 
-    ; Check segment is not dropped (active != 0)
+    ; memory.init consumes passive, not-yet-dropped data segments.
     cmp     byte [data_segments + rbx + 24], 0
-    je      .memory_trap
+    jne     .memory_trap
+    cmp     byte [data_segments + rbx + 25], 0
+    jne     .memory_trap
 
     ; Check s + n <= bytes_len
     mov     rax, [data_segments + rbx + 16]  ; bytes_len
@@ -2653,6 +2701,9 @@
     mov     r10, rax
     imul    r10, DATA_SEGMENT_SIZE
 
+    cmp     byte [data_segments + r10 + 24], 0
+    jne     .memory_trap
+
     ; Set active = 0, dropped = 1
     mov     byte [data_segments + r10 + 24], 0
     mov     byte [data_segments + r10 + 25], 1
@@ -2661,10 +2712,28 @@
 
 .ext_memory_copy:
     ; Read dest memory index, then src memory index
-    call    reader_read_byte
-    jc      .corrupt_error
-    call    reader_read_byte
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     ; Pop n, s, d
     call    exec_stack_pop  ; n
     jc      .underflow_error
@@ -2701,8 +2770,17 @@
     jmp     .dispatch_next
 
 .ext_memory_fill:
-    call    reader_read_byte
-    jc      .corrupt_error
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     ; Pop n, val, d
     call    exec_stack_pop  ; n
     jc      .underflow_error
@@ -2729,6 +2807,254 @@
     call    er_memset
 
     jmp     .dispatch_next
+
+; ==================================================================
+; Table bulk ops
+; =================================================================+
+.ext_table_init:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    mov     r15, rax            ; element segment index
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    call    exec_stack_pop      ; n
+    jc      .underflow_error
+    mov     r14, rax
+    call    exec_stack_pop      ; s
+    jc      .underflow_error
+    mov     r13, rax
+    call    exec_stack_pop      ; d
+    jc      .underflow_error
+    mov     r12, rax
+    cmp     r15, [element_segment_count]
+    jae     .memory_trap
+    mov     r10, r15
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    cmp     byte [element_segments + r10 + 264], 1
+    jne     .memory_trap
+    cmp     byte [element_segments + r10 + 265], 0
+    jne     .memory_trap
+    mov     rax, r13
+    add     rax, r14
+    jc      .memory_trap
+    cmp     rax, [element_segments + r10 + 256]
+    ja      .memory_trap
+    mov     rax, r12
+    add     rax, r14
+    jc      .memory_trap
+    cmp     rax, [table_min]
+    ja      .memory_trap
+    xor     r11d, r11d
+.table_init_loop:
+    cmp     r11, r14
+    jae     .dispatch_next
+    mov     rax, [element_segments + r10 + r13 * 8]
+    mov     [table_entries + r12 * 8], rax
+    inc     r13
+    inc     r12
+    inc     r11
+    jmp     .table_init_loop
+
+.ext_elem_drop:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    cmp     rax, [element_segment_count]
+    jae     .memory_trap
+    mov     r10, rax
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    cmp     byte [element_segments + r10 + 264], 1
+    jne     .memory_trap
+    mov     byte [element_segments + r10 + 265], 1
+    jmp     .dispatch_next
+
+.ext_table_copy:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    call    exec_stack_pop      ; n
+    jc      .underflow_error
+    mov     r14, rax
+    call    exec_stack_pop      ; s
+    jc      .underflow_error
+    mov     r13, rax
+    call    exec_stack_pop      ; d
+    jc      .underflow_error
+    mov     r12, rax
+    mov     rax, r13
+    add     rax, r14
+    jc      .memory_trap
+    cmp     rax, [table_min]
+    ja      .memory_trap
+    mov     rax, r12
+    add     rax, r14
+    jc      .memory_trap
+    cmp     rax, [table_min]
+    ja      .memory_trap
+    test    r14, r14
+    jz      .dispatch_next
+    cmp     r12, r13
+    ja      .table_copy_backward
+.table_copy_forward:
+    mov     rax, [table_entries + r13 * 8]
+    mov     [table_entries + r12 * 8], rax
+    inc     r13
+    inc     r12
+    dec     r14
+    jnz     .table_copy_forward
+    jmp     .dispatch_next
+.table_copy_backward:
+    add     r13, r14
+    add     r12, r14
+.table_copy_backward_loop:
+    dec     r13
+    dec     r12
+    mov     rax, [table_entries + r13 * 8]
+    mov     [table_entries + r12 * 8], rax
+    dec     r14
+    jnz     .table_copy_backward_loop
+    jmp     .dispatch_next
+
+.ext_table_grow:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    call    exec_stack_pop      ; n
+    jc      .underflow_error
+    mov     r14, rax
+    call    exec_stack_pop      ; init value
+    jc      .underflow_error
+    mov     r13, rax
+    mov     r12, [table_min]
+    mov     rax, r12
+    add     rax, r14
+    jc      .table_grow_fail
+    cmp     rax, MAX_TABLE_ENTRIES
+    ja      .table_grow_fail
+    mov     rcx, [table_max]
+    test    rcx, rcx
+    jz      .table_grow_allowed
+    cmp     rax, rcx
+    ja      .table_grow_fail
+.table_grow_allowed:
+    mov     r11, r12
+.table_grow_loop:
+    cmp     r11, rax
+    jae     .table_grow_done
+    mov     [table_entries + r11 * 8], r13
+    inc     r11
+    jmp     .table_grow_loop
+.table_grow_done:
+    mov     [table_min], rax
+    mov     rax, r12
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+.table_grow_fail:
+    mov     rax, -1
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.ext_table_size:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    mov     rax, [table_min]
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.ext_table_fill:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_error
+    test    eax, eax
+    jnz     .memory_trap
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    call    exec_stack_pop      ; n
+    jc      .underflow_error
+    mov     r14, rax
+    call    exec_stack_pop      ; val
+    jc      .underflow_error
+    mov     r13, rax
+    call    exec_stack_pop      ; i
+    jc      .underflow_error
+    mov     r12, rax
+    mov     rax, r12
+    add     rax, r14
+    jc      .memory_trap
+    cmp     rax, [table_min]
+    ja      .memory_trap
+.table_fill_loop:
+    test    r14, r14
+    jz      .dispatch_next
+    mov     [table_entries + r12 * 8], r13
+    inc     r12
+    dec     r14
+    jmp     .table_fill_loop
 
 ; ==================================================================
 ; Opcode immediate skipping helper
@@ -2768,19 +3094,20 @@
     je      .skip_leb_i64
     cmp     bl, 0x0e         ; br_table
     je      .skip_br_table
-    cmp     bl, 0x28         ; i32.load etc.
-    ret
-    cmp     bl, 0x3f         ; below memory_size
-    jb      .skip_load_store
-    cmp     bl, 0x40         ; memory_grow
-    je      .skip_leb
     cmp     bl, 0x1c         ; select_typed
     je      .skip_select_typed
+    cmp     bl, 0x28         ; i32.load etc.
+    jb      .skip_no_immediate
+    cmp     bl, 0x3f         ; below memory_size
+    jb      .skip_load_store
+    cmp     bl, 0x40         ; memory.size/grow
+    jbe     .skip_leb
     cmp     bl, 0xd0         ; ref.null
     je      .skip_byte
     cmp     bl, 0xd2         ; ref.func
     je      .skip_leb
     ; For most opcodes, no immediates to skip
+.skip_no_immediate:
     ret
 
 .skip_leb:
@@ -2835,11 +3162,13 @@
     call    er_wasm_read_leb_u32    ; type_index
     test    rdx, rdx
     jnz     .skip_error
+    call    er_wasm_read_leb_u32    ; table_index
+    test    rdx, rdx
+    jnz     .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
     pop     rsi
-    call    reader_read_byte        ; table_index
     ret
 
 .skip_load_store:
@@ -2899,7 +3228,20 @@
     ret
 
 .skip_select_typed:
-    call    reader_read_byte  ; type count (should be 1)
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .skip_error
+    cmp     eax, 1
+    jne     .skip_error
+    cmp     byte [rsi], 0x7f
+    jne     .skip_error
+    inc     rsi
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
     ret
 
 .skip_error:

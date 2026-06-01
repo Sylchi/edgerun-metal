@@ -56,7 +56,7 @@ er_fn er_ip_set_config
 ; er_checksum — compute 16-bit one's complement checksum
 ; uint16_t er_checksum(const void *buf, uint32_t len)
 ;
-; Sums all 16-bit words, folds carry, returns one's complement.
+; Sums all 16-bit network-order words, folds carry, returns one's complement.
 ; ==================================================================
 er_fn er_checksum
     push    rbx
@@ -70,7 +70,11 @@ er_fn er_checksum
     jz      .done_bytes
 
 .sum_loop:
-    add     ax, [rbx]
+    movzx   edx, byte [rbx]
+    shl     edx, 8
+    movzx   edi, byte [rbx + 1]
+    or      edx, edi
+    add     ax, dx
     adc     ax, 0           ; add carry
     add     rbx, 2
     dec     ecx
@@ -267,9 +271,11 @@ er_fn er_ip_send
 
 ; ==================================================================
 ; er_ip_handle — process incoming IP packet
-; void er_ip_handle(const uint8_t *frame, uint32_t frame_len)
+; int er_ip_handle(const uint8_t *frame, uint32_t frame_len)
 ;
 ; Validates IP header, checks protocol field, dispatches to TCP/UDP.
+; Invalid, corrupt, or non-local frames are dropped successfully.
+; Valid local packets with unsupported protocols fail explicitly.
 ; ==================================================================
 er_fn er_ip_handle
     push    rbx
@@ -347,7 +353,7 @@ er_fn er_ip_handle
     ; Dispatch by protocol
     movzx   eax, byte [rbx + IP_PROTOCOL]
     cmp     al, IP_PROTO_TCP
-    jne     .check_udp
+    jne     .unsupported_protocol
 
     ; Dispatch to TCP
     mov     rdi, rbx        ; IP header start
@@ -360,15 +366,19 @@ er_fn er_ip_handle
     call    er_tcp_handle
     jmp     .done
 
-.check_udp:
-    ; UDP not yet implemented — silently drop
-    jmp     .done
+.unsupported_protocol:
+    mov     eax, -1
+    er_err  ERROR_UNSUPPORTED
+    jmp     .ret
 
 .done:
+    xor     eax, eax
+    er_ok
+
+.ret:
     pop     r13
     pop     r12
     pop     rbx
-    er_ok
     er_ret
 ; ==================================================================
 

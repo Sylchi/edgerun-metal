@@ -14,16 +14,25 @@ MP4_BOX_TYPE_FTYP                   equ 0x70797466 ; "ftyp" little-endian load
 MP4_BOX_TYPE_MDAT                   equ 0x7461646d ; "mdat" little-endian load
 MP4_BOX_TYPE_MOOV                   equ 0x766f6f6d ; "moov" little-endian load
 MP4_BOX_TYPE_TRAK                   equ 0x6b617274 ; "trak" little-endian load
+MP4_BOX_TYPE_TKHD                   equ 0x64686b74 ; "tkhd" little-endian load
 MP4_BOX_TYPE_MDIA                   equ 0x6169646d ; "mdia" little-endian load
+MP4_BOX_TYPE_MDHD                   equ 0x6468646d ; "mdhd" little-endian load
+MP4_BOX_TYPE_HDLR                   equ 0x726c6468 ; "hdlr" little-endian load
 MP4_BOX_TYPE_MINF                   equ 0x666e696d ; "minf" little-endian load
 MP4_BOX_TYPE_STBL                   equ 0x6c627473 ; "stbl" little-endian load
 MP4_BOX_TYPE_STSD                   equ 0x64737473 ; "stsd" little-endian load
+MP4_BOX_TYPE_STTS                   equ 0x73747473 ; "stts" little-endian load
+MP4_BOX_TYPE_CTTS                   equ 0x73747463 ; "ctts" little-endian load
+MP4_BOX_TYPE_STSS                   equ 0x73737473 ; "stss" little-endian load
 MP4_BOX_TYPE_STSC                   equ 0x63737473 ; "stsc" little-endian load
 MP4_BOX_TYPE_STSZ                   equ 0x7a737473 ; "stsz" little-endian load
 MP4_BOX_TYPE_STCO                   equ 0x6f637473 ; "stco" little-endian load
+MP4_BOX_TYPE_CO64                   equ 0x34366f63 ; "co64" little-endian load
 MP4_BOX_TYPE_AV01                   equ 0x31307661 ; "av01" little-endian load
 MP4_BOX_TYPE_AV1C                   equ 0x43317661 ; "av1C" little-endian load
 MP4_BRAND_AV01                      equ 0x31307661 ; "av01" little-endian load
+MP4_HANDLER_TYPE_VIDE               equ 0x65646976 ; "vide" little-endian load
+MP4_HANDLER_TYPE_SOUN               equ 0x6e756f73 ; "soun" little-endian load
 
 MP4_FTYP_MAJOR_BRAND                equ 0
 MP4_FTYP_MINOR_VERSION              equ 4
@@ -39,9 +48,71 @@ MP4_BOX_DESC_NEXT_OFFSET            equ 16
 MP4_BOX_DESC_SIZE                   equ 24
 
 MP4_FULLBOX_HEADER_SIZE             equ 4
+MP4_FULLBOX_VERSION                 equ 0
+
+MP4_MDHD_V0_MIN_PAYLOAD             equ 24
+MP4_MDHD_V0_TIMESCALE               equ 12
+MP4_MDHD_V0_DURATION                equ 16
+MP4_MDHD_V1_MIN_PAYLOAD             equ 36
+MP4_MDHD_V1_TIMESCALE               equ 20
+MP4_MDHD_V1_DURATION_HI             equ 24
+MP4_MDHD_V1_DURATION_LO             equ 28
+MP4_MDHD_DESC_TIMESCALE             equ 0
+MP4_MDHD_DESC_DURATION              equ 4
+MP4_MDHD_DESC_SIZE                  equ 8
+
+MP4_TKHD_V0_MIN_PAYLOAD             equ 84
+MP4_TKHD_V0_DURATION                equ 20
+MP4_TKHD_V0_WIDTH                   equ 76
+MP4_TKHD_V0_HEIGHT                  equ 80
+MP4_TKHD_V1_MIN_PAYLOAD             equ 96
+MP4_TKHD_V1_DURATION_HI             equ 28
+MP4_TKHD_V1_DURATION_LO             equ 32
+MP4_TKHD_V1_WIDTH                   equ 88
+MP4_TKHD_V1_HEIGHT                  equ 92
+MP4_TKHD_FIXED_16_SHIFT             equ 16
+MP4_TKHD_DESC_DURATION              equ 0
+MP4_TKHD_DESC_WIDTH                 equ 4
+MP4_TKHD_DESC_HEIGHT                equ 8
+MP4_TKHD_DESC_SIZE                  equ 16
+
+MP4_HDLR_MIN_PAYLOAD                equ 24
+MP4_HDLR_HANDLER_TYPE               equ 8
+MP4_HDLR_DESC_HANDLER_TYPE          equ 0
+MP4_HDLR_DESC_SIZE                  equ 8
+
 MP4_STSD_ENTRY_COUNT_OFFSET         equ 4
 MP4_STSD_FIRST_ENTRY_OFFSET         equ 8
+MP4_VISUAL_SAMPLE_ENTRY_DATA_REF    equ 6
+MP4_VISUAL_SAMPLE_ENTRY_WIDTH       equ 24
+MP4_VISUAL_SAMPLE_ENTRY_HEIGHT      equ 26
 MP4_VISUAL_SAMPLE_ENTRY_CHILD_OFFSET equ 78
+MP4_VISUAL_SAMPLE_ENTRY_DESC_DATA_REF equ 0
+MP4_VISUAL_SAMPLE_ENTRY_DESC_WIDTH  equ 4
+MP4_VISUAL_SAMPLE_ENTRY_DESC_HEIGHT equ 8
+MP4_VISUAL_SAMPLE_ENTRY_DESC_SIZE   equ 16
+
+MP4_STTS_ENTRY_COUNT_OFFSET         equ 4
+MP4_STTS_FIRST_ENTRY_OFFSET         equ 8
+MP4_STTS_ENTRY_SIZE                 equ 8
+MP4_STTS_ENTRY_SAMPLE_COUNT         equ 0
+MP4_STTS_ENTRY_SAMPLE_DELTA         equ 4
+MP4_STTS_DESC_SAMPLE_COUNT          equ 0
+MP4_STTS_DESC_SAMPLE_DELTA          equ 4
+MP4_STTS_DESC_SIZE                  equ 8
+
+MP4_CTTS_ENTRY_COUNT_OFFSET         equ 4
+MP4_CTTS_FIRST_ENTRY_OFFSET         equ 8
+MP4_CTTS_ENTRY_SIZE                 equ 8
+MP4_CTTS_ENTRY_SAMPLE_COUNT         equ 0
+MP4_CTTS_ENTRY_SAMPLE_OFFSET        equ 4
+MP4_CTTS_DESC_SAMPLE_COUNT          equ 0
+MP4_CTTS_DESC_SAMPLE_OFFSET         equ 4
+MP4_CTTS_DESC_SIZE                  equ 8
+
+MP4_STSS_ENTRY_COUNT_OFFSET         equ 4
+MP4_STSS_FIRST_ENTRY_OFFSET         equ 8
+MP4_STSS_ENTRY_SIZE                 equ 4
 
 MP4_STSC_ENTRY_COUNT_OFFSET         equ 4
 MP4_STSC_FIRST_ENTRY_OFFSET         equ 8
@@ -62,6 +133,62 @@ MP4_STSZ_ENTRY_SIZE                 equ 4
 MP4_STCO_ENTRY_COUNT_OFFSET         equ 4
 MP4_STCO_FIRST_ENTRY_OFFSET         equ 8
 MP4_STCO_ENTRY_SIZE                 equ 4
+
+MP4_CO64_ENTRY_COUNT_OFFSET         equ 4
+MP4_CO64_FIRST_ENTRY_OFFSET         equ 8
+MP4_CO64_ENTRY_SIZE                 equ 8
+
+MP4_SAMPLE_TABLES_STSZ_DESC         equ 0
+MP4_SAMPLE_TABLES_STCO_DESC         equ MP4_SAMPLE_TABLES_STSZ_DESC + MP4_BOX_DESC_SIZE
+MP4_SAMPLE_TABLES_STSC_DESC         equ MP4_SAMPLE_TABLES_STCO_DESC + MP4_BOX_DESC_SIZE
+MP4_SAMPLE_TABLES_SIZE              equ MP4_SAMPLE_TABLES_STSC_DESC + MP4_BOX_DESC_SIZE
+
+MP4_SAMPLE_DESC_PAYLOAD_OFFSET      equ 0
+MP4_SAMPLE_DESC_PAYLOAD_LEN         equ 4
+MP4_SAMPLE_DESC_CHUNK_INDEX         equ 8
+MP4_SAMPLE_DESC_INDEX_IN_CHUNK      equ 12
+MP4_SAMPLE_DESC_SIZE                equ 16
+
+MP4_SAMPLE_TIME_DTS                 equ 0
+MP4_SAMPLE_TIME_DURATION            equ 4
+MP4_SAMPLE_TIME_PTS                 equ 8
+MP4_SAMPLE_TIME_SIZE                equ 16
+
+MP4_STTS_SAMPLE_TIME_CUR_DESC       equ 0
+MP4_STTS_SAMPLE_TIME_ENTRY_COUNT    equ MP4_STTS_SAMPLE_TIME_CUR_DESC + MP4_STTS_DESC_SIZE
+MP4_STTS_SAMPLE_TIME_ENTRY_INDEX    equ MP4_STTS_SAMPLE_TIME_ENTRY_COUNT + 4
+MP4_STTS_SAMPLE_TIME_SAMPLE_CURSOR  equ MP4_STTS_SAMPLE_TIME_ENTRY_INDEX + 4
+MP4_STTS_SAMPLE_TIME_DTS            equ MP4_STTS_SAMPLE_TIME_SAMPLE_CURSOR + 4
+MP4_STTS_SAMPLE_TIME_STACK_SIZE     equ 32
+
+MP4_CTTS_SAMPLE_OFFSET_CUR_DESC     equ 0
+MP4_CTTS_SAMPLE_OFFSET_ENTRY_COUNT  equ MP4_CTTS_SAMPLE_OFFSET_CUR_DESC + MP4_CTTS_DESC_SIZE
+MP4_CTTS_SAMPLE_OFFSET_ENTRY_INDEX  equ MP4_CTTS_SAMPLE_OFFSET_ENTRY_COUNT + 4
+MP4_CTTS_SAMPLE_OFFSET_SAMPLE_CURSOR equ MP4_CTTS_SAMPLE_OFFSET_ENTRY_INDEX + 4
+MP4_CTTS_SAMPLE_OFFSET_STACK_SIZE   equ 32
+
+MP4_SAMPLE_LOC_CUR_STSC             equ 0
+MP4_SAMPLE_LOC_NEXT_STSC            equ MP4_SAMPLE_LOC_CUR_STSC + MP4_STSC_DESC_SIZE
+MP4_SAMPLE_LOC_ENTRY_COUNT          equ MP4_SAMPLE_LOC_NEXT_STSC + MP4_STSC_DESC_SIZE
+MP4_SAMPLE_LOC_ENTRY_INDEX          equ MP4_SAMPLE_LOC_ENTRY_COUNT + 4
+MP4_SAMPLE_LOC_SAMPLE_CURSOR        equ MP4_SAMPLE_LOC_ENTRY_INDEX + 4
+MP4_SAMPLE_LOC_CHUNK_INDEX          equ MP4_SAMPLE_LOC_SAMPLE_CURSOR + 4
+MP4_SAMPLE_LOC_CHUNK_COUNT          equ MP4_SAMPLE_LOC_CHUNK_INDEX + 4
+MP4_SAMPLE_LOC_NEXT_FIRST_CHUNK     equ MP4_SAMPLE_LOC_CHUNK_COUNT + 4
+MP4_SAMPLE_LOC_OFFSET_IN_CHUNK      equ MP4_SAMPLE_LOC_NEXT_FIRST_CHUNK + 4
+MP4_SAMPLE_LOC_STACK_SIZE           equ 64
+
+MP4_VIDEO_STBL_TRAK_DESC            equ 0
+MP4_VIDEO_STBL_MDIA_DESC            equ MP4_VIDEO_STBL_TRAK_DESC + MP4_BOX_DESC_SIZE
+MP4_VIDEO_STBL_HDLR_DESC            equ MP4_VIDEO_STBL_MDIA_DESC + MP4_BOX_DESC_SIZE
+MP4_VIDEO_STBL_MINF_DESC            equ MP4_VIDEO_STBL_HDLR_DESC + MP4_BOX_DESC_SIZE
+MP4_VIDEO_STBL_CURSOR               equ MP4_VIDEO_STBL_MINF_DESC + MP4_BOX_DESC_SIZE
+MP4_VIDEO_STBL_END                  equ MP4_VIDEO_STBL_CURSOR + 4
+MP4_VIDEO_STBL_STACK_SIZE           equ 128
+
+MP4_FILE_SAMPLE_PAYLOAD_SAMPLE_DESC equ 0
+MP4_FILE_SAMPLE_PAYLOAD_MDAT_DESC   equ MP4_FILE_SAMPLE_PAYLOAD_SAMPLE_DESC + MP4_SAMPLE_DESC_SIZE
+MP4_FILE_SAMPLE_PAYLOAD_STACK_SIZE  equ MP4_FILE_SAMPLE_PAYLOAD_MDAT_DESC + MP4_BOX_DESC_SIZE
 
 MP4_AV1C_PAYLOAD_MIN                equ 4
 MP4_AV1C_MARKER_MASK                equ 0x80

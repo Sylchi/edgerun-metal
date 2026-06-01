@@ -61,9 +61,12 @@ da_surface_count:    resd 1
 da_app_registry: resb DA_MAX_APPS * DA_APP_SIZE
 da_app_count:    resd 1
 
-; DA's WASM runtime (for launching apps)
-da_wasm_memory:  resb 65536
-da_wasm_ticks:   resq 1
+; DA-owned per-app WASM allocations.
+; Each launched app receives one full fixed allocation slot; no shared buffer.
+da_app_memory_pool: resb DA_MAX_APPS * DA_APP_MEMORY_BYTES
+da_app_ticks_pool:  resq DA_MAX_APPS
+
+; DA's active WASM runtime descriptor (points at the current app allocation)
 da_wasm_runtime: resb RUNTIME_SIZE
 
 ; Per-surface rect/icon storage pools (DA_MAX_SURFACES entries each)
@@ -745,30 +748,70 @@ _da_update_surface:
 ; rdi = export_name_ptr, rsi = export_name_len
 ; ==================================================================
 _da_store_export_name:
+    push    rbx
+    mov     rbx, rdi
     mov     [rel da_app_export_len], sil
     test    rsi, rsi
     jz      .done
     cmp     rsi, 64
     ja      .done
     push    rdx
-    lea     rdi, [rel da_app_export]
     mov     rdx, rsi
+    lea     rdi, [rel da_app_export]
+    mov     rsi, rbx
     call    er_memcpy
     pop     rdx
 .done:
+    pop     rbx
+    ret
+
+; ==================================================================
+; _da_app_allocation_bind
+; rdi = app entry pointer, esi = app index
+; Binds a full DA-owned runtime allocation to the app registry entry.
+; ==================================================================
+_da_app_allocation_bind:
+    push    rbx
+    mov     rbx, rdi
+    mov     eax, esi
+    shl     eax, 16
+    lea     rdx, [rel da_app_memory_pool]
+    add     rdx, rax
+    mov     [rbx + DA_APP_MEM_PTR], rdx
+    mov     qword [rbx + DA_APP_MEM_LEN], DA_APP_MEMORY_BYTES
+    mov     eax, esi
+    imul    eax, 8
+    lea     rdx, [rel da_app_ticks_pool]
+    add     rdx, rax
+    mov     [rbx + DA_APP_TICKS_PTR], rdx
+    xor     eax, eax
+    er_ok
+    pop     rbx
     ret
 
 ; ==================================================================
 ; _da_prepare_wasm_runtime
+; rdi = app entry pointer
 ; Returns rax = &da_wasm_runtime
+;         edx = 0 on success, ERROR_NO_MEMORY if allocation is missing
 ; ==================================================================
 _da_prepare_wasm_runtime:
+    push    rbx
+    mov     rbx, rdi
+    mov     rdx, [rbx + DA_APP_MEM_PTR]
+    test    rdx, rdx
+    jz      .missing
+    mov     rcx, [rbx + DA_APP_MEM_LEN]
+    cmp     rcx, DA_APP_MEMORY_BYTES
+    jb      .missing
+    mov     r8, [rbx + DA_APP_TICKS_PTR]
+    test    r8, r8
+    jz      .missing
+
     lea     rax, [rel da_wasm_runtime]
-    lea     rdx, [rel da_wasm_memory]
     mov     [rax + RUNTIME_MEMORY_PTR_OFF], rdx
-    mov     qword [rax + RUNTIME_MEMORY_LEN_OFF], 65536
-    lea     rdx, [rel da_wasm_ticks]
-    mov     [rax + RUNTIME_TICKS_PTR_OFF], rdx
+    mov     [rax + RUNTIME_MEMORY_LEN_OFF], rcx
+    mov     [rax + RUNTIME_TICKS_PTR_OFF], r8
     xor     edx, edx
     mov     [rax + RUNTIME_MEM_GROW_FN_OFF], rdx
     mov     [rax + RUNTIME_MEM_GROW_CTX_OFF], rdx
@@ -781,11 +824,20 @@ _da_prepare_wasm_runtime:
     mov     rdx, [rel er_local_cell_import_count]
     mov     [rax + RUNTIME_IMPORTS_LEN_OFF], rdx
 
-    lea     rdi, [rel da_wasm_memory]
+    mov     rdi, [rbx + DA_APP_MEM_PTR]
     xor     esi, esi
-    mov     edx, 65536
+    mov     edx, DA_APP_MEMORY_BYTES
     call    er_memset
-    mov     qword [rel da_wasm_ticks], 0
+    mov     rdx, [rbx + DA_APP_TICKS_PTR]
+    mov     qword [rdx], 0
+    lea     rax, [rel da_wasm_runtime]
+    er_ok
+    pop     rbx
+    ret
+.missing:
+    xor     eax, eax
+    er_err  ERROR_NO_MEMORY
+    pop     rbx
     ret
 
 ; ==================================================================
@@ -852,12 +904,13 @@ _da_launch_common:
     push    r13
     push    r14
     push    r15
-    sub     rsp, 32
+    sub     rsp, 48
 
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
     mov     r15, rcx
+    mov     [rsp + 40], r8d
 
     ; Compute app identity hash once.
     mov     rdi, r12
@@ -876,7 +929,9 @@ _da_launch_common:
     ; Existing hash found.
     imul    eax, DA_APP_SIZE
     lea     r9, [rel da_app_registry + rax]
-    mov     [r9 + DA_APP_SLOT], r8d
+    mov     [rsp + 32], r9
+    mov     eax, [rsp + 40]
+    mov     [r9 + DA_APP_SLOT], eax
     cmp     byte [r9 + DA_APP_STATE], 1
     jne     .reuse_entry
 
@@ -901,36 +956,59 @@ _da_launch_common:
     mov     eax, ebx
     imul    eax, DA_APP_SIZE
     lea     r9, [rel da_app_registry + rax]
+    mov     [rsp + 32], r9
+    mov     rdi, r9
+    xor     esi, esi
+    mov     edx, DA_APP_SIZE
+    call    er_memset
+    mov     r9, [rsp + 32]
     lea     rdi, [r9 + DA_APP_HASH]
     lea     rsi, [rsp]
     mov     edx, 32
     call    er_memcpy
+    mov     r9, [rsp + 32]
+    mov     rdi, r9
+    mov     esi, ebx
+    call    _da_app_allocation_bind
+    mov     r9, [rsp + 32]
+    test    edx, edx
+    jnz     .alloc_fail
     inc     dword [rel da_app_count]
 
 .reuse_entry:
     ; Existing or new entry now loads/reloads in-place.
+    mov     [rsp + 32], r9
     lea     rdi, [r9 + DA_APP_HASH]
     lea     rsi, [rsp]
     mov     edx, 32
     call    er_memcpy
+    mov     r9, [rsp + 32]
 
-    mov     [r9 + DA_APP_SLOT], r8d
+    mov     eax, [rsp + 40]
+    mov     [r9 + DA_APP_SLOT], eax
     mov     byte [r9 + DA_APP_STATE], 1
 
+    mov     rdi, r9
     call    _da_prepare_wasm_runtime
+    mov     r9, [rsp + 32]
+    test    edx, edx
+    jnz     .alloc_fail
     mov     rbx, rax
 
     mov     rdi, r14
     mov     rsi, r15
     call    _da_store_export_name
+    mov     r9, [rsp + 32]
 
     lea     rdi, [r9 + DA_APP_HASH]
     call    _da_publish_app_hash
+    mov     r9, [rsp + 32]
 
     mov     rdi, rbx
     mov     rsi, r12
     mov     rdx, r13
     call    er_fn_load
+    mov     r9, [rsp + 32]
     test    edx, edx
     jnz     .load_fail
 
@@ -946,11 +1024,16 @@ _da_launch_common:
     er_err  ERROR_CORRUPT
     jmp     .done
 
+.alloc_fail:
+    mov     byte [r9 + DA_APP_STATE], 0
+    er_err  ERROR_NO_MEMORY
+    jmp     .done
+
 .load_fail:
     mov     byte [r9 + DA_APP_STATE], 0
 
 .done:
-    add     rsp, 32
+    add     rsp, 48
     pop     r15
     pop     r14
     pop     r13

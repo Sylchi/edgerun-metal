@@ -5,6 +5,19 @@
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
 
+%macro av1_route_first_payload 3
+    cmp     eax, %1
+    jne     %%skip
+    cmp     dword [r14 + %2], 0
+    jne     %%skip
+    mov     ecx, [rsp + AV1_OBU_DESC_PAYLOAD_OFFSET]
+    add     ecx, ebx
+    mov     [r14 + %2], ecx
+    mov     ecx, [rsp + AV1_OBU_DESC_PAYLOAD_LEN]
+    mov     [r14 + %3], ecx
+%%skip:
+%endmacro
+
 SECTION .text
 
 ; er_av1_obu_type_valid(type) -> eax=1 valid, eax=0 invalid
@@ -292,6 +305,137 @@ er_fn er_av1_obu_decode_unit
 .done:
     er_stack_free 16
     er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_obu_scan_units(buf, len, stats) -> eax=unit count, rdx=error
+; Walks consecutive complete AV1 OBUs and fills dword counts by OBU type.
+; rdi=buf, esi=len, rdx=stats
+er_fn er_av1_obu_scan_units
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 32
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r15, rdx
+    mov     rdi, r15
+    xor     eax, eax
+    mov     ecx, AV1_OBU_STATS_SIZE / 8
+    cld
+    rep     stosq
+    xor     ebx, ebx
+    xor     r14d, r14d
+.loop:
+    cmp     ebx, r13d
+    je      .ok
+    ja      .corrupt
+    lea     rdi, [r12 + rbx]
+    mov     esi, r13d
+    sub     esi, ebx
+    mov     rdx, rsp
+    call    er_av1_obu_decode_unit
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .corrupt
+    add     ebx, eax
+    jc      .corrupt
+    movzx   eax, byte [rsp + AV1_OBU_DESC_TYPE]
+    inc     dword [r15 + AV1_OBU_STATS_TYPE_COUNTS + rax * 4]
+    cmp     r14d, AV1_LEB128_U32_MAX
+    je      .corrupt
+    inc     r14d
+    jmp     .loop
+.ok:
+    mov     [r15 + AV1_OBU_STATS_TOTAL], r14d
+    mov     eax, r14d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 32
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_obu_route_sample(buf, len, route) -> eax=unit count, rdx=error
+; Fills the stats prefix and first sequence/frame/tile payload offsets relative to buf.
+; rdi=buf, esi=len, rdx=route
+er_fn er_av1_obu_route_sample
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 32
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     rdi, r14
+    xor     eax, eax
+    mov     ecx, AV1_OBU_ROUTE_SIZE / 8
+    cld
+    rep     stosq
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     rdx, r14
+    call    er_av1_obu_scan_units
+    test    edx, edx
+    jnz     .done
+    mov     r15d, eax
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, r13d
+    je      .ok
+    ja      .corrupt
+    lea     rdi, [r12 + rbx]
+    mov     esi, r13d
+    sub     esi, ebx
+    mov     rdx, rsp
+    call    er_av1_obu_decode_unit
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .corrupt
+    movzx   eax, byte [rsp + AV1_OBU_DESC_TYPE]
+    av1_route_first_payload AV1_OBU_TYPE_SEQUENCE_HEADER, AV1_OBU_ROUTE_SEQUENCE_OFFSET, AV1_OBU_ROUTE_SEQUENCE_LEN
+    av1_route_first_payload AV1_OBU_TYPE_FRAME_HEADER, AV1_OBU_ROUTE_FRAME_HEADER_OFFSET, AV1_OBU_ROUTE_FRAME_HEADER_LEN
+    av1_route_first_payload AV1_OBU_TYPE_TILE_GROUP, AV1_OBU_ROUTE_TILE_GROUP_OFFSET, AV1_OBU_ROUTE_TILE_GROUP_LEN
+    av1_route_first_payload AV1_OBU_TYPE_FRAME, AV1_OBU_ROUTE_FRAME_OFFSET, AV1_OBU_ROUTE_FRAME_LEN
+    add     ebx, [rsp + AV1_OBU_DESC_TOTAL_LEN]
+    jc      .corrupt
+    jmp     .loop
+.ok:
+    mov     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 32
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_obu_count_units(buf, len) -> eax=unit count, rdx=error
+; Walks a buffer of consecutive AV1 OBUs and requires every byte to belong to a complete unit.
+; rdi=buf, esi=len
+er_fn er_av1_obu_count_units
+    er_stack_alloc AV1_OBU_STATS_SIZE
+    mov     rdx, rsp
+    call    er_av1_obu_scan_units
+    er_stack_free AV1_OBU_STATS_SIZE
     er_ret
 
 ; er_av1_metadata_decode(payload, len, desc)

@@ -4,6 +4,7 @@
 ; Usage: esp32_serial_boot_host [options] <binary> [entry_point]
 
 %include "host/esp32_serial_boot.inc"
+%include "esp32s3/jc3248w535/registers.inc"
 
 %define PROT_READ           1
 %define MAP_PRIVATE          2
@@ -19,14 +20,30 @@ section .bss
 opt_port:       resq 1
 opt_baud:       resd 1
 opt_entry:      resd 1
+opt_flash_offset: resd 1
 opt_binary:     resq 1
 opt_help:       resb 1
 opt_dry_run:    resb 1
+opt_flash:      resb 1
+opt_no_reset:   resb 1
+opt_sync_only:  resb 1
+opt_read_reg:   resb 1
+opt_read_reg_addr: resd 1
+opt_write_reg:  resb 1
+opt_write_reg_addr: resd 1
+opt_write_reg_value: resd 1
+opt_write_reg_mask: resd 1
+opt_write_reg_delay: resd 1
+opt_jc3248_bl: resb 1
+opt_jc3248_spi2: resb 1
+opt_jc3248_qspi_route: resb 1
 
 binary_data:    resq 1
 binary_size:    resd 1
 
 serial_fd:      resd 1
+download_packets: resd 1
+read_reg_value: resd 1
 
 ; Buffers: packet building (raw), SLIP output, receive
 pkt_buf:        resb 16384 + 256
@@ -49,9 +66,23 @@ _start:
 
     mov     qword [opt_port], default_port
     mov     dword [opt_baud], ESP_DEFAULT_BAUD
-    mov     dword [opt_entry], 0x40000000
+    mov     dword [opt_entry], ESP32S3_IRAM_ENTRY
+    mov     dword [opt_flash_offset], ESP_DEFAULT_FLASH_OFF
     mov     byte [opt_help], 0
     mov     byte [opt_dry_run], 0
+    mov     byte [opt_flash], 0
+    mov     byte [opt_no_reset], 0
+    mov     byte [opt_sync_only], 0
+    mov     byte [opt_read_reg], 0
+    mov     dword [opt_read_reg_addr], 0
+    mov     byte [opt_write_reg], 0
+    mov     dword [opt_write_reg_addr], 0
+    mov     dword [opt_write_reg_value], 0
+    mov     dword [opt_write_reg_mask], 0xffffffff
+    mov     dword [opt_write_reg_delay], 0
+    mov     byte [opt_jc3248_bl], 0
+    mov     byte [opt_jc3248_spi2], 0
+    mov     byte [opt_jc3248_qspi_route], 0
     mov     qword [opt_binary], 0
 
     cmp     r14, 2
@@ -70,6 +101,18 @@ _start:
     call    parse_options
     cmp     byte [opt_help], 1
     je      .help_exit
+    cmp     byte [opt_sync_only], 1
+    je      .skip_binary_read
+    cmp     byte [opt_read_reg], 1
+    je      .skip_binary_read
+    cmp     byte [opt_write_reg], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_bl], 0
+    jne     .skip_binary_read
+    cmp     byte [opt_jc3248_spi2], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_qspi_route], 1
+    je      .skip_binary_read
     cmp     qword [opt_binary], 0
     je      .help_exit
 
@@ -80,8 +123,19 @@ _start:
     mov     [binary_data], rax
     mov     [binary_size], edx
 
-    lea     rdi, [m_plan]
+    cmp     byte [opt_flash], 1
+    jne     .plan_ram
+    lea     rdi, [m_plan_flash]
     call    print_str
+    mov     edi, [opt_flash_offset]
+    call    print_hex32
+    lea     rdi, [m_plan_sep]
+    call    print_str
+    jmp     .plan_size
+.plan_ram:
+    lea     rdi, [m_plan_ram]
+    call    print_str
+.plan_size:
     mov     edi, [binary_size]
     call    print_dec
     lea     rdi, [m_to]
@@ -92,7 +146,13 @@ _start:
 
     cmp     byte [opt_dry_run], 1
     je      .dry_exit
+    jmp     .open_port
 
+.skip_binary_read:
+    cmp     byte [opt_dry_run], 1
+    je      .dry_exit
+
+.open_port:
     mov     rdi, [opt_port]
     call    serial_open
     test    eax, eax
@@ -105,21 +165,46 @@ _start:
     test    eax, eax
     js      .cfg_err
 
+    cmp     byte [opt_no_reset], 1
+    je      .sync_start
     mov     edi, [serial_fd]
     call    esp_reset
     test    eax, eax
     js      .rst_err
 
+.sync_start:
     mov     edi, [serial_fd]
     call    esp_sync
     test    eax, eax
     jnz     .sync_err
 
+    cmp     byte [opt_sync_only], 1
+    je      .sync_ok
+    mov     edi, [serial_fd]
+    call    serial_drain
+    cmp     byte [opt_read_reg], 1
+    je      .read_reg
+    cmp     byte [opt_write_reg], 1
+    je      .write_reg
+    cmp     byte [opt_jc3248_bl], 0
+    jne     .jc3248_backlight
+    cmp     byte [opt_jc3248_spi2], 1
+    je      .jc3248_spi2
+    cmp     byte [opt_jc3248_qspi_route], 1
+    je      .jc3248_qspi_route
+
     mov     edi, [serial_fd]
     mov     rsi, [binary_data]
     mov     edx, [binary_size]
+    cmp     byte [opt_flash], 1
+    jne     .ram_download
+    mov     ecx, [opt_flash_offset]
+    call    esp_flash_download
+    jmp     .download_done
+.ram_download:
     mov     ecx, [opt_entry]
     call    esp_download
+.download_done:
     test    eax, eax
     jnz     .dl_err
 
@@ -127,6 +212,115 @@ _start:
     call    print_str
     call    print_crlf
     xor     edi, edi
+    call    sys_exit
+.sync_ok:
+    lea     rdi, [m_sync_ok]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.read_reg:
+    mov     edi, [serial_fd]
+    mov     esi, [opt_read_reg_addr]
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .read_reg_err
+    mov     [read_reg_value], eax
+    lea     rdi, [m_read_reg]
+    call    print_str
+    mov     edi, [opt_read_reg_addr]
+    call    print_hex32
+    lea     rdi, [m_eq]
+    call    print_str
+    mov     edi, [read_reg_value]
+    call    print_hex32
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.read_reg_err:
+    lea     rdi, [m_read_reg_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.write_reg:
+    mov     edi, [serial_fd]
+    mov     esi, [opt_write_reg_addr]
+    mov     edx, [opt_write_reg_value]
+    mov     ecx, [opt_write_reg_mask]
+    mov     r8d, [opt_write_reg_delay]
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .write_reg_err
+    lea     rdi, [m_write_reg]
+    call    print_str
+    mov     edi, [opt_write_reg_addr]
+    call    print_hex32
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.write_reg_err:
+    lea     rdi, [m_write_reg_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_backlight:
+    mov     edi, [serial_fd]
+    movzx   esi, byte [opt_jc3248_bl]
+    call    jc3248_backlight
+    test    eax, eax
+    jnz     .jc3248_backlight_err
+    lea     rdi, [m_jc3248_bl]
+    call    print_str
+    cmp     byte [opt_jc3248_bl], 2
+    je      .jc3248_backlight_on_msg
+    lea     rdi, [m_off]
+    jmp     .jc3248_backlight_msg
+.jc3248_backlight_on_msg:
+    lea     rdi, [m_on]
+.jc3248_backlight_msg:
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_backlight_err:
+    lea     rdi, [m_jc3248_bl_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_spi2:
+    mov     edi, [serial_fd]
+    call    jc3248_spi2_enable
+    test    eax, eax
+    jnz     .jc3248_spi2_err
+    lea     rdi, [m_jc3248_spi2]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_spi2_err:
+    lea     rdi, [m_jc3248_spi2_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_qspi_route:
+    mov     edi, [serial_fd]
+    call    jc3248_qspi_route
+    test    eax, eax
+    jnz     .jc3248_qspi_route_err
+    lea     rdi, [m_jc3248_qspi_route]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_qspi_route_err:
+    lea     rdi, [m_jc3248_qspi_route_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
     call    sys_exit
 
 .help_exit:
@@ -234,13 +428,158 @@ parse_options:
     lea     rsi, [str_entry]
     call    str_eq
     test    eax, eax
-    jz      .ck_help
+    jz      .ck_flash_offset
     cmp     ebx, r12d
     jae     .bad
     mov     rdi, [r13 + rbx * 8]
     inc     ebx
     call    parse_hex32
     mov     [opt_entry], eax
+    jmp     .loop
+
+.ck_flash_offset:
+    mov     rdi, r14
+    lea     rsi, [str_flash_offset]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_flash
+    cmp     ebx, r12d
+    jae     .bad
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    mov     [opt_flash_offset], eax
+    jmp     .loop
+
+.ck_flash:
+    mov     rdi, r14
+    lea     rsi, [str_flash]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_no_reset
+    mov     byte [opt_flash], 1
+    jmp     .loop
+
+.ck_no_reset:
+    mov     rdi, r14
+    lea     rsi, [str_no_reset]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_sync_only
+    mov     byte [opt_no_reset], 1
+    jmp     .loop
+
+.ck_sync_only:
+    mov     rdi, r14
+    lea     rsi, [str_sync_only]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_read_reg
+    mov     byte [opt_sync_only], 1
+    jmp     .loop
+
+.ck_read_reg:
+    mov     rdi, r14
+    lea     rsi, [str_read_reg]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_write_reg
+    cmp     ebx, r12d
+    jae     .bad
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    mov     [opt_read_reg_addr], eax
+    mov     byte [opt_read_reg], 1
+    jmp     .loop
+
+.ck_write_reg:
+    mov     rdi, r14
+    lea     rsi, [str_write_reg]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_bl_on
+    mov     eax, r12d
+    sub     eax, ebx
+    cmp     eax, 3
+    jb      .bad
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    mov     [opt_write_reg_addr], eax
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    mov     [opt_write_reg_value], eax
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    mov     [opt_write_reg_mask], eax
+    mov     eax, r12d
+    cmp     ebx, eax
+    jae     .write_reg_args_done
+    mov     rdi, [r13 + rbx * 8]
+    cmp     byte [rdi], '-'
+    je      .write_reg_args_done
+    inc     ebx
+    call    parse_uint32
+    mov     [opt_write_reg_delay], eax
+.write_reg_args_done:
+    mov     byte [opt_write_reg], 1
+    jmp     .loop
+
+.ck_jc3248_bl_on:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_bl_on]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_bl_off
+    mov     byte [opt_jc3248_bl], 2
+    jmp     .loop
+
+.ck_jc3248_bl_off:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_bl_off]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_spi2
+    mov     byte [opt_jc3248_bl], 1
+    jmp     .loop
+
+.ck_jc3248_spi2:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_spi2]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_qspi_route
+    mov     byte [opt_jc3248_spi2], 1
+    jmp     .loop
+
+.ck_jc3248_qspi_route:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_qspi_route]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_target
+    mov     byte [opt_jc3248_qspi_route], 1
+    jmp     .loop
+
+.ck_target:
+    mov     rdi, r14
+    lea     rsi, [str_target]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_help
+    cmp     ebx, r12d
+    jae     .bad
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    lea     rsi, [str_jc3248w535]
+    call    str_eq
+    test    eax, eax
+    jz      .bad
+    mov     dword [opt_entry], ESP32S3_IRAM_ENTRY
+    mov     dword [opt_flash_offset], ESP_DEFAULT_FLASH_OFF
     jmp     .loop
 
 .ck_help:
@@ -335,9 +674,9 @@ serial_configure:
     ; cflag = CS8 | CREAD | CLOCAL | HUPCL
     mov     dword [termios_buf + TERMIO2_CFLAG], CS8 | CREAD | CLOCAL | HUPCL
 
-    ; VMIN = 1, VTIME = 0
-    mov     byte [termios_buf + TERMIO2_CC + VMIN], 1
-    mov     byte [termios_buf + TERMIO2_CC + VTIME], 0
+    ; VTIME bounds probe reads so SYNC attempts fail cleanly.
+    mov     byte [termios_buf + TERMIO2_CC + VMIN], 0
+    mov     byte [termios_buf + TERMIO2_CC + VTIME], 1
 
     ; Set speeds
     mov     [termios_buf + TERMIO2_ISPEED], ebx
@@ -627,7 +966,7 @@ esp_download:
     jz      .pk_ok
     inc     ebx
 .pk_ok:
-    mov     r8d, ebx            ; r8d = num_packets
+    mov     [download_packets], ebx
 
     ; ─── MEM_BEGIN ────────────────────────────────────────────────
     lea     rdi, [recv_buf]
@@ -640,9 +979,9 @@ esp_download:
     ; Build MEM_BEGIN payload
     lea     rdi, [rdi + PKT_DATA]
     mov     esi, r14d           ; total_size
-    mov     edx, r8d            ; num_packets
+    mov     edx, [download_packets]
     mov     ecx, ESP_MEM_PACKET_SIZE
-    mov     r8d, 0x40000000     ; mem_offset = IROM base
+    mov     r8d, r15d           ; mem_offset
     build_mem_begin
 
     ; SLIP encode
@@ -685,7 +1024,7 @@ esp_download:
     xor     r10d, r10d          ; byte offset into source data
 
 .data_loop:
-    cmp     r9d, r8d
+    cmp     r9d, [download_packets]
     jae     .data_done
 
     ; chunk_size = min(remaining, ESP_MEM_PACKET_SIZE)
@@ -830,6 +1169,618 @@ esp_download:
     ret
 
 ; ==================================================================
+; esp_flash_download(fd, data, data_size, flash_offset) -> 0 ok
+;
+; FLASH_BEGIN -> FLASH_DATA x N -> FLASH_END sequence.
+; ==================================================================
+esp_flash_download:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi           ; fd
+    mov     r13, rsi            ; data ptr
+    mov     r14d, edx           ; data size
+    mov     r15d, ecx           ; flash offset
+
+    mov     eax, r14d
+    xor     edx, edx
+    mov     ecx, ESP_FLASH_PACKET_SIZE
+    div     ecx
+    mov     ebx, eax
+    test    edx, edx
+    jz      .pk_ok
+    inc     ebx
+.pk_ok:
+    mov     [download_packets], ebx
+
+    lea     rdi, [recv_buf]
+    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
+    mov     byte [rdi + PKT_COMMAND], CMD_FLASH_BEGIN
+    mov     word [rdi + PKT_SIZE], FLASH_BEGIN_DATA_BYTES
+    xor     eax, eax
+    mov     [rdi + PKT_CHECKSUM], eax
+    lea     rdi, [rdi + PKT_DATA]
+    mov     [rdi + FLASH_BEGIN_TOTAL_SIZE], r14d
+    mov     eax, [download_packets]
+    mov     [rdi + FLASH_BEGIN_NUM_PACKETS], eax
+    mov     dword [rdi + FLASH_BEGIN_PACKET_SIZE], ESP_FLASH_PACKET_SIZE
+    mov     [rdi + FLASH_BEGIN_OFFSET], r15d
+
+    lea     rdi, [recv_buf]
+    mov     esi, PKT_HEADER_BYTES + FLASH_BEGIN_DATA_BYTES
+    lea     rdx, [slip_buf]
+    slip_encode
+    mov     ebx, eax
+
+    mov     edi, r12d
+    lea     rsi, [slip_buf]
+    mov     edx, ebx
+    call    serial_write_all
+    test    eax, eax
+    js      .fail_io
+
+    mov     edi, ESP_RESPONSE_TIMEOUT_MS
+    call    sleep_ms
+    mov     edi, r12d
+    lea     rsi, [recv_buf]
+    mov     edx, 256
+    call    serial_read_slip
+    test    eax, eax
+    jle     .fail_resp
+    mov     rdi, rsi
+    mov     esi, eax
+    slip_decode
+    jc      .fail_resp
+    call    check_response
+    test    eax, eax
+    jnz     .fail_resp
+
+    xor     r9d, r9d            ; sequence number
+    xor     r10d, r10d          ; byte offset
+
+.data_loop:
+    cmp     r9d, [download_packets]
+    jae     .data_done
+    mov     eax, r14d
+    sub     eax, r10d
+    cmp     eax, ESP_FLASH_PACKET_SIZE
+    jbe     .chunk_ok
+    mov     eax, ESP_FLASH_PACKET_SIZE
+.chunk_ok:
+    mov     r11d, eax
+
+    lea     rdi, [recv_buf]
+    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
+    mov     byte [rdi + PKT_COMMAND], CMD_FLASH_DATA
+    mov     eax, r11d
+    add     eax, FLASH_DATA_HEADER_BYTES
+    mov     word [rdi + PKT_SIZE], ax
+
+    push    rdi
+    mov     rdi, r13
+    add     rdi, r10
+    mov     esi, r11d
+    checksum_compute
+    pop     rdi
+    mov     [rdi + PKT_CHECKSUM], al
+
+    lea     rdi, [rdi + PKT_DATA]
+    mov     [rdi + FLASH_DATA_SIZE], r11d
+    mov     [rdi + FLASH_DATA_SEQUENCE], r9d
+    mov     dword [rdi + 8], 0
+    mov     dword [rdi + 12], 0
+    lea     rdi, [rdi + FLASH_DATA_HEADER_BYTES]
+    lea     rsi, [r13 + r10]
+    mov     ecx, r11d
+    rep movsb
+
+    lea     rdi, [recv_buf]
+    mov     eax, r11d
+    add     eax, FLASH_DATA_HEADER_BYTES
+    add     eax, PKT_HEADER_BYTES
+    mov     esi, eax
+    lea     rdx, [slip_buf]
+    slip_encode
+    mov     ebx, eax
+
+    mov     edi, r12d
+    lea     rsi, [slip_buf]
+    mov     edx, ebx
+    call    serial_write_all
+    test    eax, eax
+    js      .fail_io
+
+    mov     edi, 50
+    call    sleep_ms
+    mov     edi, r12d
+    lea     rsi, [recv_buf]
+    mov     edx, 256
+    call    serial_read_slip
+    test    eax, eax
+    jle     .fail_resp
+    mov     rdi, rsi
+    mov     esi, eax
+    slip_decode
+    jc      .fail_resp
+    call    check_response
+    test    eax, eax
+    jnz     .fail_resp
+
+    inc     r9d
+    add     r10d, r11d
+    jmp     .data_loop
+
+.data_done:
+    lea     rdi, [recv_buf]
+    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
+    mov     byte [rdi + PKT_COMMAND], CMD_FLASH_END
+    mov     word [rdi + PKT_SIZE], FLASH_END_DATA_BYTES
+    xor     eax, eax
+    mov     [rdi + PKT_CHECKSUM], eax
+    mov     dword [rdi + PKT_DATA + FLASH_END_REBOOT_FLAG], 0
+
+    lea     rdi, [recv_buf]
+    mov     esi, PKT_HEADER_BYTES + FLASH_END_DATA_BYTES
+    lea     rdx, [slip_buf]
+    slip_encode
+    mov     ebx, eax
+
+    mov     edi, r12d
+    lea     rsi, [slip_buf]
+    mov     edx, ebx
+    call    serial_write_all
+    test    eax, eax
+    js      .fail_io
+
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+.fail_io:
+    mov     eax, 2
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.fail_resp:
+    mov     eax, 3
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; esp_read_reg(fd, addr) -> eax=value, edx=0 ok / nonzero error
+; ==================================================================
+esp_read_reg:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+
+    mov     r12d, edi
+    lea     rdi, [recv_buf]
+    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
+    mov     byte [rdi + PKT_COMMAND], CMD_READ_REG
+    mov     word [rdi + PKT_SIZE], 4
+    xor     eax, eax
+    mov     [rdi + PKT_CHECKSUM], eax
+    mov     [rdi + PKT_DATA], esi
+
+    lea     rdi, [recv_buf]
+    mov     esi, PKT_HEADER_BYTES + 4
+    lea     rdx, [slip_buf]
+    slip_encode
+    mov     ebx, eax
+
+    mov     edi, r12d
+    lea     rsi, [slip_buf]
+    mov     edx, ebx
+    call    serial_write_all
+    test    eax, eax
+    js      .fail
+
+.read_loop_start:
+    mov     ebx, 16
+.read_loop:
+    mov     edi, r12d
+    lea     rsi, [recv_buf]
+    mov     edx, 256
+    call    serial_read_slip
+    test    eax, eax
+    jle     .read_wait
+    mov     rdi, rsi
+    mov     esi, eax
+    slip_decode
+    jc      .read_next
+    cmp     byte [recv_buf + PKT_DIRECTION], DIR_RESPONSE
+    jne     .read_next
+    cmp     byte [recv_buf + PKT_COMMAND], CMD_READ_REG
+    jne     .read_next
+    call    check_response
+    test    eax, eax
+    jnz     .fail
+    mov     eax, [recv_buf + PKT_CHECKSUM]
+    xor     edx, edx
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.read_wait:
+    mov     edi, 100
+    call    sleep_ms
+.read_next:
+    dec     ebx
+    jnz     .read_loop
+.fail:
+    xor     eax, eax
+    mov     edx, 1
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; esp_write_reg(fd, addr, value, mask, delay_us) -> eax=0 ok
+; ==================================================================
+esp_write_reg:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+
+    mov     r12d, edi
+    lea     rdi, [recv_buf]
+    mov     byte [rdi + PKT_DIRECTION], DIR_REQUEST
+    mov     byte [rdi + PKT_COMMAND], CMD_WRITE_REG
+    mov     word [rdi + PKT_SIZE], 16
+    xor     eax, eax
+    mov     [rdi + PKT_CHECKSUM], eax
+    mov     [rdi + PKT_DATA + 0], esi
+    mov     [rdi + PKT_DATA + 4], edx
+    mov     [rdi + PKT_DATA + 8], ecx
+    mov     [rdi + PKT_DATA + 12], r8d
+
+    lea     rdi, [recv_buf]
+    mov     esi, PKT_HEADER_BYTES + 16
+    lea     rdx, [slip_buf]
+    slip_encode
+    mov     ebx, eax
+
+    mov     edi, r12d
+    lea     rsi, [slip_buf]
+    mov     edx, ebx
+    call    serial_write_all
+    test    eax, eax
+    js      .fail
+
+    mov     ebx, 16
+.read_loop:
+    mov     edi, r12d
+    lea     rsi, [recv_buf]
+    mov     edx, 256
+    call    serial_read_slip
+    test    eax, eax
+    jle     .read_wait
+    mov     rdi, rsi
+    mov     esi, eax
+    slip_decode
+    jc      .read_next
+    cmp     byte [recv_buf + PKT_DIRECTION], DIR_RESPONSE
+    jne     .read_next
+    cmp     byte [recv_buf + PKT_COMMAND], CMD_WRITE_REG
+    jne     .read_next
+    call    check_response
+    test    eax, eax
+    jnz     .fail
+    xor     eax, eax
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.read_wait:
+    mov     edi, 100
+    call    sleep_ms
+.read_next:
+    dec     ebx
+    jnz     .read_loop
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; jc3248_backlight(fd, mode) -> eax=0 ok
+; esi: 1 off, 2 on.
+; ==================================================================
+jc3248_backlight:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+
+    mov     r12d, edi
+    mov     ebx, esi
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_GPIO_ENABLE_W1TS
+    mov     edx, 1 << JC3248_PIN_BL
+    mov     ecx, 1 << JC3248_PIN_BL
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    cmp     ebx, 2
+    je      .on
+    mov     esi, ESP32S3_GPIO_OUT_W1TC
+    jmp     .write_level
+.on:
+    mov     esi, ESP32S3_GPIO_OUT_W1TS
+.write_level:
+    mov     edx, 1 << JC3248_PIN_BL
+    mov     ecx, 1 << JC3248_PIN_BL
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+    xor     eax, eax
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; jc3248_spi2_enable(fd) -> eax=0 ok
+; Enables SPI2 peripheral clock and releases reset through SYSTEM MMIO.
+; ==================================================================
+jc3248_spi2_enable:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_CLK_EN0
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .fail
+    or      eax, ESP32S3_SYSTEM_SPI2_CLK_EN
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_CLK_EN0
+    mov     edx, eax
+    mov     ecx, ESP32S3_SYSTEM_SPI2_CLK_EN
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_RST_EN0
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .fail
+    or      eax, ESP32S3_SYSTEM_SPI2_RST
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_RST_EN0
+    mov     edx, eax
+    mov     ecx, ESP32S3_SYSTEM_SPI2_RST
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_RST_EN0
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .fail
+    and     eax, ~ESP32S3_SYSTEM_SPI2_RST
+    mov     edi, r12d
+    mov     esi, ESP32S3_SYSTEM_RST_EN0
+    mov     edx, eax
+    mov     ecx, ESP32S3_SYSTEM_SPI2_RST
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CLK_GATE
+    mov     edx, ESP32S3_SPI_CLK_EN | ESP32S3_SPI_MST_CLK_ACTIVE | ESP32S3_SPI_MST_CLK_SEL
+    mov     ecx, ESP32S3_SPI_CLK_EN | ESP32S3_SPI_MST_CLK_ACTIVE | ESP32S3_SPI_MST_CLK_SEL
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; ==================================================================
+; jc3248_qspi_route(fd) -> eax=0 ok
+; Routes JC3248 AXS15231B QSPI pins through ESP32-S3 GPIO matrix.
+; ==================================================================
+jc3248_qspi_route:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_CS
+    mov     edx, ESP32S3_IO_MUX_GPIO45
+    mov     ecx, ESP32S3_FSPICS0_OUT
+    mov     r8d, ESP32S3_FSPICS0_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_CLK
+    mov     edx, ESP32S3_IO_MUX_GPIO47
+    mov     ecx, ESP32S3_FSPICLK_OUT
+    mov     r8d, ESP32S3_FSPICLK_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_D0
+    mov     edx, ESP32S3_IO_MUX_GPIO21
+    mov     ecx, ESP32S3_FSPID_OUT
+    mov     r8d, ESP32S3_FSPID_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_D1
+    mov     edx, ESP32S3_IO_MUX_GPIO48
+    mov     ecx, ESP32S3_FSPIQ_OUT
+    mov     r8d, ESP32S3_FSPIQ_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_D2
+    mov     edx, ESP32S3_IO_MUX_GPIO40
+    mov     ecx, ESP32S3_FSPIWP_OUT
+    mov     r8d, ESP32S3_FSPIWP_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, JC3248_PIN_LCD_D3
+    mov     edx, ESP32S3_IO_MUX_GPIO39
+    mov     ecx, ESP32S3_FSPIHD_OUT
+    mov     r8d, ESP32S3_FSPIHD_IN
+    call    jc3248_route_spi_pin
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_route_spi_pin(fd, pin, iomux, out_signal, in_signal) -> eax=0 ok
+jc3248_route_spi_pin:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi           ; fd
+    mov     r13d, esi           ; pin
+    mov     r14d, ecx           ; output signal
+    mov     r15d, r8d           ; input signal
+    mov     ebx, edx            ; IO_MUX register
+
+    mov     edi, r12d
+    mov     esi, ebx
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .fail
+    and     eax, ~(ESP32S3_MCU_SEL_MASK | ESP32S3_FUN_DRV_MASK | ESP32S3_FUN_IE)
+    or      eax, (ESP32S3_GPIO_FUNC << ESP32S3_MCU_SEL_SHIFT) | (ESP32S3_DRIVE_3 << ESP32S3_FUN_DRV_SHIFT) | ESP32S3_FUN_IE
+    mov     edi, r12d
+    mov     esi, ebx
+    mov     edx, eax
+    mov     ecx, ESP32S3_MCU_SEL_MASK | ESP32S3_FUN_DRV_MASK | ESP32S3_FUN_IE
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     eax, r13d
+    shl     eax, 2
+    add     eax, ESP32S3_GPIO_FUNC_OUT_SEL
+    mov     edi, r12d
+    mov     esi, eax
+    mov     edx, r14d
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     eax, r15d
+    shl     eax, 2
+    add     eax, ESP32S3_GPIO_FUNC_IN_SEL
+    mov     edi, r12d
+    mov     esi, eax
+    mov     edx, r13d
+    or      edx, 0x80
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
 ; check_response() -> 0 ok, 1 fail
 ; Checks recv_buf content for valid response.
 ; ==================================================================
@@ -896,32 +1847,72 @@ serial_write_all:
 serial_read_slip:
     push    rbp
     mov     rbp, rsp
+    push    rbx
     push    r12
     push    r13
+    push    r14
+    push    r15
 
     mov     r12d, edi
     mov     r13, rsi
-    xor     ecx, ecx
+    mov     r15d, edx
+    xor     r14d, r14d
+    xor     ebx, ebx
 
 .loop:
-    cmp     ecx, edx
+    cmp     r14d, r15d
     jae     .done
 
     mov     edi, r12d
-    lea     rsi, [r13 + rcx]
+    lea     rsi, [r13 + r14]
     mov     edx, 1
     mov     eax, SYS_read
     syscall
     test    eax, eax
     jle     .done
 
-    inc     ecx
-    cmp     byte [r13 + rcx - 1], SLIP_END
+    cmp     byte [r13 + r14], SLIP_END
+    jne     .got_payload_byte
+    test    ebx, ebx
+    jz      .loop
+    inc     r14d
+    jmp     .done
+.got_payload_byte:
+    mov     ebx, 1
+    inc     r14d
+    cmp     byte [r13 + r14 - 1], SLIP_END
     jne     .loop
 
 .done:
-    mov     eax, ecx
+    mov     eax, r14d
+    pop     r15
+    pop     r14
     pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; serial_drain(fd)
+; Drains queued ROM responses after SYNC so later commands do not consume stale
+; SYNC frames.
+; ==================================================================
+serial_drain:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+    mov     r12d, edi
+    mov     edi, 100
+    call    sleep_ms
+.loop:
+    mov     edi, r12d
+    lea     rsi, [recv_buf]
+    mov     edx, 256
+    mov     eax, SYS_read
+    syscall
+    test    eax, eax
+    jg      .loop
     pop     r12
     pop     rbp
     ret
@@ -938,13 +1929,13 @@ sleep_ms:
     xor     edx, edx
     mov     ecx, 1000
     div     ecx
-    mov     [rbp - 8], eax
+    mov     qword [rbp - 16], rax
     mov     eax, edx
     mov     ecx, 1000000
     mul     ecx
-    mov     [rbp - 4], eax
+    mov     qword [rbp - 8], rax
 
-    lea     rdi, [rbp - 8]
+    lea     rdi, [rbp - 16]
     xor     esi, esi
     mov     eax, SYS_nanosleep
     syscall
@@ -1073,6 +2064,41 @@ print_dec:
     pop     rbp
     ret
 
+; print_hex32(value)
+print_hex32:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    sub     rsp, 16
+    mov     byte [rbp - 24], '0'
+    mov     byte [rbp - 23], 'x'
+    mov     ecx, 8
+    lea     rbx, [rbp - 22]
+.l:
+    mov     eax, edi
+    shr     eax, 28
+    cmp     al, 9
+    ja      .hex
+    add     al, '0'
+    jmp     .store
+.hex:
+    add     al, 'a' - 10
+.store:
+    mov     [rbx], al
+    inc     rbx
+    shl     edi, 4
+    dec     ecx
+    jnz     .l
+    mov     edi, 1
+    lea     rsi, [rbp - 24]
+    mov     edx, 10
+    mov     eax, SYS_write
+    syscall
+    add     rsp, 16
+    pop     rbx
+    pop     rbp
+    ret
+
 ; read_file(path) → rax=ptr, edx=size, or rax=0
 read_file:
     push    rbp
@@ -1152,10 +2178,24 @@ crlf_str:           db 0x0a
 str_port:           db "--port", 0
 str_baud:           db "--baud", 0
 str_entry:          db "--entry", 0
+str_flash_offset:   db "--flash-offset", 0
+str_flash:          db "--flash", 0
+str_no_reset:       db "--no-reset", 0
+str_sync_only:      db "--sync-only", 0
+str_read_reg:       db "--read-reg", 0
+str_write_reg:      db "--write-reg", 0
+str_jc3248_bl_on:   db "--jc3248-bl-on", 0
+str_jc3248_bl_off:  db "--jc3248-bl-off", 0
+str_jc3248_spi2:    db "--jc3248-spi2-enable", 0
+str_jc3248_qspi_route: db "--jc3248-qspi-route", 0
+str_target:         db "--target", 0
+str_jc3248w535:     db "jc3248w535", 0
 str_help:           db "--help", 0
 str_dry:            db "--dry-run", 0
 
-m_plan:             db "ESP32 boot: ", 0
+m_plan_ram:         db "ESP32-S3 RAM boot: ", 0
+m_plan_flash:       db "ESP32-S3 flash @ ", 0
+m_plan_sep:         db ": ", 0
 m_to:               db " bytes -> ", 0
 m_ok:               db "OK", 0
 m_dry:              db "Dry run", 0
@@ -1164,14 +2204,39 @@ m_open_err:         db "Cannot open serial port", 0
 m_cfg_err:          db "Cannot configure serial port", 0
 m_rst_err:          db "Reset failed", 0
 m_sync_err:         db "SYNC failed", 0
+m_sync_ok:          db "SYNC OK", 0
+m_read_reg:         db "READ_REG ", 0
+m_eq:               db " = ", 0
+m_read_reg_err:     db "READ_REG failed", 0
+m_write_reg:        db "WRITE_REG ", 0
+m_write_reg_err:    db "WRITE_REG failed", 0
+m_jc3248_bl:        db "JC3248 backlight ", 0
+m_jc3248_bl_err:    db "JC3248 backlight failed", 0
+m_jc3248_spi2:      db "JC3248 SPI2 enabled", 0
+m_jc3248_spi2_err:  db "JC3248 SPI2 enable failed", 0
+m_jc3248_qspi_route: db "JC3248 QSPI routed", 0
+m_jc3248_qspi_route_err: db "JC3248 QSPI route failed", 0
+m_on:               db "on", 0
+m_off:              db "off", 0
 m_dl_err:           db "Download failed", 0
 m_bad_arg:          db "Bad argument. Use --help for usage.", 0
 
 usage_str:          db "Usage: esp32_serial_boot_host [options] <binary> [entry_point]", 0x0a
                     db "Options:", 0x0a
+                    db "  --target jc3248w535  Select ESP32-S3 display/controller defaults", 0x0a
+                    db "  --flash              Write binary to SPI flash instead of RAM", 0x0a
+                    db "  --flash-offset <hex> Flash offset (default: 0x00010000)", 0x0a
+                    db "  --no-reset           Do not toggle reset lines before SYNC", 0x0a
+                    db "  --sync-only          Probe ROM SYNC and exit without writing", 0x0a
+                    db "  --read-reg <hex>     Read one ESP32 ROM-loader MMIO register", 0x0a
+                    db "  --write-reg <addr> <value> <mask> [delay-us]", 0x0a
+                    db "  --jc3248-bl-on      Configure GPIO1 and turn backlight on", 0x0a
+                    db "  --jc3248-bl-off     Configure GPIO1 and turn backlight off", 0x0a
+                    db "  --jc3248-spi2-enable Enable SPI2 peripheral clock/reset", 0x0a
+                    db "  --jc3248-qspi-route Route LCD QSPI pins through GPIO matrix", 0x0a
                     db "  --port <device>      Serial port (default: /dev/ttyUSB0)", 0x0a
                     db "  --baud <rate>        Baud rate (default: 115200)", 0x0a
-                    db "  --entry <hex>        Entry point address (default: 0x40000000)", 0x0a
+                    db "  --entry <hex>        RAM load/entry address (default: 0x40374000)", 0x0a
                     db "  --dry-run            Scan port but don't write", 0x0a
                     db "  --help               Show this help", 0x0a
                     db 0

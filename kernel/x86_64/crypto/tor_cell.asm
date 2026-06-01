@@ -303,6 +303,75 @@ _tor_recv_var_cell:
     pop     rbx
     ret
 
+_tor_recv_netinfo_skip_vpadding:
+    push    rbx
+    push    r12
+    mov     rbx, rdi
+.next_cell:
+    mov     edi, [tor_conn_id]
+    mov     rsi, rbx
+    lea     rdx, [tor_recv_len]
+    mov     dword [rdx], TOR_CELL_HEADER_LEN
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_CELL_HEADER_LEN
+    jne     .fail
+    cmp     dword [rbx + TOR_CELL_CIRC_ID], 0
+    jne     .fail
+    cmp     byte [rbx + TOR_CELL_CMD], TOR_CELL_NETINFO
+    je      .recv_netinfo_payload
+    cmp     byte [rbx + TOR_CELL_CMD], TOR_CELL_VPADDING
+    jne     .fail
+
+    mov     edi, [tor_conn_id]
+    lea     rsi, [rbx + TOR_VAR_LEN]
+    lea     rdx, [tor_recv_len]
+    mov     dword [rdx], 2
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], 2
+    jne     .fail
+    movzx   r12d, byte [rbx + TOR_VAR_LEN]
+    shl     r12d, 8
+    movzx   eax, byte [rbx + TOR_VAR_LEN + 1]
+    or      r12d, eax
+    test    r12d, r12d
+    jz      .next_cell
+    mov     edi, [tor_conn_id]
+    lea     rsi, [rbx + TOR_VAR_PAYLOAD]
+    lea     rdx, [tor_recv_len]
+    mov     [rdx], r12d
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     [tor_recv_len], r12d
+    jne     .fail
+    jmp     .next_cell
+
+.recv_netinfo_payload:
+    mov     edi, [tor_conn_id]
+    lea     rsi, [rbx + TOR_CELL_PAYLOAD]
+    lea     rdx, [tor_recv_len]
+    mov     dword [rdx], TOR_CELL_PAYLOAD_LEN
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_CELL_PAYLOAD_LEN
+    jne     .fail
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r12
+    pop     rbx
+    ret
+
 SECTION .data
 global tor_recv_len
 tor_recv_len: dd 0
@@ -395,6 +464,180 @@ _tor_build_netinfo_cell:
     ; Clients send no advertised addresses of their own.
     mov     byte [rbx + TOR_CELL_PAYLOAD + 10], 0
 
+    pop     rbx
+    ret
+
+_tor_validate_certs_cell:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 32
+    mov     qword [rsp], 0
+    mov     qword [rsp + 8], 0
+    mov     qword [rsp + 16], 0
+    mov     qword [rsp + 24], 0
+    mov     rbx, rdi
+    cmp     byte [rbx + TOR_VAR_CMD], TOR_CELL_CERTS
+    jne     .bad
+    movzx   r12d, byte [rbx + TOR_VAR_LEN]
+    shl     r12d, 8
+    movzx   eax, byte [rbx + TOR_VAR_LEN + 1]
+    or      r12d, eax
+    cmp     r12d, 1
+    jb      .bad
+    movzx   r13d, byte [rbx + TOR_VAR_PAYLOAD]
+    test    r13d, r13d
+    jz      .bad
+    mov     r11d, 1
+.cert_loop:
+    test    r13d, r13d
+    jz      .cert_done
+    mov     eax, r12d
+    sub     eax, r11d
+    cmp     eax, 3
+    jb      .bad
+    movzx   r14d, byte [rbx + TOR_VAR_PAYLOAD + r11]
+    mov     r15d, r14d
+    shr     r15d, 6
+    mov     eax, r14d
+    and     eax, 63
+    mov     ecx, eax
+    mov     rdx, 1
+    shl     rdx, cl
+    lea     r10, [rsp + r15*8]
+    test    [r10], rdx
+    jnz     .bad
+    or      [r10], rdx
+
+    movzx   eax, byte [rbx + TOR_VAR_PAYLOAD + r11 + 1]
+    shl     eax, 8
+    movzx   edx, byte [rbx + TOR_VAR_PAYLOAD + r11 + 2]
+    or      eax, edx
+    add     r11d, 3
+    jc      .bad
+    add     r11d, eax
+    jc      .bad
+    cmp     r11d, r12d
+    ja      .bad
+    dec     r13d
+    jmp     .cert_loop
+.cert_done:
+    xor     eax, eax
+    add     rsp, 32
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.bad:
+    mov     eax, -1
+    add     rsp, 32
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+_tor_validate_auth_challenge_cell:
+    push    rbx
+    mov     rbx, rdi
+    cmp     byte [rbx + TOR_VAR_CMD], TOR_CELL_AUTH_CHALLENGE
+    jne     .bad
+    movzx   ecx, byte [rbx + TOR_VAR_LEN]
+    shl     ecx, 8
+    movzx   eax, byte [rbx + TOR_VAR_LEN + 1]
+    or      ecx, eax
+    cmp     ecx, 34
+    jb      .bad
+    movzx   eax, byte [rbx + TOR_VAR_PAYLOAD + 32]
+    shl     eax, 8
+    movzx   edx, byte [rbx + TOR_VAR_PAYLOAD + 33]
+    or      eax, edx
+    shl     eax, 1
+    add     eax, 34
+    jc      .bad
+    cmp     eax, ecx
+    jne     .bad
+    xor     eax, eax
+    pop     rbx
+    ret
+.bad:
+    mov     eax, -1
+    pop     rbx
+    ret
+
+_tor_validate_netinfo_cell:
+    push    rbx
+    push    r12
+    push    r13
+    mov     rbx, rdi
+    cmp     byte [rbx + TOR_CELL_CMD], TOR_CELL_NETINFO
+    jne     .bad
+    cmp     dword [rbx + TOR_CELL_CIRC_ID], 0
+    jne     .bad
+
+    ; TIME(4) + OTHERADDR ATYPE/ALEN.
+    mov     r12d, TOR_CELL_PAYLOAD + 6
+    movzx   eax, byte [rbx + TOR_CELL_PAYLOAD + 4]
+    movzx   ecx, byte [rbx + TOR_CELL_PAYLOAD + 5]
+    cmp     al, 4
+    jne     .other_not_ipv4
+    cmp     ecx, 4
+    jne     .bad
+    jmp     .other_len_ready
+.other_not_ipv4:
+    cmp     al, 6
+    jne     .other_len_ready
+    cmp     ecx, 16
+    jne     .bad
+.other_len_ready:
+    add     r12d, ecx
+    cmp     r12d, TOR_CELL_LEN
+    jae     .bad
+
+    ; NMYADDR followed by that many ATYPE/ALEN/AVAL tuples. Extra bytes are ignored.
+    movzx   r13d, byte [rbx + r12]
+    inc     r12d
+.addr_loop:
+    test    r13d, r13d
+    jz      .ok
+    mov     eax, TOR_CELL_LEN
+    sub     eax, r12d
+    cmp     eax, 2
+    jb      .bad
+    movzx   eax, byte [rbx + r12]
+    movzx   ecx, byte [rbx + r12 + 1]
+    cmp     al, 4
+    jne     .addr_not_ipv4
+    cmp     ecx, 4
+    jne     .bad
+    jmp     .addr_len_ready
+.addr_not_ipv4:
+    cmp     al, 6
+    jne     .addr_len_ready
+    cmp     ecx, 16
+    jne     .bad
+.addr_len_ready:
+    add     r12d, 2
+    add     r12d, ecx
+    cmp     r12d, TOR_CELL_LEN
+    ja      .bad
+    dec     r13d
+    jmp     .addr_loop
+.ok:
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.bad:
+    mov     eax, -1
+    pop     r13
+    pop     r12
     pop     rbx
     ret
 
@@ -527,37 +770,49 @@ er_fn er_tor_link_handshake
 
     mov     [tor_link_version], eax
 
-    ; Wait for CERTS from relay
+.recv_certs:
     mov     rdi, tor_var_cell
     call    _tor_recv_var_cell
     test    eax, eax
     js      .recv_fail
+    cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_VPADDING
+    je      .recv_certs
 
     ; Should be CERTS cell
     cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_CERTS
     jne     .proto_fail
+    mov     rdi, tor_var_cell
+    call    _tor_validate_certs_cell
+    test    eax, eax
+    js      .proto_fail
 
-    ; Wait for AUTH_CHALLENGE
+.recv_auth_challenge:
     mov     rdi, tor_var_cell
     call    _tor_recv_var_cell
     test    eax, eax
     js      .recv_fail
+    cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_VPADDING
+    je      .recv_auth_challenge
 
     ; Should be AUTH_CHALLENGE
     cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_AUTH_CHALLENGE
     jne     .proto_fail
-
-    ; Extract challenge from AUTH_CHALLENGE payload
-    ; Format: challenge_len(2) + challenge(len) + methods_len(1) + methods
-    lea     rsi, [tor_var_cell + TOR_VAR_PAYLOAD]
+    mov     rdi, tor_var_cell
+    call    _tor_validate_auth_challenge_cell
+    test    eax, eax
+    js      .proto_fail
 
     ; Wait for responder NETINFO before sending our client NETINFO.
-    mov     rsi, tor_rx_cell
-    call    _tor_cell_recv
+    mov     rdi, tor_rx_cell
+    call    _tor_recv_netinfo_skip_vpadding
     test    eax, eax
     js      .recv_fail
     cmp     byte [tor_rx_cell + TOR_CELL_CMD], TOR_CELL_NETINFO
     jne     .proto_fail
+    mov     rdi, tor_rx_cell
+    call    _tor_validate_netinfo_cell
+    test    eax, eax
+    js      .proto_fail
 
     ; Send NETINFO
     mov     rdi, tor_var_cell
@@ -628,8 +883,9 @@ _tor_send_create2:
     mov     byte [tor_tx_cell + 4], TOR_CELL_CREATE2
 
     ; Payload: htype(2) + hlen(2) + handshake_data
-    ; htype = 0x0002 (ntor) at payload offset 0 (= cell offset 5)
-    mov     word [tor_tx_cell + 5], 0x0002
+    ; htype = 0x0002 (ntor), big-endian.
+    mov     byte [tor_tx_cell + 5], 0
+    mov     byte [tor_tx_cell + 6], 2
 
     ; hlen (big-endian)
     mov     eax, ebx
@@ -658,10 +914,15 @@ _tor_recv_created2:
     push    rbx
     push    r12
     push    r13
+    push    r14
 
     mov     r12d, edi       ; circ_id
     mov     r13, rsi        ; reply buffer
     mov     r14, rdx        ; reply_len ptr
+    test    r13, r13
+    jz      .fail
+    test    r14, r14
+    jz      .fail
 
     ; Read cell from TCP
     mov     edi, [tor_conn_id]
@@ -671,17 +932,31 @@ _tor_recv_created2:
     call    er_tls_recv
     test    eax, eax
     js      .fail
-
-    ; Verify cmd = CREATED2 (v4+: offset 4)
-    cmp     byte [tor_rx_cell + 4], TOR_CELL_CREATED2
+    cmp     dword [tor_recv_len], TOR_CELL_LEN
     jne     .fail
 
-    ; Parse reply: htype(2) + hlen(2) + data
-    movzx   ecx, word [tor_rx_cell + 7]  ; hlen (big-endian)
-    xchg    cl, ch
+    ; Verify the CREATED2 belongs to the circuit being opened.
+    cmp     dword [tor_rx_cell + TOR_CELL_CIRC_ID], r12d
+    jne     .fail
+
+    ; Verify cmd = CREATED2 (v4+: offset 4)
+    cmp     byte [tor_rx_cell + TOR_CELL_CMD], TOR_CELL_CREATED2
+    jne     .fail
+
+    ; Parse reply: htype(2) + hlen(2) + data. Only ntor CREATED2 is valid.
+    cmp     byte [tor_rx_cell + TOR_CELL_PAYLOAD], 0
+    jne     .fail
+    cmp     byte [tor_rx_cell + TOR_CELL_PAYLOAD + 1], 2
+    jne     .fail
+    movzx   ecx, byte [tor_rx_cell + TOR_CELL_PAYLOAD + 2]
+    shl     ecx, 8
+    movzx   eax, byte [tor_rx_cell + TOR_CELL_PAYLOAD + 3]
+    or      ecx, eax
+    cmp     ecx, 64
+    jne     .fail
 
     ; Copy handshake data to reply buffer
-    lea     rsi, [tor_rx_cell + 9]       ; after htype + hlen
+    lea     rsi, [tor_rx_cell + TOR_CELL_PAYLOAD + 4]
     mov     rdi, r13
     mov     edx, ecx
     call    er_memcpy

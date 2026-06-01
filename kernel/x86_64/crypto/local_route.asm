@@ -6,7 +6,7 @@
 ; Public API:
 ;   er_local_cell_init()     — init routing table and all rings
 ;   er_route_send()          — send cell to any identity route
-;   er_route_register_relay() — bind identity to raw Tor cell forwarding
+;   er_route_register_relay() — bind identity to explicit Tor cell forwarding
 ;   er_local_route_register() — register an identity
 ;   er_local_route_lookup()  — look up slot by identity hash
 ;   er_local_route_unregister() — unregister an identity
@@ -490,6 +490,7 @@ er_fn er_local_route_get_ring
 ; er_route_send — send a cell to an identity route
 ; int er_route_send(const u8 *dest_hash[32], const u8 *cell[LOCAL_CELL_SIZE])
 ; rdi = dest identity hash, rsi = cell data
+; Unknown valid identities use the kernel Tor relay path by default.
 ; Returns: eax = 0, edx = 0 on success
 ; ==================================================================
 global er_route_send
@@ -506,7 +507,7 @@ er_fn er_route_send
 
     call    _local_route_find_by_hash
     test    edx, edx
-    jnz     .not_found
+    jnz     .send_tor
 
     mov     ebx, eax        ; slot_id
     mov     edi, ebx

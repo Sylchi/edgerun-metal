@@ -464,9 +464,9 @@ db 6   ; 6 global
 db 7   ; 7 export
 db 8   ; 8 start
 db 9   ; 9 element
-db 10  ; 10 data_count
-db 11  ; 11 code
-db 12  ; 12 data
+db 11  ; 10 code
+db 12  ; 11 data
+db 10  ; 12 data_count
 
 ; Float constants for saturating truncation
 align 8

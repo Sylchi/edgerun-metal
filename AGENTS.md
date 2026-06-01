@@ -156,6 +156,19 @@ Resources (RAM, storage, identity access) require a signed user grant.
 See [`docs/authorization.md`](docs/authorization.md) for the full architecture:
 app manifest → user prompt → signed receipt → TPM-mediated key hierarchy.
 
+Grants are honest allocation contracts, not symbolic permissions over a hidden
+shared pool. If an app is granted RAM, durable flush capacity, identity access,
+display, input, clock, or Tor role authority, that resource is allocated in full
+and owned by the app for the grant. If the grant or capacity is missing, the
+capability does not exist. Do not model this as best-effort scheduling,
+overcommit, implicit shared caches, passwords, sockets, paths, or ambient auth.
+
+Apps route with the Tor protocol through the device relay and may manage their
+own Tor-compatible routing only inside granted resources. App content is sealed
+by the app through SDK tooling; user data is sealed for the USER identity;
+device data is sealed for the DEVICE identity; object requirements carry who may
+move, decrypt, verify, or flush the data.
+
 ### Route Table
 A fixed-size table (16 entries) maps identity hash → SPSC ring buffer + handler.
 - `er_local_route_register(id)` → slot_id

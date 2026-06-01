@@ -858,10 +858,11 @@ er_wasm_read_constant_value:
     ret
 
 ; ==================================================================
-; Element section parser (stub for now — full implementation)
+; Element section parser
 ; =================================================================+
 er_wasm_parse_element_section:
     er_frame_push
+    push    rbx
     push    r11
     push    r12
     push    r13
@@ -900,32 +901,81 @@ er_wasm_parse_element_section:
     je      .mode_2
     cmp     eax, 3
     je      .mode_3
-    ; Modes 4-7 are like 0-3 but use ref.func expressions
-    ; For now, skip them the same way (unsupported would be too strict)
-    cmp     eax, 4
-    je      .mode_0
-    cmp     eax, 5
-    je      .mode_1
-    cmp     eax, 6
-    je      .mode_2
-    cmp     eax, 7
-    je      .mode_3
+    ; Modes 4-7 carry expression vectors. They must not be accepted until
+    ; ref.func/ref.null element expression application is implemented.
     jmp     .unsupported_section
 
 .mode_0:
-    ; read offset_expr, then treat like mode_1 (active -> store entries in element_segment)
+    ; Active implicit table 0: offset_expr, elem_kind, vec(func_idx)
+    cmp     byte [table_has], 1
+    jne     .unsupported_section
     er_call er_wasm_read_constant_i32, .error
-    ; For now, just read elem_kind + vec and skip (no table support needed yet)
-    ; We fall through to mode_1 parsing
+    mov     rbx, rax
+    jmp     .active_tail
+
 .mode_1:
     ; Passive: elem_kind byte + vec(func_idx)
+    xor     ebx, ebx
+    jmp     .passive_tail
+
+.mode_2:
+    ; Active with explicit table: table_idx, offset_expr, elem_kind, vec
+    cmp     byte [table_has], 1
+    jne     .unsupported_section
+    er_call er_wasm_read_leb_u32, .error  ; table index
+    test    eax, eax
+    jnz     .unsupported_section          ; only table 0 supported
+    er_call er_wasm_read_constant_i32, .error
+    mov     rbx, rax
+    jmp     .active_tail
+
+.active_tail:
     movzx   eax, byte [rsi]     ; elem_kind
     inc     rsi
-    ; Validate elem_kind is 0x00 (funcref)
     test    al, al
     jnz     .unsupported_section
+    er_call er_wasm_read_leb_u32, .error
+    mov     r14, rax
+    cmp     r14, MAX_TABLE_ENTRIES
+    ja      .unsupported_section
+    mov     rax, rbx
+    add     rax, r14
+    jc      .unsupported_section
+    cmp     rax, [table_min]
+    ja      .unsupported_section
 
-    ; Read function count
+    push    r10
+    mov     r10, r11
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    mov     [element_segments + r10 + 256], r14  ; count
+    mov     byte [element_segments + r10 + 264], 0  ; active
+    pop     r10
+
+    xor     r13d, r13d
+.active_idx_loop:
+    cmp     r13, r14
+    jae     .next
+    er_call er_wasm_read_leb_u32, .error
+    mov     rcx, [import_count]
+    add     rcx, [function_count]
+    cmp     rax, rcx
+    jae     .unsupported_section
+    push    r10
+    mov     r10, r11
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    mov     [element_segments + r10 + r13 * 8], rax
+    pop     r10
+    mov     r10, rbx
+    add     r10, r13
+    mov     [table_entries + r10 * 8], rax
+    inc     r13
+    jmp     .active_idx_loop
+
+.passive_tail:
+    movzx   eax, byte [rsi]     ; elem_kind
+    inc     rsi
+    test    al, al
+    jnz     .unsupported_section
     er_call er_wasm_read_leb_u32, .error
     mov     r14, rax            ; count
     cmp     r14, MAX_TABLE_ENTRIES
@@ -944,6 +994,10 @@ er_wasm_parse_element_section:
     cmp     r13, r14
     jae     .next
     er_call er_wasm_read_leb_u32, .error
+    mov     rcx, [import_count]
+    add     rcx, [function_count]
+    cmp     rax, rcx
+    jae     .unsupported_section
     push    r10
     mov     r10, r11
     imul    r10, ELEMENT_SEGMENT_SIZE
@@ -952,26 +1006,24 @@ er_wasm_parse_element_section:
     inc     r13
     jmp     .idx_loop
 
-.mode_2:
-    ; Active with explicit table: table_idx, offset_expr, elem_kind, vec
-    er_call er_wasm_read_leb_u32, .error  ; table index
-    test    eax, eax
-    jnz     .unsupported_section          ; only table 0 supported
-    er_call er_wasm_read_constant_i32, .error  ; offset expr (skip)
-    jmp     .mode_1                        ; rest same as mode_1
-
 .mode_3:
-    ; Declarative: elem_kind byte + vec(func_idx) — skip entirely
+    ; Declarative: elem_kind byte + vec(func_idx) — validate and discard.
     movzx   eax, byte [rsi]
     inc     rsi
     test    al, al
     jnz     .unsupported_section
     er_call er_wasm_read_leb_u32, .error
     mov     r14, rax
+    cmp     r14, MAX_TABLE_ENTRIES
+    ja      .unsupported_section
 .skip_idx_loop:
     test    r14, r14
     jz      .next
     er_call er_wasm_read_leb_u32, .error
+    mov     rcx, [import_count]
+    add     rcx, [function_count]
+    cmp     rax, rcx
+    jae     .unsupported_section
     dec     r14
     jmp     .skip_idx_loop
 
@@ -986,6 +1038,7 @@ er_wasm_parse_element_section:
     pop     r13
     pop     r12
     pop     r11
+    pop     rbx
     pop     rbp
     ret
 
@@ -996,6 +1049,7 @@ er_wasm_parse_element_section:
     pop     r13
     pop     r12
     pop     r11
+    pop     rbx
     pop     rbp
     ret
 
@@ -1007,6 +1061,7 @@ er_wasm_parse_element_section:
     pop     r13
     pop     r12
     pop     r11
+    pop     rbx
     pop     rbp
     ret
 

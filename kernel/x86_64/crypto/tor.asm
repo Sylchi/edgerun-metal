@@ -1,5 +1,5 @@
-; EdgeRun Tor client — x86_64 assembly
-; Main orchestrator: bootstrap, connect, circuit management, streaming.
+; EdgeRun Tor role orchestrator — x86_64 assembly
+; Bootstrap, role capabilities, circuit management, streaming.
 ;
 ; Entry point: er_tor_init() — called explicitly by a Tor role owner
 ;              er_tor_poll() — called explicitly by a Tor role owner
@@ -57,31 +57,6 @@ extern er_tor_relay_crypt
 
 SECTION .rodata
 
-; Default Tor guard relay (for testing, use a public relay)
-; Replace with actual guard IP at boot time
-; 131.188.40.189 = 0xBD28B683 (but in network byte order)
-; For testing in QEMU with local Tor: 10.0.2.2 = localhost via host
-; We use a compile-time default that can be overridden
-%ifndef TOR_DEFAULT_GUARD_IP_A
-%define TOR_DEFAULT_GUARD_IP_A 0x0A
-%endif
-%ifndef TOR_DEFAULT_GUARD_IP_B
-%define TOR_DEFAULT_GUARD_IP_B 0x00
-%endif
-%ifndef TOR_DEFAULT_GUARD_IP_C
-%define TOR_DEFAULT_GUARD_IP_C 0x02
-%endif
-%ifndef TOR_DEFAULT_GUARD_IP_D
-%define TOR_DEFAULT_GUARD_IP_D 0x64
-%endif
-%ifndef TOR_DEFAULT_GUARD_PORT
-%define TOR_DEFAULT_GUARD_PORT 19001
-%endif
-tor_default_guard_ip:
-    db TOR_DEFAULT_GUARD_IP_A, TOR_DEFAULT_GUARD_IP_B
-    db TOR_DEFAULT_GUARD_IP_C, TOR_DEFAULT_GUARD_IP_D
-tor_default_guard_port: dw TOR_DEFAULT_GUARD_PORT
-
 ; Status strings
 str_tor_init:    db "tor: init", 0x0A, 0
 str_tor_connect: db "tor: connecting...", 0x0A, 0
@@ -100,7 +75,7 @@ tor_hs_desc_signature_line_len equ $ - tor_hs_desc_signature_line
 
 SECTION .bss
 
-; Tor client state
+; Tor role state
 tor_state: resb TOR_STATE_SIZE
 
 ; Circuit IDs for applications
@@ -963,7 +938,7 @@ er_fn er_tor_directory_fetch_consensus
     mov     rsi, r14
     call    er_memcpy
 
-    ; Parse first relay entry from consensus and persist guard material
+    ; Parse first relay entry from consensus into kernel-owned guard material
     call    _tor_parse_consensus_first_relay
     test    eax, eax
     js      .fail
@@ -3159,7 +3134,7 @@ _tor_print_ip:
     ret
 
 ; ==================================================================
-; er_tor_init — initialize and bootstrap Tor client
+; er_tor_init — initialize and bootstrap configured Tor role
 ; int er_tor_init(void)
 ;
 ; 1. Initialize cell layer
@@ -3180,10 +3155,13 @@ er_fn er_tor_init
 
     ; Initialize Tor cell module
     call    er_tor_cell_init
+    cmp     dword [tor_state + TOR_STATE_ROLE_CAPS], 0
+    jne     .role_ready
     mov     edi, TOR_ROLE_CLIENT
     call    er_tor_set_role
     test    eax, eax
     js      .link_fail
+.role_ready:
     mov     dword [tor_dir_stream_open], 0
     mov     word [tor_dir_stream_id], 0
     mov     word [tor_hs_live_stream_next_id], 1

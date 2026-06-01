@@ -1,0 +1,374 @@
+# 07 Padding Spec
+
+Mike Perry, George Kadianakis
+
+Note: This is an attempt to specify Tor as currently implemented. Future versions of Tor will implement improved algorithms.
+
+This document tries to cover how Tor chooses to use cover traffic to obscure various traffic patterns from external and internal observers. Other implementations MAY take other approaches, but implementors should be aware of the anonymity and load-balancing implications of their choices.
+
+# Circuit-level padding
+
+The circuit padding system in Tor is an extension of the WTF-PAD event-driven state machine design[15]. At a high level, this design places one or more padding state machines at the client, and one or more padding state machines at a relay, on each circuit.
+
+State transition and histogram generation has been generalized to be fully programmable, and probability distribution support was added to support more compact representations like APE[16]. Additionally, packet count limits, rate limiting, and circuit application conditions have been added.
+
+At present, Tor uses this system to deploy two pairs of circuit padding machines, to obscure differences between the setup phase of client-side onion service circuits, up to the first 10 relay cells.
+
+This specification covers only the resulting behavior of these padding machines, and thus does not cover the state machine implementation details or operation. For full details on using the circuit padding system to develop future padding defenses, see the research developer documentation[17].
+
+## Circuit Padding Negotiation
+
+Circuit padding machines are advertised as “Padding” subprotocols. The onion service circuit padding machines are advertised as “Padding=2” (`PADDING_MACHINES_CIRC_SETUP`).
+
+Because circuit padding machines only become active at certain points in circuit lifetime, and because more than one padding machine may be active at any given point in circuit lifetime, there is also a PADDING_NEGOTIATE message and a PADDING_NEGOTIATED message. These are relay commands 41 and 42 respectively, with relay headers as per section 6.1 of tor-spec.txt.
+
+The fields in the body of a PADDING_NEGOTIATE message are as follows:
+[code]
+         const CIRCPAD_COMMAND_STOP = 1;
+         const CIRCPAD_COMMAND_START = 2;
+
+         const CIRCPAD_RESPONSE_OK = 1;
+         const CIRCPAD_RESPONSE_ERR = 2;
+
+         const CIRCPAD_MACHINE_CIRC_SETUP = 1;
+
+         struct circpad_negotiate {
+           u8 version IN [0];
+           u8 command IN [CIRCPAD_COMMAND_START, CIRCPAD_COMMAND_STOP];
+
+           u8 machine_type IN [CIRCPAD_MACHINE_CIRC_SETUP];
+
+           u8 unused; // Formerly echo_request
+
+           u32 machine_ctr;
+         };
+
+[/code]
+
+When a client wants to start a circuit padding machine, it first checks that the desired destination hop advertises the appropriate subprotocol for that machine. It then sends a PADDING_NEGOTIATE message to that hop with command=CIRCPAD_COMMAND_START, and machine_type=CIRCPAD_MACHINE_CIRC_SETUP (for the circ setup machine, the destination hop is the second hop in the circuit). The machine_ctr is the count of which machine instance this is on the circuit. It is used to disambiguate shutdown requests.
+
+When a relay receives a PADDING_NEGOTIATE message, it checks that it supports the requested machine, and sends a PADDING_NEGOTIATED message, which is formatted in the body of a relay message with command number 42 (see tor-spec.txt section 6.1), as follows:
+[code]
+         struct circpad_negotiated {
+           u8 version IN [0];
+           u8 command IN [CIRCPAD_COMMAND_START, CIRCPAD_COMMAND_STOP];
+           u8 response IN [CIRCPAD_RESPONSE_OK, CIRCPAD_RESPONSE_ERR];
+
+           u8 machine_type IN [CIRCPAD_MACHINE_CIRC_SETUP];
+
+           u32 machine_ctr;
+         };
+
+[/code]
+
+If the machine is supported, the response field will contain CIRCPAD_RESPONSE_OK. If it is not, it will contain CIRCPAD_RESPONSE_ERR.
+
+Either side may send a CIRCPAD_COMMAND_STOP to shut down the padding machines (clients MUST only send circpad_negotiate, and relays MUST only send circpad_negotiated for this purpose).
+
+If the machine_ctr does not match the current machine instance count on the circuit, the command is ignored.
+
+## Circuit Padding Machine Message Management
+
+Clients MAY send padding cells towards the relay before receiving the circpad_negotiated response, to allow for outbound cover traffic before negotiation completes.
+
+Clients MAY send another PADDING_NEGOTIATE message before receiving the circpad_negotiated response, to allow for rapid machine changes.
+
+Relays MUST NOT send padding cells or PADDING_NEGOTIATE messages unless a padding machine is active. Any padding cells or padding-related messages that arrive at the client from unexpected relay sources are protocol violations, and clients MAY immediately tear down such circuits to avoid side channel risk.
+
+## Obfuscating client-side onion service circuit setup
+
+The circuit padding currently deployed in Tor attempts to hide client-side onion service circuit setup. Service-side setup is not covered, because doing so would involve significantly more overhead, and/or require interaction with the application layer.
+
+The approach taken aims to make client-side introduction and rendezvous circuits match the cell direction sequence and cell count of 3 hop general circuits used for normal web traffic, for the first 10 cells only. The lifespan of introduction circuits is also made to match the lifespan of general circuits.
+
+Note that inter-arrival timing is not obfuscated by this defense.
+
+### Common general circuit construction sequences
+
+Most general Tor circuits used to surf the web or download directory information start with the following 6-cell relay cell sequence (cells surrounded in [brackets] are outgoing, the others are incoming):
+
+[EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [BEGIN] -> CONNECTED
+
+When this is done, the client has established a 3-hop circuit and also opened a stream to the other end. Usually after this comes a series of DATA message that either fetches pages, establishes an SSL connection or fetches directory information:
+
+[DATA] -> [DATA] -> DATA -> DATA…(inbound cells continue)
+
+The above stream of 10 relay cells defines the grand majority of general circuits that come out of Tor browser during our testing, and it’s what we use to make introduction and rendezvous circuits blend in.
+
+Please note that in this section we only investigate relay cells and not connection-level cells like CREATE/CREATED or AUTHENTICATE/etc. that are used during the link-layer handshake. The rationale is that connection-level cells depend on the type of guard used and are not an effective fingerprint for a network/guard-level adversary.
+
+### Client-side onion service introduction circuit obfuscation
+
+Two circuit padding machines work to hide client-side introduction circuits: one machine at the origin, and one machine at the second hop of the circuit. Each machine sends padding towards the other. The padding from the origin-side machine terminates at the second hop and does not get forwarded to the actual introduction point.
+
+From Section 3.3.1 above, most general circuits have the following initial relay cell sequence (outgoing cells marked in [brackets]):
+[code]
+      [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [BEGIN] -> CONNECTED
+        -> [DATA] -> [DATA] -> DATA -> DATA...(inbound data cells continue)
+
+      Whereas normal introduction circuits usually look like:
+
+      [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2
+        -> [INTRO1] -> INTRODUCE_ACK
+
+[/code]
+
+This means that up to the sixth cell (first line of each sequence above), both general and intro circuits have identical cell sequences. After that we want to mimic the second line sequence of
+
+-> [DATA] -> [DATA] -> DATA -> DATA…(inbound data cells continue)
+
+We achieve this by starting padding INTRODUCE1 has been sent. With padding negotiation cells, in the common case of the second line looks like:
+
+-> [INTRO1] -> [PADDING_NEGOTIATE] -> PADDING_NEGOTIATED -> INTRO_ACK
+
+Then, the middle node will send between INTRO_MACHINE_MINIMUM_PADDING (7) and INTRO_MACHINE_MAXIMUM_PADDING (10) cells, to match the “…(inbound data cells continue)” portion of the trace (aka the rest of an HTTPS response body).
+
+We also set a special flag which keeps the circuit open even after the introduction is performed. With this feature the circuit will stay alive for the same duration as normal web circuits before they expire (usually 10 minutes).
+
+### Client-side rendezvous circuit hiding
+
+Following a similar argument as for intro circuits, we are aiming for padded rendezvous circuits to blend in with the initial cell sequence of general circuits which usually look like this:
+[code]
+      [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [BEGIN] -> CONNECTED
+         -> [DATA] -> [DATA] -> DATA -> DATA...(incoming cells continue)
+
+      Whereas normal rendezvous circuits usually look like:
+
+      [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [EST_REND] -> REND_EST
+         -> REND2 -> [BEGIN]
+
+[/code]
+
+This means that up to the sixth cell (the first line), both general and rend circuits have identical cell sequences.
+
+After that we want to mimic a [DATA] -> [DATA] -> DATA -> DATA sequence.
+
+With padding negotiation right after the REND_ESTABLISHED, the sequence becomes:
+[code]
+      [EXTEND2] -> EXTENDED2 -> [EXTEND2] -> EXTENDED2 -> [EST_REND] -> REND_EST
+         -> [PADDING_NEGOTIATE] -> [DROP] -> PADDING_NEGOTIATED -> DROP...
+
+      After which normal application DATA-bearing cells continue on the circuit.
+
+[/code]
+
+Hence this way we make rendezvous circuits look like general circuits up till the end of the circuit setup.
+
+After that our machine gets deactivated, and we let the actual rendezvous circuit shape the traffic flow. Since rendezvous circuits usually imitate general circuits (their purpose is to surf the web), we can expect that they will look alike.
+
+### Circuit setup machine overhead
+
+For the intro circuit case, we see that the origin-side machine just sends a single PADDING_NEGOTIATE message, whereas the origin-side machine sends a PADDING_NEGOTIATED message and between 7 to 10 DROP cells. This means that the average overhead of this machine is 11 padding cells per introduction circuit.
+
+For the rend circuit case, this machine is quite light. Both sides send 2 padding cells, for a total of 4 padding cells.
+
+## Circuit padding consensus parameters
+
+The circuit padding system has a handful of consensus parameters that can either disable circuit padding entirely, or rate limit the total overhead at relays and clients.
+[code]
+      * circpad_padding_disabled
+        - If set to 1, no circuit padding machines will negotiate, and all
+          current padding machines will cease padding immediately.
+        - Default: 0
+
+      * circpad_padding_reduced
+        - If set to 1, only circuit padding machines marked as "reduced"/"low
+          overhead" will be used. (Currently no such machines are marked
+          as "reduced overhead").
+        - Default: 0
+
+      * circpad_global_allowed_cells
+        - This is the number of padding cells that must be sent before
+          the 'circpad_global_max_padding_percent' parameter is applied.
+        - Default: 0
+
+      * circpad_global_max_padding_percent
+        - This is the maximum ratio of padding cells to total cells, specified
+          as a percent. If the global ratio of padding cells to total cells
+          across all circuits exceeds this percent value, no more padding is sent
+          until the ratio becomes lower. 0 means no limit.
+        - Default: 0
+
+      * circpad_max_circ_queued_cells
+        - This is the maximum number of cells that can be in the circuitmux queue
+          before padding stops being sent on that circuit.
+        - Default: CIRCWINDOW_START_MAX (1000)
+
+[/code]
+
+## Connection-level padding
+
+## Background
+
+Tor clients and relays make use of PADDING to reduce the resolution of connection-level metadata retention by ISPs and surveillance infrastructure.
+
+Such metadata retention is implemented by Internet routers in the form of Netflow, jFlow, Netstream, or IPFIX records. These records are emitted by gateway routers in a raw form and then exported (often over plaintext) to a “collector” that either records them verbatim, or reduces their granularity further[1].
+
+Netflow records and the associated data collection and retention tools are very configurable, and have many modes of operation, especially when configured to handle high throughput. However, at ISP scale, per-flow records are very likely to be employed, since they are the default, and also provide very high resolution in terms of endpoint activity, second only to full packet and/or header capture.
+
+Per-flow records record the endpoint connection 5-tuple, as well as the total number of bytes sent and received by that 5-tuple during a particular time period. They can store additional fields as well, but it is primarily timing and bytecount information that concern us.
+
+When configured to provide per-flow data, routers emit these raw flow records periodically for all active connections passing through them based on two parameters: the “active flow timeout” and the “inactive flow timeout”.
+
+The “active flow timeout” causes the router to emit a new record periodically for every active TCP session that continuously sends data. The default active flow timeout for most routers is 30 minutes, meaning that a new record is created for every TCP session at least every 30 minutes, no matter what. This value can be configured from 1 minute to 60 minutes on major routers.
+
+The “inactive flow timeout” is used by routers to create a new record if a TCP session is inactive for some number of seconds. It allows routers to avoid the need to track a large number of idle connections in memory, and instead emit a separate record only when there is activity. This value ranges from 10 seconds to 600 seconds on common routers. It appears as though no routers support a value lower than 10 seconds.
+
+For reference, here are default values and ranges (in parenthesis when known) for common routers, along with citations to their manuals.
+
+Some routers speak other collection protocols than Netflow, and in the case of Juniper, use different timeouts for these protocols. Where this is known to happen, it has been noted.
+[code]
+                                Inactive Timeout              Active Timeout
+        Cisco IOS[3]              15s (10-600s)               30min (1-60min)
+        Cisco Catalyst[4]         5min                        32min
+        Juniper (jFlow)[5]        15s (10-600s)               30min (1-60min)
+        Juniper (Netflow)[6,7]    60s (10-600s)               30min (1-30min)
+        H3C (Netstream)[8]        60s (60-600s)               30min (1-60min)
+        Fortinet[9]               15s                         30min
+        MicroTik[10]              15s                         30min
+        nProbe[14]                30s                         120s
+        Alcatel-Lucent[2]         15s (10-600s)               30min (1-600min)
+
+[/code]
+
+The combination of the active and inactive netflow record timeouts allow us to devise a low-cost padding defense that causes what would otherwise be split records to “collapse” at the router even before they are exported to the collector for storage. So long as a connection transmits data before the “inactive flow timeout” expires, then the router will continue to count the total bytes on that flow before finally emitting a record at the “active flow timeout”.
+
+This means that for a minimal amount of padding that prevents the “inactive flow timeout” from expiring, it is possible to reduce the resolution of raw per-flow netflow data to the total amount of bytes send and received in a 30 minute window. This is a vast reduction in resolution for HTTP, IRC, XMPP, SSH, and other intermittent interactive traffic, especially when all user traffic in that time period is multiplexed over a single connection (as it is with Tor).
+
+Though flow measurement in principle can be bidirectional (counting cells sent in both directions between a pair of IPs) or unidirectional (counting only cells sent from one IP to another), we assume for safety that all measurement is unidirectional, and so traffic must be sent by both parties in order to prevent record splitting.
+
+## Implementation
+
+Tor clients currently maintain one TLS connection to their Guard node to carry actual application traffic, and make up to 3 additional connections to other nodes to retrieve directory information.
+
+We pad only the client’s connection to the Guard node, and not any other connection. We treat Bridge node connections to the Tor network as client connections, and pad them, but otherwise not pad between normal relays.
+
+Both clients and Guards will maintain a timer for all application (ie: non-directory) TLS connections. Every time a padding packet sent by an endpoint, that endpoint will sample a timeout value from the max(X,X) distribution described in Section 2.3. The default range is from 1.5 seconds to 9.5 seconds time range, subject to consensus parameters as specified in Section 2.6.
+
+(The timing is randomized to avoid making it obvious which cells are padding.)
+
+If another cell is sent for any reason before this timer expires, the timer is reset to a new random value.
+
+If the connection remains inactive until the timer expires, a single PADDING cell will be sent on that connection (which will also start a new timer).
+
+In this way, the connection will only be padded in a given direction in the event that it is idle in that direction, and will always transmit a packet before the minimum 10 second inactive timeout.
+
+(In practice, an implementation may not be able to determine when, exactly, a cell is sent on a given channel. For example, even though the cell has been given to the kernel via a call to `send(2)`, the kernel may still be buffering that cell. In cases such as these, implementations should use a reasonable proxy for the time at which a cell is sent: for example, when the cell is queued. If this strategy is used, implementations should try to observe the innermost (closest to the wire) queue that they practically can, and if this queue is already nonempty, padding should not be scheduled until after the queue does become empty.)
+
+## Padding Cell Timeout Distribution Statistics
+
+To limit the amount of padding sent, instead of sampling each endpoint timeout uniformly, we instead sample it from max(X,X), where X is uniformly distributed.
+
+If X is a random variable uniform from 0..R-1 (where R=high-low), then the random variable Y = max(X,X) has Prob(Y == i) = (2.0 _i + 1)/(R_ R).
+
+Then, when both sides apply timeouts sampled from Y, the resulting bidirectional padding packet rate is now a third random variable: Z = min(Y,Y).
+
+The distribution of Z is slightly bell-shaped, but mostly flat around the mean. It also turns out that Exp[Z] ~= Exp[X]. Here’s a table of average values for each random variable:
+[code]
+         R       Exp[X]    Exp[Z]    Exp[min(X,X)]   Exp[Y=max(X,X)]
+         2000     999.5    1066        666.2           1332.8
+         3000    1499.5    1599.5      999.5           1999.5
+         5000    2499.5    2666       1666.2           3332.8
+         6000    2999.5    3199.5     1999.5           3999.5
+         7000    3499.5    3732.8     2332.8           4666.2
+         8000    3999.5    4266.2     2666.2           5332.8
+         10000   4999.5    5328       3332.8           6666.2
+         15000   7499.5    7995       4999.5           9999.5
+         20000   9900.5    10661      6666.2           13332.8
+
+[/code]
+
+## Maximum overhead bounds
+
+With the default parameters and the above distribution, we expect a padded connection to send one padding cell every 5.5 seconds. This averages to 103 bytes per second full duplex (~52 bytes/sec in each direction), assuming a 512 byte cell and 55 bytes of TLS+TCP+IP headers. For a client connection that remains otherwise idle for its expected ~50 minute lifespan (governed by the circuit available timeout plus a small additional connection timeout), this is about 154.5KB of overhead in each direction (309KB total).
+
+With 2.5M completely idle clients connected simultaneously, 52 bytes per second amounts to 130MB/second in each direction network-wide, which is roughly the current amount of Tor directory traffic[11]. Of course, our 2.5M daily users will neither be connected simultaneously, nor entirely idle, so we expect the actual overhead to be much lower than this.
+
+## Reducing or Disabling Padding via Negotiation
+
+To allow mobile clients to either disable or reduce their padding overhead, the PADDING_NEGOTIATE cell (tor-spec.txt section 7.2) may be sent from clients to relays. This cell is used to instruct relays to cease sending padding.
+
+If the client has opted to use reduced padding, it continues to send padding cells sampled from the range [9000,14000] milliseconds (subject to consensus parameter alteration as per Section 2.6), still using the Y=max(X,X) distribution. Since the padding is now unidirectional, the expected frequency of padding cells is now governed by the Y distribution above as opposed to Z. For a range of 5000ms, we can see that we expect to send a padding packet every 9000+3332.8 = 12332.8ms. We also half the circuit available timeout from ~50min down to ~25min, which causes the client’s OR connections to be closed shortly there after when it is idle, thus reducing overhead.
+
+These two changes cause the padding overhead to go from 309KB per one-time-use Tor connection down to 69KB per one-time-use Tor connection. For continual usage, the maximum overhead goes from 103 bytes/sec down to 46 bytes/sec.
+
+If a client opts to completely disable padding, it sends a PADDING_NEGOTIATE to instruct the relay not to pad, and then does not send any further padding itself.
+
+Currently, clients negotiate padding only when a channel is created, immediately after sending their NETINFO cell. Recipients SHOULD, however, accept padding negotiation messages at any time.
+
+If a client which previously negotiated reduced, or disabled, padding, and wishes to re-enable default padding (ie padding according to the consensus parameters), it SHOULD send PADDING_NEGOTIATE START with zero in the ito_low_ms and ito_high_ms fields. (It therefore SHOULD NOT copy the values from its own established consensus into the PADDING_NEGOTIATE cell.) This avoids the client needing to send updated padding negotiations if the consensus parameters should change. The recipient’s clamping of the timing parameters will cause the recipient to use its notion of the consensus parameters.
+
+Clients and bridges MUST reject padding negotiation messages from relays, and close the channel if they receive one.
+
+## Consensus Parameters Governing Behavior
+
+Connection-level padding is controlled by the following consensus parameters:
+[code]
+        * nf_ito_low
+          - The low end of the range to send padding when inactive, in ms.
+          - Default: 1500
+
+        * nf_ito_high
+          - The high end of the range to send padding, in ms.
+          - Default: 9500
+          - If nf_ito_low == nf_ito_high == 0, padding will be disabled.
+
+        * nf_ito_low_reduced
+          - For reduced padding clients: the low end of the range to send padding
+            when inactive, in ms.
+          - Default: 9000
+
+        * nf_ito_high_reduced
+          - For reduced padding clients: the high end of the range to send padding,
+            in ms.
+          - Default: 14000
+
+        * nf_conntimeout_clients
+          - The number of seconds to keep never-used circuits opened and
+            available for clients to use. Note that the actual client timeout is
+            randomized uniformly from this value to twice this value.
+          - The number of seconds to keep idle (not currently used) canonical
+            channels are open and available. (We do this to ensure a sufficient
+            time duration of padding, which is the ultimate goal.)
+          - This value is also used to determine how long, after a port has been
+            used, we should attempt to keep building predicted circuits for that
+            port. (See path-spec.txt section 2.1.1.)  This behavior was
+            originally added to work around implementation limitations, but it
+            serves as a reasonable default regardless of implementation.
+          - For all use cases, reduced padding clients use half the consensus
+            value.
+          - Implementations MAY mark circuits held open past the reduced padding
+            quantity (half the consensus value) as "not to be used for streams",
+            to prevent their use from becoming a distinguisher.
+          - Default: 1800
+
+        * nf_pad_before_usage
+          - If set to 1, OR connections are padded before the client uses them
+            for any application traffic. If 0, OR connections are not padded
+            until application data begins.
+          - Default: 1
+
+        * nf_pad_relays
+          - If set to 1, we also pad inactive relay-to-relay connections
+          - Default: 0
+
+        * nf_conntimeout_relays
+          - The number of seconds that idle relay-to-relay connections are kept
+            open.
+          - Default: 3600
+
+[/code]
+
+## Overview
+
+Tor supports two classes of cover traffic: connection-level padding, and circuit-level padding.
+
+Connection-level padding uses the PADDING cell command for cover traffic, where as circuit-level padding uses the DROP relay command. PADDING cells are single-hop only and can be differentiated from normal traffic by Tor relays (“internal” observers), but not by entities monitoring Tor OR connections (“external” observers).
+
+DROP relay messages are multi-hop, and is not visible to intermediate Tor relays, because the relay command field is covered by circuit layer encryption. Moreover, Tor’s ‘recognized’ field allows DROP messages to be sent to any intermediate node in a circuit (as per Section 6.1 of tor-spec.txt).
+
+Tor uses both connection level and circuit level padding. Connection level padding is described in section 2. Circuit level padding is described in section 3.
+
+The circuit-level padding system is completely orthogonal to the connection-level padding. The connection-level padding system regards circuit-level padding as normal data traffic, and hence the connection-level padding system will not add any additional overhead while the circuit-level padding system is actively padding.
+
+---

@@ -1,0 +1,102 @@
+; JC3248W535 ESP32-S3 MMIO constants for ROM-loader bring-up.
+; Values are captured from the local reference board notes and will be used by
+; owned ASM firmware and host-side ROM-loader diagnostics.
+
+%define JC3248_LCD_WIDTH            320
+%define JC3248_LCD_HEIGHT           480
+%define JC3248_LCD_RGB565_BPP       16
+
+%define JC3248_PIN_BL               1
+%define JC3248_PIN_TOUCH_SDA        4
+%define JC3248_PIN_LCD_DC_TOUCH_SCL 8
+%define JC3248_PIN_LCD_D0           21
+%define JC3248_PIN_LCD_TE           38
+%define JC3248_PIN_LCD_D3           39
+%define JC3248_PIN_LCD_D2           40
+%define JC3248_PIN_LCD_CS           45
+%define JC3248_PIN_LCD_CLK          47
+%define JC3248_PIN_LCD_D1           48
+
+%define JC3248_TOUCH_I2C_ADDR       0x3b
+
+%define ESP32S3_GPIO_BASE           0x60004000
+%define ESP32S3_GPIO_OUT_W1TS       0x60004008
+%define ESP32S3_GPIO_OUT_W1TC       0x6000400c
+%define ESP32S3_GPIO_OUT1_W1TS      0x60004014
+%define ESP32S3_GPIO_OUT1_W1TC      0x60004018
+%define ESP32S3_GPIO_ENABLE_W1TS    0x60004024
+%define ESP32S3_GPIO_ENABLE_W1TC    0x60004028
+%define ESP32S3_GPIO_ENABLE1_W1TS   0x60004030
+%define ESP32S3_GPIO_ENABLE1_W1TC   0x60004034
+%define ESP32S3_GPIO_IN             0x6000403c
+%define ESP32S3_GPIO_IN1            0x60004040
+%define ESP32S3_GPIO_PIN_BASE       0x60004074
+%define ESP32S3_GPIO_FUNC_IN_SEL    0x60004154
+%define ESP32S3_GPIO_FUNC_OUT_SEL   0x60004554
+
+%define ESP32S3_IO_MUX_GPIO21       0x60009058
+%define ESP32S3_IO_MUX_GPIO39       0x600090a0
+%define ESP32S3_IO_MUX_GPIO40       0x600090a4
+%define ESP32S3_IO_MUX_GPIO45       0x600090b8
+%define ESP32S3_IO_MUX_GPIO47       0x600090c0
+%define ESP32S3_IO_MUX_GPIO48       0x600090c4
+
+%define ESP32S3_MCU_SEL_SHIFT       12
+%define ESP32S3_MCU_SEL_MASK        0x00007000
+%define ESP32S3_FUN_DRV_SHIFT       10
+%define ESP32S3_FUN_DRV_MASK        0x00000c00
+%define ESP32S3_FUN_IE              0x00000200
+%define ESP32S3_GPIO_FUNC           1
+%define ESP32S3_DRIVE_3             3
+
+%define ESP32S3_IO_MUX_BASE         0x60009000
+%define ESP32S3_I2C0_BASE           0x60013000
+%define ESP32S3_SPI2_BASE           0x60024000
+%define ESP32S3_USB_SERIAL_JTAG     0x60043000
+%define ESP32S3_SYSTEM_BASE         0x600c0000
+%define ESP32S3_SYSTEM_CLK_EN0      0x600c0018
+%define ESP32S3_SYSTEM_RST_EN0      0x600c0020
+
+%define ESP32S3_SYSTEM_SPI2_CLK_EN  0x00000040
+%define ESP32S3_SYSTEM_SPI2_RST     0x00000040
+%define ESP32S3_SPI_CLK_EN          0x00000001
+%define ESP32S3_SPI_MST_CLK_ACTIVE  0x00000002
+%define ESP32S3_SPI_MST_CLK_SEL     0x00000004
+%define ESP32S3_SPI_USR             0x01000000
+%define ESP32S3_SPI_UPDATE          0x00800000
+%define ESP32S3_SPI_USR_MOSI        0x08000000
+%define ESP32S3_SPI_FWRITE_QUAD     0x00002000
+%define ESP32S3_SPI_CK_IDLE_EDGE    0x20000000
+%define ESP32S3_SPI_CS_KEEP_ACTIVE  0x40000000
+%define ESP32S3_SPI_MISC_INIT       0x2000003e
+%define ESP32S3_SPI_CLOCK_INIT      0x00003043
+
+%define ESP32S3_SPI2_CMD            0x60024000
+%define ESP32S3_SPI2_CTRL           0x60024008
+%define ESP32S3_SPI2_CLOCK          0x6002400c
+%define ESP32S3_SPI2_USER           0x60024010
+%define ESP32S3_SPI2_USER1          0x60024014
+%define ESP32S3_SPI2_USER2          0x60024018
+%define ESP32S3_SPI2_MS_DLEN        0x6002401c
+%define ESP32S3_SPI2_MISC           0x60024020
+%define ESP32S3_SPI2_DMA_CONF       0x60024030
+%define ESP32S3_SPI2_DMA_INT_CLR    0x60024038
+%define ESP32S3_SPI2_W0             0x60024098
+%define ESP32S3_SPI2_SLAVE          0x600240e0
+%define ESP32S3_SPI2_CLK_GATE       0x600240e8
+
+%define ESP32S3_FSPICLK_OUT         101
+%define ESP32S3_FSPICLK_IN          101
+%define ESP32S3_FSPIQ_OUT           102
+%define ESP32S3_FSPIQ_IN            102
+%define ESP32S3_FSPID_OUT           103
+%define ESP32S3_FSPID_IN            103
+%define ESP32S3_FSPIHD_OUT          104
+%define ESP32S3_FSPIHD_IN           104
+%define ESP32S3_FSPIWP_OUT          105
+%define ESP32S3_FSPIWP_IN           105
+%define ESP32S3_FSPICS0_OUT         110
+%define ESP32S3_FSPICS0_IN          110
+
+%define JC3248_LCD_OPCODE_WRITE_CMD   0x02
+%define JC3248_LCD_OPCODE_WRITE_COLOR 0x32

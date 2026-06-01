@@ -68,6 +68,13 @@ er_wasm_parse_module:
     mov     byte [imported_table_present], 0
     mov     qword [decoded_op_count], 0
     mov     qword [start_function_index], -1
+    lea     rax, [table_entries]
+    mov     rcx, MAX_TABLE_ENTRIES
+.clear_table_entries:
+    mov     qword [rax], 0
+    add     rax, 8
+    dec     rcx
+    jnz     .clear_table_entries
 
     ; Check magic bytes
     cmp     rsi, 8

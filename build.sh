@@ -141,6 +141,7 @@ KERNEL_ASM_SRCS="
 	crypto/local_route.asm
 	crypto/local_circuit.asm
 	media/av1_bits.asm
+	media/vp8.asm
 	media/mp4.asm
 	media/av1_obu.asm
 	media/av1_ivf.asm
@@ -423,6 +424,7 @@ test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test with owned assembler runtim
 test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
 test-identity|unit|crypto|yes|cmd_test_identity|Run identity source test
 test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
+test-ipv4|unit|net|yes|cmd_test_ipv4|Run IPv4 receive dispatch test
 test-tcp|unit|net|yes|cmd_test_tcp|Run TCP checksum test
 test-serial|unit|driver|yes|cmd_test_serial|Run serial driver test
 test-cros-ec|unit|driver|yes|cmd_test_cros_ec|Run Chrome EC memmap parser test
@@ -455,6 +457,7 @@ test-local-route|contract|route|yes|cmd_test_local_route|Run local cell route qu
 test-local-circuit|contract|route|yes|cmd_test_local_circuit|Run local circuit open/send/recv/close test
 test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
 test-av1-mp4|unit|media|yes|cmd_test_av1_mp4|Run AV1 MP4 container parser test
+test-vp8|unit|media|yes|cmd_test_vp8|Run VP8 frame header parser test
 test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
 test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
 test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
@@ -938,6 +941,7 @@ cmd_test_er_asm_cli() {
   local expected_status="$1"
   local status_label="$2"
   shift 2
+  test -f "$out"
   ld -nostdlib -static "$@" -o "$bin" "$out"
   local status=0
   "$bin" || status=$?
@@ -1175,6 +1179,7 @@ EOF
  expect_linked_out_status 52 "identity function" "$caller_obj"
  rm -f "$caller_obj"
  "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/ctype.asm"
+ test -f "$out"
  cat > "$caller_src" <<'EOF'
 [BITS 64]
 extern er_isdigit
@@ -1232,9 +1237,11 @@ EOF
  test -f "$out"
  rm -f "$out"
  "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/wasm/test_table.asm"
+ test -f "$out"
  nm "$out" | grep -q 'test_table_len'
  rm -f "$out"
  "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/math_hash.asm"
+ test -f "$out"
  nm "$out" | grep -q 'er_xorshift64'
  nm "$out" | grep -q 'er_crc32c'
  nm "$out" | grep -q 'er_fnv1a64'
@@ -1482,6 +1489,10 @@ cmd_test_http() {
 	build_test_stubbed "test_http_self" "stubs_http" "net/http"
 }
 
+cmd_test_ipv4() {
+	build_test_self "test_ipv4_self" "net/ipv4"
+}
+
 cmd_test_tcp() {
 	local name="test_tcp_self"
 	local obj="${ASM_BUILD}/${name}.o"
@@ -1549,7 +1560,11 @@ cmd_test_av1_obu() {
 }
 
 cmd_test_av1_mp4() {
-	build_test "test_av1_mp4_self" "${TEST_DIR}/test_av1_mp4_self.asm" "media/mp4"
+	build_test "test_av1_mp4_self" "${TEST_DIR}/test_av1_mp4_self.asm" "media/mp4" "media/av1_obu"
+}
+
+cmd_test_vp8() {
+	build_test "test_vp8_self" "${TEST_DIR}/test_vp8_self.asm" "media/vp8"
 }
 
 cmd_test_av1_ivf() {
@@ -1577,7 +1592,7 @@ cmd_test_av1_reduced() {
 }
 
 cmd_test_render_ir() {
-	build_test_self "test_render_ir_self" "ui/render_ir" "ui/sw_fb"
+	build_test_self "test_render_ir_self" "ui/render_ir" "ui/sw_fb" "agent/da" "crypto/blake3" "rt/runtime"
 }
 
 cmd_test_fe_mul() {
@@ -1936,6 +1951,7 @@ cmd_test_tor_live_host() {
 # ---- ARM / Pi Zero targets ----
 HOST_BUILD="${BUILD_DIR}/host"
 PI_BUILD="${BUILD_DIR}/pi"
+ESP32S3_BUILD="${BUILD_DIR}/esp32s3/jc3248w535"
 PI_KERNEL_ELF="${PI_BUILD}/kernel.elf"
 PI_KERNEL_IMG="${PI_BUILD}/kernel.img"
 PI_USB_BOOT="${HOST_BUILD}/pi_usb_boot"
@@ -1992,6 +2008,19 @@ cmd_esp32_serial_boot() {
 	echo "  LD  ${obj}"
 }
 
+cmd_jc3248_firmware() {
+	mkdir -p "${ESP32S3_BUILD}"
+	local src="kernel/esp32s3/jc3248w535/firmware_image.asm"
+	local bin="${ESP32S3_BUILD}/firmware.desc.bin"
+	asm_x86_obj bin "$bin" "$src"
+	local bsize=$(stat -c '%s' "$bin")
+	printf 'jc3248-firmware-desc: %s (%d bytes)\n' "$bin" "$bsize"
+	if [ "$bsize" -ne 256 ]; then
+		echo "error: JC3248 firmware descriptor must be 256 bytes" >&2
+		exit 1
+	fi
+}
+
 cmd_clean() {
 	rm -rf "${BUILD_DIR}"
 }
@@ -2038,6 +2067,7 @@ EOF
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
   esp32-serial-boot   Build ESP32 serial boot host tool (x86_64)
+  jc3248-firmware     Build JC3248W535 ESP32-S3 firmware descriptor
   clean               Remove .build/
 EOF
 }
@@ -2085,6 +2115,7 @@ case "${1:-help}" in
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;
 	esp32-serial-boot) cmd_esp32_serial_boot ;;
+	jc3248-firmware) cmd_jc3248_firmware ;;
 	clean)          cmd_clean ;;
 	help|--help|-h) cmd_help ;;
 	*)

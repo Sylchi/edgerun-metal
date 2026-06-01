@@ -206,15 +206,17 @@ _start:
     ASSERT_EQ dword [rel sync_count], 2
     ASSERT_EQ dword [rel last_sync_sender], 13
 
-    ; Unknown identity is not delivered until relay forwarding is registered.
+    ; Unknown valid identities use the kernel public relay IPC path by default.
     lea     rdi, [rel remote_hash]
     lea     rsi, [rel test_cell]
     call    er_route_send
-    ASSERT_RDX ERROR_LOCAL_NOT_FOUND
+    ASSERT_RDX 0
+    ASSERT_EQ dword [rel remote_count], 1
+    lea     rax, [rel test_cell]
+    ASSERT_EQ qword [rel last_remote_cell], rax
+    ASSERT_EQ dword [rel last_remote_len], LOCAL_CELL_SIZE
 
     lea     rdi, [rel remote_hash]
-    mov     esi, 17
-    mov     edx, 19
     call    er_route_register_relay
     ASSERT_RDX 0
 
@@ -222,7 +224,7 @@ _start:
     lea     rsi, [rel test_cell]
     call    er_route_send
     ASSERT_RDX 0
-    ASSERT_EQ dword [rel remote_count], 1
+    ASSERT_EQ dword [rel remote_count], 2
     lea     rax, [rel test_cell]
     ASSERT_EQ qword [rel last_remote_cell], rax
     ASSERT_EQ dword [rel last_remote_len], LOCAL_CELL_SIZE

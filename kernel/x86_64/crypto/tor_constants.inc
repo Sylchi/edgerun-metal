@@ -1,4 +1,4 @@
-; EdgeRun Tor client constants — x86_64 assembly
+; EdgeRun Tor role constants — x86_64 assembly
 ; Tor protocol constants, cell layouts, state enums.
 
 ; ==================================================================
@@ -266,7 +266,7 @@ TOR_STREAM_RX_BUF     equ 20  ; 4096 bytes
 TOR_STREAM_SIZE       equ 4116
 
 ; ==================================================================
-; Tor client state structure
+; Tor role state structure
 ; ==================================================================
 TOR_STATE_LINK_ESTABLISHED equ 0  ; u32
 TOR_STATE_LINK_VERSION     equ 4  ; u32

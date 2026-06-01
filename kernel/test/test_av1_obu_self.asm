@@ -12,6 +12,9 @@ extern er_av1_leb128_encode
 extern er_av1_obu_decode_header
 extern er_av1_obu_encode_header
 extern er_av1_obu_decode_unit
+extern er_av1_obu_scan_units
+extern er_av1_obu_route_sample
+extern er_av1_obu_count_units
 extern er_av1_obu_encode_prefix
 extern er_av1_obu_encode_temporal_delimiter
 extern er_av1_metadata_decode
@@ -22,6 +25,8 @@ extern er_av1_obu_encode_padding
 TEST_BSS_PASSED_FAILED
 desc:   resb AV1_OBU_DESC_SIZE
 metadata_desc: resb AV1_METADATA_DESC_SIZE
+obu_stats: resb AV1_OBU_STATS_SIZE
+obu_route: resb AV1_OBU_ROUTE_SIZE
 value:  resq 1
 outbuf: resb 32
 
@@ -45,6 +50,8 @@ obu_unsized:    db 0x08, 0xaa, 0xbb
 obu_ext_sized:  db 0x36, 0x68, 0x02, 0xaa, 0xbb
 obu_trunc_size: db 0x0a, 0x80
 obu_trunc_body: db 0x0a, 0x03, 0xaa
+obu_two_units:  db 0x0a, 0x02, 0xaa, 0xbb, 0x12, 0x00
+obu_route_units: db 0x0a, 0x02, 0xaa, 0xbb, 0x1a, 0x01, 0xcc, 0x22, 0x01, 0xdd, 0x32, 0x01, 0xee
 metadata_cll:   db 0x01, 0x01, 0x02, 0x03, 0x04
 metadata_cll_short: db 0x01, 0x01, 0x02, 0x03
 metadata_payload: db 0x01, 0x02, 0x03, 0x04
@@ -769,18 +776,120 @@ _start:
 	inc     qword [rel failed]
 
 .padding_encode_no_space:
-	mov     rdi, outbuf
-	mov     esi, 4
-	mov     edx, 3
-	call    er_av1_obu_encode_padding
-	test    eax, eax
-	jnz     .fail_padding_encode_no_space
-	cmp     edx, ERROR_NO_SPACE
-	jne     .fail_padding_encode_no_space
-	inc     qword [rel passed]
-	jmp     .done
+    mov     rdi, outbuf
+    mov     esi, 4
+    mov     edx, 3
+    call    er_av1_obu_encode_padding
+    test    eax, eax
+    jnz     .fail_padding_encode_no_space
+    cmp     edx, ERROR_NO_SPACE
+    jne     .fail_padding_encode_no_space
+    inc     qword [rel passed]
+    jmp     .count_units
 .fail_padding_encode_no_space:
-	inc     qword [rel failed]
+    inc     qword [rel failed]
+
+.count_units:
+    mov     rdi, obu_two_units
+    mov     esi, 6
+    call    er_av1_obu_count_units
+    cmp     eax, 2
+    jne     .fail_count_units
+    test    edx, edx
+    jnz     .fail_count_units
+    inc     qword [rel passed]
+    jmp     .scan_units
+.fail_count_units:
+    inc     qword [rel failed]
+
+.scan_units:
+    mov     rdi, obu_two_units
+    mov     esi, 6
+    mov     rdx, obu_stats
+    call    er_av1_obu_scan_units
+    cmp     eax, 2
+    jne     .fail_scan_units
+    test    edx, edx
+    jnz     .fail_scan_units
+    cmp     dword [rel obu_stats + AV1_OBU_STATS_TOTAL], 2
+    jne     .fail_scan_units
+    cmp     dword [rel obu_stats + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_SEQUENCE_HEADER * 4], 1
+    jne     .fail_scan_units
+    cmp     dword [rel obu_stats + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_TEMPORAL_DELIMITER * 4], 1
+    jne     .fail_scan_units
+    cmp     dword [rel obu_stats + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_FRAME * 4], 0
+    jne     .fail_scan_units
+    inc     qword [rel passed]
+    jmp     .route_sample
+.fail_scan_units:
+    inc     qword [rel failed]
+
+.route_sample:
+    mov     rdi, obu_route_units
+    mov     esi, 13
+    mov     rdx, obu_route
+    call    er_av1_obu_route_sample
+    cmp     eax, 4
+    jne     .fail_route_sample
+    test    edx, edx
+    jnz     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_STATS_TOTAL], 4
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_SEQUENCE_HEADER * 4], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_FRAME_HEADER * 4], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_TILE_GROUP * 4], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_FRAME * 4], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_SEQUENCE_OFFSET], 2
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_SEQUENCE_LEN], 2
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_HEADER_OFFSET], 6
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_HEADER_LEN], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_TILE_GROUP_OFFSET], 9
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_TILE_GROUP_LEN], 1
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_OFFSET], 12
+    jne     .fail_route_sample
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_LEN], 1
+    jne     .fail_route_sample
+    inc     qword [rel passed]
+    jmp     .route_sample_trunc
+.fail_route_sample:
+    inc     qword [rel failed]
+
+.route_sample_trunc:
+    mov     rdi, obu_route_units
+    mov     esi, 12
+    mov     rdx, obu_route
+    call    er_av1_obu_route_sample
+    test    eax, eax
+    jnz     .fail_route_sample_trunc
+    cmp     edx, ERROR_NO_DATA
+    jne     .fail_route_sample_trunc
+    inc     qword [rel passed]
+    jmp     .count_units_trunc
+.fail_route_sample_trunc:
+    inc     qword [rel failed]
+
+.count_units_trunc:
+    mov     rdi, obu_two_units
+    mov     esi, 5
+    call    er_av1_obu_count_units
+    test    eax, eax
+    jnz     .fail_count_units_trunc
+    cmp     edx, ERROR_NO_DATA
+    jne     .fail_count_units_trunc
+    inc     qword [rel passed]
+    jmp     .done
+.fail_count_units_trunc:
+    inc     qword [rel failed]
 
 .done:
     TEST_EXIT_FAILED

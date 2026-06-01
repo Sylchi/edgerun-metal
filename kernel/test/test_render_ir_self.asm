@@ -2,6 +2,8 @@
 ; Exits via syscall: 0 = pass, 1 = fail.
 
 %include "x86_64/macros.inc"
+%include "x86_64/agent/da_constants.inc"
+%include "x86_64/wasm_defines.inc"
 %include "test/test_macros.inc"
 
 extern er_render_ir_channel
@@ -20,6 +22,7 @@ extern er_render_ir_push_rect_ex
 extern er_render_ir_push_textured_vertex_ex
 extern er_render_ir_push_icon_ex
 extern er_render_ir_push_textured_quad
+extern er_da_launch_app
 
 %define RS  15
 %define VS  8
@@ -112,6 +115,13 @@ tq_expected_6:
 tq_clip_miss:
     dd 0x41200000, 0x41200000, 0x40800000, 0x40800000  ; (10, 10, 4, 4) — no overlap
 
+da_export_name: db "main"
+DA_EXPORT_NAME_LEN equ 4
+da_wasm_a: db 0x00, 0x61, 0x73, 0x6D, 0x01
+DA_WASM_A_LEN equ 5
+da_wasm_b: db 0x00, 0x61, 0x73, 0x6D, 0x02
+DA_WASM_B_LEN equ 5
+
 TEST_BSS_TOTAL_PASSED
 rect_buf:   resd RS*4
 vtx_buf:    resd VS*4
@@ -121,6 +131,26 @@ rect_out:   resd RS
 vtx_out:    resd VS
 icon_out:   resd IS
 tq_out:     resd 8            ; single vertex read-back
+da_test_load_count: resq 1
+da_test_error:      resq 1
+da_test_first_mem:  resq 1
+
+global da_wasm_app_hash
+global da_wasm_ready
+global er_local_cell_imports
+global er_local_cell_import_count
+global fb_addr
+global fb_width
+global fb_height
+global fb_pitch
+da_wasm_app_hash: resb 32
+da_wasm_ready:    resb 1
+er_local_cell_imports: resq 1
+er_local_cell_import_count: resq 1
+fb_addr:   resq 1
+fb_width:  resd 1
+fb_height: resd 1
+fb_pitch:  resd 1
 
 SECTION .data
 rect_len:   dq 0
@@ -536,5 +566,101 @@ _start:
     mov     rdx, 48
     TESTQ
 
+    ; ===== 14. DA app launch binds owned per-app runtime allocations =====
+    call    test_da_owned_runtime_allocations
+    xor     edx, edx
+    TEST
+
     ; ===== done =====
     TEST_EXIT_PASSED_TOTAL
+
+test_da_owned_runtime_allocations:
+    mov     qword [rel da_test_load_count], 0
+    mov     qword [rel da_test_error], 0
+    mov     qword [rel da_test_first_mem], 0
+
+    lea     rdi, [rel da_wasm_a]
+    mov     esi, DA_WASM_A_LEN
+    lea     rdx, [rel da_export_name]
+    mov     ecx, DA_EXPORT_NAME_LEN
+    call    er_da_launch_app
+    test    edx, edx
+    jnz     .fail
+
+    lea     rdi, [rel da_wasm_b]
+    mov     esi, DA_WASM_B_LEN
+    lea     rdx, [rel da_export_name]
+    mov     ecx, DA_EXPORT_NAME_LEN
+    call    er_da_launch_app
+    test    edx, edx
+    jnz     .fail
+
+    cmp     qword [rel da_test_error], 0
+    jne     .fail
+    cmp     qword [rel da_test_load_count], 2
+    jne     .fail
+    xor     eax, eax
+    ret
+.fail:
+    mov     eax, 1
+    ret
+
+global er_fn_load
+er_fn er_fn_load
+    push    rbx
+    mov     rbx, rdi
+    inc     qword [rel da_test_load_count]
+
+    mov     rax, [rbx + RUNTIME_MEMORY_PTR_OFF]
+    test    rax, rax
+    jz      .bad_memory
+    cmp     qword [rbx + RUNTIME_MEMORY_LEN_OFF], DA_APP_MEMORY_BYTES
+    jne     .bad_memory
+    cmp     qword [rbx + RUNTIME_TICKS_PTR_OFF], 0
+    je      .bad_ticks
+
+    cmp     qword [rel da_test_load_count], 1
+    jne     .check_second
+    mov     [rel da_test_first_mem], rax
+    jmp     .ok
+.check_second:
+    cmp     rax, [rel da_test_first_mem]
+    je      .bad_shared
+.ok:
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    ret
+.bad_memory:
+    mov     qword [rel da_test_error], 1
+    jmp     .ok
+.bad_ticks:
+    mov     qword [rel da_test_error], 2
+    jmp     .ok
+.bad_shared:
+    mov     qword [rel da_test_error], 3
+    jmp     .ok
+
+global er_fn_run
+er_fn er_fn_run
+    xor     eax, eax
+    er_ok
+    ret
+
+global er_fn_call
+er_fn er_fn_call
+    xor     eax, eax
+    er_ok
+    ret
+
+global er_local_route_register
+er_fn er_local_route_register
+    xor     eax, eax
+    er_ok
+    ret
+
+global er_local_route_set_handler
+er_fn er_local_route_set_handler
+    xor     eax, eax
+    er_ok
+    ret
