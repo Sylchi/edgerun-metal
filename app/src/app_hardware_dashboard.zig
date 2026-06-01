@@ -398,6 +398,10 @@ pub const State = struct {
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const dashboard_options = options.withStyle(hardwareStyle(self.accentColor()));
         const app = component_union.renderer(scene, collector, dashboard_options);
+        try self.renderView(app, bounds);
+    }
+
+    pub fn renderView(self: *State, app: component_union.View, bounds: ui.Rect) !void {
         try app.gradient(bounds, hardware_bg_top, hardware_bg_bottom, 0.0);
         try app.topScrim(bounds, hardware_orb, 96.0, 0.0);
         try app.fill(ui.Rect.init(bounds.x, bounds.y + bounds.h - 2.0, bounds.w, 2.0), hardware_rim, 0.0);
@@ -408,7 +412,7 @@ pub const State = struct {
         } else {
             try self.renderStacked(app, outer);
         }
-        self.refreshSelectedRegion(collector.written());
+        self.refreshSelectedRegion(app.interactionRegions());
         try self.renderSelectionOverlay(app, bounds);
         try self.renderContextAndEditor(app, bounds);
     }
@@ -600,6 +604,24 @@ pub const State = struct {
 
     fn renderInventory(self: *State, app: component_union.View, bounds: ui.Rect) !void {
         var items: [row_count]component_union.PanelListItem = undefined;
+        const projected = self.writeInventoryItems(&items);
+        try app.panelList(bounds, .{
+            .id = select_inventory_id,
+            .variant = .elevated,
+            .title = "Inventory",
+            .detail = fittedText("Detected runtime capabilities.", 300.0),
+            .icon = .server,
+            .inset = 18.0,
+            .header_gap = 12.0,
+            .row_h = if (self.compact_rows) 42.0 else 50.0,
+            .gap = 6.0,
+            .items = projected,
+            .empty_title = "No inventory",
+            .empty_detail = "No detected runtime capabilities.",
+        });
+    }
+
+    fn writeInventoryItems(self: *const State, items: *[row_count]component_union.PanelListItem) []const component_union.PanelListItem {
         var item_count: usize = 0;
         for (&rows, 0..) |row, index| {
             const row_detail = self.detail(index);
@@ -612,20 +634,7 @@ pub const State = struct {
             };
             item_count += 1;
         }
-        try app.panelList(bounds, .{
-            .id = select_inventory_id,
-            .variant = .elevated,
-            .title = "Inventory",
-            .detail = fittedText("Detected runtime capabilities.", 300.0),
-            .icon = .server,
-            .inset = 18.0,
-            .header_gap = 12.0,
-            .row_h = if (self.compact_rows) 42.0 else 50.0,
-            .gap = 6.0,
-            .items = items[0..item_count],
-            .empty_title = "No inventory",
-            .empty_detail = "No detected runtime capabilities.",
-        });
+        return items[0..item_count];
     }
 
     fn renderSelectionOverlay(self: *State, app: component_union.View, bounds: ui.Rect) !void {

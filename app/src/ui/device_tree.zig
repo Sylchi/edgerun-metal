@@ -3,6 +3,7 @@ const bytes = @import("../bytes.zig");
 const arena = @import("../arena.zig");
 const codec = @import("codec.zig");
 const ui = @import("core.zig");
+const component = @import("components/Component.zig");
 
 pub const Error = error{
     Corrupt,
@@ -159,7 +160,11 @@ pub const DeviceTree = struct {
     }
 
     pub fn render(self: *DeviceTree, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
-        ui.render(scene, self.root, bounds, style) catch |err| switch (err) {
+        try self.renderView(component.renderer(scene, null, .{ .style = style }), bounds);
+    }
+
+    pub fn renderView(self: *DeviceTree, app: component.View, bounds: ui.Rect) Error!void {
+        ui.render(app.scene, self.root, bounds, app.options.style) catch |err| switch (err) {
             error.CommandBudgetExceeded, error.InvalidBounds, error.ClipBudgetExceeded => return error.Corrupt,
             error.UnsupportedComponent => return error.Corrupt,
         };

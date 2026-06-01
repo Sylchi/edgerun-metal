@@ -87,7 +87,7 @@ fn renderWorkspaceSystem(scene: *ui.Scene, collector: *interaction.Collector, bo
     });
     try renderWorkspaceLensRail(app, shell.rail, active_lens);
     try renderWorkspaceLensSidebar(app, shell.sidebar, state, active_lens);
-    try renderWorkspaceLensMain(app, scene, collector, shell.main, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
+    try renderWorkspaceLensMain(app, shell.main, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
 }
 
 fn renderWorkspaceLensRail(app: component.View, bounds: ui.Rect, active_lens: WorkspaceLens) !void {
@@ -146,18 +146,18 @@ fn renderWorkspaceLensSidebar(app: component.View, bounds: ui.Rect, state: AppSt
     });
 }
 
-fn renderWorkspaceLensMain(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
+fn renderWorkspaceLensMain(app: component.View, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
     if (try app.pushClip(bounds)) {
         defer app.popClip();
         const content = bounds.insetUniform(12.0);
         switch (active_lens) {
-            .agent => try app_agent.render(scene, collector, content, state.agent),
-            .pipeline => if (pipeline_state) |ps| try ps.render(scene, collector, content, hardwareRenderOptions(state)),
-            .hardware => if (hardware_state) |hs| try hs.render(scene, collector, content, hardwareRenderOptions(state)),
-            .chat => if (chat_state) |cs| try cs.render(scene, collector, content, hardwareRenderOptions(state)),
+            .agent => try app_agent.renderView(app, content, state.agent),
+            .pipeline => if (pipeline_state) |ps| try ps.renderView(app.withOptions(hardwareRenderOptions(state)), content),
+            .hardware => if (hardware_state) |hs| try hs.renderView(app.withOptions(hardwareRenderOptions(state)), content),
+            .chat => if (chat_state) |cs| try cs.renderView(app.withOptions(hardwareRenderOptions(state)), content),
             .network => {
                 try dashboard_state.refresh();
-                try dashboard_state.render(scene, content, @import("../ui/theme.zig").appStyle());
+                try dashboard_state.renderView(app.withStyle(@import("../ui/theme.zig").appStyle()), content);
             },
         }
     }

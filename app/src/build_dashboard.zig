@@ -49,6 +49,12 @@ const BuildData = struct {
     commits: []const []const u8,
 };
 
+const SourceStats = struct {
+    asm_files: u32 = 0,
+    inc_files: u32 = 0,
+    loc: u32 = 0,
+};
+
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const alloc = std.heap.page_allocator;
@@ -61,6 +67,7 @@ fn freeData(alloc: std.mem.Allocator, data: BuildData) void {
     alloc.free(data.git_hash);
     alloc.free(data.branch);
     for (data.commits) |c| alloc.free(c);
+    for (data.tests) |t| alloc.free(t.name);
     alloc.free(data.commits);
     alloc.free(data.artifacts);
     alloc.free(data.modules);
@@ -80,68 +87,151 @@ fn cmdOutput(alloc: std.mem.Allocator, io: std.Io, argv: []const []const u8, max
     return owned;
 }
 
+fn countLines(bytes: []const u8) u32 {
+    var lines: u32 = 0;
+    for (bytes) |c| {
+        if (c == '\n') lines += 1;
+    }
+    if (bytes.len > 0 and bytes[bytes.len - 1] != '\n') lines += 1;
+    return lines;
+}
+
+fn collectSourceStats(alloc: std.mem.Allocator, io: std.Io, root_path: []const u8) !SourceStats {
+    const cwd = std.Io.Dir.cwd();
+    const root = try cwd.openDir(io, root_path, .{ .iterate = true });
+    defer root.close(io);
+
+    var walker = try root.walk(alloc);
+    defer walker.deinit();
+
+    var stats: SourceStats = .{};
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+
+        const is_asm = mem.endsWith(u8, entry.basename, ".asm") or mem.endsWith(u8, entry.basename, ".S");
+        const is_inc = mem.endsWith(u8, entry.basename, ".inc");
+        if (!is_asm and !is_inc) continue;
+
+        if (is_asm) stats.asm_files += 1;
+        if (is_inc) stats.inc_files += 1;
+
+        const source = try root.readFileAlloc(io, entry.path, alloc, .limited(16 * 1024 * 1024));
+        defer alloc.free(source);
+        stats.loc += countLines(source);
+    }
+
+    return stats;
+}
+
+fn nextField(line: *[]const u8) []const u8 {
+    const value = line.*;
+    if (mem.indexOfScalar(u8, value, '\t')) |idx| {
+        line.* = value[idx + 1 ..];
+        return value[0..idx];
+    }
+    line.* = "";
+    return value;
+}
+
+fn collectDashboardTestTargets(alloc: std.mem.Allocator, io: std.Io) ![]const []const u8 {
+    const raw = try cmdOutput(alloc, io, &.{ "../build.sh", "test-list" }, 16 * 1024);
+    defer alloc.free(raw);
+
+    var targets: std.ArrayList([]const u8) = .empty;
+    var rest = raw;
+    var line_index: usize = 0;
+    while (mem.indexOfScalar(u8, rest, '\n')) |nl| {
+        defer line_index += 1;
+        var line: []const u8 = rest[0..nl];
+        rest = rest[nl + 1 ..];
+        if (line_index == 0 or line.len == 0) continue;
+
+        const target = nextField(&line);
+        const category = nextField(&line);
+        _ = nextField(&line); // subsystem
+        const default = nextField(&line);
+        if (!mem.eql(u8, default, "yes")) continue;
+        if (mem.eql(u8, category, "emulator")) continue;
+        try targets.append(alloc, try alloc.dupe(u8, target));
+        if (targets.items.len == 8) break;
+    }
+
+    return targets.toOwnedSlice(alloc);
+}
+
+fn collectDashboardTestResults(alloc: std.mem.Allocator, io: std.Io) ![]TestSuite {
+    const targets = try collectDashboardTestTargets(alloc, io);
+    defer {
+        for (targets) |target| alloc.free(target);
+        alloc.free(targets);
+    }
+
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.append(alloc, "../build.sh");
+    try argv.append(alloc, "test-status");
+    for (targets) |target| try argv.append(alloc, target);
+    const args = try argv.toOwnedSlice(alloc);
+    defer alloc.free(args);
+
+    const result = try std.process.run(alloc, io, .{
+        .argv = args,
+        .stdout_limit = std.Io.Limit.limited(64 * 1024),
+    });
+    defer alloc.free(result.stderr);
+    defer alloc.free(result.stdout);
+
+    var tests: std.ArrayList(TestSuite) = .empty;
+    var rest = result.stdout;
+    var line_index: usize = 0;
+    while (mem.indexOfScalar(u8, rest, '\n')) |nl| {
+        defer line_index += 1;
+        var line: []const u8 = rest[0..nl];
+        rest = rest[nl + 1 ..];
+        if (line_index == 0 or line.len == 0) continue;
+
+        const target = nextField(&line);
+        _ = nextField(&line); // category
+        _ = nextField(&line); // subsystem
+        const status = nextField(&line);
+        const pass = mem.eql(u8, status, "pass");
+        try tests.append(alloc, .{
+            .name = try alloc.dupe(u8, target),
+            .passed = if (pass) 1 else 0,
+            .total = 1,
+        });
+    }
+
+    return tests.toOwnedSlice(alloc);
+}
+
 fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
     const git_hash = cmdOutput(alloc, io, &.{ "git", "rev-parse", "--short", "HEAD" }, 64) catch try alloc.dupe(u8, "unknown");
     const branch = cmdOutput(alloc, io, &.{ "git", "branch", "--show-current" }, 64) catch try alloc.dupe(u8, "main");
     const count_str = cmdOutput(alloc, io, &.{ "git", "rev-list", "--count", "HEAD" }, 32) catch try alloc.dupe(u8, "0");
     const commit_count = std.fmt.parseInt(u32, mem.trim(u8, count_str, " \n\r\t"), 10) catch 0;
     alloc.free(count_str);
-    const asm_str = cmdOutput(alloc, io, &.{ "sh", "-c", "find kernel -name '*.asm' -o -name '*.S' 2>/dev/null | wc -l" }, 32) catch try alloc.dupe(u8, "0");
-    const asm_files = std.fmt.parseInt(u32, mem.trim(u8, asm_str, " \n\r\t"), 10) catch 0;
-    alloc.free(asm_str);
-    const inc_str = cmdOutput(alloc, io, &.{ "sh", "-c", "find kernel -name '*.inc' 2>/dev/null | wc -l" }, 32) catch try alloc.dupe(u8, "0");
-    const inc_files = std.fmt.parseInt(u32, mem.trim(u8, inc_str, " \n\r\t"), 10) catch 0;
-    alloc.free(inc_str);
-    const loc_str = cmdOutput(alloc, io, &.{ "sh", "-c", "find kernel -name '*.asm' -o -name '*.inc' -o -name '*.S' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'" }, 64) catch try alloc.dupe(u8, "0");
-    const total_loc = std.fmt.parseInt(u32, mem.trim(u8, loc_str, " \n\r\t"), 10) catch 0;
-    alloc.free(loc_str);
+    const kernel_stats = try collectSourceStats(alloc, io, "../kernel");
+    const asm_files = kernel_stats.asm_files;
+    const inc_files = kernel_stats.inc_files;
+    const total_loc = kernel_stats.loc;
 
     const mod_names = comptime [_]struct { name: []const u8, dir: []const u8 }{
-        .{ .name = "wasm", .dir = "kernel/x86_64/wasm" },
-        .{ .name = "driver", .dir = "kernel/x86_64/drv" },
-        .{ .name = "crypto", .dir = "kernel/x86_64/crypto" },
-        .{ .name = "rt", .dir = "kernel/x86_64/rt" },
-        .{ .name = "net", .dir = "kernel/x86_64/net" },
-        .{ .name = "tpm", .dir = "kernel/x86_64/tpm" },
-        .{ .name = "ui", .dir = "kernel/x86_64/ui" },
-        .{ .name = "object", .dir = "kernel/x86_64/object" },
-        .{ .name = "pi", .dir = "kernel/arm/pi" },
+        .{ .name = "wasm", .dir = "../kernel/x86_64/wasm" },
+        .{ .name = "driver", .dir = "../kernel/driver" },
+        .{ .name = "crypto", .dir = "../kernel/x86_64/crypto" },
+        .{ .name = "rt", .dir = "../kernel/x86_64/rt" },
+        .{ .name = "net", .dir = "../kernel/x86_64/net" },
+        .{ .name = "tpm", .dir = "../kernel/x86_64/tpm" },
+        .{ .name = "ui", .dir = "../kernel/x86_64/ui" },
+        .{ .name = "object", .dir = "../kernel/x86_64/object" },
+        .{ .name = "pi", .dir = "../kernel/arm/pi" },
     };
     const modules = try alloc.alloc(ModuleLoc, mod_names.len);
     for (mod_names, modules) |entry, *m| {
-        const dir = entry.dir;
-        const sh_cmd = try std.fmt.allocPrint(alloc, "find {s} -name '*.asm' -o -name '*.inc' -o -name '*.S' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{{print $1}}'", .{dir});
-        defer alloc.free(sh_cmd);
-        const result = std.process.run(alloc, io, .{
-            .argv = &.{ "sh", "-c", sh_cmd },
-            .stdout_limit = std.Io.Limit.limited(32),
-        }) catch {
-            m.* = .{ .name = entry.name, .loc = 0 };
-            continue;
-        };
-        defer alloc.free(result.stdout);
-        defer alloc.free(result.stderr);
-        m.* = .{ .name = entry.name, .loc = std.fmt.parseInt(u32, mem.trim(u8, result.stdout, " \n\r\t"), 10) catch 0 };
+        m.* = .{ .name = entry.name, .loc = (try collectSourceStats(alloc, io, entry.dir)).loc };
     }
 
-    const test_names = comptime [_][]const u8{ "ctype", "clock", "sw_fb", "http", "serial", "render_ir", "fe_mul", "acpi" };
-    const tests = try alloc.alloc(TestSuite, test_names.len);
-    for (test_names, tests) |tname, *t| {
-        const sh_cmd = try std.fmt.allocPrint(alloc, "./build.sh test-{s} 2>&1 | tail -3", .{tname});
-        defer alloc.free(sh_cmd);
-        const result = std.process.run(alloc, io, .{
-            .argv = &.{ "sh", "-c", sh_cmd },
-            .stdout_limit = std.Io.Limit.limited(256),
-        }) catch {
-            t.* = .{ .name = tname, .passed = 0, .total = 0 };
-            continue;
-        };
-        defer alloc.free(result.stderr);
-        const passed = mem.indexOf(u8, result.stdout, "PASS") != null;
-        const failed = mem.indexOf(u8, result.stdout, "FAIL") != null;
-        alloc.free(result.stdout);
-        t.* = .{ .name = tname, .passed = if (passed) 1 else 0, .total = if (passed or failed) 1 else 0 };
-    }
+    const tests = try collectDashboardTestResults(alloc, io);
 
     const cmt_result = std.process.run(alloc, io, .{
         .argv = &.{ "git", "log", "--oneline", "-5" },
@@ -177,9 +267,9 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
 
     const cwd = std.Io.Dir.cwd();
     const artifact_entries = comptime [_]struct { name: []const u8, path: []const u8 }{
-        .{ .name = "kernel.elf", .path = ".build/kernel/kernel.elf" },
-        .{ .name = "kernel.bin", .path = ".build/kernel/kernel.bin" },
-        .{ .name = "kernel.efi", .path = ".build/kernel/kernel.efi" },
+        .{ .name = "kernel.elf", .path = "../.build/kernel/kernel.elf" },
+        .{ .name = "kernel.bin", .path = "../.build/kernel/kernel.bin" },
+        .{ .name = "kernel.efi", .path = "../.build/kernel/kernel.efi" },
     };
     const artifacts = try alloc.alloc(Artifact, artifact_entries.len);
     for (artifact_entries, artifacts) |entry, *a| {

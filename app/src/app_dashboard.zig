@@ -25,12 +25,16 @@ pub const State = struct {
     }
 
     pub fn render(self: *State, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
+        const app = component.renderer(scene, null, .{ .style = style });
+        try self.renderView(app, bounds);
+    }
+
+    pub fn renderView(self: *State, app: component.View, bounds: ui.Rect) Error!void {
         if (!self.tree_valid) {
-            const app = component.renderer(scene, null, .{ .style = style });
             try app.muted(bounds, "ifstatus unavailable");
             return;
         }
-        try self.device_tree.render(scene, bounds, style);
+        try self.device_tree.renderView(app, bounds);
     }
 };
 

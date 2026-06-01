@@ -8,9 +8,19 @@ extern er_av1_symbol_init
 extern er_av1_block_cdfs_init
 extern er_av1_block_decode_intra_symbols
 extern er_av1_block_decode_coeffs_8x8
+extern er_av1_block_decode_mv
 extern er_av1_block_dequant_8x8
 extern er_av1_block_inverse_tx_8x8
 extern er_av1_tile_decode_intra8x8_luma
+extern er_av1_tile_decode_inter8x8_luma
+extern er_av1_loop_filter_plane_8x8
+extern er_av1_loop_filter_image_420
+extern er_av1_refs_init
+extern er_av1_refs_store_image
+extern er_av1_refs_refresh
+extern er_av1_refs_get_plane
+extern er_av1_image_validate_420
+extern er_av1_block_inter_predict_8x8
 extern er_av1_block_predict_8x8
 extern er_av1_block_reconstruct_add_8x8
 
@@ -25,9 +35,14 @@ dst:    resb 128
 coeffs: resb AV1_BLOCK_PIXELS_8X8 * 2
 resid:  resb AV1_BLOCK_PIXELS_8X8 * 2
 image:  resb AV1_IMAGE_SIZE
+refs:   resb AV1_REF_STATE_SIZE
+ref_plane: resb AV1_PLANE_SIZE
 tile_y: resb 256
 tile_u: resb 64
 tile_v: resb 64
+inter_y: resb 256
+inter_u: resb 64
+inter_v: resb 64
 
 SECTION .data
 syntax_zero: db 0x00, 0x00, 0x00, 0x80
@@ -35,6 +50,7 @@ syntax_one:  db 0xff, 0xff, 0xff, 0x80
 coeff_zero:  times 96 db 0x00
 coeff_one:   times 256 db 0xff
 tile_zero:   times 512 db 0x00
+tile_one:    times 512 db 0xff
 left_ref:    db 10, 20, 30, 40, 50, 60, 70, 80
 above_ref:   db 90, 100, 110, 120, 130, 140, 150, 160
 coeff_identity:
@@ -226,8 +242,222 @@ _start:
     cmp     byte [rel pred + 77], 80
     jne     .fail_predict_h
     inc     qword [rel passed]
-    jmp     .reconstruct_identity
+    jmp     .predict_paeth
 .fail_predict_h:
+    inc     qword [rel failed]
+
+.predict_paeth:
+    mov     rdi, pred
+    mov     esi, AV1_BLOCK_DIM_8
+    mov     rdx, left_ref
+    mov     rcx, above_ref
+    mov     r8d, AV1_PRED_MODE_PAETH
+    call    er_av1_block_predict_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_predict_paeth
+    test    edx, edx
+    jnz     .fail_predict_paeth
+    cmp     byte [rel pred], 10
+    jne     .fail_predict_paeth
+    cmp     byte [rel pred + 7], 10
+    jne     .fail_predict_paeth
+    inc     qword [rel passed]
+    jmp     .predict_smooth
+.fail_predict_paeth:
+    inc     qword [rel failed]
+
+.predict_smooth:
+    mov     rdi, pred
+    mov     esi, AV1_BLOCK_DIM_8
+    mov     rdx, left_ref
+    mov     rcx, above_ref
+    mov     r8d, AV1_PRED_MODE_SMOOTH
+    call    er_av1_block_predict_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_predict_smooth
+    test    edx, edx
+    jnz     .fail_predict_smooth
+    cmp     byte [rel pred], 50
+    jne     .fail_predict_smooth
+    cmp     byte [rel pred + 63], 120
+    jne     .fail_predict_smooth
+    inc     qword [rel passed]
+    jmp     .refs_refresh
+.fail_predict_smooth:
+    inc     qword [rel failed]
+
+.refs_refresh:
+    mov     dword [rel image + AV1_IMAGE_WIDTH], 16
+    mov     dword [rel image + AV1_IMAGE_HEIGHT], 16
+    mov     qword [rel image + AV1_IMAGE_Y_PTR], tile_y
+    mov     qword [rel image + AV1_IMAGE_U_PTR], tile_u
+    mov     qword [rel image + AV1_IMAGE_V_PTR], tile_v
+    mov     dword [rel image + AV1_IMAGE_Y_LEN], 256
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    mov     dword [rel image + AV1_IMAGE_V_LEN], 64
+    mov     rdi, image
+    call    er_av1_image_validate_420
+    cmp     eax, 384
+    jne     .fail_refs_refresh
+    test    edx, edx
+    jnz     .fail_refs_refresh
+    mov     rdi, refs
+    call    er_av1_refs_init
+    cmp     eax, AV1_REF_STATE_SIZE
+    jne     .fail_refs_refresh
+    test    edx, edx
+    jnz     .fail_refs_refresh
+    mov     rdi, refs
+    mov     esi, 0x05
+    mov     rdx, image
+    call    er_av1_refs_refresh
+    cmp     eax, 2
+    jne     .fail_refs_refresh
+    test    edx, edx
+    jnz     .fail_refs_refresh
+    mov     rdi, refs
+    mov     esi, 2
+    mov     edx, AV1_PLANE_Y
+    mov     rcx, ref_plane
+    call    er_av1_refs_get_plane
+    cmp     eax, AV1_PLANE_SIZE
+    jne     .fail_refs_refresh
+    test    edx, edx
+    jnz     .fail_refs_refresh
+    cmp     qword [rel ref_plane + AV1_PLANE_PTR], tile_y
+    jne     .fail_refs_refresh
+    cmp     dword [rel ref_plane + AV1_PLANE_WIDTH], 16
+    jne     .fail_refs_refresh
+    cmp     dword [rel ref_plane + AV1_PLANE_LEN], 256
+    jne     .fail_refs_refresh
+    mov     rdi, refs
+    mov     esi, 1
+    mov     edx, AV1_PLANE_Y
+    mov     rcx, ref_plane
+    call    er_av1_refs_get_plane
+    test    eax, eax
+    jnz     .fail_refs_refresh
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_refs_refresh
+    inc     qword [rel passed]
+    jmp     .refs_store_chroma
+.fail_refs_refresh:
+    inc     qword [rel failed]
+
+.refs_store_chroma:
+    mov     rdi, refs
+    mov     esi, 6
+    mov     rdx, image
+    call    er_av1_refs_store_image
+    cmp     eax, AV1_IMAGE_SIZE
+    jne     .fail_refs_store_chroma
+    test    edx, edx
+    jnz     .fail_refs_store_chroma
+    mov     rdi, refs
+    mov     esi, 6
+    mov     edx, AV1_PLANE_U
+    mov     rcx, ref_plane
+    call    er_av1_refs_get_plane
+    cmp     eax, AV1_PLANE_SIZE
+    jne     .fail_refs_store_chroma
+    test    edx, edx
+    jnz     .fail_refs_store_chroma
+    cmp     qword [rel ref_plane + AV1_PLANE_PTR], tile_u
+    jne     .fail_refs_store_chroma
+    cmp     dword [rel ref_plane + AV1_PLANE_WIDTH], 8
+    jne     .fail_refs_store_chroma
+    cmp     dword [rel ref_plane + AV1_PLANE_HEIGHT], 8
+    jne     .fail_refs_store_chroma
+    cmp     dword [rel ref_plane + AV1_PLANE_LEN], 64
+    jne     .fail_refs_store_chroma
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 63
+    mov     rdi, refs
+    mov     esi, 7
+    mov     rdx, image
+    call    er_av1_refs_store_image
+    test    eax, eax
+    jnz     .fail_refs_store_chroma
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_refs_store_chroma
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    inc     qword [rel passed]
+    jmp     .inter_predict
+.fail_refs_store_chroma:
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    inc     qword [rel failed]
+
+.inter_predict:
+    mov     byte [rel tile_y + 35], 33
+    mov     byte [rel tile_y + 154], 154
+    mov     qword [rel ref_plane + AV1_PLANE_PTR], tile_y
+    mov     dword [rel ref_plane + AV1_PLANE_WIDTH], 16
+    mov     dword [rel ref_plane + AV1_PLANE_HEIGHT], 16
+    mov     dword [rel ref_plane + AV1_PLANE_LEN], 256
+    mov     rdi, pred
+    mov     esi, 10
+    mov     rdx, ref_plane
+    mov     ecx, 2
+    mov     r8d, 3
+    mov     r9d, 0xffff0001
+    call    er_av1_block_inter_predict_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_inter_predict
+    test    edx, edx
+    jnz     .fail_inter_predict
+    cmp     byte [rel pred], 33
+    jne     .fail_inter_predict
+    cmp     byte [rel pred + 77], 154
+    jne     .fail_inter_predict
+    mov     rdi, pred
+    mov     esi, AV1_BLOCK_DIM_8
+    mov     rdx, ref_plane
+    mov     ecx, 9
+    mov     r8d, 8
+    xor     r9d, r9d
+    call    er_av1_block_inter_predict_8x8
+    test    eax, eax
+    jnz     .fail_inter_predict
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_inter_predict
+    inc     qword [rel passed]
+    jmp     .mv_decode
+.fail_inter_predict:
+    inc     qword [rel failed]
+
+.mv_decode:
+    mov     rdi, symctx
+    mov     rsi, tile_zero
+    mov     edx, 16
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_mv_decode
+    mov     rdi, symctx
+    call    er_av1_block_decode_mv
+    test    eax, eax
+    jnz     .fail_mv_decode
+    test    edx, edx
+    jnz     .fail_mv_decode
+    mov     rdi, symctx
+    mov     rsi, tile_one
+    mov     edx, 16
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_mv_decode
+    mov     rdi, symctx
+    call    er_av1_block_decode_mv
+    test    edx, edx
+    jnz     .fail_mv_decode
+    cmp     eax, 0xfff9fff9
+    jne     .fail_mv_decode
+    xor     edi, edi
+    call    er_av1_block_decode_mv
+    test    eax, eax
+    jnz     .fail_mv_decode
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_mv_decode
+    inc     qword [rel passed]
+    jmp     .reconstruct_identity
+.fail_mv_decode:
     inc     qword [rel failed]
 
 .reconstruct_identity:
@@ -548,7 +778,7 @@ _start:
     mov     ecx, 1
     mov     r8d, 1
     call    er_av1_tile_decode_intra8x8_luma
-    cmp     eax, 4
+    cmp     eax, 6
     jne     .fail_tile_walk_zero
     test    edx, edx
     jnz     .fail_tile_walk_zero
@@ -565,8 +795,163 @@ _start:
     cmp     byte [rel tile_v + 63], AV1_PIXEL_MID_8
     jne     .fail_tile_walk_zero
     inc     qword [rel passed]
-    jmp     .tile_walk_invalid
+    jmp     .tile_walk_inter
 .fail_tile_walk_zero:
+    inc     qword [rel failed]
+
+.tile_walk_inter:
+    mov     byte [rel tile_y], 11
+    mov     byte [rel tile_y + 63], 63
+    mov     byte [rel tile_y + 128], 128
+    mov     byte [rel tile_y + 255], 255
+    mov     dword [rel image + AV1_IMAGE_WIDTH], 16
+    mov     dword [rel image + AV1_IMAGE_HEIGHT], 16
+    mov     qword [rel image + AV1_IMAGE_Y_PTR], tile_y
+    mov     qword [rel image + AV1_IMAGE_U_PTR], tile_u
+    mov     qword [rel image + AV1_IMAGE_V_PTR], tile_v
+    mov     dword [rel image + AV1_IMAGE_Y_LEN], 256
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    mov     dword [rel image + AV1_IMAGE_V_LEN], 64
+    mov     rdi, refs
+    xor     esi, esi
+    mov     rdx, image
+    call    er_av1_refs_store_image
+    test    edx, edx
+    jnz     .fail_tile_walk_inter
+    mov     dword [rel image + AV1_IMAGE_WIDTH], 16
+    mov     dword [rel image + AV1_IMAGE_HEIGHT], 16
+    mov     qword [rel image + AV1_IMAGE_Y_PTR], inter_y
+    mov     qword [rel image + AV1_IMAGE_U_PTR], inter_u
+    mov     qword [rel image + AV1_IMAGE_V_PTR], inter_v
+    mov     dword [rel image + AV1_IMAGE_Y_LEN], 256
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    mov     dword [rel image + AV1_IMAGE_V_LEN], 64
+    mov     rdi, symctx
+    mov     rsi, tile_zero
+    mov     edx, 512
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_tile_walk_inter
+    mov     rdi, symctx
+    mov     rsi, image
+    mov     rdx, cdfs
+    mov     rcx, refs
+    mov     r8d, 1
+    xor     r9d, r9d
+    call    er_av1_tile_decode_inter8x8_luma
+    cmp     eax, 4
+    jne     .fail_tile_walk_inter
+    test    edx, edx
+    jnz     .fail_tile_walk_inter
+    cmp     byte [rel inter_y], 11
+    jne     .fail_tile_walk_inter
+    cmp     byte [rel inter_y + 63], 63
+    jne     .fail_tile_walk_inter
+    cmp     byte [rel inter_y + 128], 128
+    jne     .fail_tile_walk_inter
+    cmp     byte [rel inter_y + 255], 255
+    jne     .fail_tile_walk_inter
+    mov     dword [rel image + AV1_IMAGE_WIDTH], 16
+    mov     dword [rel image + AV1_IMAGE_HEIGHT], 16
+    mov     qword [rel image + AV1_IMAGE_Y_PTR], tile_y
+    mov     qword [rel image + AV1_IMAGE_U_PTR], tile_u
+    mov     qword [rel image + AV1_IMAGE_V_PTR], tile_v
+    mov     dword [rel image + AV1_IMAGE_Y_LEN], 256
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    mov     dword [rel image + AV1_IMAGE_V_LEN], 64
+    mov     rdi, symctx
+    mov     rsi, image
+    mov     rdx, cdfs
+    mov     rcx, refs
+    mov     r8d, 1
+    mov     r9d, 1
+    call    er_av1_tile_decode_inter8x8_luma
+    test    eax, eax
+    jnz     .fail_tile_walk_inter
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_tile_walk_inter
+    mov     rdi, symctx
+    mov     rsi, tile_one
+    mov     edx, 512
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_tile_walk_inter
+    mov     rdi, symctx
+    mov     rsi, image
+    mov     rdx, cdfs
+    mov     rcx, refs
+    mov     r8d, 1
+    xor     r9d, r9d
+    call    er_av1_tile_decode_inter8x8_luma
+    test    eax, eax
+    jnz     .fail_tile_walk_inter
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_tile_walk_inter
+    inc     qword [rel passed]
+    jmp     .loop_filter_plane
+.fail_tile_walk_inter:
+    inc     qword [rel failed]
+
+.loop_filter_plane:
+    mov     byte [rel tile_y + 7], 10
+    mov     byte [rel tile_y + 8], 20
+    mov     byte [rel tile_y + 127], 30
+    mov     byte [rel tile_y + 128], 40
+    mov     rdi, tile_y
+    mov     esi, 16
+    mov     edx, 16
+    xor     ecx, ecx
+    call    er_av1_loop_filter_plane_8x8
+    test    eax, eax
+    jnz     .fail_loop_filter_plane
+    test    edx, edx
+    jnz     .fail_loop_filter_plane
+    cmp     byte [rel tile_y + 7], 10
+    jne     .fail_loop_filter_plane
+    mov     rdi, tile_y
+    mov     esi, 16
+    mov     edx, 16
+    mov     ecx, AV1_LOOP_FILTER_STRENGTH_MAX
+    call    er_av1_loop_filter_plane_8x8
+    cmp     eax, 32
+    jne     .fail_loop_filter_plane
+    test    edx, edx
+    jnz     .fail_loop_filter_plane
+    cmp     byte [rel tile_y + 7], 15
+    jne     .fail_loop_filter_plane
+    cmp     byte [rel tile_y + 8], 15
+    jne     .fail_loop_filter_plane
+    inc     qword [rel passed]
+    jmp     .loop_filter_image
+.fail_loop_filter_plane:
+    inc     qword [rel failed]
+
+.loop_filter_image:
+    mov     byte [rel tile_y + 7], 0
+    mov     byte [rel tile_y + 8], 100
+    mov     rdi, image
+    mov     esi, AV1_LOOP_FILTER_STRENGTH_MAX
+    call    er_av1_loop_filter_image_420
+    cmp     eax, 32
+    jne     .fail_loop_filter_image
+    test    edx, edx
+    jnz     .fail_loop_filter_image
+    cmp     byte [rel tile_y + 7], 50
+    jne     .fail_loop_filter_image
+    cmp     byte [rel tile_y + 8], 50
+    jne     .fail_loop_filter_image
+    mov     rdi, tile_y
+    mov     esi, 10
+    mov     edx, 16
+    mov     ecx, AV1_LOOP_FILTER_STRENGTH_MAX
+    call    er_av1_loop_filter_plane_8x8
+    test    eax, eax
+    jnz     .fail_loop_filter_image
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_loop_filter_image
+    inc     qword [rel passed]
+    jmp     .tile_walk_invalid
+.fail_loop_filter_image:
     inc     qword [rel failed]
 
 .tile_walk_invalid:

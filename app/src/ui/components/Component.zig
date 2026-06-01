@@ -14,6 +14,7 @@ const ui_icon = @import("../icon.zig");
 const ui_tokens = @import("../theme.zig");
 
 const accordion_component = @import("Accordion.zig");
+const app_surfaces_component = @import("AppSurfaces.zig");
 const alert_component = @import("Alert.zig");
 const alert_dialog_component = @import("AlertDialog.zig");
 const badge_component = @import("Badge.zig");
@@ -434,45 +435,10 @@ fn colorWithAlphaUnit(color: ui.Color, unit: f32) ui.Color {
     return out;
 }
 
-fn headerBadgesWidth(badges: []const HeaderBadge) f32 {
-    if (badges.len == 0) return 0.0;
-    var width: f32 = 0.0;
-    for (badges) |badge_value| width += badge_value.width + 10.0;
-    return width;
-}
-
-pub const SectionProps = struct {
-    title: []const u8,
-    detail: []const u8 = "",
-    icon: ?ui_icon.Icon = null,
-};
-
-pub const MetricCardProps = struct {
-    id: ?u32 = null,
-    title: []const u8,
-    detail: []const u8 = "",
-    value: []const u8,
-    icon: ?ui_icon.Icon = null,
-    progress: ?f32 = null,
-    selected: bool = false,
-};
-
-pub const Segment = struct {
-    id: u32,
-    weight: f32,
-    height: f32 = 1.0,
-    color: ui.Color,
-    selected: bool = false,
-};
-
-pub const SegmentMapProps = struct {
-    segments: []const Segment,
-    background: ui.Color,
-    border: ui.Color,
-    selected_border: ui.Color,
-    gap: f32 = 5.0,
-    radius: f32 = 8.0,
-};
+pub const SectionProps = app_surfaces_component.SectionProps;
+pub const MetricCardProps = app_surfaces_component.MetricCardProps;
+pub const Segment = app_surfaces_component.Segment;
+pub const SegmentMapProps = app_surfaces_component.SegmentMapProps;
 
 pub const TimelineBlock = timeline_component.Block;
 pub const TimelineLaneProps = timeline_component.LaneProps;
@@ -491,258 +457,32 @@ pub fn applyTimelineViewportAction(state: *TimelineViewportState, action: Timeli
     timeline_component.applyAction(state, action);
 }
 
-pub const ControlGroupProps = struct {
-    id: u32,
-    title: []const u8,
-    value: []const u8,
-    slider_id: u32,
-    slider_value: f32,
-    down_id: u32,
-    down_label: []const u8,
-    down_icon: ui_icon.Icon,
-    up_id: u32,
-    up_label: []const u8,
-    up_icon: ui_icon.Icon,
-};
-
-pub const PathRowProps = struct {
-    id: u32,
-    title: []const u8,
-    detail: []const u8,
-    trailing: []const u8,
-    progress: f32,
-    accent: ui.Color,
-    progress_color: ui.Color,
-    selected: bool = false,
-    fill: ?ui.Color = null,
-    selected_fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    text: ?ui.Color = null,
-    muted: ?ui.Color = null,
-};
-
-pub const PipelineNodeProps = struct {
-    id: u32,
-    title: []const u8,
-    detail: []const u8,
-    accent: ui.Color,
-    selected: bool = false,
-    fill: ?ui.Color = null,
-    selected_fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    text: ?ui.Color = null,
-    muted: ?ui.Color = null,
-};
-
-pub const FloatingPanelProps = struct {
-    fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    shadow: ui.Color = .{ .r = 0, .g = 0, .b = 0, .a = 88 },
-    radius: f32 = 12.0,
-    shadow_size: f32 = 8.0,
-    shadow_outset: f32 = 2.0,
-    inset: f32 = 16.0,
-    scrim: ?ui.Color = null,
-    scrim_height: f32 = 0.0,
-};
-
-pub const MessageBubbleProps = struct {
-    body: []const u8,
-    outbound: bool = false,
-    media_label: []const u8 = "",
-    media_detail: []const u8 = "",
-    media_icon: ?ui_icon.Icon = null,
-    inbound_fill: ?ui.Color = null,
-    outbound_fill: ui.Color = .{ .r = 15, .g = 95, .b = 160 },
-    outbound_border: ui.Color = .{ .r = 58, .g = 177, .b = 255, .a = 190 },
-    radius: f32 = 5.0,
-};
-
-pub const PanelScaffoldProps = struct {
-    title: []const u8,
-    detail: []const u8 = "",
-    icon: ?ui_icon.Icon = null,
-    id: ?u32 = null,
-    variant: SurfaceVariant = .panel,
-    selected: bool = false,
-    inset: f32 = 16.0,
-    header_h: f32 = 42.0,
-    header_gap: f32 = 16.0,
-};
+pub const ControlGroupProps = app_surfaces_component.ControlGroupProps;
+pub const PathRowProps = app_surfaces_component.PathRowProps;
+pub const PipelineNodeProps = app_surfaces_component.PipelineNodeProps;
+pub const FloatingPanelProps = app_surfaces_component.FloatingPanelProps;
+pub const MessageBubbleProps = app_surfaces_component.MessageBubbleProps;
+pub const PanelScaffoldProps = app_surfaces_component.PanelScaffoldProps;
 
 pub const WorkspaceTopBarProps = workspace_component.TopBarProps;
 pub const WorkspaceStatusBarProps = workspace_component.StatusBarProps;
 pub const WorkspaceSurfaceProps = workspace_component.SurfaceProps;
 
-pub const IconButtonSpec = struct {
-    id: u32,
-    label: []const u8,
-    icon: ui_icon.Icon,
-    variant: ButtonVariant = .outline,
-};
-
-pub const IconButtonValueSpec = struct {
-    id: u32,
-    label: []const u8,
-    icon: Icon,
-    variant: ButtonVariant = .outline,
-};
-
-pub const ToolbarDirection = enum {
-    row,
-    column,
-};
-
-pub const ActionToolbarProps = struct {
-    specs: []const IconButtonSpec,
-    direction: ToolbarDirection = .row,
-    button_w: f32 = 34.0,
-    button_h: f32 = 36.0,
-    gap: f32 = 8.0,
-};
-
-pub const PanelListItem = struct {
-    id: ?u32 = null,
-    title: []const u8,
-    detail: []const u8 = "",
-    icon: ?ui_icon.Icon = null,
-    active: bool = false,
-};
-
-pub const PanelListProps = struct {
-    title: []const u8,
-    detail: []const u8 = "",
-    icon: ?ui_icon.Icon = null,
-    id: ?u32 = null,
-    variant: SurfaceVariant = .panel,
-    selected: bool = false,
-    inset: f32 = 8.0,
-    header_h: f32 = 42.0,
-    header_gap: f32 = 8.0,
-    row_h: f32 = 42.0,
-    gap: f32 = 4.0,
-    empty_title: []const u8 = "No rows",
-    empty_detail: []const u8 = "",
-    items: []const PanelListItem = &.{},
-};
-
-pub const HeaderBadge = struct {
-    label: []const u8,
-    variant: BadgeVariant = .outline,
-    accent: ?ui.Color = null,
-    width: f32 = 96.0,
-};
-
-pub const PageHeaderProps = struct {
-    title: []const u8,
-    detail: []const u8 = "",
-    icon: ?ui_icon.Icon = null,
-    id: ?u32 = null,
-    variant: SurfaceVariant = .elevated,
-    selected: bool = false,
-    fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    accent: ?ui.Color = null,
-    detail_color: ?ui.Color = null,
-    badges: []const HeaderBadge = &.{},
-    trailing_action: ?IconButtonSpec = null,
-    inset: f32 = 20.0,
-    radius: f32 = 12.0,
-};
-
-pub const WorkspaceRailProps = struct {
-    actions: []const IconButtonSpec,
-    fill: ui.Color,
-    pad_x: f32 = 6.0,
-    pad_top: f32 = 12.0,
-    button_h: f32 = 36.0,
-    gap: f32 = 8.0,
-};
-
-pub const WorkspaceRailValueProps = struct {
-    actions: []const IconButtonValueSpec,
-    fill: ui.Color,
-    pad_x: f32 = 6.0,
-    pad_top: f32 = 12.0,
-    button_h: f32 = 36.0,
-    gap: f32 = 8.0,
-};
-
-pub const WorkspaceSidebarChromeProps = struct {
-    title: []const u8 = "",
-    detail: []const u8 = "",
-    fill: ui.Color,
-    border: ui.Color,
-    inset_x: f32 = 16.0,
-    title_y: f32 = 14.0,
-    detail_y: f32 = 36.0,
-    body_y: f32 = 68.0,
-    right_border_w: f32 = 1.0,
-};
-
-pub const ComposeBarProps = struct {
-    actions: []const IconButtonSpec,
-    textarea_id: u32,
-    textarea_value: []const u8,
-    send_id: u32,
-    send_label: []const u8 = "Send",
-    send_icon: ui_icon.Icon = .send,
-    send_variant: ButtonVariant = .outline,
-    footer: []const u8 = "",
-    fill: ?ui.Color = null,
-    separator: ?ui.Color = null,
-    height: f32 = 74.0,
-    inset_x: f32 = 18.0,
-    toolbar_w: f32 = 120.0,
-    toolbar_button_w: f32 = 34.0,
-    toolbar_gap: f32 = 6.0,
-    textarea_gap: f32 = 6.0,
-    send_w: f32 = 44.0,
-};
-
-pub const ContextActionPanelProps = struct {
-    x: f32,
-    y: f32,
-    title: []const u8,
-    detail: []const u8 = "",
-    primary_id: u32,
-    primary_label: []const u8,
-    secondary_id: u32,
-    secondary_label: []const u8,
-    fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    shadow: ui.Color = .{ .r = 0, .g = 0, .b = 0, .a = 96 },
-    progress: f32 = 1.0,
-    w: f32 = 220.0,
-    h: f32 = 118.0,
-};
-
-pub const EditorSwitchSpec = struct {
-    id: u32,
-    label: []const u8,
-    checked: bool,
-};
-
-pub const PropertyEditorPanelProps = struct {
-    title: []const u8,
-    detail: []const u8,
-    close_id: u32,
-    preview_title: []const u8 = "Selected",
-    preview_detail: []const u8,
-    section_title: []const u8,
-    section_detail: []const u8,
-    prev_id: u32,
-    prev_label: []const u8,
-    next_id: u32,
-    next_label: []const u8,
-    switches: []const EditorSwitchSpec = &.{},
-    fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    shadow: ui.Color = .{ .r = 0, .g = 0, .b = 0, .a = 82 },
-    scrim: ?ui.Color = null,
-    progress: f32 = 1.0,
-    panel_w: f32 = 360.0,
-};
+pub const IconButtonSpec = app_surfaces_component.IconButtonSpec;
+pub const IconButtonValueSpec = app_surfaces_component.IconButtonValueSpec;
+pub const ToolbarDirection = app_surfaces_component.ToolbarDirection;
+pub const ActionToolbarProps = app_surfaces_component.ActionToolbarProps;
+pub const PanelListItem = app_surfaces_component.PanelListItem;
+pub const PanelListProps = app_surfaces_component.PanelListProps;
+pub const HeaderBadge = app_surfaces_component.HeaderBadge;
+pub const PageHeaderProps = app_surfaces_component.PageHeaderProps;
+pub const WorkspaceRailProps = app_surfaces_component.WorkspaceRailProps;
+pub const WorkspaceRailValueProps = app_surfaces_component.WorkspaceRailValueProps;
+pub const WorkspaceSidebarChromeProps = app_surfaces_component.WorkspaceSidebarChromeProps;
+pub const ComposeBarProps = app_surfaces_component.ComposeBarProps;
+pub const ContextActionPanelProps = app_surfaces_component.ContextActionPanelProps;
+pub const EditorSwitchSpec = app_surfaces_component.EditorSwitchSpec;
+pub const PropertyEditorPanelProps = app_surfaces_component.PropertyEditorPanelProps;
 
 pub const SemanticKind = semantic_component.Kind;
 pub const SemanticImportance = semantic_component.Importance;
@@ -906,6 +646,11 @@ pub const View = struct {
 
     pub fn hasCollector(self: View) bool {
         return self.collector != null;
+    }
+
+    pub fn interactionRegions(self: View) []const interaction.Region {
+        const collector = self.collector orelse return &.{};
+        return collector.written();
     }
 
     pub fn draw(self: View, component: Component, bounds: ui.Rect) ui.RenderError!void {
@@ -1401,7 +1146,7 @@ pub const View = struct {
         }
 
         const action_w: f32 = if (props.trailing_action != null) 44.0 else 0.0;
-        const badges_w = headerBadgesWidth(props.badges);
+        const badges_w = app_surfaces_component.headerBadgesWidth(props.badges);
         const reserved = action_w + badges_w + if (badges_w > 0.0 and action_w > 0.0) @as(f32, 10.0) else @as(f32, 0.0);
         const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x - reserved);
         try self.strongText(ui.Rect.init(text_x, inner.y - 2.0, text_w, 24.0), props.title, self.options.style.text);
@@ -1426,127 +1171,35 @@ pub const View = struct {
     }
 
     pub fn workspaceRail(self: View, bounds: ui.Rect, props: WorkspaceRailProps) (ui.RenderError || interaction.Error)!void {
-        try self.fill(bounds, props.fill, 0.0);
-        try self.actionToolbar(ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), .{
-            .specs = props.actions,
-            .direction = .column,
-            .button_h = props.button_h,
-            .gap = props.gap,
-        });
+        try app_surfaces_component.workspaceRail(self, bounds, props);
     }
 
     pub fn workspaceRailValues(self: View, bounds: ui.Rect, props: WorkspaceRailValueProps) (ui.RenderError || interaction.Error)!void {
-        try self.fill(bounds, props.fill, 0.0);
-        var column_cursor = self.column(ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), props.gap);
-        for (props.actions) |action| {
-            try self.iconButtonValueAt(column_cursor.take(props.button_h), action.id, action.label, action.icon, action.variant);
-        }
+        try app_surfaces_component.workspaceRailValues(self, bounds, props);
     }
 
     pub fn workspaceSidebarChrome(self: View, bounds: ui.Rect, props: WorkspaceSidebarChromeProps) ui.RenderError!ui.Rect {
-        try self.fill(bounds, props.fill, 0.0);
-        if (props.right_border_w > 0.0) {
-            try self.fill(ui.Rect.init(bounds.x + bounds.w - props.right_border_w, bounds.y, props.right_border_w, bounds.h), props.border, 0.0);
-        }
-        const text_w = @max(primitives.min_extent, bounds.w - props.inset_x * 2.0);
-        if (props.title.len != 0) try self.title(ui.Rect.init(bounds.x + props.inset_x, bounds.y + props.title_y, text_w, 16.0), props.title);
-        if (props.detail.len != 0) try self.muted(ui.Rect.init(bounds.x + props.inset_x, bounds.y + props.detail_y, text_w, 14.0), props.detail);
-        return ui.Rect.init(bounds.x + props.inset_x - 6.0, bounds.y + props.body_y, @max(primitives.min_extent, bounds.w - (props.inset_x - 6.0) * 2.0), @max(primitives.min_extent, bounds.h - props.body_y));
+        return app_surfaces_component.workspaceSidebarChrome(self, bounds, props);
     }
 
     pub fn composeBar(self: View, bounds: ui.Rect, props: ComposeBarProps) (ui.RenderError || interaction.Error)!void {
-        if (props.fill) |fill_color| try self.fill(bounds, fill_color, 0.0);
-        try self.line(ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0));
-        const tool_y = bounds.y + @max(0.0, (bounds.h - 38.0) * 0.5);
-        try self.actionToolbar(ui.Rect.init(bounds.x + props.inset_x, tool_y, props.toolbar_w, 38.0), .{
-            .specs = props.actions,
-            .button_w = props.toolbar_button_w,
-            .gap = props.toolbar_gap,
-        });
-        const textarea_x = bounds.x + props.inset_x + props.toolbar_w + props.textarea_gap;
-        const send_x = bounds.x + bounds.w - props.inset_x - props.send_w;
-        try self.textareaAt(ui.Rect.init(textarea_x, bounds.y + 15.0, @max(primitives.min_extent, send_x - textarea_x - props.textarea_gap), 44.0), props.textarea_id, "", props.textarea_value);
-        try self.iconButtonAt(ui.Rect.init(send_x, tool_y, props.send_w, 38.0), props.send_id, props.send_label, props.send_icon, props.send_variant);
-        if (props.footer.len != 0) try self.muted(ui.Rect.init(bounds.x + props.inset_x, bounds.y + bounds.h - 18.0, @max(primitives.min_extent, props.toolbar_w + 40.0), 14.0), props.footer);
+        try app_surfaces_component.composeBar(self, bounds, props);
     }
 
     pub fn contextActionPanel(self: View, container: ui.Rect, props: ContextActionPanelProps) (ui.RenderError || interaction.Error)!void {
-        const mark = self.overlayMark();
-        const x = std.math.clamp(props.x, container.x + 8.0, container.x + container.w - props.w - 8.0);
-        const y = std.math.clamp(props.y, container.y + 8.0, container.y + container.h - props.h - 8.0);
-        const panel_bounds = ui.Rect.init(x, y, props.w, props.h);
-        _ = try self.floatingPanel(panel_bounds, .{
-            .fill = props.fill,
-            .border = props.border,
-            .shadow = props.shadow,
-            .radius = 12.0,
-            .shadow_outset = 2.0,
-        });
-        try self.title(ui.Rect.init(panel_bounds.x + 14.0, panel_bounds.y + 12.0, panel_bounds.w - 28.0, 18.0), props.title);
-        if (props.detail.len != 0) try self.muted(ui.Rect.init(panel_bounds.x + 14.0, panel_bounds.y + 36.0, panel_bounds.w - 28.0, 16.0), props.detail);
-        try self.buttonAt(ui.Rect.init(panel_bounds.x + 12.0, panel_bounds.y + 66.0, 118.0, 34.0), props.primary_id, props.primary_label, .primary);
-        try self.buttonAt(ui.Rect.init(panel_bounds.x + 138.0, panel_bounds.y + 66.0, 70.0, 34.0), props.secondary_id, props.secondary_label, .outline);
-        self.applyOverlayMotion(mark, .{ .opacity = props.progress, .dy = (1.0 - props.progress) * 8.0 });
+        try app_surfaces_component.contextActionPanel(self, container, props);
     }
 
     pub fn propertyEditorPanel(self: View, container: ui.Rect, props: PropertyEditorPanelProps) (ui.RenderError || interaction.Error)!void {
-        const mark = self.overlayMark();
-        const panel_w = @min(props.panel_w, @max(300.0, container.w * 0.24));
-        const panel_bounds = ui.Rect.init(container.x + container.w - panel_w - 18.0, container.y + 18.0, panel_w, @min(398.0, container.h - 36.0));
-        const inner = try self.floatingPanel(panel_bounds, .{
-            .fill = props.fill,
-            .border = props.border,
-            .shadow = props.shadow,
-            .radius = 14.0,
-            .shadow_outset = 1.0,
-            .scrim = props.scrim,
-            .scrim_height = 76.0,
-        });
-        try self.boldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), props.title, self.options.style.text);
-        try self.iconButtonAt(ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0), props.close_id, "Close editor", .x, .outline);
-        try self.muted(ui.Rect.init(inner.x, inner.y + 31.0, inner.w, 17.0), props.detail);
-        try self.muted(ui.Rect.init(inner.x, inner.y + 54.0, inner.w, 17.0), "Live changes apply immediately.");
-        try self.subtleAt(ui.Rect.init(inner.x, inner.y + 86.0, inner.w, 74.0), props.preview_title, props.preview_detail);
-        const section_y = inner.y + 184.0;
-        try self.title(ui.Rect.init(inner.x, section_y, inner.w, 20.0), props.section_title);
-        try self.muted(ui.Rect.init(inner.x, section_y + 25.0, inner.w, 18.0), props.section_detail);
-        const button_w = (inner.w - 10.0) * 0.5;
-        try self.buttonAt(ui.Rect.init(inner.x, section_y + 52.0, button_w, 34.0), props.prev_id, props.prev_label, .outline);
-        try self.buttonAt(ui.Rect.init(inner.x + button_w + 10.0, section_y + 52.0, button_w, 34.0), props.next_id, props.next_label, .primary);
-        try self.line(ui.Rect.init(inner.x, section_y + 106.0, inner.w, 1.0));
-        var switch_y = section_y + 122.0;
-        for (props.switches) |switch_value| {
-            try self.switchAt(ui.Rect.init(inner.x, switch_y, inner.w, 32.0), switch_value.id, switch_value.label, switch_value.checked);
-            switch_y += 40.0;
-        }
-        self.applyOverlayMotion(mark, .{ .opacity = props.progress, .dx = (1.0 - props.progress) * 18.0 });
+        try app_surfaces_component.propertyEditorPanel(self, container, props);
     }
 
     pub fn section(self: View, bounds: ui.Rect, props: SectionProps) ui.RenderError!void {
-        const text_x = if (props.icon != null) bounds.x + 42.0 else bounds.x;
-        const text_w = @max(primitives.min_extent, bounds.x + bounds.w - text_x);
-        if (props.icon) |icon_value| {
-            const chip = ui.Rect.init(bounds.x, bounds.y + 2.0, 28.0, 28.0);
-            try self.scene.pushRect(chip, self.options.style.row, .fill, 7.0, 0.0);
-            try self.scene.pushRect(chip, self.options.style.border, .border, 7.0, 0.0);
-            try self.icon(chip.withHeightCentered(15.0).withWidthCentered(15.0), icon_value, self.options.style.accent);
-        }
-        try self.strongText(ui.Rect.init(text_x, bounds.y, text_w, 18.0), props.title, self.options.style.text);
-        if (props.detail.len != 0) {
-            try self.text(ui.Rect.init(text_x, bounds.y + 23.0, text_w, 15.0), props.detail, self.options.style.muted);
-        }
+        try app_surfaces_component.section(self, bounds, props);
     }
 
     pub fn labelValue(self: View, bounds: ui.Rect, label: []const u8, value: []const u8, label_w: f32) ui.RenderError!void {
-        const clamped_label_w = @min(bounds.w, @max(primitives.min_extent, label_w));
-        try self.text(ui.Rect.init(bounds.x, bounds.y, clamped_label_w, bounds.h), label, self.options.style.muted);
-        if (bounds.w > clamped_label_w) {
-            try self.strongText(
-                ui.Rect.init(bounds.x + clamped_label_w, bounds.y, @max(primitives.min_extent, bounds.w - clamped_label_w), bounds.h),
-                value,
-                self.options.style.text,
-            );
-        }
+        try app_surfaces_component.labelValue(self, bounds, label, value, label_w);
     }
 
     pub fn metricCard(self: View, bounds: ui.Rect, props: MetricCardProps) (ui.RenderError || interaction.Error)!void {
@@ -1742,18 +1395,7 @@ pub const View = struct {
     }
 
     pub fn floatingPanel(self: View, bounds: ui.Rect, props: FloatingPanelProps) ui.RenderError!ui.Rect {
-        const radius = @max(0.0, props.radius);
-        if (props.shadow.a != 0 and props.shadow_size > 0.0) {
-            try self.scene.pushRect(bounds.insetUniform(-props.shadow_outset), props.shadow, .shadow, radius + props.shadow_outset, props.shadow_size);
-        }
-        try self.scene.pushRect(bounds, props.fill orelse self.options.style.panel, .fill, radius, 0.0);
-        try self.scene.pushRect(bounds, props.border orelse self.options.style.border, .border, radius, 0.0);
-        if (props.scrim) |scrim_color| {
-            if (props.scrim_height > 0.0) {
-                try self.scene.pushGradientRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, props.scrim_height), scrim_color, ui.Color.clear, radius);
-            }
-        }
-        return bounds.insetUniform(props.inset);
+        return app_surfaces_component.floatingPanel(self, bounds, props);
     }
 
     pub fn messageBubble(self: View, bounds: ui.Rect, props: MessageBubbleProps) ui.RenderError!void {

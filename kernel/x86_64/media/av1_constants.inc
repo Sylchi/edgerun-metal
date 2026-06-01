@@ -257,6 +257,9 @@ AV1_BLOCK_DIM_8                     equ 8
 AV1_BLOCK_PIXELS_8X8                equ 64
 AV1_PIXEL_MID_8                     equ 128
 AV1_PIXEL_MAX_8                     equ 255
+AV1_LOOP_FILTER_STRENGTH_MAX        equ 255
+AV1_MV_COMPONENT_BITS               equ 3
+AV1_MV_COMPONENT_MAX                equ (1 << AV1_MV_COMPONENT_BITS) - 1
 AV1_COEFF_MIN_16                    equ -32768
 AV1_COEFF_MAX_16                    equ 32767
 AV1_QUANT_STEP_MIN                  equ 1
@@ -264,6 +267,9 @@ AV1_QUANT_STEP_MAX                  equ 255
 AV1_PRED_MODE_DC                    equ 0
 AV1_PRED_MODE_V                     equ 1
 AV1_PRED_MODE_H                     equ 2
+AV1_PRED_MODE_PAETH                 equ 3
+AV1_PRED_MODE_SMOOTH                equ 4
+AV1_PRED_MODE_MAX_SUPPORTED         equ 4
 AV1_TX_TYPE_IDTX                    equ 0
 AV1_TX_TYPE_DCT_DCT                 equ 1
 AV1_TX_TYPE_DC_ONLY                 equ 2
@@ -279,6 +285,22 @@ AV1_IMAGE_Y_LEN                     equ 32
 AV1_IMAGE_U_LEN                     equ 36
 AV1_IMAGE_V_LEN                     equ 40
 AV1_IMAGE_SIZE                      equ 48
+
+AV1_PLANE_PTR                       equ 0
+AV1_PLANE_WIDTH                     equ 8
+AV1_PLANE_HEIGHT                    equ 12
+AV1_PLANE_LEN                       equ 16
+AV1_PLANE_SIZE                      equ 24
+AV1_PLANE_Y                         equ 0
+AV1_PLANE_U                         equ 1
+AV1_PLANE_V                         equ 2
+AV1_PLANE_MAX                       equ 2
+
+AV1_REF_COUNT                       equ 8
+AV1_REF_SLOT_VALID                  equ 0
+AV1_REF_SLOT_IMAGE                  equ 8
+AV1_REF_SLOT_SIZE                   equ AV1_REF_SLOT_IMAGE + AV1_IMAGE_SIZE
+AV1_REF_STATE_SIZE                  equ AV1_REF_SLOT_SIZE * AV1_REF_COUNT
 
 AV1_INFO_WIDTH                      equ 0
 AV1_INFO_HEIGHT                     equ 4

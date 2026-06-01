@@ -4,6 +4,13 @@
 # Targets:  kernel  kernel-hello  test  test-*  clean
 set -euo pipefail
 
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+SCRIPT_DIR="${SCRIPT_PATH%/*}"
+if [ "$SCRIPT_DIR" = "$SCRIPT_PATH" ]; then
+	SCRIPT_DIR="."
+fi
+cd "$SCRIPT_DIR"
+
 # Disable all forms of disk-based caching
 export CCACHE_DISABLE=1
 export SCCACHE_DISABLE=1
@@ -30,9 +37,17 @@ EFI_BOOT_PATH="${EFI_BOOT_DIR}/bootx64.efi"
 # ---- helpers ----
 mkdir -p "${ASM_BUILD}"
 
-elf64()   { ${YASM} -f elf64   ${ASM_INC} ${ASM_DEFS:-} -o "$2" "$1" && test -f "$2"; }
-elf32()   { ${YASM} -f elf32   ${ASM_INC} ${ASM_DEFS:-} -o "$2" "$1" && test -f "$2"; }
-elf64_dbg() { ${YASM} -f elf64 ${ASM_INC} ${ASM_DEFS:-} -dX25519_DEBUG -o "$2" "$1" && test -f "$2"; }
+asm_x86_obj() {
+	local format="$1"; shift
+	local dst="$1"; shift
+	local src="$1"; shift
+	${YASM} -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src"
+	test -f "$dst"
+}
+
+elf64()   { asm_x86_obj elf64 "$2" "$1"; }
+elf32()   { asm_x86_obj elf32 "$2" "$1"; }
+elf64_dbg() { asm_x86_obj elf64 "$2" "$1" -dX25519_DEBUG; }
 
 # Build object list string from KERNEL_ASM_SRCS with given prefix/suffix
 # Usage: kernel_objs <prefix> <suffix> [extra_objects...]
@@ -312,7 +327,7 @@ build_test() {
 	local src="$1"; shift
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local extra_o=""
 	for dep; do
 		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
@@ -325,45 +340,277 @@ build_test() {
 	"$bin"
 }
 
+test_registry() {
+ cat <<'EOF'
+test-registry|unit|build|yes|cmd_test_registry|Validate test registry metadata
+test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test
+test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
+test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
+test-serial|unit|driver|yes|cmd_test_serial|Run serial driver test
+test-cros-ec|unit|driver|yes|cmd_test_cros_ec|Run Chrome EC memmap parser test
+test-amdgpu|unit|driver|yes|cmd_test_amdgpu|Run AMDGPU DCN register-plan test
+test-uvc|unit|driver|yes|cmd_test_uvc|Run UVC descriptor parser test
+test-sw-fb|contract|ui|yes|cmd_test_sw_fb|Run software framebuffer test
+test-render-ir|contract|ui|yes|cmd_test_render_ir|Run render IR test
+test-fe-mul|unit|crypto|yes|cmd_test_fe_mul|Run field multiplication test
+test-spi-flash|unit|driver|yes|cmd_test_spi_flash|Run SPI flash compile check
+test-pi-audio|emulator|pi|yes|cmd_test_pi_audio|Run Pi Zero W PWM audio emulator test
+test-pi-bt|emulator|pi|yes|cmd_test_pi_bt|Run Pi Zero W CYW43438 Bluetooth UART emulator test
+test-pi-gpu|emulator|pi|yes|cmd_test_pi_gpu|Run Pi Zero W VideoCore mailbox framebuffer emulator test
+test-pi-gpio|emulator|pi|yes|cmd_test_pi_gpio|Run Pi Zero W GPIO emulator test
+test-pi-sd|emulator|pi|yes|cmd_test_pi_sd|Run Pi Zero W EMMC SD block emulator test
+test-pi-usb|emulator|pi|yes|cmd_test_pi_usb|Run Pi Zero W DWC2 USB host emulator test
+test-pi-wifi-sdio|emulator|pi|yes|cmd_test_pi_wifi_sdio|Run Pi Zero W CYW43438 SDIO probe emulator test
+test-sha3|unit|crypto|yes|cmd_test_sha3|Run SHA3-256 known-answer tests
+test-tls|contract|crypto|yes|cmd_test_tls|Run TLS ClientHello self-test
+test-tor|contract|crypto|yes|cmd_test_tor|Run Tor AES-128-CTR KAT test
+test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper test
+test-tor-hs|contract|crypto|yes|cmd_test_tor_hs|Run Tor onion-service message tests
+test-tor-hs-app|contract|crypto|yes|cmd_test_tor_hs_app|Run Tor hidden-service app message tests
+test-local-route|contract|route|yes|cmd_test_local_route|Run local cell route queue/dispatch test
+test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
+test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
+test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
+test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
+test-av1-tile|unit|media|yes|cmd_test_av1_tile|Run AV1 tile group test
+test-av1-block|unit|media|yes|cmd_test_av1_block|Run AV1 block syntax entropy test
+test-av1-reduced|contract|media|yes|cmd_test_av1_reduced|Run AV1 reduced-still stream test
+test-x25519|unit|crypto|yes|cmd_test_x25519|Run X25519 RFC 7748 vectors
+test-x25519-debug|debug|crypto|no|cmd_test_x25519_debug|Run X25519 vectors with debug curve25519 object
+test-wasm-compiler|contract|wasm|yes|cmd_test_wasm_compiler|Run host-side WASM compiler self-test
+test-wasm-jit|contract|wasm|yes|cmd_test_wasm_jit|Run WASM JIT self-test
+test-recursion-valid|contract|wasm|yes|cmd_test_recursion_valid|Run WASM recursion valid-DAG test
+test-recursion-invalid|contract|wasm|yes|cmd_test_recursion_invalid|Run WASM recursion cycle-rejection test
+test-wasm-float|contract|wasm|yes|cmd_test_wasm_float|Run WASM float opcode test
+test-bench-render-ir|bench|ui|no|cmd_test_bench_render_ir|Run render_ir RDTSC benchmark
+test-tor-live-host|integration|crypto|no|cmd_test_tor_live_host|Build and run hosted live Tor ORPort probe
+test-app|app|app|no|cmd_test_app|Run app-side Zig tests
+EOF
+}
+
+cmd_test_registry() {
+ local count=0 failed=0
+ local -A seen=()
+ while IFS='|' read -r reg_target reg_category reg_subsystem reg_default reg_runner reg_description; do
+  count=$((count + 1))
+  if [ -z "$reg_target" ] || [ -z "$reg_category" ] || [ -z "$reg_subsystem" ] || [ -z "$reg_default" ] || [ -z "$reg_runner" ] || [ -z "$reg_description" ]; then
+   echo "FAIL test-registry: incomplete entry ${count}" >&2
+   failed=1
+   continue
+  fi
+  if [ -n "${seen[$reg_target]:-}" ]; then
+   echo "FAIL test-registry: duplicate target ${reg_target}" >&2
+   failed=1
+  fi
+  seen[$reg_target]=1
+  case "$reg_default" in
+   yes|no) ;;
+   *)
+    echo "FAIL test-registry: invalid default flag for ${reg_target}: ${reg_default}" >&2
+    failed=1
+    ;;
+  esac
+  case "$reg_category" in
+   unit|contract|emulator|integration|bench|debug|app) ;;
+   *)
+    echo "FAIL test-registry: invalid category for ${reg_target}: ${reg_category}" >&2
+    failed=1
+    ;;
+  esac
+  if ! declare -F "$reg_runner" >/dev/null; then
+   echo "FAIL test-registry: missing runner ${reg_runner} for ${reg_target}" >&2
+   failed=1
+  fi
+ done < <(test_registry)
+
+ if [ "$count" -eq 0 ]; then
+  echo "FAIL test-registry: empty registry" >&2
+  exit 1
+ fi
+ if [ "$failed" -ne 0 ]; then
+  exit 1
+ fi
+ printf 'PASS test-registry %d entries\n' "$count"
+}
+
+cmd_test_list() {
+ printf 'target\tcategory\tsubsystem\tdefault\tdescription\n'
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  printf '%s\t%s\t%s\t%s\t%s\n' "$target" "$category" "$subsystem" "$default" "$description"
+ done < <(test_registry)
+}
+
+cmd_test_help() {
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  printf '  %-22s [%s/%s] %s\n' "$target" "$category" "$subsystem" "$description"
+ done < <(test_registry)
+}
+
+cmd_test_registered() {
+ local wanted="$1"
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  if [ "$target" = "$wanted" ]; then
+   test_run_target "$wanted"
+   return
+  fi
+ done < <(test_registry)
+ echo "unknown test target: ${wanted}" >&2
+ exit 1
+}
+
+test_run_target() {
+ local wanted="$1"
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  if [ "$target" = "$wanted" ]; then
+   "$runner"
+   return
+  fi
+ done < <(test_registry)
+ echo "unknown test target: ${wanted}" >&2
+ exit 1
+}
+
+cmd_test_status_one() {
+ local wanted="$1"
+ local found=0 meta_category="" meta_subsystem="" meta_runner=""
+ while IFS='|' read -r target reg_category reg_subsystem reg_default reg_runner reg_description; do
+  [ -n "$target" ] || continue
+  if [ "$target" = "$wanted" ]; then
+   found=1
+   meta_category="$reg_category"
+   meta_subsystem="$reg_subsystem"
+   meta_runner="$reg_runner"
+   break
+  fi
+ done < <(test_registry)
+ if [ "$found" -ne 1 ]; then
+  echo "unknown test target: ${wanted}" >&2
+  exit 1
+ fi
+
+ local status_dir="${BUILD_DIR}/test-status"
+ mkdir -p "$status_dir"
+ local log_path="${status_dir}/${wanted}.log"
+ local status="pass"
+ if ! "$meta_runner" >"$log_path" 2>&1; then
+  status="fail"
+ fi
+ printf '%s\t%s\t%s\t%s\t%s\n' "$wanted" "$meta_category" "$meta_subsystem" "$status" "$log_path"
+ if [ "$status" = "fail" ]; then
+  return 1
+ fi
+}
+
+cmd_test_status() {
+ if [ "$#" -gt 0 ]; then
+  case "$1" in
+   --category)
+    if [ "$#" -ne 2 ]; then
+     echo "usage: ./build.sh test-status --category <name>" >&2
+     exit 1
+    fi
+    ;;
+   --subsystem)
+    if [ "$#" -ne 2 ]; then
+     echo "usage: ./build.sh test-status --subsystem <name>" >&2
+     exit 1
+    fi
+    ;;
+   --core)
+    if [ "$#" -ne 1 ]; then
+     echo "usage: ./build.sh test-status --core" >&2
+     exit 1
+    fi
+    ;;
+  esac
+ fi
+ printf 'target\tcategory\tsubsystem\tstatus\tlog\n'
+ local failed=0
+ if [ "$#" -gt 0 ] && [ "$1" = "--category" ]; then
+  local wanted_category="$2"
+  while IFS='|' read -r target category subsystem default runner description; do
+   [ -n "$target" ] || continue
+   [ "$default" = "yes" ] || continue
+   [ "$category" = "$wanted_category" ] || continue
+   cmd_test_status_one "$target" || failed=1
+ done < <(test_registry)
+ elif [ "$#" -gt 0 ] && [ "$1" = "--subsystem" ]; then
+  local wanted_subsystem="$2"
+  while IFS='|' read -r target category subsystem default runner description; do
+   [ -n "$target" ] || continue
+   [ "$default" = "yes" ] || continue
+   [ "$subsystem" = "$wanted_subsystem" ] || continue
+   cmd_test_status_one "$target" || failed=1
+ done < <(test_registry)
+ elif [ "$#" -gt 0 ] && [ "$1" = "--core" ]; then
+  while IFS='|' read -r target category subsystem default runner description; do
+   [ -n "$target" ] || continue
+   [ "$default" = "yes" ] || continue
+   case "$category" in
+    unit|contract) cmd_test_status_one "$target" || failed=1 ;;
+   esac
+  done < <(test_registry)
+ elif [ "$#" -gt 0 ]; then
+  local target
+  for target in "$@"; do
+   cmd_test_status_one "$target" || failed=1
+  done
+ else
+  while IFS='|' read -r target category subsystem default runner description; do
+   [ -n "$target" ] || continue
+   [ "$default" = "yes" ] || continue
+   cmd_test_status_one "$target" || failed=1
+  done < <(test_registry)
+ fi
+ if [ "$failed" -ne 0 ]; then
+  exit 1
+ fi
+}
+
+cmd_test_category() {
+ local wanted="$1"
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  [ "$category" = "$wanted" ] || continue
+  [ "$default" = "yes" ] || continue
+  "$runner"
+ done < <(test_registry)
+}
+
+cmd_test_subsystem() {
+ local wanted="$1"
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  [ "$subsystem" = "$wanted" ] || continue
+  [ "$default" = "yes" ] || continue
+  "$runner"
+ done < <(test_registry)
+}
+
+cmd_test_core() {
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  [ "$default" = "yes" ] || continue
+  case "$category" in
+   unit|contract) "$runner" ;;
+  esac
+ done < <(test_registry)
+}
+
+cmd_test_app() {
+ (cd app && zig build --summary none test)
+}
+
 cmd_test() {
-	cmd_test_ctype
-	cmd_test_clock
-	cmd_test_http
-	cmd_test_serial
-	cmd_test_cros_ec
-	cmd_test_amdgpu
-	cmd_test_uvc
-	cmd_test_sw_fb
-	cmd_test_render_ir
-	cmd_test_fe_mul
-	cmd_test_spi_flash
-	cmd_test_pi_audio
-	cmd_test_pi_bt
-	cmd_test_pi_gpu
-	cmd_test_pi_gpio
-	cmd_test_pi_sd
-	cmd_test_pi_usb
-	cmd_test_pi_wifi_sdio
-	cmd_test_sha3
-	cmd_test_tls
-	cmd_test_tor
-	cmd_test_tor_cell
-	cmd_test_tor_hs
-	cmd_test_tor_hs_app
-	cmd_test_local_route
-	cmd_test_av1_obu
-	cmd_test_av1_ivf
-	cmd_test_av1_sequence
-	cmd_test_av1_frame
-	cmd_test_av1_tile
-	cmd_test_av1_block
-	cmd_test_av1_reduced
-	cmd_test_x25519
-	cmd_test_wasm_compiler
-	cmd_test_wasm_jit
-	cmd_test_recursion_valid
-	cmd_test_recursion_invalid
-	cmd_test_wasm_float
+ while IFS='|' read -r target category subsystem default runner description; do
+  [ -n "$target" ] || continue
+  [ "$default" = "yes" ] || continue
+  "$runner"
+ done < <(test_registry)
 }
 
 build_test_ldscript() {
@@ -371,7 +618,7 @@ build_test_ldscript() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local dep_obj="${ASM_BUILD}/runtime.o"
 	elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
 	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj" "$@"
@@ -413,8 +660,8 @@ cmd_test_uvc() {
 	local stub_src="${TEST_DIR}/stubs_xhci.asm"
 	local stub_obj="${ASM_BUILD}/stubs_xhci.o"
 	local bin="${ASM_BUILD}/test_uvc"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local uvc_o="${ASM_BUILD}/uvc.o"
 	elf64 "${ASM_DIR}/../driver/uvc.asm" "$uvc_o"
 	local xhci_o="${ASM_BUILD}/xhci.o"
@@ -430,8 +677,8 @@ cmd_test_http() {
 	local stub_src="${TEST_DIR}/stubs_http.asm"
 	local stub_obj="${ASM_BUILD}/stubs_http.o"
 	local bin="${ASM_BUILD}/test_http"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local http_o="${ASM_BUILD}/http.o"
 	if [ ! -f "$http_o" ]; then
 		elf64 "${ASM_DIR}/net/http.asm" "$http_o"
@@ -487,8 +734,8 @@ cmd_test_fe_mul() {
 	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
 	local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
 	local bin="${ASM_BUILD}/test_fe_mul"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -562,9 +809,9 @@ cmd_test_cros_ec() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local cros_ec_o="${ASM_BUILD}/cros_ec_hosted.o"
-	${YASM} -f elf64 ${ASM_INC} -dHOSTED_TEST -o "$cros_ec_o" "${ASM_DIR}/../driver/cros_ec.asm"
+	asm_x86_obj elf64 "$cros_ec_o" "${ASM_DIR}/../driver/cros_ec.asm" -dHOSTED_TEST
 	ld -nostdlib -static -o "$bin" "$obj" "$cros_ec_o"
 	echo "  LD  ${bin}"
 	"$bin"
@@ -575,9 +822,9 @@ cmd_test_amdgpu() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local amdgpu_o="${ASM_BUILD}/amdgpu_hosted.o"
-	${YASM} -f elf64 ${ASM_INC} -o "$amdgpu_o" "${ASM_DIR}/../driver/amdgpu.asm"
+	asm_x86_obj elf64 "$amdgpu_o" "${ASM_DIR}/../driver/amdgpu.asm"
 	ld -nostdlib -static -o "$bin" "$obj" "$amdgpu_o"
 	echo "  LD  ${bin}"
 	"$bin"
@@ -588,7 +835,7 @@ cmd_test_tls() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local tls_o="${ASM_BUILD}/tls.o"
 	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
 	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
@@ -609,7 +856,7 @@ cmd_test_tor() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
 	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
 	local tor_o="${ASM_BUILD}/tor.o"
@@ -642,7 +889,7 @@ cmd_bench_tor() {
 	local src="${TEST_DIR}/test_tor_self.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name}"
-	${YASM} -f elf64 ${ASM_INC} -dTOR_BENCH -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src" -dTOR_BENCH
 	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
 	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
 	local tor_o="${ASM_BUILD}/tor.o"
@@ -659,7 +906,7 @@ cmd_bench_tor_hs() {
 	local src="${TEST_DIR}/test_tor_hs_self.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name}"
-	${YASM} -f elf64 ${ASM_INC} -DHS_BENCH -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src" -DHS_BENCH
 	local tor_hs_o="${ASM_BUILD}/tor_hs.o"
 	elf64 "${ASM_DIR}/crypto/tor_hs.asm" "$tor_hs_o"
 	local sha3_o="${ASM_BUILD}/sha3.o"
@@ -681,8 +928,8 @@ cmd_test_x25519() {
 	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
 	local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
 	local bin="${ASM_BUILD}/test_x25519"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -706,8 +953,8 @@ cmd_test_x25519_debug() {
 	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
 	local stub_obj="${ASM_BUILD}/stubs_tor_ntor_debug.o"
 	local bin="${ASM_BUILD}/test_x25519_debug"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -732,7 +979,7 @@ cmd_bench_wasm_jit() {
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	local runtime_o="${ASM_BUILD}/runtime.o"
 	if [ ! -f "$runtime_o" ]; then
 		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
@@ -752,7 +999,7 @@ cmd_bench_zig_wasm() {
 	zig build-obj -O ReleaseFast -fstrip -target x86_64-linux -femit-bin="$native_obj" "$zig_src"
 	zig build-exe -O ReleaseFast -fstrip -target wasm32-freestanding -fno-entry -rdynamic -femit-bin="$wasm_bin" "$zig_src"
 	local wasm_abs="${PWD}/${wasm_bin}"
-	${YASM} -f elf64 ${ASM_INC} -DZIG_WASM_BENCH_PATH="\"${wasm_abs}\"" -o "$asm_obj" "$asm_src"
+	asm_x86_obj elf64 "$asm_obj" "$asm_src" -DZIG_WASM_BENCH_PATH="\"${wasm_abs}\""
 	local runtime_o="${ASM_BUILD}/runtime.o"
 	if [ ! -f "$runtime_o" ]; then
 		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
@@ -854,7 +1101,7 @@ cmd_tor_hs_host() {
 	mkdir -p "${HOST_BUILD}"
 	local obj="${HOST_BUILD}/tor_hs_host.o"
 	local bin="${HOST_BUILD}/tor_hs_host"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "${TEST_DIR}/test_tor_hs_self.asm"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_tor_hs_self.asm"
 	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_hs.a"
 	echo "  LD  ${bin}"
 }
@@ -864,7 +1111,7 @@ cmd_tor_live_host() {
 	mkdir -p "${HOST_BUILD}"
 	local obj="${HOST_BUILD}/tor_live_host.o"
 	local bin="${HOST_BUILD}/tor_live_host"
-	${YASM} -f elf64 ${ASM_INC} ${ASM_DEFS:-} -o "$obj" "${TEST_DIR}/test_tor_live_host.asm"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_tor_live_host.asm"
 	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_core.a"
 	echo "  LD  ${bin}"
 }
@@ -911,7 +1158,7 @@ cmd_pi_usb_boot() {
 	mkdir -p "${HOST_BUILD}"
 	local src="kernel/host/pi_usb_boot_host.asm"
 	local obj="${HOST_BUILD}/pi_usb_boot_host.o"
-	${YASM} -f elf64 -I kernel -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	ld -o "${PI_USB_BOOT}" "$obj"
 	echo "  LD  ${PI_USB_BOOT}"
 }
@@ -928,7 +1175,7 @@ cmd_esp32_serial_boot() {
 	mkdir -p "${HOST_BUILD}"
 	local src="kernel/host/esp32_serial_boot_host.asm"
 	local obj="${HOST_BUILD}/esp32_serial_boot_host.o"
-	${YASM} -f elf64 -I kernel -o "$obj" "$src"
+	asm_x86_obj elf64 "$obj" "$src"
 	ld -o "${HOST_BUILD}/esp32_serial_boot" "$obj"
 	echo "  LD  ${obj}"
 }
@@ -951,53 +1198,27 @@ EdgeRun build targets:
   kernel-efi          Build kernel.efi and copy it to the EdgeRun ESP path
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
-  test-wasm-compiler  Run host-side WASM compiler self-test
-  test-wasm-jit       Run WASM JIT self-test (self-hosted ASM runner)
-  test-wasm-float     Run WASM float opcode test (self-hosted ASM runner)
-  test-ctype          Run ctype test (self-hosted ASM runner)
-  test-clock          Run clock test (self-hosted ASM runner)
-  test-http           Run HTTP test (self-hosted ASM runner)
-  test-recursion-valid    Run WASM recursion-validation valid-DAG test
-  test-recursion-invalid  Run WASM recursion-validation cycle-rejection test
-  test-serial         Run serial test (self-hosted ASM runner)
-  test-cros-ec        Run Chrome EC memmap parser test (self-hosted ASM)
-  test-amdgpu         Run AMDGPU DCN register-plan test (self-hosted ASM)
-  test-uvc            Run UVC descriptor parse test (self-hosted ASM runner)
-  test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
-  test-render-ir      Run render IR test (self-hosted ASM runner)
-  test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
-  test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
-  test-pi-audio       Run Pi Zero W BCM2835 PWM audio emulator test
-  test-pi-bt          Run Pi Zero W CYW43438 Bluetooth UART emulator test
-  test-pi-gpu         Run Pi Zero W VideoCore mailbox framebuffer emulator test
-  test-pi-gpio        Run Pi Zero W BCM2835 GPIO emulator test
-  test-pi-sd          Run Pi Zero W EMMC SD block emulator test
-  test-pi-usb         Run Pi Zero W DWC2 USB host init emulator test
-  test-pi-wifi-sdio   Run Pi Zero W CYW43438 SDIO probe emulator test
-  test-sha3           Run SHA3-256 known-answer tests (self-hosted ASM)
-  test-tls            Run TLS ClientHello self-test (self-hosted ASM)
-  test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
-  test-tor-cell       Run Tor cell EXTEND2 helper test (self-hosted ASM)
-  test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
-  test-local-route    Run local cell route queue/dispatch test (self-hosted ASM)
-  test-av1-obu        Run AV1 OBU header codec test (self-hosted ASM)
-  test-av1-ivf        Run AV1 IVF container parser test (self-hosted ASM)
-  test-av1-sequence   Run AV1 reduced-still sequence header test (self-hosted ASM)
-  test-av1-frame      Run AV1 reduced-still frame header test (self-hosted ASM)
-  test-av1-tile       Run AV1 single-tile group test (self-hosted ASM)
-  test-av1-block      Run AV1 block syntax entropy test (self-hosted ASM)
-  test-av1-reduced    Run AV1 reduced-still stream decode/encode test (self-hosted ASM)
+  test-core           Run default unit + contract tests, excluding emulator tests
+  test-unit           Run default unit tests
+  test-contract       Run default architecture contract tests
+  test-emulator       Run default emulator-backed tests
+  test-subsystem NAME Run default tests for one subsystem (wasm, route, ui, media, crypto, driver, rt, net, pi)
+  test-list           List tests as TSV: target, category, subsystem, default, description
+  test-status [TARGET...] Run tests and emit TSV: target, category, subsystem, status, log
+  test-status --category NAME Run default tests in one category
+  test-status --subsystem NAME Run default tests in one subsystem
+  test-status --core    Run default unit + contract tests as TSV status
+EOF
+ cmd_test_help
+ cat <<'EOF'
   bench-tor           Run Tor local AES cell latency/throughput benchmark
   bench-tor-hs        Run hidden-service local self-connect benchmark
-  test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
-  test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
   signing-wasm        Compile Ed25519 signing WASM guest
   lib-tor             Build reusable Tor static archives under .build/lib
   tor-hs-host         Build hosted hidden-service library smoke binary
   tor-live-host       Build hosted live Tor ORPort probe binary
-  test-tor-live-host  Build + run hosted live Tor ORPort probe
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -1019,48 +1240,22 @@ case "${1:-help}" in
 	kernel-efi)     cmd_kernel_efi ;;
 	install-efi)    cmd_install_efi ;;
 	test)           cmd_test ;;
-	test-wasm-compiler) cmd_test_wasm_compiler ;;
-	test-wasm-jit)  cmd_test_wasm_jit ;;
-	test-wasm-float) cmd_test_wasm_float ;;
-	test-ctype)     cmd_test_ctype ;;
-	test-clock)     cmd_test_clock ;;
-	test-http)       cmd_test_http ;;
-	test-recursion-valid) cmd_test_recursion_valid ;;
-	test-recursion-invalid) cmd_test_recursion_invalid ;;
-	test-serial)     cmd_test_serial ;;
-	test-cros-ec)    cmd_test_cros_ec ;;
-	test-amdgpu)     cmd_test_amdgpu ;;
-	test-uvc)        cmd_test_uvc ;;
-	test-sw-fb)     cmd_test_sw_fb ;;
-	test-render-ir) cmd_test_render_ir ;;
-	test-fe-mul)    cmd_test_fe_mul ;;
-	test-spi-flash) cmd_test_spi_flash ;;
-	test-pi-audio) cmd_test_pi_audio ;;
-	test-pi-bt) cmd_test_pi_bt ;;
-	test-pi-gpu) cmd_test_pi_gpu ;;
-	test-pi-gpio) cmd_test_pi_gpio ;;
-	test-pi-sd) cmd_test_pi_sd ;;
-	test-pi-usb) cmd_test_pi_usb ;;
-	test-pi-wifi-sdio) cmd_test_pi_wifi_sdio ;;
-	test-sha3)      cmd_test_sha3 ;;
-	test-tls)       cmd_test_tls ;;
-	test-tor)       cmd_test_tor ;;
-	test-tor-cell)  cmd_test_tor_cell ;;
-	test-tor-hs)    cmd_test_tor_hs ;;
-	test-tor-hs-app) cmd_test_tor_hs_app ;;
-	test-local-route) cmd_test_local_route ;;
-	test-av1-obu)    cmd_test_av1_obu ;;
-	test-av1-ivf)    cmd_test_av1_ivf ;;
-	test-av1-sequence) cmd_test_av1_sequence ;;
-	test-av1-frame)  cmd_test_av1_frame ;;
-	test-av1-tile)   cmd_test_av1_tile ;;
-	test-av1-block)  cmd_test_av1_block ;;
-	test-av1-reduced) cmd_test_av1_reduced ;;
+	test-core)      cmd_test_core ;;
+	test-unit)      cmd_test_category unit ;;
+	test-contract)  cmd_test_category contract ;;
+	test-emulator)  cmd_test_category emulator ;;
+	test-subsystem)
+		if [ -z "${2:-}" ]; then
+			echo "usage: ./build.sh test-subsystem <name>" >&2
+			exit 1
+		fi
+		cmd_test_subsystem "$2"
+		;;
+	test-list)      cmd_test_list ;;
+	test-status)    shift; cmd_test_status "$@" ;;
+	test-*)         cmd_test_registered "$1" ;;
 	bench-tor)      cmd_bench_tor ;;
 	bench-tor-hs)   cmd_bench_tor_hs ;;
-	test-x25519)     cmd_test_x25519 ;;
-	test-x25519-debug) cmd_test_x25519_debug ;;
-	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	bench-zig-wasm) cmd_bench_zig_wasm ;;
 	signing-wasm)    cmd_signing_wasm ;;

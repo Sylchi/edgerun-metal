@@ -68,7 +68,7 @@ compute-heavy workloads.
 
 | Area | Est. Savings | Description |
 |------|:---:|-------------|
-| Duplicate app/route surfaces | ~1,500 | Remove exact-copy app entry points or make one canonical owner |
+| App entry surfaces | TBD | Re-audit `app/src/app_*.zig`, previews, and host entry points; no `app/src/route/` tree exists in this checkout |
 | Component serialization boilerplate | ~550-825 | 55+ components share identical toObject/writeRecord/fromView |
 | `encodedId` wrappers | ~50 | 7 near-identical wrappers |
 | `Point` struct | ~30 | 4 identical definitions |

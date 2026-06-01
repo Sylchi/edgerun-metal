@@ -318,10 +318,12 @@ tsx_nested: db "<App><Title text=",34,"hi",34,"/><Body count={40 + 2}>ok</Body><
 TSX_NESTED_LEN equ $ - tsx_nested
 tsx_boolean_attr: db "<Input disabled value='x' />"
 TSX_BOOLEAN_ATTR_LEN equ $ - tsx_boolean_attr
-tsx_quoted_lt_attr: db "<Input pattern=",34,"<tag attr='x'>",34," />"
+tsx_quoted_lt_attr: db "<Input pattern=",34,"<tag attr='x'> &amp; &#65;",34," />"
 TSX_QUOTED_LT_ATTR_LEN equ $ - tsx_quoted_lt_attr
 tsx_svg_names: db "<svg:path stroke-width='2' xlink:href={url} />"
 TSX_SVG_NAMES_LEN equ $ - tsx_svg_names
+tsx_utf8_names: db "<Caf",0xc3,0xa9," data-",0xce,0xbb,"='x' />"
+TSX_UTF8_NAMES_LEN equ $ - tsx_utf8_names
 tsx_deep: db "<A><B><C><D /></C></B></A>"
 TSX_DEEP_LEN equ $ - tsx_deep
 tsx_fragment: db "<><App /><span data-x='1'>text</span></>"
@@ -330,6 +332,8 @@ tsx_member_expr: db "<UI.Card data-id={",34,"a<b",34,"}>{items.map(x => <Row key
 TSX_MEMBER_EXPR_LEN equ $ - tsx_member_expr
 tsx_conditional_expr: db "<App>{ready ? <Ready /> : <Fallback />}</App>"
 TSX_CONDITIONAL_EXPR_LEN equ $ - tsx_conditional_expr
+tsx_template_expr_child: db "<App>{`${<Icon name='x' />}`}</App>"
+TSX_TEMPLATE_EXPR_CHILD_LEN equ $ - tsx_template_expr_child
 tsx_spread_attr: db "<Panel {...props} a={/* comment */ `x{y}`} />"
 TSX_SPREAD_ATTR_LEN equ $ - tsx_spread_attr
 tsx_spread_attr_jsx: db "<Panel {...{ icon: <Icon name='x' /> }} />"
@@ -342,7 +346,7 @@ tsx_expr_comment_child: db "<App>{/* hidden <Tag /> */}{items // comment",10,"}<
 TSX_EXPR_COMMENT_CHILD_LEN equ $ - tsx_expr_comment_child
 tsx_text_before_expr: db "<App>hi{value}there{again}</App>"
 TSX_TEXT_BEFORE_EXPR_LEN equ $ - tsx_text_before_expr
-tsx_entity_text: db "<Text>&nbsp;ready &amp; set</Text>"
+tsx_entity_text: db "<Text>&nbsp;ready &#65; &#x41; &amp; set</Text>"
 TSX_ENTITY_TEXT_LEN equ $ - tsx_entity_text
 tsx_wrapped: db "  ((<App />));  "
 TSX_WRAPPED_LEN equ $ - tsx_wrapped
@@ -356,14 +360,18 @@ tsx_non_null_only: db "<App />!"
 TSX_NON_NULL_ONLY_LEN equ $ - tsx_non_null_only
 tsx_leading_not: db "!(<App />)"
 TSX_LEADING_NOT_LEN equ $ - tsx_leading_not
-tsx_raw_text: db "<script>if (a < b) { draw(); }</script>"
+tsx_raw_text: db "<script>if (a < b && raw &bad) { draw(); }</script>"
 TSX_RAW_TEXT_LEN equ $ - tsx_raw_text
+tsx_style_raw_text: db "<style>.a > .b { content: '&bad'; }</style>"
+TSX_STYLE_RAW_TEXT_LEN equ $ - tsx_style_raw_text
 tsx_regex_attr: db "<App matcher={/}/} />"
 TSX_REGEX_ATTR_LEN equ $ - tsx_regex_attr
 tsx_regex_child: db "<App>{/}/.test(x) && <B />}</App>"
 TSX_REGEX_CHILD_LEN equ $ - tsx_regex_child
 tsx_generic_tag: db "<List<Item> items={items} />"
 TSX_GENERIC_TAG_LEN equ $ - tsx_generic_tag
+tsx_generic_pair_tag: db "<List<Item>><Row /></List>"
+TSX_GENERIC_PAIR_TAG_LEN equ $ - tsx_generic_pair_tag
 tsx_nested_generic_tag: db "<Box<Map<Key, Value>> />"
 TSX_NESTED_GENERIC_TAG_LEN equ $ - tsx_nested_generic_tag
 tsx_generic_comment_tag: db "<Box</* > */Item> />"
@@ -381,6 +389,12 @@ tsx_source_file:
     db "const templateExpr = `${<Inline />}`;",10
     db "const templateNested = `${`inner ${<NestedInline />}`}`;",10
     db "const view = <App foo=",34,"x",34," />;",10
+    db "const object = { view: <ObjectView /> };",10
+    db "const list = [<Item />, <Item />];",10
+    db "render(<Arg />, <Second />);",10
+    db "const grouped = (<One />, <Two />);",10
+    db "const arrow = () => <Arrow />;",10
+    db "const ternary = ready ? <Ready /> : <Fallback />;",10
     db "function render() { return (<Panel><Child /></Panel>); }",10
     db "function* g() { yield <Yielded />; }",10
     db "void <VoidView />;",10
@@ -399,13 +413,22 @@ tsx_source_file:
     db "if (ready) /(<StillNo \/>)/.test(text);",10
     db "if (ready) <Ready />; else <Fallback />;",10
     db "<Statement />;",10
+    db "// trailing comment"
 TSX_SOURCE_FILE_LEN equ $ - tsx_source_file
+tsx_bad_source_comment: db "const view = <App />; /* open"
+TSX_BAD_SOURCE_COMMENT_LEN equ $ - tsx_bad_source_comment
 tsx_mismatch: db "<App><Body /></Panel>"
 TSX_MISMATCH_LEN equ $ - tsx_mismatch
 tsx_unclosed: db "<App><Body /></App"
 TSX_UNCLOSED_LEN equ $ - tsx_unclosed
 tsx_bad_attr: db "<App value={40 + 2 />"
 TSX_BAD_ATTR_LEN equ $ - tsx_bad_attr
+tsx_bad_entity: db "<Text>&bad</Text>"
+TSX_BAD_ENTITY_LEN equ $ - tsx_bad_entity
+tsx_bad_attr_entity: db "<Input label='&bad' />"
+TSX_BAD_ATTR_ENTITY_LEN equ $ - tsx_bad_attr_entity
+tsx_bad_numeric_entity: db "<Text>&#x;</Text>"
+TSX_BAD_NUMERIC_ENTITY_LEN equ $ - tsx_bad_numeric_entity
 tsx_two_roots: db "<A /><B />"
 TSX_TWO_ROOTS_LEN equ $ - tsx_two_roots
 tsx_top_text: db "text<App />"
@@ -418,10 +441,12 @@ wasm_compile_tsx_valid_cases:
     dq tsx_boolean_attr, TSX_BOOLEAN_ATTR_LEN, 1, 2, 0
     dq tsx_quoted_lt_attr, TSX_QUOTED_LT_ATTR_LEN, 1, 1, 0
     dq tsx_svg_names, TSX_SVG_NAMES_LEN, 1, 2, 0
+    dq tsx_utf8_names, TSX_UTF8_NAMES_LEN, 1, 1, 0
     dq tsx_deep, TSX_DEEP_LEN, 4, 0, 0
     dq tsx_fragment, TSX_FRAGMENT_LEN, 3, 1, 1
     dq tsx_member_expr, TSX_MEMBER_EXPR_LEN, 2, 2, 0
     dq tsx_conditional_expr, TSX_CONDITIONAL_EXPR_LEN, 3, 0, 0
+    dq tsx_template_expr_child, TSX_TEMPLATE_EXPR_CHILD_LEN, 2, 1, 0
     dq tsx_spread_attr, TSX_SPREAD_ATTR_LEN, 1, 2, 0
     dq tsx_spread_attr_jsx, TSX_SPREAD_ATTR_JSX_LEN, 2, 2, 0
     dq tsx_attr_expr_jsx, TSX_ATTR_EXPR_JSX_LEN, 2, 2, 0
@@ -436,9 +461,11 @@ wasm_compile_tsx_valid_cases:
     dq tsx_non_null_only, TSX_NON_NULL_ONLY_LEN, 1, 0, 0
     dq tsx_leading_not, TSX_LEADING_NOT_LEN, 1, 0, 0
     dq tsx_raw_text, TSX_RAW_TEXT_LEN, 1, 0, 1
+    dq tsx_style_raw_text, TSX_STYLE_RAW_TEXT_LEN, 1, 0, 1
     dq tsx_regex_attr, TSX_REGEX_ATTR_LEN, 1, 1, 0
     dq tsx_regex_child, TSX_REGEX_CHILD_LEN, 2, 0, 0
     dq tsx_generic_tag, TSX_GENERIC_TAG_LEN, 1, 1, 0
+    dq tsx_generic_pair_tag, TSX_GENERIC_PAIR_TAG_LEN, 2, 0, 0
     dq tsx_nested_generic_tag, TSX_NESTED_GENERIC_TAG_LEN, 1, 0, 0
     dq tsx_generic_comment_tag, TSX_GENERIC_COMMENT_TAG_LEN, 1, 0, 0
     dq tsx_generic_object_tag, TSX_GENERIC_OBJECT_TAG_LEN, 1, 0, 0
@@ -449,6 +476,9 @@ wasm_compile_tsx_error_cases:
     dq tsx_mismatch, TSX_MISMATCH_LEN, ERROR_PARSE
     dq tsx_unclosed, TSX_UNCLOSED_LEN, ERROR_PARSE
     dq tsx_bad_attr, TSX_BAD_ATTR_LEN, ERROR_PARSE
+    dq tsx_bad_entity, TSX_BAD_ENTITY_LEN, ERROR_PARSE
+    dq tsx_bad_attr_entity, TSX_BAD_ATTR_ENTITY_LEN, ERROR_PARSE
+    dq tsx_bad_numeric_entity, TSX_BAD_NUMERIC_ENTITY_LEN, ERROR_PARSE
     dq tsx_two_roots, TSX_TWO_ROOTS_LEN, ERROR_PARSE
     dq tsx_top_text, TSX_TOP_TEXT_LEN, ERROR_PARSE
     dq tsx_too_deep, TSX_TOO_DEEP_LEN, ERROR_NO_SPACE
@@ -1228,18 +1258,159 @@ _start:
     cmp     qword [rel tsx_nodes + 112], 1
     jne     .fail
 
+    lea     rdi, [rel tsx_nested]
+    mov     esi, TSX_NESTED_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 2
+    call    er_wasmc_parse_tsx_tree
+    cmp     rdx, ERROR_NO_SPACE
+    jne     .fail
+
+    lea     rdi, [rel tsx_nested]
+    mov     esi, TSX_NESTED_LEN
+    xor     edx, edx
+    mov     ecx, 0
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 3
+    jne     .fail
+    cmp     rcx, 2
+    jne     .fail
+    cmp     r8, 1
+    jne     .fail
+
+    lea     rdi, [rel tsx_conditional_expr]
+    mov     esi, TSX_CONDITIONAL_EXPR_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 3
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 3
+    jne     .fail
+    test    rcx, rcx
+    jne     .fail
+    test    r8, r8
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 16], -1
+    jne     .fail
+    lea     rdi, [rel tsx_conditional_expr + 15]
+    cmp     [rel tsx_nodes + 40], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 48], 5
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 56], 0
+    jne     .fail
+    lea     rdi, [rel tsx_conditional_expr + 27]
+    cmp     [rel tsx_nodes + 80], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 88], 8
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 96], 0
+    jne     .fail
+
+    lea     rdi, [rel tsx_template_expr_child]
+    mov     esi, TSX_TEMPLATE_EXPR_CHILD_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 2
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 2
+    jne     .fail
+    cmp     rcx, 1
+    jne     .fail
+    test    r8, r8
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 16], -1
+    jne     .fail
+    lea     rdi, [rel tsx_template_expr_child + 10]
+    cmp     [rel tsx_nodes + 40], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 48], 4
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 56], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 64], 1
+    jne     .fail
+
+    lea     rdi, [rel tsx_conditional_expr]
+    mov     esi, TSX_CONDITIONAL_EXPR_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 2
+    call    er_wasmc_parse_tsx_tree
+    cmp     rdx, ERROR_NO_SPACE
+    jne     .fail
+
+    lea     rdi, [rel tsx_attr_expr_jsx]
+    mov     esi, TSX_ATTR_EXPR_JSX_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 2
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 2
+    jne     .fail
+    cmp     rcx, 2
+    jne     .fail
+    test    r8, r8
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 16], -1
+    jne     .fail
+    lea     rdi, [rel tsx_attr_expr_jsx + 15]
+    cmp     [rel tsx_nodes + 40], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 48], 4
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 56], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 64], 1
+    jne     .fail
+
+    lea     rdi, [rel tsx_spread_attr_jsx]
+    mov     esi, TSX_SPREAD_ATTR_JSX_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 2
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 2
+    jne     .fail
+    cmp     rcx, 2
+    jne     .fail
+    test    r8, r8
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 16], -1
+    jne     .fail
+    lea     rdi, [rel tsx_spread_attr_jsx + 20]
+    cmp     [rel tsx_nodes + 40], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 48], 4
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 56], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 64], 1
+    jne     .fail
+
     lea     rdi, [rel tsx_source_file]
     mov     esi, TSX_SOURCE_FILE_LEN
     call    er_wasmc_scan_tsx_source
     test    rdx, rdx
     jnz     .fail
-    cmp     rax, 21
+    cmp     rax, 31
     jne     .fail
-    cmp     rcx, 22
+    cmp     rcx, 32
     jne     .fail
     cmp     r8, 1
     jne     .fail
     cmp     r9, 0
+    jne     .fail
+
+    lea     rdi, [rel tsx_bad_source_comment]
+    mov     esi, TSX_BAD_SOURCE_COMMENT_LEN
+    call    er_wasmc_scan_tsx_source
+    cmp     rdx, ERROR_PARSE
     jne     .fail
 
     xor     edi, edi

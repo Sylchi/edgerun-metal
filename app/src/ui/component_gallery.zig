@@ -436,7 +436,7 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
         null;
     defer gallery_hover_point = previous_hover_point;
 
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+    const app = component_union.renderer(scene, collector, .{ .style = componentStyle() });
     try app.fill(bounds, palette.bg, 0);
 
     const content = app_layout.centered(bounds, design.content_wide, design.content_pad);
@@ -449,10 +449,10 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
 
         _ = state.layout;
         const catalog_h = galleryBodyHeight(layout.board.w, layout.columns, layout.gap, state.selected_component_index);
-        try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap, state.selected_component_index);
+        try renderCatalogSection(app, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap, state.selected_component_index);
     }
 
-    try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .none);
+    try app_chrome.renderHeaderView(app, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
 }
 
 const GalleryLayout = struct {
@@ -482,12 +482,11 @@ fn galleryBodyHeight(width: f32, columns: usize, gap: f32, selected_index: ?usiz
     return selected_h + catalogSectionHeight(columns, gap);
 }
 
-fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, columns: usize, gap: f32, selected_index: ?usize) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn renderCatalogSection(app: component_union.View, bounds: ui.Rect, columns: usize, gap: f32, selected_index: ?usize) GalleryError!void {
     var stack = app.column(bounds, 0.0);
     if (selectedComponent(selected_index)) |entry| {
         const selected_h = selectedComponentHeight(bounds.w);
-        try renderSelectedComponent(scene, collector, stack.take(selected_h), entry, selected_index.?);
+        try renderSelectedComponent(app, stack.take(selected_h), entry, selected_index.?);
         stack.skip(selected_component_gap);
     }
 
@@ -500,7 +499,7 @@ fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bou
         const card_bounds = grid.item(index);
         const card_id = first_catalog_card_id + @as(u32, @intCast(index));
         const preview_id = catalog_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride;
-        try renderCatalogCard(scene, collector, card_bounds, entry, card_id, preview_id, selected_index == index);
+        try renderCatalogCard(app, card_bounds, entry, card_id, preview_id, selected_index == index);
     }
 }
 
@@ -525,7 +524,8 @@ pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bo
 
     const gap = grid_gap_default;
     const columns = galleryColumnCount(bounds.w, gap);
-    try renderCatalogSection(scene, collector, bounds, columns, gap, selected_index);
+    const app = component_union.renderer(scene, collector, .{ .style = componentStyle() });
+    try renderCatalogSection(app, bounds, columns, gap, selected_index);
 }
 
 fn selectedComponent(selected_index: ?usize) ?ComponentSpec {
@@ -538,113 +538,103 @@ fn selectedComponentHeight(width_value: f32) f32 {
     return if (width_value < 760.0) selected_component_compact_h else selected_component_h;
 }
 
-fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{
-        .style = componentStyle(),
-        .control = .{ .active = true },
-    });
-    try app.elevatedAt(bounds, "", "");
+fn renderSelectedComponent(app: component_union.View, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
+    const selected_app = app.withMergedControl(.{ .active = true });
+    try selected_app.elevatedAt(bounds, "", "");
 
     const inset = bounds.insetUniform(18);
-    try catalogSource(scene, sourceBadgeBounds(inset, true), true);
+    try catalogSource(app, sourceBadgeBounds(inset, true), true);
     if (inset.w < 720.0) {
         try clippedText(app, ui.Rect.init(inset.x, inset.y + 38, inset.w, 26), entry.name, palette.text);
         try clippedWrappedText(app, ui.Rect.init(inset.x, inset.y + 76, inset.w, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
-        try renderOpenedComponentRenderings(scene, collector, ui.Rect.init(inset.x, inset.y + 148, inset.w, selected_preview_compact_surface_h), entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
-        try renderComponentApi(scene, ui.Rect.init(inset.x, inset.y + 490, inset.w, 210), entry);
-        try renderComponentContract(scene, ui.Rect.init(inset.x, inset.y + 718, inset.w, 64), entry);
+        try renderOpenedComponentRenderings(app, ui.Rect.init(inset.x, inset.y + 148, inset.w, selected_preview_compact_surface_h), entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
+        try renderComponentApi(app, ui.Rect.init(inset.x, inset.y + 490, inset.w, 210), entry);
+        try renderComponentContract(app, ui.Rect.init(inset.x, inset.y + 718, inset.w, 64), entry);
     } else {
         const split = app.splitLeft(inset, inset.w * 0.42, inset.w * 0.06);
         try clippedText(app, ui.Rect.init(split.first.x, split.first.y + 38, split.first.w, 26), entry.name, palette.text);
         try clippedWrappedText(app, ui.Rect.init(split.first.x, split.first.y + 76, split.first.w, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
 
-        try renderComponentApi(scene, ui.Rect.init(split.first.x, split.first.y + 154, split.first.w, inset.h - 154), entry);
+        try renderComponentApi(app, ui.Rect.init(split.first.x, split.first.y + 154, split.first.w, inset.h - 154), entry);
 
         const preview_bounds = ui.Rect.init(split.second.x, split.second.y + 10, split.second.w, selected_preview_surface_h);
-        try renderOpenedComponentRenderings(scene, collector, preview_bounds, entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
-        try renderComponentContract(scene, ui.Rect.init(preview_bounds.x, preview_bounds.y + selected_preview_surface_h + 22, preview_bounds.w, inset.h - selected_preview_surface_h - 32), entry);
+        try renderOpenedComponentRenderings(app, preview_bounds, entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
+        try renderComponentContract(app, ui.Rect.init(preview_bounds.x, preview_bounds.y + selected_preview_surface_h + 22, preview_bounds.w, inset.h - selected_preview_surface_h - 32), entry);
     }
 }
 
-fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, id: u32) GalleryError!void {
+fn renderOpenedComponentRenderings(app: component_union.View, bounds: ui.Rect, entry: ComponentSpec, id: u32) GalleryError!void {
     var render_style = componentStyle();
     render_style.panel = palette.code_bg;
-    const app = component_union.renderer(scene, null, .{ .style = render_style });
-    try app.panelAt(bounds, "Rendered component", entry.name);
+    const preview_app = app.withStyle(render_style);
+    try preview_app.panelAt(bounds, "Rendered component", entry.name);
 
     const inner = ui.Rect.init(bounds.x + card_content_x, bounds.y + 72, bounds.w - card_content_x * 2, bounds.h - 92);
     if (inner.w < 360.0) {
         const main_h = @min(112.0, inner.h * 0.45);
         const second_h = @min(88.0, inner.h * 0.32);
-        var stack = app.column(inner, 14.0);
-        try previewSlot(scene, collector, stack.take(main_h), "default", entry, id);
-        try previewSlot(scene, collector, stack.take(second_h), "compact", entry, id + 1);
-        try previewSlot(scene, collector, stack.take(second_h), "small", entry, id + 2);
+        var stack = preview_app.column(inner, 14.0);
+        try previewSlot(app, stack.take(main_h), "default", entry, id);
+        try previewSlot(app, stack.take(second_h), "compact", entry, id + 1);
+        try previewSlot(app, stack.take(second_h), "small", entry, id + 2);
     } else {
-        const split = app.splitLeft(inner, inner.w * 0.58, 14.0);
-        try previewSlot(scene, collector, split.first, "default", entry, id);
-        var side = app.column(split.second, 14.0);
-        try previewSlot(scene, collector, side.take((inner.h - 14.0) * 0.5), "compact", entry, id + 1);
-        try previewSlot(scene, collector, side.take((inner.h - 14.0) * 0.5), "small", entry, id + 2);
+        const split = preview_app.splitLeft(inner, inner.w * 0.58, 14.0);
+        try previewSlot(app, split.first, "default", entry, id);
+        var side = preview_app.column(split.second, 14.0);
+        try previewSlot(app, side.take((inner.h - 14.0) * 0.5), "compact", entry, id + 1);
+        try previewSlot(app, side.take((inner.h - 14.0) * 0.5), "small", entry, id + 2);
     }
 }
 
-fn previewSlot(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn previewSlot(app: component_union.View, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
     try app.subtleAt(bounds, label, "");
-    try renderReferencePreview(scene, collector, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
+    try renderReferencePreview(app, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
 }
 
-fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
+fn renderComponentApi(app: component_union.View, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
     var api_style = componentStyle();
     api_style.panel = palette.code_bg;
-    const app = component_union.renderer(scene, null, .{ .style = api_style });
-    try app.panelAt(bounds, "API", "");
+    const api_app = app.withStyle(api_style);
+    try api_app.panelAt(bounds, "API", "");
     const content_w = @max(1.0, bounds.w - card_content_x * 2);
-    var fields = app.column(ui.Rect.init(bounds.x + card_content_x, bounds.y + 50, content_w, @max(1.0, bounds.h - 50)), 12.0);
-    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.component_path)), "component path", entry.component_path);
-    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.source_component)), "source component", entry.source_component);
-    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.edge_builder)), "builder", entry.edge_builder);
+    var fields = api_app.column(ui.Rect.init(bounds.x + card_content_x, bounds.y + 50, content_w, @max(1.0, bounds.h - 50)), 12.0);
+    try renderApiField(app, fields.take(apiFieldHeight(content_w, entry.component_path)), "component path", entry.component_path);
+    try renderApiField(app, fields.take(apiFieldHeight(content_w, entry.source_component)), "source component", entry.source_component);
+    try renderApiField(app, fields.take(apiFieldHeight(content_w, entry.edge_builder)), "builder", entry.edge_builder);
 }
 
 fn apiFieldHeight(width: f32, value: []const u8) f32 {
     return 20.0 + app_layout.wrappedTextHeightWith(value, width, api_value_line_h, api_value_max_lines, api_value_avg_w);
 }
 
-fn renderApiField(scene: *ui.Scene, bounds: ui.Rect, label_value: []const u8, value: []const u8) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn renderApiField(app: component_union.View, bounds: ui.Rect, label_value: []const u8, value: []const u8) GalleryError!void {
     try clippedText(app, ui.Rect.init(bounds.x, bounds.y, bounds.w, api_label_h), label_value, palette.muted);
     const value_h = app_layout.wrappedTextHeightWith(value, bounds.w, api_value_line_h, api_value_max_lines, api_value_avg_w);
     try clippedWrappedText(app, ui.Rect.init(bounds.x, bounds.y + 20, bounds.w, value_h), value, palette.text, api_value_line_h, api_value_avg_w, api_value_max_lines);
 }
 
-fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn renderComponentContract(app: component_union.View, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
     try app.subtleAt(bounds, "Contract", "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.");
     try app.badgeAt(contractBadgeBounds(bounds, entry.category.label()), entry.category.label(), .outline);
 }
 
-fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
+fn renderCatalogCard(app: component_union.View, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
     if (gallery_text_clip_top) |clip_top| {
         if (bounds.y < clip_top) return;
     }
     const is_hovered = hovered(bounds);
-    const app = component_union.renderer(scene, collector, .{
-        .style = componentStyle(),
-        .control = .{ .active = selected, .hovered = is_hovered },
-    });
-    try app.selectableSurfaceAt(bounds, card_id, entry.name, entry.category.label(), if (is_hovered or selected) .elevated else .panel);
+    const card_app = app.withStyle(componentStyle()).withMergedControl(.{ .active = selected, .hovered = is_hovered });
+    try card_app.selectableSurfaceAt(bounds, card_id, entry.name, entry.category.label(), if (is_hovered or selected) .elevated else .panel);
 
     const inset = bounds.insetUniform(catalog_card_pad);
     const source_bounds = sourceBadgeBounds(inset, selected);
-    try catalogSource(scene, ui.Rect.init(inset.x + inset.w - source_bounds.w, inset.y - 1, source_bounds.w, source_bounds.h), selected);
-    try clippedText(app, ui.Rect.init(inset.x, inset.y + 48, inset.w, body_text_height), entry.edge_builder, palette.muted);
+    try catalogSource(app, ui.Rect.init(inset.x + inset.w - source_bounds.w, inset.y - 1, source_bounds.w, source_bounds.h), selected);
+    try clippedText(card_app, ui.Rect.init(inset.x, inset.y + 48, inset.w, body_text_height), entry.edge_builder, palette.muted);
 
-    try renderReferencePreview(scene, collector, ui.Rect.init(inset.x, inset.y + 76, inset.w, catalog_preview_h), entry, preview_id);
+    try renderReferencePreview(app, ui.Rect.init(inset.x, inset.y + 76, inset.w, catalog_preview_h), entry, preview_id);
 }
 
-fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn catalogSource(app: component_union.View, bounds: ui.Rect, selected: bool) GalleryError!void {
     try app.badgeAt(bounds, if (selected) "selected" else "EdgeRun", if (selected) .default else .outline);
 }
 
@@ -660,12 +650,12 @@ fn contractBadgeBounds(bounds: ui.Rect, label_value: []const u8) ui.Rect {
     return ui.Rect.init(bounds.x + card_content_x, bounds.y + bounds.h - 32, width, 24);
 }
 
-fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
+fn renderReferencePreview(app: component_union.View, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
     return switch (spec_value.preview) {
-        .accordion => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .alert => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .alert_dialog => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .aspect_ratio => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .accordion => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .alert => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .alert_dialog => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .aspect_ratio => renderPrimitivePreview(app, bounds, spec_value.preview, id),
         .avatar,
         .card,
         .empty,
@@ -687,47 +677,47 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .textarea,
         .toggle,
         .tabs,
-        => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .badge => renderBadgeVariants(scene, collector, bounds),
-        .breadcrumb => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .button => renderButtonVariants(scene, collector, bounds, id),
-        .button_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .calendar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .carousel => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .chart => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .combobox => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .command => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .context_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .data_table, .table => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .date_picker => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .dialog => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .direction => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .drawer => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .dropdown_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .field => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .hover_card => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .input_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .input_otp => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .menubar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .native_select => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .navigation_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .pagination => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .popover => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .resizable => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .scroll_area => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .sheet => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .sidebar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .sonner => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .toast => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .toggle_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .tooltip => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .badge => renderBadgeVariants(app, bounds),
+        .breadcrumb => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .button => renderButtonVariants(app, bounds, id),
+        .button_group => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .calendar => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .carousel => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .chart => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .combobox => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .command => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .context_menu => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .data_table, .table => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .date_picker => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .dialog => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .direction => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .drawer => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .dropdown_menu => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .field => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .hover_card => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .input_group => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .input_otp => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .menubar => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .native_select => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .navigation_menu => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .pagination => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .popover => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .resizable => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .scroll_area => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .sheet => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .sidebar => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .sonner => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .toast => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .toggle_group => renderPrimitivePreview(app, bounds, spec_value.preview, id),
+        .tooltip => renderPrimitivePreview(app, bounds, spec_value.preview, id),
     };
 }
 
 const PrimitivePreview = component_union.Component;
 
-fn renderPrimitivePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, kind: PreviewKind, id: u32) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, primitivePreview(kind, id));
+fn renderPrimitivePreview(app: component_union.View, bounds: ui.Rect, kind: PreviewKind, id: u32) GalleryError!void {
+    try renderComponentPreview(app, bounds, primitivePreview(kind, id));
 }
 
 fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
@@ -793,14 +783,13 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
     };
 }
 
-fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: component_union.Component) GalleryError!void {
+fn renderComponentPreview(app: component_union.View, bounds: ui.Rect, component: component_union.Component) GalleryError!void {
     try validateCanonicalPreview(component);
     const meta = component.accessibility();
     const open_ids = if (meta.control_id) |id| (&[_]u32{id})[0..] else &.{};
     const drag_value = if (meta.control_id) |id| if (gallery_drag_override) |drag| if (drag.id == id) drag.value else null else null else null;
     const options: component_common.RenderOptions = .{ .style = componentStyle(), .overlay = .{ .open_ids = open_ids }, .drag_value = drag_value };
-    const app = component_union.renderer(scene, collector, options);
-    try app.interactive(component, bounds);
+    try app.withOptions(options).interactive(component, bounds);
 }
 
 fn validateCanonicalPreview(component: component_union.Component) GalleryError!void {
@@ -826,20 +815,18 @@ fn galleryEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
 
-fn renderBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn renderBadgeVariants(app: component_union.View, bounds: ui.Rect) GalleryError!void {
     var cursor = app.row(bounds, 6);
-    try renderComponentPreview(scene, collector, cursor.take(64), .{ .badge = .{ .label = "Default" } });
-    try renderComponentPreview(scene, collector, cursor.take(72), .{ .badge = .{ .label = "Outline", .variant = .outline } });
-    try renderComponentPreview(scene, collector, cursor.take(44), .{ .badge = .{ .label = "Link", .variant = .link } });
+    try renderComponentPreview(app, cursor.take(64), .{ .badge = .{ .label = "Default" } });
+    try renderComponentPreview(app, cursor.take(72), .{ .badge = .{ .label = "Outline", .variant = .outline } });
+    try renderComponentPreview(app, cursor.take(44), .{ .badge = .{ .label = "Link", .variant = .link } });
 }
 
-fn renderButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+fn renderButtonVariants(app: component_union.View, bounds: ui.Rect, id: u32) GalleryError!void {
     var cursor = app.row(bounds, 6);
-    try renderComponentPreview(scene, collector, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } });
-    try renderComponentPreview(scene, collector, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second", .variant = .secondary } });
-    try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link", .variant = .link } });
+    try renderComponentPreview(app, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } });
+    try renderComponentPreview(app, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second", .variant = .secondary } });
+    try renderComponentPreview(app, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link", .variant = .link } });
 }
 
 fn normalizedGridGap(value: f32) f32 {
@@ -882,9 +869,8 @@ fn clippedWrappedText(app: component_union.View, bounds: ui.Rect, value: []const
     try app.wrappedWith(bounds, value, color, line_height, average_char_width, max_lines);
 }
 
-fn centeredWrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, max_lines: usize) GalleryError!void {
+fn centeredWrappedText(app: component_union.View, bounds: ui.Rect, value: []const u8, color: ui.Color, max_lines: usize) GalleryError!void {
     if (value.len == 0 or !bounds.valid() or max_lines == 0) return;
-    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
     const line_height = body_text_height;
     const lines_by_height = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.h / line_height))));
     const line_count = @min(max_lines, lines_by_height);
@@ -924,12 +910,13 @@ test "component gallery catalog entries render reference previews with canonical
     var regions: [256]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
+    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
     var rendered: usize = 0;
 
     for (component_catalog, 0..) |entry, index| {
         const y = @as(f32, @floatFromInt(rendered)) * 48.0;
         const bounds = ui.Rect.init(0, y, 220, 36);
-        try renderReferencePreview(&scene, &collector, bounds, entry, preview_base_id + @as(u32, @intCast(index)));
+        try renderReferencePreview(app, bounds, entry, preview_base_id + @as(u32, @intCast(index)));
         rendered += 1;
     }
 
@@ -954,7 +941,8 @@ test "component gallery preview path validates canonical component object" {
     var regions: [4]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderComponentPreview(&scene, &collector, ui.Rect.init(0, 0, 140, 36), source);
+    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
+    try renderComponentPreview(app, ui.Rect.init(0, 0, 140, 36), source);
 
     try std.testing.expectEqualStrings("Default", switch (decoded) {
         .button => |button| button.label,
@@ -1052,7 +1040,8 @@ test "component gallery buttons use shared optical label placement" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     const bounds = ui.Rect.init(10, 20, 140, 34);
-    try renderComponentPreview(&scene, &collector, bounds, .{ .button = .{ .id = preview_base_id + 5010, .label = "Continue" } });
+    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
+    try renderComponentPreview(app, bounds, .{ .button = .{ .id = preview_base_id + 5010, .label = "Continue" } });
 
     const label = textCommand(scene.written(), "Continue").?.text;
     const center_delta = @abs((label.origin.x + label.origin.w * 0.5) - (bounds.x + bounds.w * 0.5));

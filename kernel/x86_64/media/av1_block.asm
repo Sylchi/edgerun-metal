@@ -6,6 +6,7 @@
 
 extern er_av1_symbol_read_symbol
 extern er_av1_symbol_read_bool
+extern er_av1_symbol_read_literal
 
 AV1_TILE_WALK_BLOCK                 equ 0
 AV1_TILE_WALK_COEFFS                equ 16
@@ -21,7 +22,15 @@ AV1_TILE_WALK_BLOCK_Y               equ 556
 AV1_TILE_WALK_DISABLE_UPDATE        equ 560
 AV1_TILE_WALK_QSTEP                 equ 564
 AV1_TILE_WALK_COUNT                 equ 568
-AV1_TILE_WALK_STACK_SIZE            equ 576
+AV1_TILE_WALK_PLANE_PTR             equ 576
+AV1_TILE_WALK_PLANE_WIDTH           equ 584
+AV1_TILE_WALK_PLANE_HEIGHT          equ 588
+AV1_TILE_WALK_PLANE_LEN             equ 592
+AV1_TILE_WALK_CHROMA_INDEX          equ 596
+AV1_TILE_WALK_REFS_PTR              equ 600
+AV1_TILE_WALK_REF_PLANE             equ 608
+AV1_TILE_WALK_REF_INDEX             equ 632
+AV1_TILE_WALK_STACK_SIZE            equ 640
 
 SECTION .text
 
@@ -173,6 +182,57 @@ er_fn er_av1_block_decode_coeffs_8x8
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
+; er_av1_block_decode_mv(ctx) -> eax=packed mv, rdx=error
+; Reads signed 3-bit integer X/Y motion components and packs x in low 16, y high 16.
+er_fn er_av1_block_decode_mv
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     rdi, r12
+    mov     esi, AV1_MV_COMPONENT_BITS
+    call    er_av1_symbol_read_literal
+    test    edx, edx
+    jnz     .done
+    mov     ebx, eax
+    test    ebx, ebx
+    jz      .x_ready
+    mov     rdi, r12
+    call    er_av1_symbol_read_bool
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .x_ready
+    neg     ebx
+.x_ready:
+    mov     rdi, r12
+    mov     esi, AV1_MV_COMPONENT_BITS
+    call    er_av1_symbol_read_literal
+    test    edx, edx
+    jnz     .done
+    mov     r13d, eax
+    test    r13d, r13d
+    jz      .pack
+    mov     rdi, r12
+    call    er_av1_symbol_read_bool
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .pack
+    neg     r13d
+.pack:
+    movzx   eax, bx
+    shl     r13d, 16
+    or      eax, r13d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
 ; er_av1_block_dequant_8x8(dst, src, qstep)
 ; rdi=i16 residual[64], rsi=i16 coeff levels[64], edx=quant step.
 er_fn er_av1_block_dequant_8x8
@@ -308,8 +368,6 @@ er_fn er_av1_block_inverse_tx_8x8
 .dct_store:
     mov     eax, [rsp]
     add     eax, 1 << (AV1_TX_DCT_SCALE_BITS - 1)
-    jmp     .dct_shift
-.dct_shift:
     sar     eax, AV1_TX_DCT_SCALE_BITS
     cmp     eax, AV1_COEFF_MIN_16
     jl      .dct_clip_low
@@ -384,11 +442,13 @@ er_fn er_av1_tile_decode_intra8x8_luma
     jnz     .corrupt
     cmp     [r13 + AV1_IMAGE_Y_LEN], eax
     jb      .corrupt
-    call    .fill_chroma_neutral
+    call    .validate_chroma
+    test    edx, edx
+    jnz     .done
     xor     ebx, ebx
 .row_loop:
     cmp     ebx, [rsp + AV1_TILE_WALK_HEIGHT]
-    jae     .ok
+    jae     .decode_chroma
     mov     [rsp + AV1_TILE_WALK_BLOCK_Y], ebx
     xor     r15d, r15d
 .col_loop:
@@ -408,7 +468,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     cmp     byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_TX_SIZE], 0
     ja      .unsupported
     movzx   eax, byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_Y_MODE]
-    cmp     eax, AV1_PRED_MODE_H
+    cmp     eax, AV1_PRED_MODE_MAX_SUPPORTED
     ja      .unsupported
     mov     rdi, r12
     lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
@@ -463,6 +523,30 @@ er_fn er_av1_tile_decode_intra8x8_luma
 .next_row:
     add     ebx, AV1_BLOCK_DIM_8
     jmp     .row_loop
+.decode_chroma:
+    mov     rax, [r13 + AV1_IMAGE_U_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
+    mov     eax, [rsp + AV1_TILE_WALK_WIDTH]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_WIDTH], eax
+    mov     eax, [rsp + AV1_TILE_WALK_HEIGHT]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_HEIGHT], eax
+    mov     eax, [r13 + AV1_IMAGE_U_LEN]
+    mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
+    mov     dword [rsp + AV1_TILE_WALK_CHROMA_INDEX], 0
+    call    .decode_chroma_plane
+    test    edx, edx
+    jnz     .done
+    mov     rax, [r13 + AV1_IMAGE_V_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
+    mov     eax, [r13 + AV1_IMAGE_V_LEN]
+    mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
+    mov     dword [rsp + AV1_TILE_WALK_CHROMA_INDEX], 1
+    call    .decode_chroma_plane
+    test    edx, edx
+    jnz     .done
+    jmp     .ok
 .ok:
     mov     eax, [rsp + AV1_TILE_WALK_COUNT]
     er_ok
@@ -484,21 +568,26 @@ er_fn er_av1_tile_decode_intra8x8_luma
     er_ret
 
 .block_dst_ptr:
-    mov     eax, [rsp + AV1_TILE_WALK_BLOCK_Y]
-    mul     dword [rsp + AV1_TILE_WALK_WIDTH]
-    add     eax, [rsp + AV1_TILE_WALK_BLOCK_X]
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
     mov     rdx, [r13 + AV1_IMAGE_Y_PTR]
     add     rax, rdx
     ret
 
 .prepare_edges:
-    cmp     dword [rsp + AV1_TILE_WALK_BLOCK_X], 0
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
+    mov     rdx, [r13 + AV1_IMAGE_Y_PTR]
+    add     rax, rdx
+    mov     r10, rax
+    cmp     dword [rsp + 8 + AV1_TILE_WALK_BLOCK_X], 0
     je      .above
-    call    .block_dst_ptr
-    lea     rdx, [rsp + AV1_TILE_WALK_LEFT]
+    lea     rdx, [rsp + 8 + AV1_TILE_WALK_LEFT]
     mov     ecx, AV1_BLOCK_DIM_8
-    mov     r9d, [rsp + AV1_TILE_WALK_WIDTH]
-    lea     rax, [rax - 1]
+    mov     r9d, [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    lea     rax, [r10 - 1]
 .left_loop:
     mov     sil, [rax]
     mov     [rdx], sil
@@ -507,12 +596,12 @@ er_fn er_av1_tile_decode_intra8x8_luma
     dec     ecx
     jnz     .left_loop
 .above:
-    cmp     dword [rsp + AV1_TILE_WALK_BLOCK_Y], 0
+    cmp     dword [rsp + 8 + AV1_TILE_WALK_BLOCK_Y], 0
     je      .edges_done
-    call    .block_dst_ptr
-    mov     edx, [rsp + AV1_TILE_WALK_WIDTH]
+    mov     rax, r10
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_WIDTH]
     sub     rax, rdx
-    lea     rdx, [rsp + AV1_TILE_WALK_ABOVE]
+    lea     rdx, [rsp + 8 + AV1_TILE_WALK_ABOVE]
     mov     ecx, AV1_BLOCK_DIM_8
 .above_loop:
     mov     sil, [rax]
@@ -524,38 +613,825 @@ er_fn er_av1_tile_decode_intra8x8_luma
 .edges_done:
     ret
 
-.fill_chroma_neutral:
-    mov     rdi, [r13 + AV1_IMAGE_U_PTR]
-    mov     ecx, [r13 + AV1_IMAGE_U_LEN]
-    call    .fill_plane_neutral
-    mov     rdi, [r13 + AV1_IMAGE_V_PTR]
-    mov     ecx, [r13 + AV1_IMAGE_V_LEN]
-    call    .fill_plane_neutral
+.validate_chroma:
+    cmp     qword [r13 + AV1_IMAGE_U_PTR], 0
+    je      .chroma_bad
+    cmp     qword [r13 + AV1_IMAGE_V_PTR], 0
+    je      .chroma_bad
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    shr     eax, 1
+    cmp     eax, AV1_BLOCK_DIM_8
+    jb      .chroma_bad
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .chroma_unsupported
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_HEIGHT]
+    shr     edx, 1
+    cmp     edx, AV1_BLOCK_DIM_8
+    jb      .chroma_bad
+    test    edx, AV1_BLOCK_DIM_8 - 1
+    jnz     .chroma_unsupported
+    mul     edx
+    test    edx, edx
+    jnz     .chroma_corrupt
+    cmp     [r13 + AV1_IMAGE_U_LEN], eax
+    jb      .chroma_corrupt
+    cmp     [r13 + AV1_IMAGE_V_LEN], eax
+    jb      .chroma_corrupt
+    er_ok
+    ret
+.chroma_bad:
+    er_err  ERROR_INVALID_PARAM
+    ret
+.chroma_unsupported:
+    er_err  ERROR_UNSUPPORTED
+    ret
+.chroma_corrupt:
+    er_err  ERROR_CORRUPT
     ret
 
-.fill_plane_neutral:
-    test    rdi, rdi
-    jz      .fill_done
-    test    ecx, ecx
-    jz      .fill_done
-.fill_loop:
-    mov     byte [rdi], AV1_PIXEL_MID_8
-    inc     rdi
-    dec     ecx
-    jnz     .fill_loop
-.fill_done:
+.decode_chroma_plane:
+    xor     ebx, ebx
+.chroma_row_loop:
+    cmp     ebx, [rsp + 8 + AV1_TILE_WALK_PLANE_HEIGHT]
+    jae     .chroma_ok
+    mov     [rsp + 8 + AV1_TILE_WALK_BLOCK_Y], ebx
+    xor     r15d, r15d
+.chroma_col_loop:
+    cmp     r15d, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    jae     .chroma_next_row
+    mov     [rsp + 8 + AV1_TILE_WALK_BLOCK_X], r15d
+    mov     rdi, r12
+    lea     rsi, [rsp + 8 + AV1_TILE_WALK_COEFFS]
+    mov     rdx, r14
+    mov     ecx, [rsp + 8 + AV1_TILE_WALK_DISABLE_UPDATE]
+    call    er_av1_block_decode_coeffs_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    mov     rdi, rsp
+    add     rdi, 8 + AV1_TILE_WALK_DEQUANT
+    lea     rsi, [rsp + 8 + AV1_TILE_WALK_COEFFS]
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_QSTEP]
+    call    er_av1_block_dequant_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    mov     rdi, rsp
+    add     rdi, 8 + AV1_TILE_WALK_RESID
+    lea     rsi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_inverse_tx_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    lea     rdi, [rsp + 8 + AV1_TILE_WALK_PRED]
+    mov     esi, AV1_BLOCK_DIM_8
+    xor     edx, edx
+    xor     ecx, ecx
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_block_predict_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
+    mov     rdi, [rsp + 8 + AV1_TILE_WALK_PLANE_PTR]
+    add     rdi, rax
+    mov     esi, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    lea     rdx, [rsp + 8 + AV1_TILE_WALK_PRED]
+    mov     ecx, AV1_BLOCK_DIM_8
+    lea     r8, [rsp + 8 + AV1_TILE_WALK_RESID]
+    xor     r9d, r9d
+    call    er_av1_block_reconstruct_add_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    inc     dword [rsp + 8 + AV1_TILE_WALK_COUNT]
+    add     r15d, AV1_BLOCK_DIM_8
+    jmp     .chroma_col_loop
+.chroma_next_row:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .chroma_row_loop
+.chroma_ok:
+    er_ok
+.chroma_ret:
     ret
+
+; er_av1_tile_decode_inter8x8_luma(ctx, image_desc, cdfs, refs, qstep, ref_index)
+; Walks luma blocks, predicts from a decoded reference slot with zero MV, and adds residuals.
+er_fn er_av1_tile_decode_inter8x8_luma
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc AV1_TILE_WALK_STACK_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    cmp     r8d, AV1_QUANT_STEP_MIN
+    jb      .invalid_param
+    cmp     r8d, AV1_QUANT_STEP_MAX
+    ja      .invalid_param
+    cmp     r9d, AV1_REF_COUNT
+    jae     .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     r15d, r9d
+    mov     [rsp + AV1_TILE_WALK_REFS_PTR], rcx
+    mov     [rsp + AV1_TILE_WALK_REF_INDEX], r9d
+    mov     [rsp + AV1_TILE_WALK_QSTEP], r8d
+    mov     dword [rsp + AV1_TILE_WALK_DISABLE_UPDATE], 1
+    mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
+    mov     rdi, r13
+    call    er_av1_image_validate_420
+    test    edx, edx
+    jnz     .done
+    mov     eax, [r13 + AV1_IMAGE_WIDTH]
+    cmp     eax, AV1_BLOCK_WALK_MIN_DIM
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     [rsp + AV1_TILE_WALK_WIDTH], eax
+    mov     eax, [r13 + AV1_IMAGE_HEIGHT]
+    cmp     eax, AV1_BLOCK_WALK_MIN_DIM
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     [rsp + AV1_TILE_WALK_HEIGHT], eax
+    mov     rdi, [rsp + AV1_TILE_WALK_REFS_PTR]
+    mov     esi, r15d
+    mov     edx, AV1_PLANE_Y
+    lea     rcx, [rsp + AV1_TILE_WALK_REF_PLANE]
+    call    er_av1_refs_get_plane
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_WIDTH]
+    cmp     eax, [rsp + AV1_TILE_WALK_WIDTH]
+    jb      .unsupported
+    mov     eax, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_HEIGHT]
+    cmp     eax, [rsp + AV1_TILE_WALK_HEIGHT]
+    jb      .unsupported
+    xor     ebx, ebx
+.row_loop:
+    cmp     ebx, [rsp + AV1_TILE_WALK_HEIGHT]
+    jae     .decode_chroma
+    mov     [rsp + AV1_TILE_WALK_BLOCK_Y], ebx
+    xor     r15d, r15d
+.col_loop:
+    cmp     r15d, [rsp + AV1_TILE_WALK_WIDTH]
+    jae     .next_row
+    mov     [rsp + AV1_TILE_WALK_BLOCK_X], r15d
+    mov     rdi, r12
+    call    er_av1_block_decode_mv
+    test    edx, edx
+    jnz     .done
+    mov     [rsp + AV1_TILE_WALK_CHROMA_INDEX], eax
+    mov     rdi, r12
+    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
+    mov     rdx, r14
+    mov     ecx, [rsp + AV1_TILE_WALK_DISABLE_UPDATE]
+    call    er_av1_block_decode_coeffs_8x8
+    test    edx, edx
+    jnz     .done
+    mov     rdi, rsp
+    add     rdi, AV1_TILE_WALK_DEQUANT
+    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
+    mov     edx, [rsp + AV1_TILE_WALK_QSTEP]
+    call    er_av1_block_dequant_8x8
+    test    edx, edx
+    jnz     .done
+    mov     rdi, rsp
+    add     rdi, AV1_TILE_WALK_RESID
+    lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT]
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_inverse_tx_8x8
+    test    edx, edx
+    jnz     .done
+    lea     rdi, [rsp + AV1_TILE_WALK_PRED]
+    mov     esi, AV1_BLOCK_DIM_8
+    lea     rdx, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     ecx, [rsp + AV1_TILE_WALK_BLOCK_X]
+    mov     r8d, [rsp + AV1_TILE_WALK_BLOCK_Y]
+    mov     r9d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
+    call    er_av1_block_inter_predict_8x8
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + AV1_TILE_WALK_WIDTH]
+    add     eax, [rsp + AV1_TILE_WALK_BLOCK_X]
+    mov     rdi, [r13 + AV1_IMAGE_Y_PTR]
+    add     rdi, rax
+    mov     esi, [rsp + AV1_TILE_WALK_WIDTH]
+    lea     rdx, [rsp + AV1_TILE_WALK_PRED]
+    mov     ecx, AV1_BLOCK_DIM_8
+    lea     r8, [rsp + AV1_TILE_WALK_RESID]
+    xor     r9d, r9d
+    call    er_av1_block_reconstruct_add_8x8
+    test    edx, edx
+    jnz     .done
+    inc     dword [rsp + AV1_TILE_WALK_COUNT]
+    add     r15d, AV1_BLOCK_DIM_8
+    jmp     .col_loop
+.next_row:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .row_loop
+.decode_chroma:
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     esi, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
+    mov     edx, AV1_PLANE_U
+    lea     rcx, [rsp + AV1_TILE_WALK_REF_PLANE]
+    call    er_av1_refs_get_plane
+    test    edx, edx
+    jnz     .done
+    mov     rax, [r13 + AV1_IMAGE_U_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
+    mov     eax, [r13 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_WIDTH], eax
+    mov     eax, [r13 + AV1_IMAGE_HEIGHT]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_HEIGHT], eax
+    mov     eax, [r13 + AV1_IMAGE_U_LEN]
+    mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
+    call    .decode_inter_chroma_plane
+    test    edx, edx
+    jnz     .done
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rdi
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_LEN]
+    mov     [rsp + AV1_TILE_WALK_PLANE_LEN], rdi
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_WIDTH]
+    mov     [rsp + AV1_TILE_WALK_PLANE_WIDTH], rdi
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_HEIGHT]
+    mov     [rsp + AV1_TILE_WALK_PLANE_HEIGHT], rdi
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR - 32]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE - 32]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+    mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR]
+    mov     rdi, [rsp + AV1_TILE_WALK_REF_PLANE]
+.ok:
+.ok:
+    mov     eax, [rsp + AV1_TILE_WALK_COUNT]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done:
+    er_stack_free AV1_TILE_WALK_STACK_SIZE
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_loop_filter_plane_8x8(plane, width, height, strength)
+; Filters reconstructed 8-bit block boundaries for one 8x8-aligned plane.
+er_fn er_av1_loop_filter_plane_8x8
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    esi, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    cmp     edx, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    edx, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    cmp     ecx, AV1_LOOP_FILTER_STRENGTH_MAX
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    xor     r15d, r15d
+    test    ecx, ecx
+    jz      .ok
+    mov     ebx, AV1_BLOCK_DIM_8
+.v_boundary_loop:
+    cmp     ebx, r13d
+    jae     .h_start
+    xor     r10d, r10d
+.v_row_loop:
+    cmp     r10d, r14d
+    jae     .v_next_boundary
+    mov     eax, r10d
+    imul    eax, r13d
+    add     eax, ebx
+    lea     r11, [r12 + rax]
+    movzx   eax, byte [r11 - 1]
+    movzx   edx, byte [r11]
+    sub     eax, edx
+    jns     .v_abs_ready
+    neg     eax
+.v_abs_ready:
+    cmp     eax, ecx
+    ja      .v_skip
+    movzx   eax, byte [r11 - 1]
+    movzx   edx, byte [r11]
+    add     eax, edx
+    inc     eax
+    shr     eax, 1
+    mov     [r11 - 1], al
+    mov     [r11], al
+    inc     r15d
+.v_skip:
+    inc     r10d
+    jmp     .v_row_loop
+.v_next_boundary:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .v_boundary_loop
+.h_start:
+    mov     ebx, AV1_BLOCK_DIM_8
+.h_boundary_loop:
+    cmp     ebx, r14d
+    jae     .ok
+    xor     r10d, r10d
+.h_col_loop:
+    cmp     r10d, r13d
+    jae     .h_next_boundary
+    mov     eax, ebx
+    imul    eax, r13d
+    add     eax, r10d
+    lea     r11, [r12 + rax]
+    mov     r9d, r13d
+    mov     r8, r11
+    sub     r8, r9
+    movzx   eax, byte [r8]
+    movzx   edx, byte [r11]
+    sub     eax, edx
+    jns     .h_abs_ready
+    neg     eax
+.h_abs_ready:
+    cmp     eax, ecx
+    ja      .h_skip
+    mov     r8, r11
+    sub     r8, r9
+    movzx   eax, byte [r8]
+    movzx   edx, byte [r11]
+    add     eax, edx
+    inc     eax
+    shr     eax, 1
+    mov     [r8], al
+    mov     [r11], al
+    inc     r15d
+.h_skip:
+    inc     r10d
+    jmp     .h_col_loop
+.h_next_boundary:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .h_boundary_loop
+.ok:
+    mov     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_loop_filter_image_420(image_desc, strength)
+; Applies the 8x8 boundary filter to Y, U, and V planes in a 4:2:0 image.
+er_fn er_av1_loop_filter_image_420
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_LOOP_FILTER_STRENGTH_MAX
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r15d, esi
+    mov     r13d, [r12 + AV1_IMAGE_WIDTH]
+    mov     r14d, [r12 + AV1_IMAGE_HEIGHT]
+    cmp     qword [r12 + AV1_IMAGE_Y_PTR], 0
+    je      .invalid_param
+    cmp     qword [r12 + AV1_IMAGE_U_PTR], 0
+    je      .invalid_param
+    cmp     qword [r12 + AV1_IMAGE_V_PTR], 0
+    je      .invalid_param
+    mov     eax, r13d
+    mul     r14d
+    test    edx, edx
+    jnz     .corrupt
+    cmp     [r12 + AV1_IMAGE_Y_LEN], eax
+    jb      .corrupt
+    mov     ebx, r13d
+    shr     ebx, 1
+    mov     r11d, r14d
+    shr     r11d, 1
+    mov     eax, ebx
+    mul     r11d
+    test    edx, edx
+    jnz     .corrupt
+    cmp     [r12 + AV1_IMAGE_U_LEN], eax
+    jb      .corrupt
+    cmp     [r12 + AV1_IMAGE_V_LEN], eax
+    jb      .corrupt
+    mov     rdi, [r12 + AV1_IMAGE_Y_PTR]
+    mov     esi, r13d
+    mov     edx, r14d
+    mov     ecx, r15d
+    call    er_av1_loop_filter_plane_8x8
+    test    edx, edx
+    jnz     .done
+    mov     r13d, eax
+    mov     ebx, [r12 + AV1_IMAGE_WIDTH]
+    shr     ebx, 1
+    mov     r14d, [r12 + AV1_IMAGE_HEIGHT]
+    shr     r14d, 1
+    mov     rdi, [r12 + AV1_IMAGE_U_PTR]
+    mov     esi, ebx
+    mov     edx, r14d
+    mov     ecx, r15d
+    call    er_av1_loop_filter_plane_8x8
+    test    edx, edx
+    jnz     .done
+    add     r13d, eax
+    mov     rdi, [r12 + AV1_IMAGE_V_PTR]
+    mov     esi, ebx
+    mov     edx, r14d
+    mov     ecx, r15d
+    call    er_av1_loop_filter_plane_8x8
+    test    edx, edx
+    jnz     .done
+    add     eax, r13d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_refs_init(refs) -> eax=bytes cleared, rdx=error
+; Clears the eight decoded-frame reference slots.
+er_fn er_av1_refs_init
+    test    rdi, rdi
+    jz      .invalid_param
+    xor     eax, eax
+    mov     ecx, AV1_REF_STATE_SIZE
+    cld
+    rep     stosb
+    mov     eax, AV1_REF_STATE_SIZE
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_av1_refs_store_image(refs, index, image_desc) -> eax=AV1_IMAGE_SIZE
+; Stores one validated 4:2:0 image descriptor in a reference slot.
+er_fn er_av1_refs_store_image
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_REF_COUNT
+    jae     .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     ebx, esi
+    mov     r13, rdx
+    mov     rdi, r13
+    call    er_av1_image_validate_420
+    test    edx, edx
+    jnz     .done
+    mov     eax, ebx
+    imul    eax, AV1_REF_SLOT_SIZE
+    lea     rdi, [r12 + rax]
+    mov     byte [rdi + AV1_REF_SLOT_VALID], 1
+    add     rdi, AV1_REF_SLOT_IMAGE
+    mov     rsi, r13
+    mov     ecx, AV1_IMAGE_SIZE
+    cld
+    rep     movsb
+    mov     eax, AV1_IMAGE_SIZE
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_av1_refs_refresh(refs, refresh_flags, image_desc) -> eax=slots refreshed
+; Copies the current image descriptor to every reference slot selected by flags.
+er_fn er_av1_refs_refresh
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_FRAME_REFRESH_ALL
+    ja      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     rdi, r14
+    call    er_av1_image_validate_420
+    test    edx, edx
+    jnz     .done
+    xor     ebx, ebx
+    xor     r15d, r15d
+.slot_loop:
+    cmp     ebx, AV1_REF_COUNT
+    jae     .ok
+    mov     eax, 1
+    mov     ecx, ebx
+    shl     eax, cl
+    test    eax, r13d
+    jz      .next_slot
+    mov     eax, ebx
+    imul    eax, AV1_REF_SLOT_SIZE
+    lea     rdi, [r12 + rax]
+    mov     byte [rdi + AV1_REF_SLOT_VALID], 1
+    add     rdi, AV1_REF_SLOT_IMAGE
+    mov     rsi, r14
+    mov     ecx, AV1_IMAGE_SIZE
+    cld
+    rep     movsb
+    inc     r15d
+.next_slot:
+    inc     ebx
+    jmp     .slot_loop
+.ok:
+    mov     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_refs_get_plane(refs, index, plane_id, out_plane) -> eax=AV1_PLANE_SIZE
+; Exposes one plane descriptor from a valid reference slot.
+er_fn er_av1_refs_get_plane
+    er_push rbx, r12, r13, r14
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_REF_COUNT
+    jae     .invalid_param
+    cmp     edx, AV1_PLANE_MAX
+    ja      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     ebx, esi
+    mov     r13d, edx
+    mov     r14, rcx
+    mov     eax, ebx
+    imul    eax, AV1_REF_SLOT_SIZE
+    lea     r12, [r12 + rax]
+    cmp     byte [r12 + AV1_REF_SLOT_VALID], 0
+    je      .corrupt
+    add     r12, AV1_REF_SLOT_IMAGE
+    cmp     r13d, AV1_PLANE_Y
+    je      .plane_y
+    cmp     r13d, AV1_PLANE_U
+    je      .plane_u
+    mov     rax, [r12 + AV1_IMAGE_V_PTR]
+    mov     [r14 + AV1_PLANE_PTR], rax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    mov     [r14 + AV1_PLANE_WIDTH], eax
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    shr     eax, 1
+    mov     [r14 + AV1_PLANE_HEIGHT], eax
+    mov     eax, [r12 + AV1_IMAGE_V_LEN]
+    mov     [r14 + AV1_PLANE_LEN], eax
+    jmp     .ok
+.plane_u:
+    mov     rax, [r12 + AV1_IMAGE_U_PTR]
+    mov     [r14 + AV1_PLANE_PTR], rax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    mov     [r14 + AV1_PLANE_WIDTH], eax
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    shr     eax, 1
+    mov     [r14 + AV1_PLANE_HEIGHT], eax
+    mov     eax, [r12 + AV1_IMAGE_U_LEN]
+    mov     [r14 + AV1_PLANE_LEN], eax
+    jmp     .ok
+.plane_y:
+    mov     rax, [r12 + AV1_IMAGE_Y_PTR]
+    mov     [r14 + AV1_PLANE_PTR], rax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    mov     [r14 + AV1_PLANE_WIDTH], eax
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    mov     [r14 + AV1_PLANE_HEIGHT], eax
+    mov     eax, [r12 + AV1_IMAGE_Y_LEN]
+    mov     [r14 + AV1_PLANE_LEN], eax
+.ok:
+    mov     eax, AV1_PLANE_SIZE
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_av1_image_validate_420(image_desc) -> eax=raw420 bytes, rdx=error
+; Validates an 8-bit 4:2:0 image descriptor used by decoded-frame references.
+er_fn er_av1_image_validate_420
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     r12, rdi
+    cmp     qword [r12 + AV1_IMAGE_Y_PTR], 0
+    je      .invalid_param
+    cmp     qword [r12 + AV1_IMAGE_U_PTR], 0
+    je      .invalid_param
+    cmp     qword [r12 + AV1_IMAGE_V_PTR], 0
+    je      .invalid_param
+    mov     r13d, [r12 + AV1_IMAGE_WIDTH]
+    cmp     r13d, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    r13d, 1
+    jnz     .unsupported
+    mov     ebx, [r12 + AV1_IMAGE_HEIGHT]
+    cmp     ebx, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    ebx, 1
+    jnz     .unsupported
+    mov     eax, r13d
+    mul     ebx
+    test    edx, edx
+    jnz     .corrupt
+    cmp     [r12 + AV1_IMAGE_Y_LEN], eax
+    jb      .corrupt
+    mov     r13d, eax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    mov     ebx, [r12 + AV1_IMAGE_HEIGHT]
+    shr     ebx, 1
+    mul     ebx
+    test    edx, edx
+    jnz     .corrupt
+    cmp     [r12 + AV1_IMAGE_U_LEN], eax
+    jb      .corrupt
+    cmp     [r12 + AV1_IMAGE_V_LEN], eax
+    jb      .corrupt
+    add     eax, eax
+    add     eax, r13d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_av1_block_inter_predict_8x8(dst, dst_stride, ref_plane, block_x, block_y, mv)
+; rdi=dst, esi=dst_stride, rdx=AV1_PLANE_*, ecx=block_x, r8d=block_y.
+; r9d packs signed integer mv_x in low 16 bits and mv_y in high 16 bits.
+er_fn er_av1_block_inter_predict_8x8
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    cmp     qword [rdx + AV1_PLANE_PTR], 0
+    je      .invalid_param
+    cmp     dword [rdx + AV1_PLANE_WIDTH], AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    cmp     dword [rdx + AV1_PLANE_HEIGHT], AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    mov     r12, rdi
+    mov     ebx, esi
+    mov     r13, [rdx + AV1_PLANE_PTR]
+    mov     r14d, [rdx + AV1_PLANE_WIDTH]
+    mov     r15d, [rdx + AV1_PLANE_HEIGHT]
+    mov     r10d, [rdx + AV1_PLANE_LEN]
+    mov     eax, r14d
+    mul     r15d
+    test    edx, edx
+    jnz     .corrupt
+    cmp     r10d, eax
+    jb      .corrupt
+    movsx   eax, r9w
+    add     ecx, eax
+    js      .corrupt
+    mov     eax, r9d
+    sar     eax, 16
+    add     r8d, eax
+    js      .corrupt
+    lea     eax, [rcx + AV1_BLOCK_DIM_8 - 1]
+    cmp     eax, r14d
+    jae     .corrupt
+    lea     eax, [r8 + AV1_BLOCK_DIM_8 - 1]
+    cmp     eax, r15d
+    jae     .corrupt
+    mov     eax, r8d
+    mul     r14d
+    add     eax, ecx
+    add     r13, rax
+    xor     edx, edx
+.row:
+    cmp     edx, AV1_BLOCK_DIM_8
+    jae     .ok
+    mov     eax, edx
+    imul    eax, ebx
+    lea     r10, [r12 + rax]
+    mov     eax, edx
+    imul    eax, r14d
+    lea     r11, [r13 + rax]
+    mov     rax, [r11]
+    mov     [r10], rax
+    inc     edx
+    jmp     .row
+.ok:
+    mov     eax, AV1_BLOCK_PIXELS_8X8
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
 
 ; er_av1_block_predict_8x8(dst, stride, left, above, mode)
 ; rdi=dst, esi=stride, rdx=left[8] or 0, rcx=above[8] or 0, r8d=mode.
-; Produces an 8-bit 8x8 intra predictor for the supported DC/V/H modes.
+; Produces an 8-bit 8x8 intra predictor for the supported intra modes.
 er_fn er_av1_block_predict_8x8
     er_push rbx, r12, r13, r14, r15
     test    rdi, rdi
     jz      .invalid_param
     cmp     esi, AV1_BLOCK_DIM_8
     jb      .invalid_param
-    cmp     r8d, AV1_PRED_MODE_H
+    cmp     r8d, AV1_PRED_MODE_MAX_SUPPORTED
     ja      .invalid_param
     mov     r12, rdi
     mov     r13d, esi
@@ -565,6 +1441,12 @@ er_fn er_av1_block_predict_8x8
     je      .dc
     cmp     r8d, AV1_PRED_MODE_V
     je      .vertical
+    cmp     r8d, AV1_PRED_MODE_H
+    je      .horizontal
+    cmp     r8d, AV1_PRED_MODE_PAETH
+    je      .paeth
+    jmp     .smooth
+.horizontal:
     test    r14, r14
     jz      .invalid_param
     xor     ebx, ebx
@@ -602,6 +1484,78 @@ er_fn er_av1_block_predict_8x8
     loop    .v_col
     inc     ebx
     jmp     .v_row
+.paeth:
+    test    r14, r14
+    jz      .invalid_param
+    test    r15, r15
+    jz      .invalid_param
+    xor     ebx, ebx
+.paeth_row:
+    cmp     ebx, AV1_BLOCK_DIM_8
+    jae     .ok
+    mov     edx, ebx
+    imul    edx, r13d
+    lea     r9, [r12 + rdx]
+    xor     ecx, ecx
+.paeth_col:
+    cmp     ecx, AV1_BLOCK_DIM_8
+    jae     .paeth_next_row
+    movzx   eax, byte [r14 + rbx]
+    movzx   edx, byte [r15 + rcx]
+    add     eax, edx
+    sub     eax, AV1_PIXEL_MID_8
+    mov     esi, eax
+    movzx   edx, byte [r14 + rbx]
+    sub     esi, edx
+    jns     .paeth_left_abs
+    neg     esi
+.paeth_left_abs:
+    mov     r10d, eax
+    movzx   edx, byte [r15 + rcx]
+    sub     r10d, edx
+    jns     .paeth_above_abs
+    neg     r10d
+.paeth_above_abs:
+    cmp     esi, r10d
+    jbe     .paeth_store_left
+    movzx   eax, byte [r15 + rcx]
+    jmp     .paeth_store
+.paeth_store_left:
+    movzx   eax, byte [r14 + rbx]
+.paeth_store:
+    mov     [r9 + rcx], al
+    inc     ecx
+    jmp     .paeth_col
+.paeth_next_row:
+    inc     ebx
+    jmp     .paeth_row
+.smooth:
+    test    r14, r14
+    jz      .invalid_param
+    test    r15, r15
+    jz      .invalid_param
+    xor     ebx, ebx
+.smooth_row:
+    cmp     ebx, AV1_BLOCK_DIM_8
+    jae     .ok
+    mov     edx, ebx
+    imul    edx, r13d
+    lea     r9, [r12 + rdx]
+    xor     ecx, ecx
+.smooth_col:
+    cmp     ecx, AV1_BLOCK_DIM_8
+    jae     .smooth_next_row
+    movzx   eax, byte [r14 + rbx]
+    movzx   edx, byte [r15 + rcx]
+    add     eax, edx
+    inc     eax
+    shr     eax, 1
+    mov     [r9 + rcx], al
+    inc     ecx
+    jmp     .smooth_col
+.smooth_next_row:
+    inc     ebx
+    jmp     .smooth_row
 .dc:
     xor     eax, eax
     xor     ebx, ebx

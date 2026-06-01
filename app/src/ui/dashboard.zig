@@ -12,13 +12,17 @@ pub const Dashboard = struct {
 
     pub fn render(self: *Dashboard, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
         const app = component.renderer(scene, null, .{ .style = style });
+        try self.renderView(app, bounds);
+    }
+
+    pub fn renderView(self: *Dashboard, app: component.View, bounds: ui.Rect) Error!void {
         var cursor = app.column(bounds, device_gap);
         for (self.devices) |*device| {
             const header_h: f32 = device_header_height;
             const panel_bounds = cursor.take(header_h + device_preferred_height);
             if (!panel_bounds.usable()) break;
 
-            try app.fill(panel_bounds, style.panel, panel_radius);
+            try app.fill(panel_bounds, app.options.style.panel, panel_radius);
 
             const header_rect = ui.Rect.init(
                 panel_bounds.x + panel_inset,
@@ -26,7 +30,7 @@ pub const Dashboard = struct {
                 panel_bounds.w - panel_inset * 2,
                 header_h - panel_inset,
             );
-            try app.text(header_rect, device.name, style.accent);
+            try app.text(header_rect, device.name, app.options.style.accent);
 
             const content_bounds = ui.Rect.init(
                 panel_bounds.x + panel_inset,
@@ -35,7 +39,7 @@ pub const Dashboard = struct {
                 panel_bounds.h - header_h - panel_inset,
             );
             if (content_bounds.valid()) {
-                try device.render(scene, content_bounds, style);
+                try device.renderView(app, content_bounds);
             }
         }
     }

@@ -177,6 +177,10 @@ pub const State = struct {
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
         const render_options = options.withStyle(pipelineStyle());
         const app = component.renderer(scene, collector, render_options);
+        try self.renderView(app, bounds);
+    }
+
+    pub fn renderView(self: *State, app: component.View, bounds: ui.Rect) Error!void {
         try app.gradient(bounds, pipeline_bg_top, pipeline_bg_bottom, 0.0);
 
         const outer = bounds.insetUniform(18.0);
@@ -341,20 +345,41 @@ pub const State = struct {
     }
 
     fn renderInspector(self: *State, app: component.View, bounds: ui.Rect) Error!void {
-        const stage = stages[self.selected_stage];
-        const path = fs_paths[self.selected_path];
         const body = try app.panelScaffold(bounds, .{
             .title = "scheduler controls",
             .detail = "stage budgets are explicit before work starts",
         });
 
+        var semantic_items: [9]component.SemanticItem = undefined;
         var ram_buf: [24]u8 = undefined;
         var tick_buf: [24]u8 = undefined;
         var volatile_buf: [24]u8 = undefined;
-        const ram_value = std.fmt.bufPrint(&ram_buf, "{d}%", .{@as(u32, @intFromFloat(@round(path.ram_fit * self.ram_budget * 100.0)))}) catch "RAM";
-        const tick_value = std.fmt.bufPrint(&tick_buf, "{d}%", .{@as(u32, @intFromFloat(@round(self.tick_budget * 100.0)))}) catch "ticks";
-        const volatile_value = std.fmt.bufPrint(&volatile_buf, "{d}%", .{@as(u32, @intFromFloat(@round(volatileRatio() * 100.0)))}) catch "volatile";
-        const semantic_items = [_]component.SemanticItem{
+        const projected = self.writeInspectorSemanticItems(&semantic_items, &ram_buf, &tick_buf, &volatile_buf);
+
+        var stack = app.column(body, 14.0);
+        try app.semanticView(stack.take(@min(330.0, @max(250.0, body.h * 0.62))), .{
+            .intent = .{ .mode = .schedule, .focus = .resources, .density = .compact },
+            .items = projected,
+        });
+
+        try app.sliderAt(stack.take(44.0), ram_slider_id, "RAM grant", self.ram_budget);
+        stack.skip(14.0);
+        try app.sliderAt(stack.take(44.0), tick_slider_id, "Tick budget", self.tick_budget);
+    }
+
+    fn writeInspectorSemanticItems(
+        self: State,
+        items: *[9]component.SemanticItem,
+        ram_buf: *[24]u8,
+        tick_buf: *[24]u8,
+        volatile_buf: *[24]u8,
+    ) []const component.SemanticItem {
+        const stage = stages[self.selected_stage];
+        const path = fs_paths[self.selected_path];
+        const ram_value = std.fmt.bufPrint(ram_buf, "{d}%", .{@as(u32, @intFromFloat(@round(path.ram_fit * self.ram_budget * 100.0)))}) catch "RAM";
+        const tick_value = std.fmt.bufPrint(tick_buf, "{d}%", .{@as(u32, @intFromFloat(@round(self.tick_budget * 100.0)))}) catch "ticks";
+        const volatile_value = std.fmt.bufPrint(volatile_buf, "{d}%", .{@as(u32, @intFromFloat(@round(volatileRatio() * 100.0)))}) catch "volatile";
+        items.* = [_]component.SemanticItem{
             .{ .kind = .path, .label = shortPath(path.path), .value = path.size_label, .detail = path.role, .state = if (path.private) .private else .neutral, .importance = .primary, .progress = path.indexed, .accent = path.color() },
             .{ .kind = .resource, .label = "RAM fit", .value = ram_value, .detail = "selected path x grant", .state = if (path.ram_fit < 0.5) .warning else .good, .importance = .primary, .progress = path.ram_fit * self.ram_budget, .accent = if (path.ram_fit < 0.5) pipeline_reject else pipeline_ram },
             .{ .kind = .resource, .label = "Tick budget", .value = tick_value, .detail = "user granted compute", .state = .active, .progress = self.tick_budget, .accent = pipeline_ticks },
@@ -365,16 +390,7 @@ pub const State = struct {
             .{ .id = commit_button_id, .kind = .action, .label = "Commit useful result", .detail = "write durable output", .state = .good, .importance = .normal, .accent = pipeline_commit },
             .{ .id = discard_button_id, .kind = .action, .label = "Discard volatile work", .detail = "release RAM objects", .state = .warning, .importance = .normal, .accent = pipeline_reject },
         };
-
-        var stack = app.column(body, 14.0);
-        try app.semanticView(stack.take(@min(330.0, @max(250.0, body.h * 0.62))), .{
-            .intent = .{ .mode = .schedule, .focus = .resources, .density = .compact },
-            .items = &semantic_items,
-        });
-
-        try app.sliderAt(stack.take(44.0), ram_slider_id, "RAM grant", self.ram_budget);
-        stack.skip(14.0);
-        try app.sliderAt(stack.take(44.0), tick_slider_id, "Tick budget", self.tick_budget);
+        return items[0..];
     }
 
     fn stateLabel(self: State) []const u8 {

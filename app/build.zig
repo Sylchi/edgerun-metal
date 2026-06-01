@@ -29,8 +29,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| pi_usb_boot_host_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| pi_usb_boot_host_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(pi_usb_boot_host_tests, math_obj, runtime_obj);
 
     const run_pi_usb_boot_host_tests = b.addRunArtifact(pi_usb_boot_host_tests);
     test_step.dependOn(&run_pi_usb_boot_host_tests.step);
@@ -42,8 +41,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| pi_usb_control_host_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| pi_usb_control_host_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(pi_usb_control_host_tests, math_obj, runtime_obj);
 
     const run_pi_usb_control_host_tests = b.addRunArtifact(pi_usb_control_host_tests);
     test_step.dependOn(&run_pi_usb_control_host_tests.step);
@@ -55,8 +53,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| clock_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| clock_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(clock_tests, math_obj, runtime_obj);
 
     const run_clock_tests = b.addRunArtifact(clock_tests);
     const clock_test_step = b.step("clock-test", "Run Zig clock tests");
@@ -69,8 +66,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| identity_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| identity_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(identity_tests, math_obj, runtime_obj);
 
     const run_identity_tests = b.addRunArtifact(identity_tests);
     const identity_test_step = b.step("identity-test", "Run Zig identity tests");
@@ -83,8 +79,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| object_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| object_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(object_tests, math_obj, runtime_obj);
 
     const run_object_tests = b.addRunArtifact(object_tests);
     const object_test_step = b.step("object-test", "Run Zig object tests");
@@ -97,8 +92,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| storage_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| storage_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(storage_tests, math_obj, runtime_obj);
 
     const run_storage_tests = b.addRunArtifact(storage_tests);
     const storage_test_step = b.step("storage-test", "Run Zig storage tests");
@@ -111,8 +105,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| chat_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| chat_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(chat_tests, math_obj, runtime_obj);
 
     const run_chat_tests = b.addRunArtifact(chat_tests);
     const chat_test_step = b.step("chat-test", "Run encrypted chat app state tests");
@@ -126,8 +119,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| chat_ui_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| chat_ui_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(chat_ui_tests, math_obj, runtime_obj);
 
     const run_chat_ui_tests = b.addRunArtifact(chat_ui_tests);
     const chat_ui_test_step = b.step("chat-ui-test", "Run encrypted chat app UI tests");
@@ -141,8 +133,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| pipeline_ui_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| pipeline_ui_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(pipeline_ui_tests, math_obj, runtime_obj);
 
     const run_pipeline_ui_tests = b.addRunArtifact(pipeline_ui_tests);
     const pipeline_ui_test_step = b.step("pipeline-ui-test", "Run user-scheduled pipeline UI tests");
@@ -156,8 +147,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| sdk_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| sdk_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(sdk_tests, math_obj, runtime_obj);
 
     const run_sdk_tests = b.addRunArtifact(sdk_tests);
     const sdk_test_step = b.step("sdk-test", "Run Zig SDK tests");
@@ -172,8 +162,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| sdk_cli.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| sdk_cli.root_module.addObjectFile(obj);
+    addBootstrapObjects(sdk_cli, math_obj, runtime_obj);
 
     const run_sdk_cli = b.addRunArtifact(sdk_cli);
     if (b.args) |args| run_sdk_cli.addArgs(args);
@@ -189,8 +178,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| sdk_bench.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| sdk_bench.root_module.addObjectFile(obj);
+    addBootstrapObjects(sdk_bench, math_obj, runtime_obj);
 
     const run_sdk_bench = b.addRunArtifact(sdk_bench);
     const sdk_bench_step = b.step("sdk-bench", "Benchmark deterministic Edgerun SDK setup and simulation");
@@ -205,8 +193,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| media_video_dump.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| media_video_dump.root_module.addObjectFile(obj);
+    addBootstrapObjects(media_video_dump, math_obj, runtime_obj);
 
     const run_media_video_dump = b.addRunArtifact(media_video_dump);
     if (b.args) |args| run_media_video_dump.addArgs(args);
@@ -220,8 +207,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| media_video_dump_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| media_video_dump_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(media_video_dump_tests, math_obj, runtime_obj);
 
     const run_media_video_dump_tests = b.addRunArtifact(media_video_dump_tests);
     const media_video_dump_test_step = b.step("media-video-dump-test", "Run media video dump host-tool tests");
@@ -234,8 +220,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| ui_core_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_core_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(ui_core_tests, math_obj, runtime_obj);
 
     const run_ui_core_tests = b.addRunArtifact(ui_core_tests);
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
@@ -248,8 +233,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| ui_codec_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_codec_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(ui_codec_tests, math_obj, runtime_obj);
 
     const run_ui_codec_tests = b.addRunArtifact(ui_codec_tests);
     const ui_codec_test_step = b.step("ui-codec-test", "Run Zig UI codec and stream tests");
@@ -258,13 +242,12 @@ pub fn build(b: *std.Build) void {
 
     const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui/component_gallery.zig"),
+            .root_source_file = b.path("src/component_gallery_test.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| component_gallery_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| component_gallery_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(component_gallery_tests, math_obj, runtime_obj);
 
     const run_component_gallery_tests = b.addRunArtifact(component_gallery_tests);
     const component_gallery_test_step = b.step("component-gallery-test", "Run canonical component gallery tests");
@@ -279,8 +262,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| build_dashboard.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| build_dashboard.root_module.addObjectFile(obj);
+    addBootstrapObjects(build_dashboard, math_obj, runtime_obj);
 
     const run_build_dashboard = b.addRunArtifact(build_dashboard);
     const build_dashboard_step = b.step("build-dashboard", "Render the build dashboard PPM");
@@ -295,8 +277,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| chat_preview.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| chat_preview.root_module.addObjectFile(obj);
+    addBootstrapObjects(chat_preview, math_obj, runtime_obj);
 
     const run_chat_preview = b.addRunArtifact(chat_preview);
     const chat_preview_step = b.step("chat-preview", "Render encrypted chat UI preview PPM");
@@ -311,8 +292,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| wayland_window.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| wayland_window.root_module.addObjectFile(obj);
+    addBootstrapObjects(wayland_window, math_obj, runtime_obj);
 
     const run_wayland_window = b.addRunArtifact(wayland_window);
     if (b.args) |args| run_wayland_window.addArgs(args);
@@ -326,8 +306,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| wayland_window_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| wayland_window_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(wayland_window_tests, math_obj, runtime_obj);
     const run_wayland_window_tests = b.addRunArtifact(wayland_window_tests);
     const wayland_window_test_step = b.step("wayland-window-test", "Run native Wayland host protocol tests");
     wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
@@ -354,8 +333,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
+    addBootstrapObjects(drm_gbm_window, math_obj, runtime_obj);
     const run_drm_gbm_window = b.addRunArtifact(drm_gbm_window);
     if (b.args) |args| run_drm_gbm_window.addArgs(args);
     const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
@@ -368,8 +346,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    if (math_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
+    addBootstrapObjects(drm_gbm_tests, math_obj, runtime_obj);
     const run_drm_gbm_tests = b.addRunArtifact(drm_gbm_tests);
     const drm_gbm_test_step = b.step("drm-gbm-test", "Run DRM/GBM host tests");
     drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);
@@ -446,8 +423,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| tpm_real_check.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| tpm_real_check.root_module.addObjectFile(obj);
+    addBootstrapObjects(tpm_real_check, math_obj, runtime_obj);
 
     const run_tpm_real_check = b.addRunArtifact(tpm_real_check);
     const tpm_real_check_step = b.step("real-tpm", "Run TPM checks against /dev/tpmrm0");
@@ -462,8 +438,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| ifstatus.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ifstatus.root_module.addObjectFile(obj);
+    addBootstrapObjects(ifstatus, math_obj, runtime_obj);
 
     const run_ifstatus = b.addRunArtifact(ifstatus);
     if (b.args) |args| run_ifstatus.addArgs(args);
@@ -479,8 +454,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| pi_usb_boot_host.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| pi_usb_boot_host.root_module.addObjectFile(obj);
+    addBootstrapObjects(pi_usb_boot_host, math_obj, runtime_obj);
 
     const pi_usb_load = b.addRunArtifact(pi_usb_boot_host);
     if (b.args) |args| pi_usb_load.addArgs(args);
@@ -496,8 +470,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    if (math_obj) |obj| pi_usb_control_host.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| pi_usb_control_host.root_module.addObjectFile(obj);
+    addBootstrapObjects(pi_usb_control_host, math_obj, runtime_obj);
 
     const pi_usb_control = b.addRunArtifact(pi_usb_control_host);
     if (b.args) |args| pi_usb_control.addArgs(args);
@@ -525,4 +498,9 @@ pub fn build(b: *std.Build) void {
     drm_gbm_tests.step.dependOn(&run_gen_icon_objects.step);
     wayland_window_tests.step.dependOn(&run_gen_icon_objects.step);
     test_step.dependOn(&run_gen_icon_objects.step);
+}
+
+fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.LazyPath, runtime_obj: ?std.Build.LazyPath) void {
+    if (math_obj) |obj| compile.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| compile.root_module.addObjectFile(obj);
 }

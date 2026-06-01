@@ -337,10 +337,14 @@ pub fn contentHeight(width: f32, state: State) f32 {
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     const style = design.appStyle();
+    const app = component.renderer(scene, collector, .{ .style = style });
+    try renderView(app, bounds, state);
+}
+
+pub fn renderView(app: component.View, bounds: ui.Rect, state: State) !void {
     const pad: f32 = 24.0;
     const gap: f32 = 14.0;
     const content = bounds.insetUniform(pad);
-    const app = component.renderer(scene, collector, .{ .style = style });
 
     var page = app.column(content, gap);
     try renderHero(app, page.take(112.0), state);
@@ -427,6 +431,16 @@ fn renderContextCard(app: component.View, bounds: ui.Rect, state: State) !void {
 fn renderAgents(app: component.View, bounds: ui.Rect, state: State) !void {
     var items: [max_agents]component.SemanticItem = undefined;
     var detail_bufs: [max_agents][176]u8 = undefined;
+    const projected = writeAgentSemanticItems(state, &items, &detail_bufs);
+    try app.semanticView(bounds, .{
+        .title = "Expert pipeline",
+        .detail = "automatic role chain",
+        .intent = .{ .mode = .debug, .focus = .general, .density = .compact },
+        .items = projected,
+    });
+}
+
+fn writeAgentSemanticItems(state: State, items: *[max_agents]component.SemanticItem, detail_bufs: *[max_agents][176]u8) []const component.SemanticItem {
     for (state.agents, 0..) |agent, index| {
         const detail = std.fmt.bufPrint(&detail_bufs[index], "{s} · {s} · {d} tokens", .{ agent.role, agent.model, agent.context_used }) catch agent.role;
         items[index] = .{
@@ -439,12 +453,7 @@ fn renderAgents(app: component.View, bounds: ui.Rect, state: State) !void {
             .selected = agent.active,
         };
     }
-    try app.semanticView(bounds, .{
-        .title = "Expert pipeline",
-        .detail = "automatic role chain",
-        .intent = .{ .mode = .debug, .focus = .general, .density = .compact },
-        .items = items[0..state.agents.len],
-    });
+    return items[0..state.agents.len];
 }
 
 fn renderTranscript(app: component.View, bounds: ui.Rect, state: State) !void {
@@ -483,8 +492,9 @@ fn appendSemanticEvents(items: []component.SemanticItem, offset: usize, state: S
         items[next] = .{
             .kind = semanticKindForEvent(event.kind),
             .label = event.title.slice(),
+            .value = semanticValueForEvent(event),
             .detail = event.detail.slice(),
-            .state = semanticStateForEvent(event.kind),
+            .state = semanticStateForEvent(event),
         };
         next += 1;
     }
@@ -534,8 +544,17 @@ fn semanticKindForEvent(kind: AgentEventKind) component.SemanticKind {
     };
 }
 
-fn semanticStateForEvent(kind: AgentEventKind) component.SemanticState {
-    return switch (kind) {
+fn semanticValueForEvent(event: AgentEvent) []const u8 {
+    if (bytes.nonzero(&event.receipt)) return "receipt";
+    if (bytes.nonzero(&event.output_object)) return "object";
+    if (bytes.nonzero(&event.input_object)) return "input";
+    return "pending";
+}
+
+fn semanticStateForEvent(event: AgentEvent) component.SemanticState {
+    if ((event.kind == .stage_result or event.kind == .tool_result or event.kind == .receipt or event.kind == .artifact) and !bytes.nonzero(&event.receipt)) return .pending;
+    if (event.kind == .artifact and bytes.nonzero(&event.receipt)) return .good;
+    return switch (event.kind) {
         .stage_start, .tool_request, .approval_request => .active,
         .stage_result, .tool_result, .approval_result, .receipt, .output => .good,
         .warning => .warning,
@@ -547,6 +566,20 @@ fn pipelineContextUsed(state: State) u32 {
     var total: u32 = 0;
     for (state.agents) |agent| total += agent.context_used;
     return total;
+}
+
+fn pipelineShapeValid(stages: []const AgentSlot) bool {
+    if (stages.len == 0) return false;
+    var index: usize = 1;
+    while (index < stages.len) : (index += 1) {
+        if (!stageOutputFeedsInput(stages[index - 1].output_kind, stages[index].input_kind)) return false;
+    }
+    return true;
+}
+
+fn stageOutputFeedsInput(output_kind: AgentObjectKind, input_kind: AgentObjectKind) bool {
+    return output_kind == input_kind or
+        (output_kind == .tool_request and input_kind == .tool_result);
 }
 
 fn objectRequirementsPermitConsequence(requirements: object.Requirements, consequence: intent.Consequence) bool {
@@ -818,6 +851,12 @@ pub const AgentEvent = struct {
             .receipt = idFromBytes(in[166..198]),
         };
     }
+
+    pub fn writeObject(self: AgentEvent, requirements: object.Requirements, out: []u8) ![]u8 {
+        var body: [agent_event_body_size]u8 = undefined;
+        if (!self.encodeBody(&body)) return error.BadUiStreamPatch;
+        return try (object.NodeWriter{ .out = out }).bytesNode(requirements, self.clock_stamp, &body);
+    }
 };
 
 pub const AgentSession = struct {
@@ -852,6 +891,22 @@ pub const AgentSession = struct {
 
     pub fn treeChildren(self: *const AgentSession) []const object.Child {
         return self.children[0..self.len];
+    }
+
+    pub fn writeObject(self: *const AgentSession, requirements: object.Requirements, epoch: clock.Stamp, out: []u8) ![]u8 {
+        if (self.len == 0) return error.BadUiStreamPatch;
+        return try (object.NodeWriter{ .out = out }).treeNode(requirements, epoch, self.treeChildren());
+    }
+
+    pub fn viewEventCount(view: object.View) ?usize {
+        if (view.header.kind != .tree or view.header.child_count == 0) return null;
+        return @as(usize, @intCast(view.header.child_count - 1));
+    }
+
+    pub fn eventChildAt(view: object.View, event_index: usize) ?object.Child {
+        const count = viewEventCount(view) orelse return null;
+        if (event_index >= count) return null;
+        return view.childAt(event_index + 1) catch null;
     }
 
     pub fn eventCount(self: AgentSession) usize {
@@ -891,6 +946,29 @@ pub const StageTransition = struct {
         return self.stage_identity.eql(stage_slot.identity) and
             self.input_kind == stage_slot.input_kind and
             self.output_kind == stage_slot.output_kind;
+    }
+
+    pub fn event(self: StageTransition, sequence: u32, stamp: clock.Stamp) AgentEvent {
+        return .{
+            .sequence = sequence,
+            .stage_identity = self.stage_identity,
+            .kind = if (self.status == .completed) .stage_result else .warning,
+            .clock_stamp = stamp,
+            .input_object = self.input_object,
+            .output_object = self.output_object,
+            .receipt = self.completion_receipt,
+        };
+    }
+
+    pub fn envelope(self: StageTransition, sender_slot: u32) ?AgentCellEnvelope {
+        if (sender_slot == 0) return null;
+        return .{
+            .msg_type = if (self.status == .completed) .stage_result else .@"error",
+            .sender_slot = sender_slot,
+            .request_object = self.output_object,
+            .input_object = self.input_object,
+            .grant_or_receipt = self.completion_receipt,
+        };
     }
 
     pub fn encodeBody(self: StageTransition, out: []u8) bool {
@@ -971,6 +1049,22 @@ pub const ToolRequest = struct {
         if (!request.service_identity.valid() or !bytes.nonzero(&request.request_object) or !bytes.nonzero(&request.input_object) or !bytes.nonzero(&request.grant_or_receipt)) return null;
         return request;
     }
+
+    pub fn envelope(self: ToolRequest, sender_slot: u32) ?AgentCellEnvelope {
+        if (sender_slot == 0) return null;
+        return .{
+            .msg_type = .tool_request,
+            .sender_slot = sender_slot,
+            .request_object = self.request_object,
+            .input_object = self.input_object,
+            .grant_or_receipt = self.grant_or_receipt,
+        };
+    }
+
+    pub fn fromEnvelope(service: ToolService, envelope_value: AgentCellEnvelope) ?ToolRequest {
+        if (envelope_value.msg_type != .tool_request) return null;
+        return init(service, envelope_value.request_object, envelope_value.input_object, envelope_value.grant_or_receipt);
+    }
 };
 
 pub const ToolResult = struct {
@@ -1003,6 +1097,45 @@ pub const ToolResult = struct {
         };
         if (!result.service_identity.valid() or !bytes.nonzero(&result.request_object) or !bytes.nonzero(&result.output_object) or !bytes.nonzero(&result.receipt)) return null;
         return result;
+    }
+
+    pub fn event(self: ToolResult, sequence: u32, stamp: clock.Stamp) AgentEvent {
+        return .{
+            .sequence = sequence,
+            .stage_identity = self.service_identity,
+            .kind = if (self.status == .ok) .tool_result else .warning,
+            .clock_stamp = stamp,
+            .input_object = self.request_object,
+            .output_object = self.output_object,
+            .receipt = self.receipt,
+        };
+    }
+
+    pub fn envelope(self: ToolResult, sender_slot: u32) ?AgentCellEnvelope {
+        if (sender_slot == 0) return null;
+        return .{
+            .msg_type = if (self.status == .ok) .tool_result else .@"error",
+            .sender_slot = sender_slot,
+            .request_object = self.request_object,
+            .input_object = self.output_object,
+            .grant_or_receipt = self.receipt,
+        };
+    }
+
+    pub fn fromEnvelope(service: ToolService, envelope_value: AgentCellEnvelope) ?ToolResult {
+        const status: ToolStatus = switch (envelope_value.msg_type) {
+            .tool_result => .ok,
+            .@"error" => .failed,
+            else => return null,
+        };
+        if (!service.identity.valid() or !bytes.nonzero(&envelope_value.request_object) or !bytes.nonzero(&envelope_value.input_object) or !bytes.nonzero(&envelope_value.grant_or_receipt)) return null;
+        return .{
+            .service_identity = service.identity,
+            .request_object = envelope_value.request_object,
+            .output_object = envelope_value.input_object,
+            .receipt = envelope_value.grant_or_receipt,
+            .status = status,
+        };
     }
 };
 
@@ -1037,6 +1170,18 @@ pub const PatchObject = struct {
         if (!bytes.nonzero(&patch.plan_object) or !bytes.nonzero(&patch.patch_object) or !bytes.nonzero(&patch.tool_result) or !bytes.nonzero(&patch.receipt)) return null;
         return patch;
     }
+
+    pub fn event(self: PatchObject, sequence: u32, stamp: clock.Stamp, stage_identity: identity.Id) AgentEvent {
+        return .{
+            .sequence = sequence,
+            .stage_identity = stage_identity,
+            .kind = if (self.status == .completed) .artifact else .warning,
+            .clock_stamp = stamp,
+            .input_object = self.plan_object,
+            .output_object = self.patch_object,
+            .receipt = self.receipt,
+        };
+    }
 };
 
 pub const ReviewObject = struct {
@@ -1066,6 +1211,18 @@ pub const ReviewObject = struct {
         };
         if (!bytes.nonzero(&review.patch_object) or !bytes.nonzero(&review.review_object) or !bytes.nonzero(&review.receipt)) return null;
         return review;
+    }
+
+    pub fn event(self: ReviewObject, sequence: u32, stamp: clock.Stamp, stage_identity: identity.Id) AgentEvent {
+        return .{
+            .sequence = sequence,
+            .stage_identity = stage_identity,
+            .kind = if (self.decision == .accepted) .stage_result else .warning,
+            .clock_stamp = stamp,
+            .input_object = self.patch_object,
+            .output_object = self.review_object,
+            .receipt = self.receipt,
+        };
     }
 };
 
@@ -1098,6 +1255,18 @@ pub const SummaryObject = struct {
         };
         if (!bytes.nonzero(&summary.review_object) or !bytes.nonzero(&summary.summary_object) or !bytes.nonzero(&summary.receipt)) return null;
         return summary;
+    }
+
+    pub fn event(self: SummaryObject, sequence: u32, stamp: clock.Stamp, stage_identity: identity.Id) AgentEvent {
+        return .{
+            .sequence = sequence,
+            .stage_identity = stage_identity,
+            .kind = .stage_result,
+            .clock_stamp = stamp,
+            .input_object = self.review_object,
+            .output_object = self.summary_object,
+            .receipt = self.receipt,
+        };
     }
 };
 
@@ -1140,6 +1309,13 @@ test "agent state applies existing ui_stream patch bytes" {
     try std.testing.expectEqualStrings("ready", state.status.slice());
     try state.applyMessage(&.{ 1, 8, assistant_component_id, 9, 'a', 's', 's', 'i', 's', 't', 'a', 'n', 't', 2, 'o', 'k' });
     try std.testing.expectEqualStrings("ok", state.assistant.slice());
+}
+
+test "agent default pipeline is deterministic object flow" {
+    try std.testing.expect(pipelineShapeValid(&default_agents));
+    try std.testing.expect(stageOutputFeedsInput(.dispatch, .dispatch));
+    try std.testing.expect(stageOutputFeedsInput(.tool_request, .tool_result));
+    try std.testing.expect(!stageOutputFeedsInput(.plan, .review));
 }
 
 test "agent stage admits only sufficient spawn receipts" {
@@ -1187,6 +1363,40 @@ test "agent stage checks object requirements before export" {
     try std.testing.expect(!stage_slot.admitsObjectRequirements(public_req, .writes_private_state));
 }
 
+test "agent stage execution requires grant intent and object policy" {
+    const stage_slot = default_agents[1];
+    const parent = stageIdentity(95);
+    const user = stageIdentity(96);
+    const device = stageIdentity(97);
+    const subject = stageIdentity(98);
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{8} ++ [_]u8{0} ** 31 } };
+    const request = [_]u8{9} ++ [_]u8{0} ** 31;
+    const spawn_receipt = testSpawnReceipt(parent, stage_slot.identity, epoch, stage_slot.memory_grant, stage_slot.tick_grant, stage_slot.storage_grant);
+    const intent_receipt = testIntentReceipt(user, device, stage_slot.identity, subject, .emit_ui_event, .attests_state, epoch, request);
+    const admission = StageAdmission{
+        .spawn_receipt = spawn_receipt,
+        .intent_receipt = intent_receipt,
+        .subject = subject,
+        .action = .emit_ui_event,
+        .consequence = .attests_state,
+        .requirements = sessionTestRequirements(),
+    };
+    try std.testing.expect(stage_slot.admitsExecution(admission));
+
+    var wrong_spawn = admission;
+    wrong_spawn.spawn_receipt = testSpawnReceipt(parent, stageIdentity(99), epoch, stage_slot.memory_grant, stage_slot.tick_grant, stage_slot.storage_grant);
+    try std.testing.expect(!stage_slot.admitsExecution(wrong_spawn));
+
+    var wrong_intent = admission;
+    wrong_intent.subject = stageIdentity(100);
+    try std.testing.expect(!stage_slot.admitsExecution(wrong_intent));
+
+    var denied_export = admission;
+    denied_export.consequence = .exports_data;
+    denied_export.intent_receipt = testIntentReceipt(user, device, stage_slot.identity, subject, .emit_ui_event, .exports_data, epoch, request);
+    try std.testing.expect(!stage_slot.admitsExecution(denied_export));
+}
+
 test "agent stream records object-native events" {
     var state = State{};
     try state.applyMessage(&.{ 1, 48, tool_component_id, 6, 's', 'e', 'a', 'r', 'c', 'h', 5, 'i', 'n', 'd', 'e', 'x' });
@@ -1215,6 +1425,13 @@ test "agent events project into semantic pipeline and output views" {
     try std.testing.expectEqual(@as(usize, 1), output_len);
     try std.testing.expectEqual(component.SemanticKind.artifact, items[0].kind);
     try std.testing.expectEqual(component.SemanticState.pending, items[0].state);
+
+    state.events.items[1].output_object = [_]u8{1} ++ [_]u8{0} ** 31;
+    state.events.items[1].receipt = [_]u8{2} ++ [_]u8{0} ** 31;
+    const receipted_output_len = appendSemanticEvents(&items, 0, state, .output);
+    try std.testing.expectEqual(@as(usize, 1), receipted_output_len);
+    try std.testing.expectEqualStrings("receipt", items[0].value);
+    try std.testing.expectEqual(component.SemanticState.good, items[0].state);
 }
 
 test "agent event has fixed canonical object body" {
@@ -1268,7 +1485,7 @@ test "agent session is an ordered object tree" {
 
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 } };
     var raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const canonical = try (object.NodeWriter{ .out = &raw }).treeNode(req, epoch, session.treeChildren());
+    const canonical = try session.writeObject(req, epoch, &raw);
     const view = try object.View.decode(canonical);
 
     try std.testing.expectEqual(object.Kind.tree, view.header.kind);
@@ -1278,6 +1495,10 @@ test "agent session is an ordered object tree" {
     const decoded_event = try view.childAt(1);
     try std.testing.expect(bytes.eql(&request_child.object_id, &decoded_request.object_id));
     try std.testing.expect(bytes.eql(&event_child.object_id, &decoded_event.object_id));
+    try std.testing.expectEqual(@as(?usize, 1), AgentSession.viewEventCount(view));
+    const projected_event = AgentSession.eventChildAt(view, 0).?;
+    try std.testing.expect(bytes.eql(&event_child.object_id, &projected_event.object_id));
+    try std.testing.expect(AgentSession.eventChildAt(view, 1) == null);
 }
 
 test "agent session appends only canonical event objects" {
@@ -1301,10 +1522,8 @@ test "agent session appends only canonical event objects" {
         .output_object = [_]u8{3} ++ [_]u8{0} ** 31,
         .receipt = [_]u8{4} ++ [_]u8{0} ** 31,
     };
-    var event_body: [agent_event_body_size]u8 = undefined;
-    try std.testing.expect(event.encodeBody(&event_body));
     var event_raw: [object.header_size + agent_event_body_size]u8 = undefined;
-    const event_canonical = try (object.NodeWriter{ .out = &event_raw }).bytesNode(req, epoch, &event_body);
+    const event_canonical = try event.writeObject(req, &event_raw);
     const event_view = try object.View.decode(event_canonical);
     try std.testing.expect(session.appendEventView(event_view));
     try std.testing.expectEqual(@as(usize, 1), session.eventCount());
@@ -1336,6 +1555,21 @@ test "agent stage transition binds grants receipts and object kinds" {
     try std.testing.expect(bytes.eql(&transition.grant_or_receipt, &decoded.grant_or_receipt));
     try std.testing.expect(bytes.eql(&transition.completion_receipt, &decoded.completion_receipt));
     try std.testing.expectEqual(StageStatus.completed, decoded.status);
+
+    const event = decoded.event(9, clock.Stamp{ .keeper = .{ .bytes = [_]u8{5} ++ [_]u8{0} ** 31 } });
+    try std.testing.expectEqual(@as(u32, 9), event.sequence);
+    try std.testing.expect(event.stage_identity.eql(stage_slot.identity));
+    try std.testing.expectEqual(AgentEventKind.stage_result, event.kind);
+    try std.testing.expect(bytes.eql(&transition.input_object, &event.input_object));
+    try std.testing.expect(bytes.eql(&transition.output_object, &event.output_object));
+    try std.testing.expect(bytes.eql(&transition.completion_receipt, &event.receipt));
+
+    const envelope = decoded.envelope(55).?;
+    try std.testing.expectEqual(AgentMessageType.stage_result, envelope.msg_type);
+    try std.testing.expectEqual(@as(u32, 55), envelope.sender_slot);
+    try std.testing.expect(bytes.eql(&transition.output_object, &envelope.request_object));
+    try std.testing.expect(bytes.eql(&transition.input_object, &envelope.input_object));
+    try std.testing.expect(bytes.eql(&transition.completion_receipt, &envelope.grant_or_receipt));
 }
 
 test "agent cell envelope matches kernel payload offsets" {
@@ -1392,6 +1626,18 @@ test "agent tools are object addressed services" {
     try std.testing.expect(bytes.eql(&request.input_object, &decoded_request.input_object));
     try std.testing.expect(bytes.eql(&request.grant_or_receipt, &decoded_request.grant_or_receipt));
     try std.testing.expectEqual(AgentObjectKind.tool_result, decoded_request.output_kind);
+    const envelope = decoded_request.envelope(44).?;
+    try std.testing.expectEqual(AgentMessageType.tool_request, envelope.msg_type);
+    try std.testing.expectEqual(@as(u32, 44), envelope.sender_slot);
+    try std.testing.expect(bytes.eql(&request.request_object, &envelope.request_object));
+    try std.testing.expect(bytes.eql(&request.input_object, &envelope.input_object));
+    try std.testing.expect(bytes.eql(&request.grant_or_receipt, &envelope.grant_or_receipt));
+
+    const request_from_envelope = ToolRequest.fromEnvelope(service, envelope).?;
+    try std.testing.expect(request_from_envelope.service_identity.eql(service.identity));
+    try std.testing.expect(bytes.eql(&request.request_object, &request_from_envelope.request_object));
+    try std.testing.expect(bytes.eql(&request.input_object, &request_from_envelope.input_object));
+    try std.testing.expect(bytes.eql(&request.grant_or_receipt, &request_from_envelope.grant_or_receipt));
 }
 
 test "agent tool result binds output object and receipt" {
@@ -1411,6 +1657,28 @@ test "agent tool result binds output object and receipt" {
     try std.testing.expect(bytes.eql(&result.output_object, &decoded.output_object));
     try std.testing.expect(bytes.eql(&result.receipt, &decoded.receipt));
     try std.testing.expectEqual(ToolStatus.ok, decoded.status);
+
+    const event = decoded.event(12, clock.Stamp{ .keeper = .{ .bytes = [_]u8{8} ++ [_]u8{0} ** 31 } });
+    try std.testing.expectEqual(@as(u32, 12), event.sequence);
+    try std.testing.expect(event.stage_identity.eql(service.identity));
+    try std.testing.expectEqual(AgentEventKind.tool_result, event.kind);
+    try std.testing.expect(bytes.eql(&result.request_object, &event.input_object));
+    try std.testing.expect(bytes.eql(&result.output_object, &event.output_object));
+    try std.testing.expect(bytes.eql(&result.receipt, &event.receipt));
+
+    const envelope = decoded.envelope(66).?;
+    try std.testing.expectEqual(AgentMessageType.tool_result, envelope.msg_type);
+    try std.testing.expectEqual(@as(u32, 66), envelope.sender_slot);
+    try std.testing.expect(bytes.eql(&result.request_object, &envelope.request_object));
+    try std.testing.expect(bytes.eql(&result.output_object, &envelope.input_object));
+    try std.testing.expect(bytes.eql(&result.receipt, &envelope.grant_or_receipt));
+
+    const result_from_envelope = ToolResult.fromEnvelope(service, envelope).?;
+    try std.testing.expect(result_from_envelope.service_identity.eql(service.identity));
+    try std.testing.expect(bytes.eql(&result.request_object, &result_from_envelope.request_object));
+    try std.testing.expect(bytes.eql(&result.output_object, &result_from_envelope.output_object));
+    try std.testing.expect(bytes.eql(&result.receipt, &result_from_envelope.receipt));
+    try std.testing.expectEqual(ToolStatus.ok, result_from_envelope.status);
 }
 
 test "agent patch review and summary objects bind receipts" {
@@ -1427,6 +1695,11 @@ test "agent patch review and summary objects bind receipts" {
     try std.testing.expect(bytes.eql(&patch.patch_object, &decoded_patch.patch_object));
     try std.testing.expect(bytes.eql(&patch.receipt, &decoded_patch.receipt));
     try std.testing.expectEqual(StageStatus.completed, decoded_patch.status);
+    const patch_event = decoded_patch.event(20, clock.Stamp{ .keeper = .{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 } }, default_agents[4].identity);
+    try std.testing.expectEqual(AgentEventKind.artifact, patch_event.kind);
+    try std.testing.expect(bytes.eql(&patch.plan_object, &patch_event.input_object));
+    try std.testing.expect(bytes.eql(&patch.patch_object, &patch_event.output_object));
+    try std.testing.expect(bytes.eql(&patch.receipt, &patch_event.receipt));
 
     const review = ReviewObject{
         .patch_object = decoded_patch.patch_object,
@@ -1440,6 +1713,11 @@ test "agent patch review and summary objects bind receipts" {
     try std.testing.expect(bytes.eql(&review.patch_object, &decoded_review.patch_object));
     try std.testing.expect(bytes.eql(&review.receipt, &decoded_review.receipt));
     try std.testing.expectEqual(ReviewDecision.accepted, decoded_review.decision);
+    const review_event = decoded_review.event(21, clock.Stamp{ .keeper = .{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 } }, default_agents[5].identity);
+    try std.testing.expectEqual(AgentEventKind.stage_result, review_event.kind);
+    try std.testing.expect(bytes.eql(&review.patch_object, &review_event.input_object));
+    try std.testing.expect(bytes.eql(&review.review_object, &review_event.output_object));
+    try std.testing.expect(bytes.eql(&review.receipt, &review_event.receipt));
 
     const summary = SummaryObject{
         .review_object = decoded_review.review_object,
@@ -1453,6 +1731,11 @@ test "agent patch review and summary objects bind receipts" {
     try std.testing.expect(bytes.eql(&summary.summary_object, &decoded_summary.summary_object));
     try std.testing.expect(bytes.eql(&summary.receipt, &decoded_summary.receipt));
     try std.testing.expect(decoded_summary.retained);
+    const summary_event = decoded_summary.event(22, clock.Stamp{ .keeper = .{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 } }, default_agents[6].identity);
+    try std.testing.expectEqual(AgentEventKind.stage_result, summary_event.kind);
+    try std.testing.expect(bytes.eql(&summary.review_object, &summary_event.input_object));
+    try std.testing.expect(bytes.eql(&summary.summary_object, &summary_event.output_object));
+    try std.testing.expect(bytes.eql(&summary.receipt, &summary_event.receipt));
 }
 
 test "agent stream reports complete patch lengths" {

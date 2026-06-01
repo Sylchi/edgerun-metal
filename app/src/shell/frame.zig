@@ -28,7 +28,8 @@ pub const State = struct {
 };
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try renderWorkspace(scene, collector, bounds, state);
+    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+    try renderWorkspace(app, bounds, state);
 }
 
 pub fn contentHeight(width: f32, state: State) f32 {
@@ -37,8 +38,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
     return 600.0;
 }
 
-fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+fn renderWorkspace(app: component.View, bounds: ui.Rect, state: State) !void {
     const shell = try app.workspaceSurface(bounds, .{
         .background = design.Palette.bg,
         .top = .{
@@ -52,7 +52,7 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
     });
     try renderWorkspaceRail(app, shell.rail, state.location);
     try renderWorkspaceSidebar(app, shell.sidebar, state);
-    try renderWorkspaceMain(app, scene, collector, shell.main, state);
+    try renderWorkspaceMain(app, shell.main, state);
 }
 
 fn renderWorkspaceRail(app: component.View, bounds: ui.Rect, active: app_location.Location) !void {
@@ -95,11 +95,11 @@ fn renderWorkspaceSidebar(app: component.View, bounds: ui.Rect, state: State) !v
     }
 }
 
-fn renderWorkspaceMain(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, _: State) !void {
+fn renderWorkspaceMain(app: component.View, bounds: ui.Rect, _: State) !void {
     try app.fill(bounds, design.workspace_main_bg, 0.0);
     if (try app.pushClip(bounds)) {
         defer app.popClip();
-        try app_agent.render(scene, collector, shiftedPageBounds(bounds), .{});
+        try app_agent.renderView(app, shiftedPageBounds(bounds), .{});
     }
 }
 

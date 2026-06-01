@@ -210,9 +210,9 @@ pub const State = struct {
         const msg_text = std.fmt.bufPrint(&self.message_count_buf, "{d} messages", .{self.visibleMessageCount(selected.id)}) catch "messages";
         try app.composeBar(ui.Rect.init(bounds.x, compose_y, bounds.w, compose_h), .{
             .actions = &.{
-            .{ .id = image_button_id, .label = "Image", .icon = .photo },
-            .{ .id = video_button_id, .label = "Video", .icon = .video },
-            .{ .id = emoji_button_id, .label = "Emoji", .icon = .mood_smile },
+                .{ .id = image_button_id, .label = "Image", .icon = .photo },
+                .{ .id = video_button_id, .label = "Video", .icon = .video },
+                .{ .id = emoji_button_id, .label = "Emoji", .icon = .mood_smile },
             },
             .textarea_id = compose_textarea_id,
             .textarea_value = self.compose,

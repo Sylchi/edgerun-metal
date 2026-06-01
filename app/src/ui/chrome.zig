@@ -75,12 +75,12 @@ pub const ActionRouteNavProps = struct {
     variant: ?ui_component_common.ButtonVariant = null,
 };
 
-pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, props: ActionNavProps) (ui.RenderError || interaction.Error)!void {
+pub fn renderActionItemView(view: component_union.View, props: ActionNavProps) (ui.RenderError || interaction.Error)!void {
     const control: ui_component_common.ControlState = .{
         .active = props.active,
         .disabled = !props.enabled,
     };
-    const app = component_union.renderer(scene, collector, .{})
+    const app = view
         .withStyle(design.appStyle())
         .withControl(control)
         .withControlSize(props.control_size orelse .default);
@@ -93,9 +93,9 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
     );
 }
 
-pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
+pub fn renderRouteItemView(view: component_union.View, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
     const binding = app_location.topLevelBinding(props.button);
-    try renderNavItemView(component_union.renderer(scene, collector, .{ .style = design.appStyle() }), .{
+    try renderNavItemView(view, .{
         .kind = props.kind,
         .binding = binding,
         .bounds = props.bounds,
@@ -107,9 +107,9 @@ pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, prop
     });
 }
 
-pub fn renderActionRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: ActionRouteNavProps) (ui.RenderError || interaction.Error)!void {
+pub fn renderActionRouteItemView(view: component_union.View, props: ActionRouteNavProps) (ui.RenderError || interaction.Error)!void {
     const id = app_location.actionId(props.action);
-    try renderActionItem(scene, collector, .{
+    try renderActionItemView(view, .{
         .id = id,
         .bounds = props.bounds,
         .label = props.label,
@@ -121,11 +121,6 @@ pub fn renderActionRouteItem(scene: *ui.Scene, collector: *interaction.Collector
     });
 }
 
-pub const ActiveNav = enum {
-    none,
-    agent,
-};
-
 const palette = design.Palette;
 
 pub fn headerMode(content_w: f32) HeaderMode {
@@ -134,21 +129,13 @@ pub fn headerMode(content_w: f32) HeaderMode {
     return .desktop;
 }
 
-pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
+pub fn renderHeaderView(view: component_union.View, bounds: ui.Rect, content: ui.Rect) (ui.RenderError || interaction.Error)!void {
     const logo_binding = app_location.subNavBinding(.logo);
-    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
-
+    const app = view.withStyle(design.appStyle());
     try app.fill(bounds, palette.bg, 0.0);
     try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
 
     try app.buttonIconAt(ui.Rect.init(content.x, bounds.y + 13.0, 148.0, 36.0), logo_binding.id, "EdgeRun", .ghost, .terminal);
-}
-
-fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const logo_binding = app_location.subNavBinding(.logo);
-    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
-
-    try app.buttonIconAt(ui.Rect.init(content.x, bounds.y + 13.0, 118.0, 36.0), logo_binding.id, "EdgeRun", .ghost, .terminal);
 }
 
 pub fn renderNavItemView(view: component_union.View, props: NavProps) (ui.RenderError || interaction.Error)!void {
@@ -192,7 +179,8 @@ test "header renders compact chrome" {
     var scene = ui.Scene.init(&commands);
     var regions: [16]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(20, 0, 600, header_h), .none);
+    const app = component_union.renderer(&scene, &collector, .{ .style = design.appStyle() });
+    try renderHeaderView(app, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(20, 0, 600, header_h));
     try std.testing.expect(scene.written().len != 0);
 }
 

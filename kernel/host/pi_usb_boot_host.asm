@@ -12,6 +12,8 @@
 
 %include "host/bcm2708_usb_boot.inc"
 
+SAFE_FILE_BACKSLASH equ 0x5c
+
 ; ---- .data section ----
 section .data
 default_image:  db ".build/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin", 0
@@ -988,8 +990,8 @@ safe_file_name:
     je      .unsafe         ; empty
     cmp     byte [rbx], '/'
     je      .unsafe
-    cmp     byte [rbx], '\\'
-    je     .unsafe
+    cmp     byte [rbx], SAFE_FILE_BACKSLASH
+    je      .unsafe
     cmp     byte [rbx], '*'
     je      .unsafe
 
@@ -998,7 +1000,7 @@ safe_file_name:
 .scan:
     cmp     byte [rsi], 0
     je      .safe
-    cmp     byte [rsi], '\\'
+    cmp     byte [rsi], SAFE_FILE_BACKSLASH
     je      .unsafe
     ; Check for ".."
     cmp     byte [rsi], '.'
