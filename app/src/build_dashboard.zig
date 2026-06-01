@@ -55,8 +55,8 @@ const SourceStats = struct {
     loc: u32 = 0,
 };
 
-pub fn main(init: std.process.Init) !void {
-    const io = init.io;
+pub fn main() !void {
+    const io: std.Io = .{};
     const alloc = std.heap.page_allocator;
     const data = try collectData(alloc, io);
     defer freeData(alloc, data);
@@ -115,7 +115,7 @@ fn collectSourceStats(alloc: std.mem.Allocator, io: std.Io, root_path: []const u
         if (is_asm) stats.asm_files += 1;
         if (is_inc) stats.inc_files += 1;
 
-        const source = try root.readFileAlloc(io, entry.path, alloc, .limited(16 * 1024 * 1024));
+        const source = try root.readFileAlloc(io, entry.path, alloc, std.Io.Limit.limited(16 * 1024 * 1024));
         defer alloc.free(source);
         stats.loc += countLines(source);
     }

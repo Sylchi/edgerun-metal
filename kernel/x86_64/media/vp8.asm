@@ -1940,6 +1940,122 @@ er_fn er_vp8_parse_loop_filter_header
     er_pop  rbx, r12, r13
     er_ret
 
+; er_vp8_loop_filter_parameters(header, macroblock_header, frame_type, out) -> eax=1 when active, eax=0 when disabled, rdx=error
+; out: edge_limit u8, interior_limit u8, hev_threshold u8.
+; rdi=compressed_header, rsi=macroblock_header, edx=frame_type, rcx=out
+er_fn er_vp8_loop_filter_parameters
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     byte [rcx + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT], 0
+    mov     byte [rcx + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT], 0
+    mov     byte [rcx + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD], 0
+    movzx   r8d, byte [rsi + VP8_MACROBLOCK_HEADER_SEGMENT_ID]
+    cmp     r8d, VP8_SEGMENT_COUNT
+    jae     .corrupt
+    movsx   eax, byte [rdi + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_LOOP_FILTER_DELTAS + r8]
+    cmp     byte [rdi + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_QUANT_ABSOLUTE], 0
+    jne     .have_segment_level
+    movzx   r9d, byte [rdi + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_LEVEL]
+    add     eax, r9d
+.have_segment_level:
+    cmp     byte [rdi + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_DELTA_ENABLED], 0
+    je      .clamp_level
+    movzx   r9d, byte [rsi + VP8_MACROBLOCK_HEADER_PREDICTION]
+    cmp     r9d, VP8_MACROBLOCK_PREDICTION_INTRA
+    je      .ref_delta
+    cmp     r9d, VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    ja      .corrupt
+    movzx   r10d, byte [rsi + VP8_MACROBLOCK_HEADER_REFERENCE]
+    cmp     r10d, VP8_REFERENCE_NAME_ALTERNATE
+    ja      .corrupt
+    inc     r10d
+    jmp     .add_ref_delta
+.ref_delta:
+    xor     r10d, r10d
+.add_ref_delta:
+    movsx   r11d, byte [rdi + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_REF_DELTAS + r10]
+    add     eax, r11d
+    cmp     r9d, VP8_MACROBLOCK_PREDICTION_INTRA
+    jne     .inter_mode_delta
+    cmp     byte [rsi + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_B_PRED
+    jne     .clamp_level
+    xor     r10d, r10d
+    jmp     .add_mode_delta
+.inter_mode_delta:
+    cmp     r9d, VP8_MACROBLOCK_PREDICTION_INTER_ZERO
+    je      .zero_mode_delta
+    mov     r10d, VP8_LOOP_FILTER_MODE_NEW
+    jmp     .add_mode_delta
+.zero_mode_delta:
+    mov     r10d, VP8_LOOP_FILTER_MODE_ZERO
+.add_mode_delta:
+    movsx   r11d, byte [rdi + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_MODE_DELTAS + r10]
+    add     eax, r11d
+.clamp_level:
+    test    eax, eax
+    jle     .disabled
+    cmp     eax, VP8_LOOP_FILTER_LEVEL_MAX
+    jle     .level_ready
+    mov     eax, VP8_LOOP_FILTER_LEVEL_MAX
+.level_ready:
+    mov     [rcx + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT], al
+    mov     r8d, eax
+    movzx   r9d, byte [rdi + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_SHARPNESS]
+    test    r9d, r9d
+    jz      .interior_min
+    cmp     r9d, VP8_LOOP_FILTER_SHARPNESS_HIGH
+    ja      .sharp_shift_two
+    shr     r8d, 1
+    jmp     .sharp_limit
+.sharp_shift_two:
+    shr     r8d, 2
+.sharp_limit:
+    mov     r10d, VP8_LOOP_FILTER_SHARPNESS_LIMIT_BASE
+    sub     r10d, r9d
+    cmp     r8d, r10d
+    jbe     .interior_min
+    mov     r8d, r10d
+.interior_min:
+    test    r8d, r8d
+    jnz     .write_interior
+    mov     r8d, 1
+.write_interior:
+    mov     [rcx + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT], r8b
+    xor     r8d, r8d
+    cmp     eax, VP8_LOOP_FILTER_HEV_LEVEL_0
+    jb      .write_hev
+    inc     r8d
+    cmp     eax, VP8_LOOP_FILTER_HEV_LEVEL_1
+    jb      .inter_hev
+    inc     r8d
+.inter_hev:
+    cmp     edx, VP8_FRAME_TYPE_INTER
+    jne     .write_hev
+    cmp     eax, VP8_LOOP_FILTER_HEV_INTER_LEVEL
+    jb      .write_hev
+    inc     r8d
+.write_hev:
+    mov     [rcx + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD], r8b
+    mov     eax, 1
+    er_ok
+    er_ret
+.disabled:
+    xor     eax, eax
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
 ; er_vp8_read_reference_copy(reader) -> eax=copy enum, rdx=error
 ; rdi=reader. Values: 0 none, 1 last, 2 golden. Literal 3 is corrupt.
 er_fn er_vp8_read_reference_copy
@@ -4624,6 +4740,350 @@ er_fn er_vp8_filter_normal_macroblock_horizontal_edge
     er_err  ERROR_INVALID_PARAM
 .done_filter_horizontal:
     er_stack_free 48
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_filter_normal_subblock_edge_pixel(plane, q0_index, stride, edge_limit, interior_limit, hev_threshold)
+; -> eax=1 if filtered, eax=0 if threshold rejected, rdx=error
+er_fn er_vp8_filter_normal_subblock_edge_pixel
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 48
+    test    rdi, rdi
+    jz      .invalid_param
+    test    edx, edx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     r15d, ecx
+    mov     ebx, r8d
+    mov     [rsp], r9d
+    mov     ecx, r13d
+    mov     eax, r14d
+    shl     eax, 2
+    sub     ecx, eax
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 8], eax
+    mov     ecx, r13d
+    mov     eax, r14d
+    lea     eax, [rax + rax * 2]
+    sub     ecx, eax
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 12], eax
+    mov     ecx, r13d
+    mov     eax, r14d
+    shl     eax, 1
+    sub     ecx, eax
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 16], eax
+    mov     ecx, r13d
+    sub     ecx, r14d
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 20], eax
+    movzx   eax, byte [r12 + r13]
+    mov     [rsp + 24], eax
+    mov     ecx, r13d
+    add     ecx, r14d
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 28], eax
+    mov     ecx, r13d
+    mov     eax, r14d
+    shl     eax, 1
+    add     ecx, eax
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 32], eax
+    mov     ecx, r13d
+    mov     eax, r14d
+    lea     eax, [rax + rax * 2]
+    add     ecx, eax
+    movzx   eax, byte [r12 + rcx]
+    mov     [rsp + 36], eax
+    mov     edi, [rsp + 20]
+    mov     esi, [rsp + 24]
+    call    er_vp8_abs_diff_u8
+    lea     eax, [rax * 2]
+    mov     r10d, eax
+    mov     edi, [rsp + 16]
+    mov     esi, [rsp + 28]
+    call    er_vp8_abs_diff_u8
+    shr     eax, 1
+    add     r10d, eax
+    mov     eax, r15d
+    shl     eax, 1
+    add     eax, ebx
+    cmp     eax, 255
+    jbe     .limit_ready
+    mov     eax, 255
+.limit_ready:
+    cmp     r10d, eax
+    ja      .rejected
+    mov     edi, [rsp + 8]
+    mov     esi, [rsp + 12]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 12]
+    mov     esi, [rsp + 16]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 16]
+    mov     esi, [rsp + 20]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 36]
+    mov     esi, [rsp + 32]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 32]
+    mov     esi, [rsp + 28]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 28]
+    mov     esi, [rsp + 24]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, ebx
+    ja      .rejected
+    mov     edi, [rsp + 16]
+    mov     esi, [rsp + 20]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, [rsp]
+    ja      .write_common_outer
+    mov     edi, [rsp + 28]
+    mov     esi, [rsp + 24]
+    call    er_vp8_abs_diff_u8
+    cmp     eax, [rsp]
+    ja      .write_common_outer
+    mov     eax, [rsp + 24]
+    sub     eax, [rsp + 20]
+    lea     edi, [rax + rax * 2]
+    call    er_vp8_saturate_i8
+    mov     r11d, eax
+    mov     dword [rsp + 44], 0
+    jmp     .common_adjust_ready
+.write_common_outer:
+    mov     eax, [rsp + 24]
+    sub     eax, [rsp + 20]
+    lea     edi, [rax + rax * 2]
+    mov     eax, [rsp + 16]
+    sub     eax, [rsp + 28]
+    add     edi, eax
+    call    er_vp8_saturate_i8
+    mov     r11d, eax
+    mov     dword [rsp + 44], 1
+.common_adjust_ready:
+    mov     eax, r11d
+    add     eax, 4
+    cmp     eax, 127
+    jle     .f1_ready
+    mov     eax, 127
+.f1_ready:
+    sar     eax, 3
+    mov     [rsp + 40], eax
+    mov     edi, [rsp + 24]
+    sub     edi, eax
+    call    er_vp8_clamp_u8
+    mov     [r12 + r13], al
+    mov     eax, r11d
+    add     eax, 3
+    cmp     eax, 127
+    jle     .f2_ready
+    mov     eax, 127
+.f2_ready:
+    sar     eax, 3
+    mov     edi, [rsp + 20]
+    add     edi, eax
+    call    er_vp8_clamp_u8
+    mov     ecx, r13d
+    sub     ecx, r14d
+    mov     [r12 + rcx], al
+    cmp     dword [rsp + 44], 0
+    jne     .filtered
+    mov     edi, [rsp + 16]
+    mov     eax, [rsp + 40]
+    inc     eax
+    sar     eax, 1
+    add     edi, eax
+    call    er_vp8_clamp_u8
+    mov     ecx, r13d
+    mov     edx, r14d
+    lea     edx, [rdx + rdx]
+    sub     ecx, edx
+    mov     [r12 + rcx], al
+    mov     edi, [rsp + 28]
+    mov     eax, [rsp + 40]
+    inc     eax
+    sar     eax, 1
+    sub     edi, eax
+    call    er_vp8_clamp_u8
+    mov     ecx, r13d
+    add     ecx, r14d
+    mov     [r12 + rcx], al
+.filtered:
+    mov     eax, 1
+    er_ok
+    jmp     .done_subblock_pixel
+.rejected:
+    xor     eax, eax
+    er_ok
+    jmp     .done_subblock_pixel
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_subblock_pixel:
+    er_stack_free 48
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_filter_normal_subblock_vertical_edge(plane, width, height, edge_x, edge_y, edge_limit, interior_limit, hev_threshold, size)
+; -> eax=edges filtered, rdx=error
+er_fn er_vp8_filter_normal_subblock_vertical_edge
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 24
+    test    rdi, rdi
+    jz      .invalid_param
+    test    esi, esi
+    jz      .invalid_param
+    test    edx, edx
+    jz      .invalid_param
+    cmp     ecx, 4
+    jb      .ok_zero
+    mov     eax, ecx
+    add     eax, 3
+    cmp     eax, esi
+    jae     .ok_zero
+    mov     eax, [rsp + 88]
+    test    eax, eax
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     r15d, ecx
+    mov     ebx, r8d
+    mov     [rsp], r9d
+    mov     eax, [rsp + 72]
+    mov     [rsp + 4], eax
+    mov     eax, [rsp + 80]
+    mov     [rsp + 8], eax
+    mov     eax, [rsp + 88]
+    imul    eax, VP8_CHROMA_BLOCK_SIZE
+    mov     [rsp + 12], eax
+    mov     dword [rsp + 16], 0
+    xor     r11d, r11d
+.row_loop:
+    cmp     r11d, [rsp + 12]
+    jae     .ok
+    mov     eax, ebx
+    add     eax, r11d
+    cmp     eax, r14d
+    jae     .ok
+    imul    eax, r13d
+    add     eax, r15d
+    mov     rdi, r12
+    mov     esi, eax
+    mov     edx, 1
+    mov     ecx, [rsp]
+    mov     r8d, [rsp + 4]
+    mov     r9d, [rsp + 8]
+    push    r11
+    call    er_vp8_filter_normal_subblock_edge_pixel
+    pop     r11
+    test    edx, edx
+    jnz     .done_vertical
+    add     dword [rsp + 16], eax
+    inc     r11d
+    jmp     .row_loop
+.ok_zero:
+    xor     eax, eax
+    er_ok
+    jmp     .done_vertical
+.ok:
+    mov     eax, [rsp + 16]
+    er_ok
+    jmp     .done_vertical
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_vertical:
+    er_stack_free 24
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_filter_normal_subblock_horizontal_edge(plane, width, height, edge_x, edge_y, edge_limit, interior_limit, hev_threshold, size)
+; -> eax=edges filtered, rdx=error
+er_fn er_vp8_filter_normal_subblock_horizontal_edge
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 24
+    test    rdi, rdi
+    jz      .invalid_param
+    test    esi, esi
+    jz      .invalid_param
+    test    edx, edx
+    jz      .invalid_param
+    cmp     r8d, 4
+    jb      .ok_zero
+    mov     eax, r8d
+    add     eax, 3
+    cmp     eax, edx
+    jae     .ok_zero
+    mov     eax, [rsp + 88]
+    test    eax, eax
+    jz      .invalid_param
+    imul    eax, VP8_CHROMA_BLOCK_SIZE
+    mov     [rsp + 12], eax
+    mov     eax, ecx
+    add     eax, [rsp + 12]
+    cmp     eax, esi
+    ja      .ok_zero
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     r15d, ecx
+    mov     ebx, r8d
+    mov     [rsp], r9d
+    mov     eax, [rsp + 72]
+    mov     [rsp + 4], eax
+    mov     eax, [rsp + 80]
+    mov     [rsp + 8], eax
+    mov     dword [rsp + 16], 0
+    xor     r11d, r11d
+.col_loop:
+    cmp     r11d, [rsp + 12]
+    jae     .ok
+    mov     eax, ebx
+    imul    eax, r13d
+    add     eax, r15d
+    add     eax, r11d
+    mov     rdi, r12
+    mov     esi, eax
+    mov     edx, r13d
+    mov     ecx, [rsp]
+    mov     r8d, [rsp + 4]
+    mov     r9d, [rsp + 8]
+    push    r11
+    call    er_vp8_filter_normal_subblock_edge_pixel
+    pop     r11
+    test    edx, edx
+    jnz     .done_horizontal
+    add     dword [rsp + 16], eax
+    inc     r11d
+    jmp     .col_loop
+.ok_zero:
+    xor     eax, eax
+    er_ok
+    jmp     .done_horizontal
+.ok:
+    mov     eax, [rsp + 16]
+    er_ok
+    jmp     .done_horizontal
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_horizontal:
+    er_stack_free 24
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 

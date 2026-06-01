@@ -1371,6 +1371,7 @@ EOF
  expect_er_asm_builds "kernel/driver/portio.asm" "portio flat binary"
  expect_er_asm_builds "${ASM_DIR}/wasm/test_table.asm" "test table flat binary"
  expect_er_asm_builds "${ASM_DIR}/rt/math_hash.asm" "math hash flat binary"
+ expect_er_asm_builds "kernel/driver/acpi.asm" "acpi flat binary"
  expect_er_asm_reject "$bad_hex_src" "out-of-range hex immediate"
  expect_er_asm_reject "$bad_dup_equ_src" "duplicate equ"
  expect_er_asm_reject "$bad_define_tail_src" "trailing define junk"
@@ -1728,6 +1729,15 @@ cmd_jc3248_frame() {
  cmd_app_exe src/jc3248_display_frame.zig edgerun-jc3248-frame
 }
 
+cmd_build_dashboard() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/build_dashboard.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-build-dashboard")
+}
+
 cmd_tpm_real_check_build() {
  mkdir -p "${BUILD_DIR}/app"
  (cd app && zig build-exe -ODebug \
@@ -1750,6 +1760,7 @@ cmd_app() {
  cmd_project_intro_video
  cmd_chat_preview
  cmd_jc3248_frame
+ cmd_build_dashboard
 }
 
 cmd_test() {
@@ -2377,6 +2388,7 @@ EdgeRun build targets:
   project-intro-video Build and run project intro renderer without app/build.zig
   chat-preview       Build and run chat preview renderer without app/build.zig
   jc3248-frame       Build and run JC3248 frame renderer without app/build.zig
+  build-dashboard    Build dashboard renderer without app/build.zig
   tpm-real-check     Build real TPM checker without app/build.zig
   real-tpm           Build and run real TPM checker against /dev/tpmrm0
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
@@ -2436,6 +2448,7 @@ case "${1:-help}" in
 	project-intro-video) cmd_project_intro_video ;;
 	chat-preview)   cmd_chat_preview ;;
 	jc3248-frame)   cmd_jc3248_frame ;;
+	build-dashboard) cmd_build_dashboard ;;
 	tpm-real-check) cmd_tpm_real_check_build ;;
 	real-tpm)       cmd_real_tpm ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;

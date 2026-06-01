@@ -1499,7 +1499,7 @@ er_fn match_acpi_find_table_setup_ops
     jmp     .yes
 .mov_ebx_imm_not_u32:
     pop     r14
-    jmp     .no
+    jmp     .no_pop
 .mov_esi_sdt_length:
     pop     r14
     lea     rdi, [rel tok_esi]
@@ -1763,7 +1763,7 @@ er_fn match_acpi_find_table_setup_ops
     jmp     .yes
 .sub_esi_not_u32:
     pop     r14
-    jmp     .no
+    jmp     .no_pop
 .yes:
     mov     eax, 1
     ret
@@ -1897,9 +1897,11 @@ er_fn match_acpi_checksum_ops
     test    eax, eax
     jz      .movzx_eax_al_after_comma
     pop     rax
+    push    r14
     call    expect_r12_plus_rcx
     test    eax, eax
-    jz      .no_pop
+    jz      .movzx_eax_mcfg_start
+    pop     rax
     call    expect_line_end
     test    eax, eax
     jz      .no_pop
@@ -1913,6 +1915,39 @@ er_fn match_acpi_checksum_ops
     mov     edi, 0x04
     call    append_text_byte
     mov     edi, 0x0c
+    call    append_text_byte
+    jmp     .yes
+.movzx_eax_mcfg_start:
+    pop     r14
+    lea     rdi, [rel tok_mcfg_alloc_start_close]
+    mov     esi, tok_mcfg_alloc_start_close_len
+    push    r14
+    call    expect_rdi_mcfg_field
+    test    eax, eax
+    jz      .movzx_eax_mcfg_end
+    pop     rax
+    mov     r10d, 54
+    jmp     .movzx_eax_mcfg_emit
+.movzx_eax_mcfg_end:
+    pop     r14
+    lea     rdi, [rel tok_mcfg_alloc_end_close]
+    mov     esi, tok_mcfg_alloc_end_close_len
+    call    expect_rdi_mcfg_field
+    test    eax, eax
+    jz      .no_pop
+    mov     r10d, 55
+.movzx_eax_mcfg_emit:
+    call    expect_line_end
+    test    eax, eax
+    jz      .no_pop
+    pop     rax
+    mov     edi, 0x0f
+    call    append_text_byte
+    mov     edi, 0xb6
+    call    append_text_byte
+    mov     edi, 0x47
+    call    append_text_byte
+    mov     edi, r10d
     call    append_text_byte
     jmp     .yes
 .movzx_eax_al_after_comma:
@@ -2818,8 +2853,7 @@ er_fn match_acpi_checksum_ops
     call    match_acpi_store_bl_ptr
     test    eax, eax
     jnz     .yes
-    xor     eax, eax
-    ret
+    jmp     .no_pop
 .yes:
     mov     eax, 1
     ret

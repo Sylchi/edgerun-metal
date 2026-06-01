@@ -30,21 +30,6 @@ pub fn build(b: *std.Build) void {
     const media_video_dump_step = b.step("media-video-dump", "Decode a VP8 IVF/WebM file to PPM frames");
     media_video_dump_step.dependOn(&run_media_video_dump.step);
 
-    const build_dashboard = b.addExecutable(.{
-        .name = "edgerun-build-dashboard",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/build_dashboard.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    addBootstrapStd(b, build_dashboard, asm_std_obj);
-
-    const run_build_dashboard = b.addRunArtifact(build_dashboard);
-    const build_dashboard_step = b.step("build-dashboard", "Render the build dashboard PPM");
-    build_dashboard_step.dependOn(&run_build_dashboard.step);
-
     const wayland_window = b.addExecutable(.{
         .name = "edgerun-wayland-window",
         .root_module = b.createModule(.{

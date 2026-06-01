@@ -381,6 +381,11 @@ pub fn ArrayListUnmanaged(comptime T: type) type {
             return .{};
         }
 
+        pub fn initCapacity(allocator: mem.Allocator, capacity: usize) error{OutOfMemory}!@This() {
+            if (capacity == 0) return .{};
+            return .{ .items = (try allocator.alloc(T, capacity))[0..0], .capacity = capacity };
+        }
+
         pub fn deinit(_: *@This(), _: mem.Allocator) void {}
 
         pub fn append(self: *@This(), allocator: mem.Allocator, value: T) !void {
@@ -429,7 +434,10 @@ pub const fmt = struct {
     }
 
     pub fn parseInt(comptime T: type, text: []const u8, radix: u8) !T {
-        if (text.len != 0 and text[0] == '-') return -@as(T, @intCast(try parseUnsigned(unsignedPair(T), text[1..], radix)));
+        if (text.len != 0 and text[0] == '-') {
+            if (@typeInfo(T).int.signedness == .unsigned) return error.InvalidCharacter;
+            return -@as(T, @intCast(try parseUnsigned(unsignedPair(T), text[1..], radix)));
+        }
         return @intCast(try parseUnsigned(unsignedPair(T), text, radix));
     }
 
@@ -502,6 +510,14 @@ pub const fmt = struct {
 };
 
 pub const Io = struct {
+    pub const Limit = struct {
+        value: usize,
+
+        pub fn limited(value: usize) Limit {
+            return .{ .value = value };
+        }
+    };
+
     pub const Writer = struct {
         pub fn print(_: *Writer, comptime _: []const u8, _: anytype) !void {}
         pub fn flush(_: *Writer) !void {}
@@ -516,10 +532,28 @@ pub const Io = struct {
     };
 
     pub const Dir = struct {
+        pub const WalkEntry = struct {
+            pub const Kind = enum { file, directory };
+            kind: Kind,
+            basename: []const u8,
+            path: []const u8,
+        };
+
+        pub const Walker = struct {
+            pub fn next(_: *Walker, _: Io) !?WalkEntry { return null; }
+            pub fn deinit(_: *Walker) void {}
+        };
+
+        pub const Stat = struct { size: u64 = 0 };
+
         pub fn cwd() Dir { return .{}; }
+        pub fn close(_: Dir, _: Io) void {}
         pub fn createDirPath(_: Dir, _: Io, _: []const u8) !void {}
         pub fn createFile(_: Dir, _: Io, _: []const u8, _: anytype) !File { return .{}; }
+        pub fn openDir(_: Dir, _: Io, _: []const u8, _: anytype) !Dir { return .{}; }
         pub fn openDirAbsolute(_: Io, _: []const u8, _: anytype) !Dir { return .{}; }
+        pub fn statFile(_: Dir, _: Io, _: []const u8, _: anytype) !Stat { return .{}; }
+        pub fn walk(_: Dir, _: mem.Allocator) !Walker { return .{}; }
         pub fn readFileAlloc(_: Dir, _: Io, _: []const u8, allocator: mem.Allocator, _: anytype) ![]u8 { return allocator.alloc(u8, 0); }
     };
 
@@ -534,6 +568,17 @@ pub const Io = struct {
 pub const process = struct {
     pub const Init = struct { minimal: struct { args: Args, environ: Environ = .{} } = .{ .args = .{} }, io: Io = .{} };
     pub const Environ = struct { block: ?[*:null]const ?[*:0]const u8 = null };
+    pub const Term = union(enum) { exited: u8 };
+    pub const RunResult = struct { stdout: []u8, stderr: []u8, term: Term };
+
+    pub fn run(allocator: mem.Allocator, _: Io, _: anytype) !RunResult {
+        return .{
+            .stdout = try allocator.alloc(u8, 0),
+            .stderr = try allocator.alloc(u8, 0),
+            .term = .{ .exited = 0 },
+        };
+    }
+
     pub const Args = struct {
         vector: []const [*:0]const u8 = &.{},
         pub const Iterator = struct {

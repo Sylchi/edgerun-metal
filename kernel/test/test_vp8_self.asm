@@ -31,6 +31,7 @@ extern er_vp8_ac_quant
 extern er_vp8_build_dequant
 extern er_vp8_parse_segmentation_header
 extern er_vp8_parse_loop_filter_header
+extern er_vp8_loop_filter_parameters
 extern er_vp8_parse_compressed_key_frame_header
 extern er_vp8_parse_compressed_inter_frame_header
 extern er_vp8_read_key_macroblock_header
@@ -77,6 +78,8 @@ extern er_vp8_abs_diff_u8
 extern er_vp8_saturate_i8
 extern er_vp8_filter_normal_macroblock_vertical_edge
 extern er_vp8_filter_normal_macroblock_horizontal_edge
+extern er_vp8_filter_normal_subblock_vertical_edge
+extern er_vp8_filter_normal_subblock_horizontal_edge
 extern er_vp8_filter_simple_vertical_edge
 extern er_vp8_filter_simple_horizontal_edge
 extern er_vp8_dequantize_y2_block
@@ -176,6 +179,7 @@ quant:          resb VP8_QUANT_SIZE
 dequant:        resb VP8_DEQUANT_SIZE
 segment_desc:   resb VP8_SEGMENT_HEADER_SIZE
 loop_filter:    resb VP8_LOOP_FILTER_HEADER_SIZE
+loop_filter_params: resb VP8_LOOP_FILTER_PARAM_SIZE
 reference:      resb VP8_REFERENCE_HEADER_SIZE
 motion_vector:  resb VP8_MOTION_VECTOR_SIZE
 motion_vector_other: resb VP8_MOTION_VECTOR_SIZE
@@ -1223,8 +1227,111 @@ _start:
     cmp     byte [rel loop_filter + VP8_LOOP_FILTER_MODE_DELTAS + 3], 0
     jne     .fail_loop_filter_full
     inc     qword [rel passed]
-    jmp     .compressed_key_header
+    jmp     .loop_filter_parameters_disabled
 .fail_loop_filter_full:
+    inc     qword [rel failed]
+
+.loop_filter_parameters_disabled:
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     edx, VP8_COMPRESSED_HEADER_SIZE
+    call    er_vp8_memset
+    mov     rdi, macroblock_header
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_HEADER_SIZE
+    call    er_vp8_memset
+    mov     rdi, loop_filter_params
+    mov     esi, 0xaa
+    mov     edx, VP8_LOOP_FILTER_PARAM_SIZE
+    call    er_vp8_memset
+    mov     rdi, compressed_header
+    mov     rsi, macroblock_header
+    mov     edx, VP8_FRAME_TYPE_KEY
+    mov     rcx, loop_filter_params
+    call    er_vp8_loop_filter_parameters
+    test    eax, eax
+    jnz     .fail_loop_filter_parameters_disabled
+    test    edx, edx
+    jnz     .fail_loop_filter_parameters_disabled
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT], 0
+    jne     .fail_loop_filter_parameters_disabled
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT], 0
+    jne     .fail_loop_filter_parameters_disabled
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD], 0
+    jne     .fail_loop_filter_parameters_disabled
+    inc     qword [rel passed]
+    jmp     .loop_filter_parameters_key
+.fail_loop_filter_parameters_disabled:
+    inc     qword [rel failed]
+
+.loop_filter_parameters_key:
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     edx, VP8_COMPRESSED_HEADER_SIZE
+    call    er_vp8_memset
+    mov     rdi, macroblock_header
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_HEADER_SIZE
+    call    er_vp8_memset
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_LEVEL], 20
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTRA
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_DC
+    mov     rdi, compressed_header
+    mov     rsi, macroblock_header
+    mov     edx, VP8_FRAME_TYPE_KEY
+    mov     rcx, loop_filter_params
+    call    er_vp8_loop_filter_parameters
+    cmp     eax, 1
+    jne     .fail_loop_filter_parameters_key
+    test    edx, edx
+    jnz     .fail_loop_filter_parameters_key
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT], 20
+    jne     .fail_loop_filter_parameters_key
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT], 20
+    jne     .fail_loop_filter_parameters_key
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD], 1
+    jne     .fail_loop_filter_parameters_key
+    inc     qword [rel passed]
+    jmp     .loop_filter_parameters_delta
+.fail_loop_filter_parameters_key:
+    inc     qword [rel failed]
+
+.loop_filter_parameters_delta:
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     edx, VP8_COMPRESSED_HEADER_SIZE
+    call    er_vp8_memset
+    mov     rdi, macroblock_header
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_HEADER_SIZE
+    call    er_vp8_memset
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_LEVEL], 30
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_SHARPNESS], 5
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_DELTA_ENABLED], 1
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_LOOP_FILTER_DELTAS + 2], 4
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_REF_DELTAS + VP8_LOOP_FILTER_REF_GOLDEN], 3
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_MODE_DELTAS + VP8_LOOP_FILTER_MODE_NEW], 0xf6
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 2
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_REFERENCE], VP8_REFERENCE_NAME_GOLDEN
+    mov     rdi, compressed_header
+    mov     rsi, macroblock_header
+    mov     edx, VP8_FRAME_TYPE_INTER
+    mov     rcx, loop_filter_params
+    call    er_vp8_loop_filter_parameters
+    cmp     eax, 1
+    jne     .fail_loop_filter_parameters_delta
+    test    edx, edx
+    jnz     .fail_loop_filter_parameters_delta
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT], 27
+    jne     .fail_loop_filter_parameters_delta
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT], 4
+    jne     .fail_loop_filter_parameters_delta
+    cmp     byte [rel loop_filter_params + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD], 2
+    jne     .fail_loop_filter_parameters_delta
+    inc     qword [rel passed]
+    jmp     .compressed_key_header
+.fail_loop_filter_parameters_delta:
     inc     qword [rel failed]
 
 .compressed_key_header:
@@ -2488,6 +2595,107 @@ _start:
     cmp     byte [rel frame_y + 8 * VP8_TEST_FRAME_WIDTH], 83
     jne     .fail_macroblock_geometry
     cmp     byte [rel frame_y + 9 * VP8_TEST_FRAME_WIDTH], 84
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_subblock_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_subblock_filter_right
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_subblock_filter_plane
+.paint_subblock_filter_right:
+    xor     r8d, r8d
+.paint_subblock_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_subblock_filter_vertical
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    add     eax, 8
+    xor     ecx, ecx
+.paint_subblock_filter_col:
+    cmp     ecx, 12
+    jae     .paint_subblock_filter_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_subblock_filter_col
+.paint_subblock_filter_next_row:
+    inc     r8d
+    jmp     .paint_subblock_filter_row
+.call_subblock_filter_vertical:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_MACROBLOCK_SIZE
+    mov     ecx, 8
+    xor     r8d, r8d
+    mov     r9d, 20
+    push    2
+    push    0
+    push    20
+    call    er_vp8_filter_normal_subblock_vertical_edge
+    add     rsp, 24
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 10], 84
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_subblock_horizontal_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_subblock_horizontal_filter_bottom
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_subblock_horizontal_filter_plane
+.paint_subblock_horizontal_filter_bottom:
+    mov     r8d, 8
+.paint_subblock_horizontal_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_subblock_filter_horizontal
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    xor     ecx, ecx
+.paint_subblock_horizontal_filter_col:
+    cmp     ecx, VP8_MACROBLOCK_SIZE
+    jae     .paint_subblock_horizontal_filter_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_subblock_horizontal_filter_col
+.paint_subblock_horizontal_filter_next_row:
+    inc     r8d
+    jmp     .paint_subblock_horizontal_filter_row
+.call_subblock_filter_horizontal:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_TEST_FRAME_HEIGHT
+    xor     ecx, ecx
+    mov     r8d, 8
+    mov     r9d, 20
+    push    2
+    push    0
+    push    20
+    call    er_vp8_filter_normal_subblock_horizontal_edge
+    add     rsp, 24
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6 * VP8_TEST_FRAME_WIDTH], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7 * VP8_TEST_FRAME_WIDTH], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8 * VP8_TEST_FRAME_WIDTH], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9 * VP8_TEST_FRAME_WIDTH], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 10 * VP8_TEST_FRAME_WIDTH], 84
     jne     .fail_macroblock_geometry
     inc     qword [rel passed]
     jmp     .coeff_tables
