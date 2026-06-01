@@ -159,6 +159,8 @@ tok_inc: db "inc"
 tok_inc_len equ $ - tok_inc
 tok_dec: db "dec"
 tok_dec_len equ $ - tok_dec
+tok_lodsb: db "lodsb"
+tok_lodsb_len equ $ - tok_lodsb
 tok_cld: db "cld"
 tok_cld_len equ $ - tok_cld
 tok_std: db "std"
@@ -315,10 +317,14 @@ tok_r15: db "r15"
 tok_r15_len equ $ - tok_r15
 tok_ax: db "ax"
 tok_ax_len equ $ - tok_ax
+tok_bx: db "bx"
+tok_bx_len equ $ - tok_bx
 tok_dil: db "dil"
 tok_dil_len equ $ - tok_dil
 tok_al: db "al"
 tok_al_len equ $ - tok_al
+tok_ah: db "ah"
+tok_ah_len equ $ - tok_ah
 tok_cl: db "cl"
 tok_cl_len equ $ - tok_cl
 tok_dl: db "dl"
@@ -409,6 +415,28 @@ tok_madt_lapic_addr_close: db "MADT_LAPIC_ADDR]"
 tok_madt_lapic_addr_close_len equ $ - tok_madt_lapic_addr_close
 tok_madt_entries: db "MADT_ENTRIES"
 tok_madt_entries_len equ $ - tok_madt_entries
+tok_uart_dll: db "UART_DLL"
+tok_uart_dll_len equ $ - tok_uart_dll
+tok_uart_dlm: db "UART_DLM"
+tok_uart_dlm_len equ $ - tok_uart_dlm
+tok_uart_ier: db "UART_IER"
+tok_uart_ier_len equ $ - tok_uart_ier
+tok_uart_fcr: db "UART_FCR"
+tok_uart_fcr_len equ $ - tok_uart_fcr
+tok_uart_lcr: db "UART_LCR"
+tok_uart_lcr_len equ $ - tok_uart_lcr
+tok_uart_mcr: db "UART_MCR"
+tok_uart_mcr_len equ $ - tok_uart_mcr
+tok_uart_lsr: db "UART_LSR"
+tok_uart_lsr_len equ $ - tok_uart_lsr
+tok_lcr_dlab: db "LCR_DLAB"
+tok_lcr_dlab_len equ $ - tok_lcr_dlab
+tok_lcr_8n1: db "LCR_8N1"
+tok_lcr_8n1_len equ $ - tok_lcr_8n1
+tok_lsr_thr_empty: db "LSR_THR_EMPTY"
+tok_lsr_thr_empty_len equ $ - tok_lsr_thr_empty
+tok_lsr_data_ready: db "LSR_DATA_READY"
+tok_lsr_data_ready_len equ $ - tok_lsr_data_ready
 tok_madt_ioapic_addr_close: db "MADT_IOAPIC_ADDR]"
 tok_madt_ioapic_addr_close_len equ $ - tok_madt_ioapic_addr_close
 tok_madt_ioapic_gsi_base_close: db "MADT_IOAPIC_GSI_BASE]"

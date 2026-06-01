@@ -21,6 +21,7 @@ BUILD_DIR=".build"
 ASM_BUILD="${BUILD_DIR}/kernel"
 ASM_DIR="kernel/x86_64"
 TEST_DIR="kernel/test"
+TEST_REGISTRY="${TEST_DIR}/registry.tsv"
 ER_ASM="${ER_ASM:-}"
 YASM="${YASM:-yasm}"
 ASM_INC="-I kernel"
@@ -144,6 +145,7 @@ KERNEL_ASM_SRCS="
 	media/av1_bits.asm
 	media/vp8.asm
 	media/vp9.asm
+	media/image_formats.asm
 	media/webp.asm
 	media/mp4.asm
 	media/av1_obu.asm
@@ -448,86 +450,7 @@ build_test_stubbed() {
 }
 
 test_registry() {
- cat <<'EOF'
-test-registry|unit|build|yes|cmd_test_registry|Validate test registry metadata
-test-deps-audit|unit|build|yes|cmd_deps_audit|Validate dependency manifests and tracked binary artifacts
-test-x86-asm-boundary|unit|build|yes|cmd_check_x86_asm_boundary|Validate x86 ASM goes through one assembler boundary
-test-x86-asm-selector|unit|build|yes|cmd_test_x86_asm_selector|Validate ER_ASM selects a single x86 assembler
-test-x86-asm-inventory|unit|build|yes|cmd_test_x86_asm_inventory|Validate x86 ASM syntax inventory generation
-test-x86-asm-warning-fatal|unit|build|yes|cmd_test_x86_asm_warning_fatal|Validate x86 ASM warnings fail the build
-test-er-asm-parse|unit|build|yes|cmd_test_er_asm_parse|Run owned ASM assembler parser smoke test
-test-er-asm-cli|unit|build|yes|cmd_test_er_asm_cli|Validate owned assembler accepts x86 assembler CLI shape
-test-er-efiboot|unit|build|yes|cmd_test_er_efiboot|Validate owned EFI variable manager dry-run operations
-test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype bare-metal flat-image test
-test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
-test-identity|unit|crypto|yes|cmd_test_identity|Run identity source test
-test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
-test-ipv4|unit|net|yes|cmd_test_ipv4|Run IPv4 receive dispatch test
-test-tcp|unit|net|yes|cmd_test_tcp|Run TCP checksum test
-test-serial|unit|driver|yes|cmd_test_serial|Run serial driver test
-test-cros-ec|unit|driver|yes|cmd_test_cros_ec|Run Chrome EC memmap parser test
-test-amdgpu|unit|driver|yes|cmd_test_amdgpu|Run AMDGPU DCN register-plan test
-test-uvc|unit|driver|yes|cmd_test_uvc|Run UVC descriptor parser test
-test-nvme|unit|driver|yes|cmd_test_nvme|Run NVMe IO command helper test
-test-sdhci|unit|driver|yes|cmd_test_sdhci|Run Intel SDHCI command helper test
-test-sw-fb|contract|ui|yes|cmd_test_sw_fb|Run software framebuffer test
-test-render-ir|contract|ui|yes|cmd_test_render_ir|Run render IR test
-test-fe-mul|unit|crypto|yes|cmd_test_fe_mul|Run field multiplication test
-test-store|unit|driver|yes|cmd_test_store|Run persistent store replay test
-test-spi-flash|unit|driver|yes|cmd_test_spi_flash|Run SPI flash compile check
-test-pi-audio|emulator|pi|yes|cmd_test_pi_audio|Run Pi Zero W PWM audio emulator test
-test-pi-bt|emulator|pi|yes|cmd_test_pi_bt|Run Pi Zero W CYW43438 Bluetooth UART emulator test
-test-pi-gpu|emulator|pi|yes|cmd_test_pi_gpu|Run Pi Zero W VideoCore mailbox framebuffer emulator test
-test-pi-gpio|emulator|pi|yes|cmd_test_pi_gpio|Run Pi Zero W GPIO emulator test
-test-pi-sd|emulator|pi|yes|cmd_test_pi_sd|Run Pi Zero W EMMC SD block emulator test
-test-pi-usb|emulator|pi|yes|cmd_test_pi_usb|Run Pi Zero W DWC2 USB host emulator test
-test-pi-wifi-sdio|emulator|pi|yes|cmd_test_pi_wifi_sdio|Run Pi Zero W CYW43438 SDIO probe emulator test
-test-sha3|unit|crypto|yes|cmd_test_sha3|Run SHA3-256 known-answer tests
-test-sha512|unit|crypto|yes|cmd_test_sha512|Run SHA-512 known-answer tests
-test-ed25519|unit|crypto|yes|cmd_test_ed25519|Run Ed25519 ASM helper tests
-test-tls|contract|crypto|yes|cmd_test_tls|Run TLS ClientHello self-test
-test-tpm|unit|crypto|yes|cmd_test_tpm|Run TPM command builder test
-test-tor|contract|crypto|yes|cmd_test_tor|Run Tor AES-128-CTR KAT test
-test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper test
-test-tor-hs|contract|crypto|yes|cmd_test_tor_hs|Run Tor onion-service message tests
-test-tor-hs-app|contract|crypto|yes|cmd_test_tor_hs_app|Run Tor hidden-service app message tests
-test-local-route|contract|route|yes|cmd_test_local_route|Run local cell route queue/dispatch test
-test-local-circuit|contract|route|yes|cmd_test_local_circuit|Run local circuit open/send/recv/close test
-test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
-test-av1-mp4|unit|media|yes|cmd_test_av1_mp4|Run AV1 MP4 container parser test
-test-vp8|unit|media|yes|cmd_test_vp8|Run VP8 frame header parser test
-test-vp9|unit|media|yes|cmd_test_vp9|Run VP9 uncompressed frame header parser test
-test-webp|unit|media|yes|cmd_test_webp|Run WebP container parser test
-test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
-test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
-test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
-test-av1-tile|unit|media|yes|cmd_test_av1_tile|Run AV1 tile group test
-test-av1-block|unit|media|yes|cmd_test_av1_block|Run AV1 block syntax entropy test
-test-av1-reduced|contract|media|yes|cmd_test_av1_reduced|Run AV1 reduced-still stream test
-test-x25519|unit|crypto|yes|cmd_test_x25519|Run X25519 RFC 7748 vectors
-test-x25519-debug|debug|crypto|no|cmd_test_x25519_debug|Run X25519 vectors with debug curve25519 object
-test-wasm-compiler|contract|wasm|yes|cmd_test_wasm_compiler|Run host-side WASM compiler self-test
-test-wasm-jit|contract|wasm|yes|cmd_test_wasm_jit|Run WASM JIT self-test
-test-recursion-valid|contract|wasm|yes|cmd_test_recursion_valid|Run WASM recursion valid-DAG test
-test-recursion-invalid|contract|wasm|yes|cmd_test_recursion_invalid|Run WASM recursion cycle-rejection test
-test-wasm-float|contract|wasm|yes|cmd_test_wasm_float|Run WASM float opcode test
-test-bench-render-ir|bench|ui|no|cmd_test_bench_render_ir|Run render_ir RDTSC benchmark
-test-tor-live-host|integration|crypto|no|cmd_test_tor_live_host|Build and run hosted live Tor ORPort probe
-test-app|app|app|no|cmd_test_app|Run app-side Zig tests
-test-app-ui-wasm|app|app|no|cmd_app_ui_wasm|Build app UI WASM artifact directly
-test-app-uefi-smoke|app|app|no|cmd_immutable_kernel_gop_smoke_efi|Build app UEFI native renderer smoke artifact directly
-test-app-project-intro-video|app|app|no|cmd_project_intro_video_build|Build project intro renderer artifact directly
-test-app-chat-preview|app|app|no|cmd_chat_preview_build|Build chat preview renderer artifact directly
-test-app-jc3248-frame|app|app|no|cmd_jc3248_frame_build|Build JC3248 frame renderer artifact directly
-test-app-build-dashboard|app|app|no|cmd_build_dashboard|Build dashboard renderer artifact directly
-test-app-media-video-dump|app|app|no|cmd_media_video_dump|Build media video dump artifact directly
-test-app-ifstatus|app|app|no|cmd_ifstatus|Build interface status publisher artifact directly
-test-app-pi-usb-load|app|app|no|cmd_pi_usb_boot|Build Pi USB boot host ASM artifact directly
-test-app-pi-usb-control|app|app|no|cmd_pi_usb_control|Build Pi USB control host artifact directly
-test-app-wayland-window|app|app|no|cmd_wayland_window|Build Wayland native window artifact directly
-test-app-drm-gbm-window|app|app|no|cmd_drm_gbm_window|Build DRM/GBM native window artifact directly
-test-app-build|app|app|no|cmd_app|Run complete direct app build path
-EOF
+ cat "${TEST_REGISTRY}"
 }
 
 cmd_test_registry() {
@@ -1954,6 +1877,10 @@ cmd_test_vp8() {
 
 cmd_test_vp9() {
 	build_test "test_vp9_self" "${TEST_DIR}/test_vp9_self.asm" "media/vp8" "media/vp9"
+}
+
+cmd_test_image_formats() {
+	build_test "test_image_formats_self" "${TEST_DIR}/test_image_formats_self.asm" "media/image_formats"
 }
 
 cmd_test_webp() {

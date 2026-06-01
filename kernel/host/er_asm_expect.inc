@@ -159,6 +159,18 @@ er_fn expect_rdi_minus_one
     xor     eax, eax
     ret
 
+er_fn expect_rsi_minus_one
+    lea     rdi, [rel tok_mem_rsi_open]
+    mov     esi, tok_mem_rsi_open_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_minus_one_close
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
 er_fn expect_rdi_plus_one
     lea     rdi, [rel tok_mem_rdi_open]
     mov     esi, tok_mem_rdi_open_len

@@ -1,5 +1,5 @@
 ; BCM2708 USB boot protocol — host-side constants and helpers.
-; Ported from edgerun-zig/src/bcm2708_usb_boot.zig
+; Canonical BCM2708 USB boot protocol constants and helpers.
 ; Target: x86_64 Linux userspace assembly
 ;
 ; The BCM2708 boot ROM exposes a vendor-specific USB interface (class 0xff, subclass 0, protocol 0)
