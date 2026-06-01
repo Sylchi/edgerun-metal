@@ -84,9 +84,10 @@ _start:
     jne     .fail_cdfs_init
     cmp     word [rel cdfs + AV1_BLOCK_CDFS_COEFF_LEVEL + 6], AV1_CDF_PROB_TOP
     jne     .fail_cdfs_init
-    TEST_PASS_NEXT .decode_zero
+    inc     qword [rel passed]
+    jmp     .decode_zero
 .fail_cdfs_init:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .decode_zero:
     mov     rdi, symctx
@@ -112,9 +113,10 @@ _start:
     jne     .fail_decode_zero
     cmp     byte [rel block + AV1_BLOCK_TX_SIZE], 0
     jne     .fail_decode_zero
-    TEST_PASS_NEXT .decode_one
+    inc     qword [rel passed]
+    jmp     .decode_one
 .fail_decode_zero:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .decode_one:
     mov     rdi, cdfs
@@ -146,9 +148,10 @@ _start:
     jne     .fail_decode_one
     cmp     word [rel cdfs + AV1_BLOCK_CDFS_PARTITION + 8], 1
     jne     .fail_decode_one
-    TEST_PASS_NEXT .invalid
+    inc     qword [rel passed]
+    jmp     .invalid
 .fail_decode_one:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .invalid:
     xor     edi, edi
@@ -166,9 +169,10 @@ _start:
     jnz     .fail_invalid
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_invalid
-    TEST_PASS_NEXT .predict_dc
+    inc     qword [rel passed]
+    jmp     .predict_dc
 .fail_invalid:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_dc:
     mov     rdi, pred
@@ -189,9 +193,10 @@ _start:
     jne     .fail_predict_dc
     cmp     byte [rel pred + 63], 85
     jne     .fail_predict_dc
-    TEST_PASS_NEXT .predict_v
+    inc     qword [rel passed]
+    jmp     .predict_v
 .fail_predict_dc:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_v:
     mov     rdi, pred
@@ -212,9 +217,10 @@ _start:
     jne     .fail_predict_v
     cmp     byte [rel pred + 17], 160
     jne     .fail_predict_v
-    TEST_PASS_NEXT .predict_h
+    inc     qword [rel passed]
+    jmp     .predict_h
 .fail_predict_v:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_h:
     mov     rdi, pred
@@ -235,9 +241,10 @@ _start:
     jne     .fail_predict_h
     cmp     byte [rel pred + 77], 80
     jne     .fail_predict_h
-    TEST_PASS_NEXT .predict_paeth
+    inc     qword [rel passed]
+    jmp     .predict_paeth
 .fail_predict_h:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_paeth:
     mov     rdi, pred
@@ -254,9 +261,10 @@ _start:
     jne     .fail_predict_paeth
     cmp     byte [rel pred + 7], 10
     jne     .fail_predict_paeth
-    TEST_PASS_NEXT .predict_smooth
+    inc     qword [rel passed]
+    jmp     .predict_smooth
 .fail_predict_paeth:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_smooth:
     mov     rdi, pred
@@ -273,9 +281,10 @@ _start:
     jne     .fail_predict_smooth
     cmp     byte [rel pred + 63], 120
     jne     .fail_predict_smooth
-    TEST_PASS_NEXT .refs_refresh
+    inc     qword [rel passed]
+    jmp     .refs_refresh
 .fail_predict_smooth:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .refs_refresh:
     mov     dword [rel image + AV1_IMAGE_WIDTH], 16
@@ -330,9 +339,10 @@ _start:
     jnz     .fail_refs_refresh
     cmp     edx, ERROR_CORRUPT
     jne     .fail_refs_refresh
-    TEST_PASS_NEXT .refs_store_chroma
+    inc     qword [rel passed]
+    jmp     .refs_store_chroma
 .fail_refs_refresh:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .refs_store_chroma:
     mov     rdi, refs
@@ -370,10 +380,11 @@ _start:
     cmp     edx, ERROR_CORRUPT
     jne     .fail_refs_store_chroma
     mov     dword [rel image + AV1_IMAGE_U_LEN], 64
-    TEST_PASS_NEXT .inter_predict
+    inc     qword [rel passed]
+    jmp     .inter_predict
 .fail_refs_store_chroma:
     mov     dword [rel image + AV1_IMAGE_U_LEN], 64
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .inter_predict:
     mov     byte [rel tile_y + 35], 33
@@ -408,9 +419,10 @@ _start:
     jnz     .fail_inter_predict
     cmp     edx, ERROR_CORRUPT
     jne     .fail_inter_predict
-    TEST_PASS_NEXT .mv_decode
+    inc     qword [rel passed]
+    jmp     .mv_decode
 .fail_inter_predict:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .mv_decode:
     mov     rdi, symctx
@@ -443,9 +455,10 @@ _start:
     jnz     .fail_mv_decode
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_mv_decode
-    TEST_PASS_NEXT .reconstruct_identity
+    inc     qword [rel passed]
+    jmp     .reconstruct_identity
 .fail_mv_decode:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .reconstruct_identity:
     mov     rdi, pred
@@ -473,9 +486,10 @@ _start:
     jne     .fail_reconstruct_identity
     cmp     byte [rel dst + 63], AV1_PIXEL_MAX_8
     jne     .fail_reconstruct_identity
-    TEST_PASS_NEXT .reconstruct_dc
+    inc     qword [rel passed]
+    jmp     .reconstruct_dc
 .fail_reconstruct_identity:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .reconstruct_dc:
     mov     rdi, resid
@@ -501,9 +515,10 @@ _start:
     jne     .fail_reconstruct_dc
     cmp     byte [rel dst + 63], 95
     jne     .fail_reconstruct_dc
-    TEST_PASS_NEXT .predict_invalid
+    inc     qword [rel passed]
+    jmp     .predict_invalid
 .fail_reconstruct_dc:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .predict_invalid:
     mov     rdi, pred
@@ -527,9 +542,10 @@ _start:
     jne     .fail_predict_invalid
     test    edx, edx
     jnz     .fail_predict_invalid
-    TEST_PASS_NEXT .coeff_zero
+    inc     qword [rel passed]
+    jmp     .coeff_zero
 .fail_predict_invalid:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .coeff_zero:
     mov     rdi, cdfs
@@ -555,9 +571,10 @@ _start:
     jne     .fail_coeff_zero
     cmp     word [rel coeffs + 126], 0
     jne     .fail_coeff_zero
-    TEST_PASS_NEXT .coeff_one
+    inc     qword [rel passed]
+    jmp     .coeff_one
 .fail_coeff_zero:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .coeff_one:
     mov     rdi, cdfs
@@ -583,9 +600,10 @@ _start:
     jne     .fail_coeff_one
     cmp     word [rel coeffs + 126], -4
     jne     .fail_coeff_one
-    TEST_PASS_NEXT .dequant
+    inc     qword [rel passed]
+    jmp     .dequant
 .fail_coeff_one:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .dequant:
     mov     rdi, resid
@@ -609,9 +627,10 @@ _start:
     jnz     .fail_dequant
     cmp     word [rel resid], AV1_COEFF_MAX_16
     jne     .fail_dequant
-    TEST_PASS_NEXT .coeff_reconstruct
+    inc     qword [rel passed]
+    jmp     .coeff_reconstruct
 .fail_dequant:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .coeff_reconstruct:
     mov     rdi, pred
@@ -639,9 +658,10 @@ _start:
     jne     .fail_coeff_reconstruct
     cmp     byte [rel dst + 1], 95
     jne     .fail_coeff_reconstruct
-    TEST_PASS_NEXT .inverse_idtx
+    inc     qword [rel passed]
+    jmp     .inverse_idtx
 .fail_coeff_reconstruct:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .inverse_idtx:
     mov     word [rel coeffs], -3
@@ -661,9 +681,10 @@ _start:
     jne     .fail_inverse_idtx
     cmp     word [rel resid + 126], 11
     jne     .fail_inverse_idtx
-    TEST_PASS_NEXT .inverse_dct_dc
+    inc     qword [rel passed]
+    jmp     .inverse_dct_dc
 .fail_inverse_idtx:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .inverse_dct_dc:
     mov     rdi, resid
@@ -678,9 +699,10 @@ _start:
     jne     .fail_inverse_dct_dc
     cmp     word [rel resid + 126], 9
     jne     .fail_inverse_dct_dc
-    TEST_PASS_NEXT .inverse_dct_ac
+    inc     qword [rel passed]
+    jmp     .inverse_dct_ac
 .fail_inverse_dct_dc:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .inverse_dct_ac:
     mov     rdi, resid
@@ -695,9 +717,10 @@ _start:
     jne     .fail_inverse_dct_ac
     cmp     word [rel resid + 14], -89
     jne     .fail_inverse_dct_ac
-    TEST_PASS_NEXT .coeff_invalid
+    inc     qword [rel passed]
+    jmp     .coeff_invalid
 .fail_inverse_dct_ac:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .coeff_invalid:
     mov     rdi, coeffs
@@ -725,9 +748,10 @@ _start:
     jnz     .fail_coeff_invalid
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_coeff_invalid
-    TEST_PASS_NEXT .tile_walk_zero
+    inc     qword [rel passed]
+    jmp     .tile_walk_zero
 .fail_coeff_invalid:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .tile_walk_zero:
     mov     rdi, cdfs
@@ -770,9 +794,10 @@ _start:
     jne     .fail_tile_walk_zero
     cmp     byte [rel tile_v + 63], AV1_PIXEL_MID_8
     jne     .fail_tile_walk_zero
-    TEST_PASS_NEXT .tile_walk_inter
+    inc     qword [rel passed]
+    jmp     .tile_walk_inter
 .fail_tile_walk_zero:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .tile_walk_inter:
     mov     byte [rel tile_y], 11
@@ -874,9 +899,10 @@ _start:
     jnz     .fail_tile_walk_inter
     cmp     edx, ERROR_CORRUPT
     jne     .fail_tile_walk_inter
-    TEST_PASS_NEXT .loop_filter_plane
+    inc     qword [rel passed]
+    jmp     .loop_filter_plane
 .fail_tile_walk_inter:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .loop_filter_plane:
     mov     byte [rel tile_y + 7], 10
@@ -907,9 +933,10 @@ _start:
     jne     .fail_loop_filter_plane
     cmp     byte [rel tile_y + 8], 15
     jne     .fail_loop_filter_plane
-    TEST_PASS_NEXT .loop_filter_image
+    inc     qword [rel passed]
+    jmp     .loop_filter_image
 .fail_loop_filter_plane:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .loop_filter_image:
     mov     byte [rel tile_y + 7], 0
@@ -934,9 +961,10 @@ _start:
     jnz     .fail_loop_filter_image
     cmp     edx, ERROR_UNSUPPORTED
     jne     .fail_loop_filter_image
-    TEST_PASS_NEXT .tile_walk_invalid
+    inc     qword [rel passed]
+    jmp     .tile_walk_invalid
 .fail_loop_filter_image:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .tile_walk_invalid:
     mov     dword [rel image + AV1_IMAGE_WIDTH], 10
@@ -961,9 +989,10 @@ _start:
     jnz     .fail_tile_walk_invalid
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_tile_walk_invalid
-    TEST_PASS_NEXT .done
+    inc     qword [rel passed]
+    jmp     .done
 .fail_tile_walk_invalid:
-    TEST_FAIL_CASE
+    inc     qword [rel failed]
 
 .done:
     xor     edi, edi

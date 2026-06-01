@@ -34,9 +34,15 @@ LOCAL_ID_HASH           equ 0   ; 32 bytes identity hash (BLAKE3)
 LOCAL_ID_RING           equ 32  ; incoming ring buffer (LOCAL_RING_SIZE bytes)
 LOCAL_ID_HANDLER        equ 32 + LOCAL_RING_SIZE  ; 8-byte agent handler fn ptr
 LOCAL_ID_FLAGS          equ 40 + LOCAL_RING_SIZE  ; 1-byte agent flags
-LOCAL_ID_SLOT_SIZE      equ 41 + LOCAL_RING_SIZE
+LOCAL_ID_ROUTE_KIND     equ 41 + LOCAL_RING_SIZE  ; 1=local ring, 2=Tor HS stream
+LOCAL_ID_TOR_CIRC_ID    equ 42 + LOCAL_RING_SIZE  ; u32 rendezvous circuit id
+LOCAL_ID_TOR_STREAM_ID  equ 46 + LOCAL_RING_SIZE  ; u16 rendezvous stream id
+LOCAL_ID_SLOT_SIZE      equ 48 + LOCAL_RING_SIZE
 LOCAL_MAX_IDENTITIES    equ 16
 LOCAL_ROUTE_TABLE_SIZE  equ LOCAL_MAX_IDENTITIES * LOCAL_ID_SLOT_SIZE
+
+LOCAL_ROUTE_KIND_LOCAL  equ 1
+LOCAL_ROUTE_KIND_TOR_HS equ 2
 
 ; ==================================================================
 ; Local circuit state (extended for local-only circuits)

@@ -23,6 +23,7 @@ BUILD_DIR=".build"
 ASM_BUILD="${BUILD_DIR}/kernel"
 ASM_DIR="kernel/x86_64"
 TEST_DIR="kernel/test"
+ER_ASM="${ER_ASM:-}"
 YASM="${YASM:-yasm}"
 ASM_INC="-I kernel"
 KERNEL_LD="${ASM_DIR}/linker.ld"
@@ -41,8 +42,9 @@ asm_x86_obj() {
 	local format="$1"; shift
 	local dst="$1"; shift
 	local src="$1"; shift
-	local err="${dst}.yasm.err"
-	if ! ${YASM} -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src" 2>"$err"; then
+	local err="${dst}.asm.err"
+	local assembler="${ER_ASM:-$YASM}"
+	if ! "$assembler" -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src" 2>"$err"; then
 		cat "$err" >&2
 		rm -f "$err"
 		return 1
@@ -353,13 +355,58 @@ build_test() {
 	"$bin"
 }
 
+build_test_self() {
+	local name="$1"; shift
+	build_test "$name" "${TEST_DIR}/${name}.asm" "$@"
+}
+
+build_test_single_dep_obj() {
+	local name="$1"; shift
+	local dep_obj_name="$1"; shift
+	local dep_src="$1"; shift
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	local dep_obj="${ASM_BUILD}/${dep_obj_name}.o"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$dep_obj" "$dep_src" "$@"
+	ld -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+build_test_stubbed() {
+	local name="$1"; shift
+	local stub="$1"; shift
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local stub_obj="${ASM_BUILD}/${stub}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	asm_x86_obj elf64 "$obj" "$src"
+	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/${stub}.asm"
+	local extra_o=""
+	for dep; do
+		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
+		elf64 "${ASM_DIR}/${dep}.asm" "$dep_obj"
+		extra_o="$extra_o $dep_obj"
+	done
+	ld -nostdlib -static -o "$bin" "$obj" $extra_o "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 test_registry() {
  cat <<'EOF'
 test-registry|unit|build|yes|cmd_test_registry|Validate test registry metadata
 test-x86-asm-boundary|unit|build|yes|cmd_check_x86_asm_boundary|Validate x86 ASM goes through one assembler boundary
+test-x86-asm-selector|unit|build|yes|cmd_test_x86_asm_selector|Validate ER_ASM selects a single x86 assembler
 test-x86-asm-inventory|unit|build|yes|cmd_test_x86_asm_inventory|Validate x86 ASM syntax inventory generation
+test-x86-asm-warning-fatal|unit|build|yes|cmd_test_x86_asm_warning_fatal|Validate x86 ASM warnings fail the build
+test-er-asm-parse|unit|build|yes|cmd_test_er_asm_parse|Run owned ASM assembler parser smoke test
+test-er-asm-cli|unit|build|yes|cmd_test_er_asm_cli|Validate owned assembler accepts x86 assembler CLI shape
 test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test
 test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
+test-identity|unit|crypto|yes|cmd_test_identity|Run identity source test
 test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
 test-serial|unit|driver|yes|cmd_test_serial|Run serial driver test
 test-cros-ec|unit|driver|yes|cmd_test_cros_ec|Run Chrome EC memmap parser test
@@ -483,6 +530,77 @@ cmd_check_x86_asm_boundary() {
  echo "PASS x86-asm-boundary"
 }
 
+cmd_test_x86_asm_selector() {
+	mkdir -p "${ASM_BUILD}"
+	local src="${ASM_BUILD}/x86_asm_selector_probe.asm"
+	local ok_asm="${ASM_BUILD}/x86_asm_selector_ok.sh"
+	local fail_asm="${ASM_BUILD}/x86_asm_selector_fail.sh"
+	local bootstrap_obj="${ASM_BUILD}/x86_asm_selector_bootstrap.o"
+	local ok_obj="${ASM_BUILD}/x86_asm_selector_ok.o"
+	local fail_obj="${ASM_BUILD}/x86_asm_selector_fail.o"
+	local log="${ASM_BUILD}/x86_asm_selector.log"
+	local cleanup_files=("$src" "$ok_asm" "$fail_asm" "$bootstrap_obj" "$ok_obj" "$fail_obj" "$log" "${bootstrap_obj}.marker" "${ok_obj}.marker" "${fail_obj}.marker")
+	cat > "$src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    ret
+EOF
+ cat > "$ok_asm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+out=""
+while [ "$#" -gt 0 ]; do
+ case "$1" in
+  -o)
+   shift
+   out="$1"
+   ;;
+ esac
+ shift
+done
+if [ -z "$out" ]; then
+ exit 1
+fi
+printf 'selected\n' > "${out}.marker"
+printf 'object\n' > "$out"
+EOF
+ cat > "$fail_asm" <<'EOF'
+#!/usr/bin/env bash
+echo "selected assembler failed" >&2
+exit 17
+EOF
+	chmod +x "$ok_asm" "$fail_asm"
+	rm -f "$bootstrap_obj" "$ok_obj" "$fail_obj" "$log" "${bootstrap_obj}.marker" "${ok_obj}.marker" "${fail_obj}.marker"
+	ER_ASM="" YASM="$ok_asm" asm_x86_obj elf64 "$bootstrap_obj" "$src"
+	if [ ! -f "$bootstrap_obj" ] || [ ! -f "${bootstrap_obj}.marker" ]; then
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-selector: YASM bootstrap assembler was not used" >&2
+		exit 1
+	fi
+	ER_ASM="$ok_asm" asm_x86_obj elf64 "$ok_obj" "$src"
+	if [ ! -f "$ok_obj" ] || [ ! -f "${ok_obj}.marker" ]; then
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-selector: ER_ASM assembler was not used" >&2
+		exit 1
+	fi
+	if ER_ASM="$fail_asm" YASM="$ok_asm" asm_x86_obj elf64 "$fail_obj" "$src" >"$log" 2>&1; then
+		cat "$log" >&2
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-selector: selected assembler failure was ignored" >&2
+		exit 1
+	fi
+	if ! grep 'selected assembler failed' "$log" >/dev/null 2>&1; then
+		cat "$log" >&2
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-selector: selected assembler stderr was not reported" >&2
+		exit 1
+	fi
+	rm -f "${cleanup_files[@]}"
+	echo "PASS x86-asm-selector"
+}
+
 x86_asm_source_list() {
  find kernel/x86_64 kernel/driver kernel/test kernel/host -type f \( -name '*.asm' -o -name '*.inc' \) ! -name 'test_pi_*' | sort
 }
@@ -591,6 +709,210 @@ cmd_test_x86_asm_inventory() {
   }
  '
  echo "PASS x86-asm-inventory"
+}
+
+cmd_test_x86_asm_warning_fatal() {
+	mkdir -p "${ASM_BUILD}"
+	local src="${ASM_BUILD}/x86_asm_warning_probe.asm"
+	local obj="${ASM_BUILD}/x86_asm_warning_probe.o"
+	local log="${ASM_BUILD}/x86_asm_warning_probe.log"
+	local cleanup_files=("$src" "$obj" "$log" "${obj}.asm.err")
+	cat > "$src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    cmp     byte [rax], '\\'
+    ret
+EOF
+	if asm_x86_obj elf64 "$obj" "$src" >"$log" 2>&1; then
+		cat "$log" >&2
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-warning-fatal: warning probe assembled successfully" >&2
+		exit 1
+	fi
+	if ! grep -i 'warning:' "$log" >/dev/null 2>&1; then
+		cat "$log" >&2
+		rm -f "${cleanup_files[@]}"
+		echo "FAIL x86-asm-warning-fatal: warning text not reported" >&2
+		exit 1
+	fi
+	rm -f "${cleanup_files[@]}"
+ echo "PASS x86-asm-warning-fatal"
+}
+
+cmd_er_asm() {
+ mkdir -p "${HOST_BUILD}"
+ local src="kernel/host/er_asm.asm"
+ local obj="${HOST_BUILD}/er_asm.o"
+ local bin="${HOST_BUILD}/er_asm"
+ asm_x86_obj elf64 "$obj" "$src"
+ ld -nostdlib -static -o "$bin" "$obj"
+ echo "  LD  ${bin}"
+}
+
+er_asm_report_ok() {
+ local out="$1"
+ local require_shape="${2:-basic}"
+ awk -F '\t' -v require_shape="$require_shape" '
+  $1 == "er_asm_parse" && $2 == "1" { magic = 1 }
+  $1 == "lines" && $2 > 0 { lines = 1 }
+  $1 == "preproc" && $2 > 0 { preproc = 1 }
+  $1 == "directives" && $2 > 0 { directives = 1 }
+  END {
+   if (!magic || !lines) {
+    exit 1
+   }
+   if (require_shape == "shape" && (!preproc || !directives)) {
+    exit 1
+   }
+  }
+ ' "$out"
+}
+
+cmd_test_er_asm_parse() {
+ cmd_er_asm >/dev/null
+ local out="${ASM_BUILD}/er_asm_parse.tsv"
+ local count=0
+ while IFS= read -r src; do
+  "${HOST_BUILD}/er_asm" --parse-only "$src" > "$out"
+  er_asm_report_ok "$out"
+  count=$((count + 1))
+ done < <(x86_asm_source_list)
+ "${HOST_BUILD}/er_asm" --parse-only "${ASM_DIR}/macros.inc" > "$out"
+ er_asm_report_ok "$out" shape
+ if [ "$count" -eq 0 ]; then
+  echo "FAIL er-asm-parse: no sources parsed" >&2
+  exit 1
+ fi
+ echo "PASS er-asm-parse ${count} sources"
+}
+
+cmd_test_er_asm_cli() {
+ cmd_er_asm >/dev/null
+ local src="${ASM_BUILD}/er_asm_exit_probe.asm"
+ local src_status="${ASM_BUILD}/er_asm_exit_status_probe.asm"
+ local bad_src="${ASM_BUILD}/er_asm_bad_exit_probe.asm"
+ local bad_u32_src="${ASM_BUILD}/er_asm_bad_u32_probe.asm"
+ local bad_hex_src="${ASM_BUILD}/er_asm_bad_hex_probe.asm"
+ local out="${ASM_BUILD}/er_asm_exit_probe.o"
+ local bin="${ASM_BUILD}/er_asm_exit_probe"
+ local bad="${ASM_BUILD}/er_asm_unsupported.o"
+ local log="${ASM_BUILD}/er_asm_unsupported.log"
+ cat > "$src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, 60
+    xor     edi, edi
+    syscall
+EOF
+ cat > "$src_status" <<'EOF'
+[BITS 64]
+SYSCALL_EXIT equ 0x3c
+STATUS_CODE equ 0x12c
+section .text
+global _start
+_start:
+    mov     eax, SYSCALL_EXIT
+    mov     edi, STATUS_CODE
+    syscall
+EOF
+ cat > "$bad_src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, UNKNOWN_CONST
+    xor     edi, edi
+    syscall
+EOF
+ cat > "$bad_hex_src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, 0x100000000
+    xor     edi, edi
+    syscall
+EOF
+ cat > "$bad_u32_src" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, 4294967296
+    xor     edi, edi
+    syscall
+EOF
+ "${HOST_BUILD}/er_asm" -f elf64 -I "${ASM_DIR}" -DTEST_DEFINE -dTEST_FLAG -o "$out" "$src"
+ ld -nostdlib -static -o "$bin" "$out"
+ "$bin"
+ rm -f "$out" "$bin"
+ ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$out" "$src"
+ ld -nostdlib -static -o "$bin" "$out"
+ "$bin"
+ rm -f "$out" "$bin"
+ ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$out" "$src_status"
+ ld -nostdlib -static -o "$bin" "$out"
+ local status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 44 ]; then
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: generated exit status ${status}, expected 44" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_hex_src" >"$log" 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: out-of-range hex immediate assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: out-of-range hex immediate did not report cause" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_u32_src" >"$log" 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: out-of-range u32 immediate assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: out-of-range u32 immediate did not report cause" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_src" >"$log" 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: wrong instruction sequence assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: wrong instruction sequence did not report cause" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "${ASM_DIR}/macros.inc" >"$log" 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: unsupported source assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  echo "FAIL er-asm-cli: unsupported source did not report cause" >&2
+  exit 1
+ fi
+ rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+ echo "PASS er-asm-cli"
 }
 
 cmd_test_list() {
@@ -803,49 +1125,27 @@ cmd_test_wasm_compiler() {
 }
 
 cmd_test_ctype() {
-	build_test "test_ctype_self" "${TEST_DIR}/test_ctype_self.asm" "rt/ctype"
+	build_test_self "test_ctype_self" "rt/ctype"
 }
 
 cmd_test_clock() {
-	build_test "test_clock_self" "${TEST_DIR}/test_clock_self.asm" "rt/clock" "rt/bytes" "rt/runtime"
+	build_test_self "test_clock_self" "rt/clock" "rt/bytes" "rt/runtime"
+}
+
+cmd_test_identity() {
+	build_test_self "test_identity_self" "crypto/identity" "crypto/blake3" "rt/bytes" "rt/clock" "rt/runtime"
 }
 
 cmd_test_serial() {
-	build_test "test_serial_self" "${TEST_DIR}/test_serial_self.asm" "../driver/serial" "rt/runtime"
+	build_test_self "test_serial_self" "../driver/serial" "rt/runtime"
 }
 
 cmd_test_uvc() {
-	local src="${TEST_DIR}/test_uvc_self.asm"
-	local obj="${ASM_BUILD}/test_uvc_self.o"
-	local stub_src="${TEST_DIR}/stubs_xhci.asm"
-	local stub_obj="${ASM_BUILD}/stubs_xhci.o"
-	local bin="${ASM_BUILD}/test_uvc"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$stub_obj" "$stub_src"
-	local uvc_o="${ASM_BUILD}/uvc.o"
-	elf64 "${ASM_DIR}/../driver/uvc.asm" "$uvc_o"
-	local xhci_o="${ASM_BUILD}/xhci.o"
-	elf64 "${ASM_DIR}/../driver/xhci.asm" "$xhci_o"
-	ld -nostdlib -static -o "$bin" "$obj" "$uvc_o" "$xhci_o" "$stub_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_stubbed "test_uvc_self" "stubs_xhci" "../driver/uvc" "../driver/xhci"
 }
 
 cmd_test_http() {
-	local src="${TEST_DIR}/test_http_self.asm"
-	local obj="${ASM_BUILD}/test_http_self.o"
-	local stub_src="${TEST_DIR}/stubs_http.asm"
-	local stub_obj="${ASM_BUILD}/stubs_http.o"
-	local bin="${ASM_BUILD}/test_http"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$stub_obj" "$stub_src"
-	local http_o="${ASM_BUILD}/http.o"
-	if [ ! -f "$http_o" ]; then
-		elf64 "${ASM_DIR}/net/http.asm" "$http_o"
-	fi
-	ld -nostdlib -static -o "$bin" "$obj" "$http_o" "$stub_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_stubbed "test_http_self" "stubs_http" "net/http"
 }
 
 cmd_test_wasm_float() {
@@ -853,7 +1153,7 @@ cmd_test_wasm_float() {
 }
 
 cmd_test_sw_fb() {
-	build_test "test_sw_fb_self" "${TEST_DIR}/test_sw_fb_self.asm" "ui/sw_fb"
+	build_test_self "test_sw_fb_self" "ui/sw_fb"
 }
 
 cmd_test_av1_obu() {
@@ -885,7 +1185,7 @@ cmd_test_av1_reduced() {
 }
 
 cmd_test_render_ir() {
-	build_test "test_render_ir_self" "${TEST_DIR}/test_render_ir_self.asm" "ui/render_ir" "ui/sw_fb"
+	build_test_self "test_render_ir_self" "ui/render_ir" "ui/sw_fb"
 }
 
 cmd_test_fe_mul() {
@@ -914,7 +1214,7 @@ cmd_test_fe_mul() {
 }
 
 cmd_test_spi_flash() {
-	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
+	build_test_self "test_spi_flash_self"
 }
 
 cmd_test_pi_arm() {
@@ -965,83 +1265,39 @@ cmd_test_pi_usb() {
 }
 
 cmd_test_cros_ec() {
-	local name="test_cros_ec_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	local cros_ec_o="${ASM_BUILD}/cros_ec_hosted.o"
-	asm_x86_obj elf64 "$cros_ec_o" "${ASM_DIR}/../driver/cros_ec.asm" -dHOSTED_TEST
-	ld -nostdlib -static -o "$bin" "$obj" "$cros_ec_o"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_single_dep_obj "test_cros_ec_self" "cros_ec_hosted" "${ASM_DIR}/../driver/cros_ec.asm" -dHOSTED_TEST
 }
 
 cmd_test_amdgpu() {
-	local name="test_amdgpu_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	local amdgpu_o="${ASM_BUILD}/amdgpu_hosted.o"
-	asm_x86_obj elf64 "$amdgpu_o" "${ASM_DIR}/../driver/amdgpu.asm"
-	ld -nostdlib -static -o "$bin" "$obj" "$amdgpu_o"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_single_dep_obj "test_amdgpu_self" "amdgpu_hosted" "${ASM_DIR}/../driver/amdgpu.asm"
 }
 
 cmd_test_tls() {
-	local name="test_tls_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	local tls_o="${ASM_BUILD}/tls.o"
-	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
-	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
-	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
-	local runtime_o="${ASM_BUILD}/runtime.o"
-	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
-	ld -nostdlib -static -o "$bin" "$obj" "$tls_o" "$tor_aes_o" "$runtime_o"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_self "test_tls_self" "crypto/tls" "crypto/tor_aes" "rt/runtime"
 }
 
 cmd_test_sha3() {
-	build_test "test_sha3_self" "${TEST_DIR}/test_sha3_self.asm" "crypto/sha3"
+	build_test_self "test_sha3_self" "crypto/sha3"
 }
 
 cmd_test_tor() {
-	local name="test_tor_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
-	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
-	local tor_o="${ASM_BUILD}/tor.o"
-	elf64 "${ASM_DIR}/crypto/tor.asm" "$tor_o"
-	local runtime_o="${ASM_BUILD}/runtime.o"
-	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
-	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_self "test_tor_self" "crypto/tor_aes" "crypto/tor" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
 
 cmd_test_tor_cell() {
-	build_test "test_tor_cell_self" "${TEST_DIR}/test_tor_cell_self.asm" "crypto/tor_cell"
+	build_test_self "test_tor_cell_self" "crypto/tor_cell"
 }
 
 cmd_test_tor_hs() {
-	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "crypto/sha3" "crypto/tor_aes" "crypto/curve25519" "rt/runtime"
+	build_test_self "test_tor_hs_self" "crypto/tor_hs" "crypto/sha3" "crypto/tor_aes" "crypto/curve25519" "rt/runtime"
 }
 
 cmd_test_tor_hs_app() {
-	build_test "test_tor_hs_app_self" "${TEST_DIR}/test_tor_hs_app_self.asm" "crypto/tor_hs_app" "rt/runtime"
+	build_test_self "test_tor_hs_app_self" "crypto/tor_hs_app" "rt/runtime"
 }
 
 cmd_test_local_route() {
-	build_test "test_local_route_self" "${TEST_DIR}/test_local_route_self.asm" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
+	build_test_self "test_local_route_self" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
 
 cmd_bench_tor() {
@@ -1082,14 +1338,16 @@ cmd_bench_tor_hs() {
 	"$bin"
 }
 
-cmd_test_x25519() {
-	local src="${TEST_DIR}/test_x25519.asm"
-	local obj="${ASM_BUILD}/test_x25519.o"
-	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
-	local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
-	local bin="${ASM_BUILD}/test_x25519"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$stub_obj" "$stub_src"
+build_x25519_test() {
+	local name="$1"
+	local stub_name="$2"
+	local curve_obj_name="$3"
+	local curve_builder="$4"
+	local obj="${ASM_BUILD}/${name}.o"
+	local stub_obj="${ASM_BUILD}/${stub_name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_x25519.asm"
+	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/stubs_tor_ntor.asm"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -1098,40 +1356,23 @@ cmd_test_x25519() {
 	if [ ! -f "$runtime_o" ]; then
 		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
 	fi
-	local curve25519_o="${ASM_BUILD}/curve25519.o"
-	if [ ! -f "$curve25519_o" ]; then
-		elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
-	fi
+	local curve25519_o="${ASM_BUILD}/${curve_obj_name}.o"
+	"$curve_builder" "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$curve25519_o" "$tor_ntor_o" "$runtime_o" "$stub_obj"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+cmd_test_x25519() {
+	build_x25519_test "test_x25519" "stubs_tor_ntor" "curve25519" "elf64"
 }
 
 cmd_test_x25519_debug() {
-	local src="${TEST_DIR}/test_x25519.asm"
-	local obj="${ASM_BUILD}/test_x25519_debug.o"
-	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
-	local stub_obj="${ASM_BUILD}/stubs_tor_ntor_debug.o"
-	local bin="${ASM_BUILD}/test_x25519_debug"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$stub_obj" "$stub_src"
-	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
-	if [ ! -f "$tor_ntor_o" ]; then
-		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
-	fi
-	local runtime_o="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$runtime_o" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
-	fi
-	local curve25519_o="${ASM_BUILD}/curve25519_debug.o"
-	elf64_dbg "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
-	ld -nostdlib -static -o "$bin" "$obj" "$curve25519_o" "$tor_ntor_o" "$runtime_o" "$stub_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_x25519_test "test_x25519_debug" "stubs_tor_ntor_debug" "curve25519_debug" "elf64_dbg"
 }
 
 cmd_test_bench_render_ir() {
-	build_test "bench_render_ir" "${TEST_DIR}/bench_render_ir.asm" "ui/sw_fb" "ui/render_ir"
+	build_test_self "bench_render_ir" "ui/sw_fb" "ui/render_ir"
 }
 
 cmd_bench_wasm_jit() {
@@ -1376,6 +1617,7 @@ EOF
   bench-tor-hs        Run hidden-service local self-connect benchmark
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
+  er-asm              Build owned x86 ASM assembler front-end
   signing-wasm        Compile Ed25519 signing WASM guest
   lib-tor             Build reusable Tor static archives under .build/lib
   tor-hs-host         Build hosted hidden-service library smoke binary
@@ -1420,6 +1662,7 @@ case "${1:-help}" in
 	bench-tor-hs)   cmd_bench_tor_hs ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	bench-zig-wasm) cmd_bench_zig_wasm ;;
+	er-asm)          cmd_er_asm ;;
 	signing-wasm)    cmd_signing_wasm ;;
 	lib-tor)         cmd_lib_tor ;;
 	tor-hs-host)     cmd_tor_hs_host ;;

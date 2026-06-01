@@ -1,4 +1,5 @@
 const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
 const ui = @import("../core.zig");
 const ui_icon = @import("../icon.zig");
 
@@ -214,4 +215,89 @@ pub fn badgeBounds(bounds: ui.Rect, label: []const u8) ui.Rect {
     const desired = @as(f32, @floatFromInt(label.len)) * 7.4 + 28.0;
     const width = @min(@max(54.0, desired), @max(54.0, bounds.w - 20.0));
     return ui.Rect.init(bounds.x + bounds.w - width - 12.0, bounds.y + 12.0, width, 22.0);
+}
+
+pub fn accent(view: anytype, item: Item) ui.Color {
+    if (item.accent) |color| return color;
+    return switch (item.state) {
+        .good, .active, .private => view.options.style.accent,
+        .warning, .pending => ui.Color{ .r = 245, .g = 184, .b = 78 },
+        .bad, .blocked => ui.Color{ .r = 242, .g = 103, .b = 103 },
+        .neutral => view.options.style.accent,
+    };
+}
+
+pub fn renderView(view: anytype, bounds: ui.Rect, props: ViewProps) (ui.RenderError || interaction.Error)!void {
+    const content_bounds = if (props.title.len != 0 or props.detail.len != 0)
+        try view.panelScaffold(bounds, .{
+            .title = props.title,
+            .detail = props.detail,
+            .header_gap = headerGap(props.intent.density),
+        })
+    else
+        bounds;
+
+    if (props.items.len == 0) {
+        try view.emptyAt(content_bounds, "No semantic data", "Nothing matched the current intent.");
+        return;
+    }
+
+    var stack = view.column(content_bounds, gap(props.intent.density));
+    const primary_slots = primarySlots(content_bounds, props);
+    if (primary_slots > 0) {
+        const primary_h = primaryHeight(props.intent.density);
+        const primary_area = stack.take(primary_h);
+        const grid_value = view.grid(primary_area, primary_slots, gap(props.intent.density), primary_h);
+        var rendered_primary: usize = 0;
+        for (props.items) |item| {
+            if (!promotes(item, props.intent)) continue;
+            if (rendered_primary >= primary_slots) break;
+            try renderCard(view, grid_value.item(rendered_primary), item);
+            rendered_primary += 1;
+        }
+    }
+
+    var row_count: usize = 0;
+    const row_h = rowHeight(props.intent.density);
+    for (props.items) |item| {
+        if (promotes(item, props.intent) and row_count < primary_slots) {
+            row_count += 1;
+            continue;
+        }
+        const row_bounds = stack.takeIfFits(row_h) orelse break;
+        try renderRow(view, row_bounds, item, props.intent);
+    }
+}
+
+pub fn renderCard(view: anytype, bounds: ui.Rect, item: Item) (ui.RenderError || interaction.Error)!void {
+    const accent_color = accent(view, item);
+    try view.withAccent(accent_color).metricCard(bounds, .{
+        .id = controlId(item),
+        .title = item.label,
+        .detail = detail(item),
+        .value = value(item),
+        .icon = icon(item.kind),
+        .progress = item.progress,
+        .selected = item.selected,
+    });
+    try view.badgeAt(badgeBounds(bounds, stateLabel(item.state)), stateLabel(item.state), badgeVariant(item.state));
+}
+
+pub fn renderRow(view: anytype, bounds: ui.Rect, item: Item, intent: Intent) (ui.RenderError || interaction.Error)!void {
+    const accent_color = accent(view, item);
+    if (item.kind == .action and item.id != 0 and intent.mode == .schedule) {
+        try view.buttonIconAt(bounds.withHeightCentered(@min(bounds.h, 36.0)), item.id, item.label, if (item.state == .good) .primary else .outline, icon(item.kind));
+        return;
+    }
+
+    const detail_text = rowDetail(item);
+    if (item.id != 0) {
+        try view.withAccent(accent_color).selectableRow(bounds, item.id, item.label, detail_text, icon(item.kind), item.selected);
+    } else {
+        try view.rowItemIconWithControlAt(bounds, 0, item.label, detail_text, icon(item.kind), .{ .active = item.selected });
+    }
+    if (item.progress) |progress_value| {
+        const bar_w = @min(70.0, @max(30.0, bounds.w * 0.22));
+        try view.withAccent(accent_color).progressAt(ui.Rect.init(bounds.x + bounds.w - bar_w - 10.0, bounds.y + bounds.h - 13.0, bar_w, 6.0), progress_value);
+    }
 }

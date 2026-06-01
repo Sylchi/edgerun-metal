@@ -66,8 +66,6 @@ fan_target_out: resd 1
 resp_out: resb 4
 
 SECTION .rodata
-pass_msg: db "PASS cros_ec", 10, 0
-fail_msg: db "FAIL cros_ec", 10, 0
 host_req: db 0xaa, 0xbb, 0xcc
 
 SECTION .text
@@ -103,18 +101,12 @@ _start:
     call    er_cros_ec_read_power_status
     ASSERT_EQ eax, 0
 
-    mov     eax, [rel flags_out]
-    ASSERT_EQ eax, 0x0b
-    mov     eax, [rel pct_out]
-    ASSERT_EQ eax, 50
-    mov     eax, [rel temp_out]
-    ASSERT_EQ eax, 37
-    mov     eax, [rel fan_out]
-    ASSERT_EQ eax, 2400
-    mov     eax, [rel mv_out]
-    ASSERT_EQ eax, 7600
-    mov     eax, [rel rate_out]
-    ASSERT_EQ eax, 12000
+    ASSERT_EQ dword [rel flags_out], 0x0b
+    ASSERT_EQ dword [rel pct_out], 50
+    ASSERT_EQ dword [rel temp_out], 37
+    ASSERT_EQ dword [rel fan_out], 2400
+    ASSERT_EQ dword [rel mv_out], 7600
+    ASSERT_EQ dword [rel rate_out], 12000
 
     call    er_cros_ec_read_battery
     ASSERT_EQ eax, 50
@@ -122,8 +114,7 @@ _start:
     lea     rdi, [rel switches_out]
     call    er_cros_ec_read_switches
     ASSERT_EQ eax, 0
-    mov     eax, [rel switches_out]
-    ASSERT_EQ eax, EC_SWITCH_LID_OPEN
+    ASSERT_EQ dword [rel switches_out], EC_SWITCH_LID_OPEN
 
     call    er_cros_ec_lid_open
     ASSERT_EQ eax, 1
@@ -137,14 +128,10 @@ _start:
     lea     rcx, [rel cycle_count_out]
     call    er_cros_ec_read_battery_static
     ASSERT_EQ eax, 0
-    mov     eax, [rel design_cap_out]
-    ASSERT_EQ eax, 100
-    mov     eax, [rel design_mv_out]
-    ASSERT_EQ eax, 7700
-    mov     eax, [rel last_full_cap_out]
-    ASSERT_EQ eax, 80
-    mov     eax, [rel cycle_count_out]
-    ASSERT_EQ eax, 17
+    ASSERT_EQ dword [rel design_cap_out], 100
+    ASSERT_EQ dword [rel design_mv_out], 7700
+    ASSERT_EQ dword [rel last_full_cap_out], 80
+    ASSERT_EQ dword [rel cycle_count_out], 17
 
     mov     byte [rel er_ec_host_response_shadow + EC_HRP_STRUCT_VERSION], EC_HOST_CMD_VERSION
     mov     word [rel er_ec_host_response_shadow + EC_HRP_RESULT], 0
@@ -160,32 +147,19 @@ _start:
     mov     r9d, 2
     call    er_cros_ec_host_command
     ASSERT_EQ eax, 2
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_STRUCT_VERSION]
-    ASSERT_EQ eax, EC_HOST_CMD_VERSION
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
-    ASSERT_EQ eax, 0x84
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
-    ASSERT_EQ eax, 0x34
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND + 1]
-    ASSERT_EQ eax, 0x12
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
-    ASSERT_EQ eax, 2
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_RESERVED]
-    ASSERT_EQ eax, 0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
-    ASSERT_EQ eax, 3
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN + 1]
-    ASSERT_EQ eax, 0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
-    ASSERT_EQ eax, 0xaa
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 1]
-    ASSERT_EQ eax, 0xbb
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 2]
-    ASSERT_EQ eax, 0xcc
-    movzx   eax, byte [rel resp_out]
-    ASSERT_EQ eax, 0xde
-    movzx   eax, byte [rel resp_out + 1]
-    ASSERT_EQ eax, 0xad
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_STRUCT_VERSION], EC_HOST_CMD_VERSION
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM], 0x84
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND], 0x34
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND + 1], 0x12
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION], 2
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_RESERVED], 0
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN], 3
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN + 1], 0
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE], 0xaa
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 1], 0xbb
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 2], 0xcc
+    ASSERT_EQ byte [rel resp_out], 0xde
+    ASSERT_EQ byte [rel resp_out + 1], 0xad
 
     mov     byte [rel er_ec_host_response_shadow + EC_HRP_STRUCT_VERSION], EC_HOST_CMD_VERSION
     mov     word [rel er_ec_host_response_shadow + EC_HRP_RESULT], 0
@@ -193,81 +167,42 @@ _start:
     mov     edi, 1
     call    er_cros_ec_charge_control
     ASSERT_EQ eax, 0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
-    ASSERT_EQ eax, 0x64
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
-    ASSERT_EQ eax, EC_CMD_CHARGE_CONTROL & 0xff
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND + 1]
-    ASSERT_EQ eax, EC_CMD_CHARGE_CONTROL >> 8
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
-    ASSERT_EQ eax, 1
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
-    ASSERT_EQ eax, 4
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
-    ASSERT_EQ eax, 1
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM], 0x64
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND], EC_CMD_CHARGE_CONTROL & 0xff
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND + 1], EC_CMD_CHARGE_CONTROL >> 8
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION], 1
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN], 4
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE], 1
 
     mov     word [rel er_ec_host_response_shadow + EC_HRP_DATA_LEN], 4
     mov     dword [rel er_ec_host_response_shadow + EC_HRP_SIZE], 3000
     lea     rdi, [rel fan_target_out]
     call    er_cros_ec_get_fan_target_rpm
     ASSERT_EQ eax, 0
-    mov     eax, [rel fan_target_out]
-    ASSERT_EQ eax, 3000
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
-    ASSERT_EQ eax, 0xe0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
-    ASSERT_EQ eax, EC_CMD_PWM_GET_FAN_TARGET_RPM
+    ASSERT_EQ dword [rel fan_target_out], 3000
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM], 0xe0
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND], EC_CMD_PWM_GET_FAN_TARGET_RPM
 
     mov     word [rel er_ec_host_response_shadow + EC_HRP_DATA_LEN], 0
     mov     edi, 2
     mov     esi, 2500
     call    er_cros_ec_set_fan_target_rpm
     ASSERT_EQ eax, 0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
-    ASSERT_EQ eax, 0x0a
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
-    ASSERT_EQ eax, EC_CMD_PWM_SET_FAN_TARGET_RPM
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
-    ASSERT_EQ eax, 1
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
-    ASSERT_EQ eax, 5
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
-    ASSERT_EQ eax, 0xc4
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 1]
-    ASSERT_EQ eax, 0x09
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 4]
-    ASSERT_EQ eax, 2
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM], 0x0a
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND], EC_CMD_PWM_SET_FAN_TARGET_RPM
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION], 1
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN], 5
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE], 0xc4
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 1], 0x09
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 4], 2
 
     mov     edi, 2
     call    er_cros_ec_auto_fan_control
     ASSERT_EQ eax, 0
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
-    ASSERT_EQ eax, 0xaa
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
-    ASSERT_EQ eax, EC_CMD_THERMAL_AUTO_FAN_CTRL
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
-    ASSERT_EQ eax, 1
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
-    ASSERT_EQ eax, 1
-    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
-    ASSERT_EQ eax, 2
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM], 0xaa
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND], EC_CMD_THERMAL_AUTO_FAN_CTRL
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION], 1
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN], 1
+    ASSERT_EQ byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE], 2
 
-    mov     rdi, 1
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .fail
-    lea     rsi, [rel pass_msg]
-    mov     rdx, 13
-    mov     rax, 1
-    syscall
-    xor     edi, edi
-    mov     rax, 60
-    syscall
-.fail:
-    lea     rsi, [rel fail_msg]
-    mov     rdx, 13
-    mov     rax, 1
-    syscall
-    mov     edi, 1
-    mov     rax, 60
-    syscall
+    TEST_EXIT_FAILED

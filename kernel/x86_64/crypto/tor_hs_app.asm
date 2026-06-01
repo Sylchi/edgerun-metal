@@ -10,22 +10,20 @@
 %define ER_HS_OP_MESSAGE_PUT 2
 
 %define ER_HS_CONTACT_MAX    16
-%define ER_HS_CONTACT_SIZE   104
+%define ER_HS_CONTACT_SIZE   68
 %define ER_HS_CONTACT_NAME   0
 %define ER_HS_CONTACT_NLEN   32
-%define ER_HS_CONTACT_ONION  36
-%define ER_HS_CONTACT_OLEN   100
+%define ER_HS_CONTACT_ID     36
 
 %define ER_HS_INBOX_MAX      32
-%define ER_HS_MSG_SIZE       424
-%define ER_HS_MSG_FROM       0
-%define ER_HS_MSG_FLEN       32
-%define ER_HS_MSG_BODY       36
-%define ER_HS_MSG_BLEN       420
+%define ER_HS_MSG_SIZE       420
+%define ER_HS_MSG_FROM_ID    0
+%define ER_HS_MSG_BODY       32
+%define ER_HS_MSG_BLEN       416
 
 %define ER_HS_FRAME_HDR_LEN  8
 %define ER_HS_NAME_MAX       31
-%define ER_HS_ONION_MAX      63
+%define ER_HS_ID_SIZE        32
 %define ER_HS_BODY_MAX       384
 
 extern er_memcpy
@@ -69,8 +67,8 @@ _hs_app_store_header:
     mov     word [rdi + 6], 0
     ret
 
-; er_tor_hs_app_build_contact_put(out, name, name_len, onion, onion_len)
-; Frame: "ERHS" version op reserved2 name_len onion_len name onion
+; er_tor_hs_app_build_contact_put(out, name, name_len, identity, identity_len)
+; Frame: "ERHS" version op reserved2 name_len identity[32] name
 global er_tor_hs_app_build_contact_put
 er_fn er_tor_hs_app_build_contact_put
     push    rbp
@@ -93,33 +91,28 @@ er_fn er_tor_hs_app_build_contact_put
     jz      .fail
     test    r13d, r13d
     jz      .fail
-    test    r15d, r15d
-    jz      .fail
+    cmp     r15d, ER_HS_ID_SIZE
+    jne     .fail
     cmp     r13d, ER_HS_NAME_MAX
     ja      .fail
-    cmp     r15d, ER_HS_ONION_MAX
-    ja      .fail
-    mov     eax, ER_HS_FRAME_HDR_LEN + 2
+    mov     eax, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     add     eax, r13d
-    add     eax, r15d
     cmp     eax, TOR_HS_RELAY_DATA_MAX
     ja      .fail
     mov     rdi, rbx
     mov     esi, ER_HS_OP_CONTACT_PUT
     call    _hs_app_store_header
     mov     [rbx + ER_HS_FRAME_HDR_LEN], r13b
-    mov     [rbx + ER_HS_FRAME_HDR_LEN + 1], r15b
-    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 2]
+    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 1]
+    mov     rsi, r14
+    mov     edx, ER_HS_ID_SIZE
+    call    er_memcpy
+    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE]
     mov     rsi, r12
     mov     edx, r13d
     call    er_memcpy
-    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 2 + r13]
-    mov     rsi, r14
-    mov     edx, r15d
-    call    er_memcpy
-    mov     eax, ER_HS_FRAME_HDR_LEN + 2
+    mov     eax, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     add     eax, r13d
-    add     eax, r15d
     er_ok
     pop     r15
     pop     r14
@@ -138,7 +131,7 @@ er_fn er_tor_hs_app_build_contact_put
     pop     rbp
     er_ret
 
-; er_tor_hs_app_build_message_put(out, from, from_len, body, body_len)
+; er_tor_hs_app_build_message_put(out, from_identity, identity_len, body, body_len)
 global er_tor_hs_app_build_message_put
 er_fn er_tor_hs_app_build_message_put
     push    rbp
@@ -159,37 +152,32 @@ er_fn er_tor_hs_app_build_message_put
     jz      .fail
     test    r14, r14
     jz      .fail
-    test    r13d, r13d
-    jz      .fail
+    cmp     r13d, ER_HS_ID_SIZE
+    jne     .fail
     test    r15d, r15d
     jz      .fail
-    cmp     r13d, ER_HS_NAME_MAX
-    ja      .fail
     cmp     r15d, ER_HS_BODY_MAX
     ja      .fail
-    mov     eax, ER_HS_FRAME_HDR_LEN + 3
-    add     eax, r13d
+    mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
     add     eax, r15d
     cmp     eax, TOR_HS_RELAY_DATA_MAX
     ja      .fail
     mov     rdi, rbx
     mov     esi, ER_HS_OP_MESSAGE_PUT
     call    _hs_app_store_header
-    mov     [rbx + ER_HS_FRAME_HDR_LEN], r13b
     mov     eax, r15d
     shr     eax, 8
-    mov     [rbx + ER_HS_FRAME_HDR_LEN + 1], al
-    mov     [rbx + ER_HS_FRAME_HDR_LEN + 2], r15b
-    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 3]
+    mov     [rbx + ER_HS_FRAME_HDR_LEN], al
+    mov     [rbx + ER_HS_FRAME_HDR_LEN + 1], r15b
+    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 2]
     mov     rsi, r12
-    mov     edx, r13d
+    mov     edx, ER_HS_ID_SIZE
     call    er_memcpy
-    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 3 + r13]
+    lea     rdi, [rbx + ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE]
     mov     rsi, r14
     mov     edx, r15d
     call    er_memcpy
-    mov     eax, ER_HS_FRAME_HDR_LEN + 3
-    add     eax, r13d
+    mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
     add     eax, r15d
     er_ok
     pop     r15
@@ -235,21 +223,15 @@ er_fn er_tor_hs_app_handle_frame
     jmp     .fail
 
 .contact:
-    cmp     r12d, ER_HS_FRAME_HDR_LEN + 2
+    cmp     r12d, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     jb      .fail
     movzx   r13d, byte [rbx + ER_HS_FRAME_HDR_LEN]
-    movzx   r14d, byte [rbx + ER_HS_FRAME_HDR_LEN + 1]
     test    r13d, r13d
-    jz      .fail
-    test    r14d, r14d
     jz      .fail
     cmp     r13d, ER_HS_NAME_MAX
     ja      .fail
-    cmp     r14d, ER_HS_ONION_MAX
-    ja      .fail
-    mov     eax, ER_HS_FRAME_HDR_LEN + 2
+    mov     eax, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     add     eax, r13d
-    add     eax, r14d
     cmp     r12d, eax
     jb      .fail
     mov     eax, [rel hs_app_contact_count]
@@ -258,39 +240,31 @@ er_fn er_tor_hs_app_handle_frame
     imul    eax, ER_HS_CONTACT_SIZE
     lea     r15, [rel hs_app_contacts + rax]
     mov     [r15 + ER_HS_CONTACT_NLEN], r13d
-    mov     [r15 + ER_HS_CONTACT_OLEN], r14d
+    lea     rdi, [r15 + ER_HS_CONTACT_ID]
+    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 1]
+    mov     edx, ER_HS_ID_SIZE
+    call    er_memcpy
     lea     rdi, [r15 + ER_HS_CONTACT_NAME]
-    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 2]
+    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE]
     mov     edx, r13d
     call    er_memcpy
     mov     byte [r15 + ER_HS_CONTACT_NAME + r13], 0
-    lea     rdi, [r15 + ER_HS_CONTACT_ONION]
-    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 2 + r13]
-    mov     edx, r14d
-    call    er_memcpy
-    mov     byte [r15 + ER_HS_CONTACT_ONION + r14], 0
     inc     dword [rel hs_app_contact_count]
     xor     eax, eax
     jmp     .ok
 
 .message:
-    cmp     r12d, ER_HS_FRAME_HDR_LEN + 3
+    cmp     r12d, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
     jb      .fail
-    movzx   r13d, byte [rbx + ER_HS_FRAME_HDR_LEN]
-    movzx   r14d, byte [rbx + ER_HS_FRAME_HDR_LEN + 1]
+    movzx   r14d, byte [rbx + ER_HS_FRAME_HDR_LEN]
     shl     r14d, 8
-    movzx   eax, byte [rbx + ER_HS_FRAME_HDR_LEN + 2]
+    movzx   eax, byte [rbx + ER_HS_FRAME_HDR_LEN + 1]
     or      r14d, eax
-    test    r13d, r13d
-    jz      .fail
     test    r14d, r14d
     jz      .fail
-    cmp     r13d, ER_HS_NAME_MAX
-    ja      .fail
     cmp     r14d, ER_HS_BODY_MAX
     ja      .fail
-    mov     eax, ER_HS_FRAME_HDR_LEN + 3
-    add     eax, r13d
+    mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
     add     eax, r14d
     cmp     r12d, eax
     jb      .fail
@@ -299,15 +273,13 @@ er_fn er_tor_hs_app_handle_frame
     jae     .fail
     imul    eax, ER_HS_MSG_SIZE
     lea     r15, [rel hs_app_messages + rax]
-    mov     [r15 + ER_HS_MSG_FLEN], r13d
     mov     [r15 + ER_HS_MSG_BLEN], r14d
-    lea     rdi, [r15 + ER_HS_MSG_FROM]
-    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 3]
-    mov     edx, r13d
+    lea     rdi, [r15 + ER_HS_MSG_FROM_ID]
+    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 2]
+    mov     edx, ER_HS_ID_SIZE
     call    er_memcpy
-    mov     byte [r15 + ER_HS_MSG_FROM + r13], 0
     lea     rdi, [r15 + ER_HS_MSG_BODY]
-    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 3 + r13]
+    lea     rsi, [rbx + ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE]
     mov     edx, r14d
     call    er_memcpy
     mov     byte [r15 + ER_HS_MSG_BODY + r14], 0
@@ -325,7 +297,7 @@ er_fn er_tor_hs_app_handle_frame
     pop     rbx
     er_ret
 
-; er_tor_hs_app_send_message(circ_id, stream_id, from, from_len, body, body_len)
+; er_tor_hs_app_send_message(circ_id, stream_id, sender_identity, identity_len, body, body_len)
 global er_tor_hs_app_send_message
 er_fn er_tor_hs_app_send_message
     push    rbp
@@ -359,7 +331,7 @@ er_fn er_tor_hs_app_send_message
     pop     rbp
     er_ret
 
-; er_tor_hs_app_add_contact(name, name_len, onion, onion_len)
+; er_tor_hs_app_add_contact(name, name_len, identity, identity_len)
 global er_tor_hs_app_add_contact
 er_fn er_tor_hs_app_add_contact
     push    rbx
@@ -391,7 +363,7 @@ er_fn er_tor_hs_app_add_contact
     pop     rbx
     er_ret
 
-; er_tor_hs_app_send_contact(circ_id, stream_id, name, name_len, onion, onion_len)
+; er_tor_hs_app_send_contact(circ_id, stream_id, name, name_len, identity, identity_len)
 global er_tor_hs_app_send_contact
 er_fn er_tor_hs_app_send_contact
     push    rbp
@@ -426,7 +398,7 @@ er_fn er_tor_hs_app_send_contact
     er_ret
 
 ; er_tor_hs_app_send_message_to_contact(circ_id, stream_id, contact_idx,
-;                                       from, from_len, body, body_len)
+;                                       sender_identity, identity_len, body, body_len)
 ; Uses contact_idx as a bounds-checked send target. The caller still supplies
 ; the already-open HS stream for that contact.
 global er_tor_hs_app_send_message_to_contact

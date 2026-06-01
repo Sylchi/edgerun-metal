@@ -8,6 +8,7 @@
 
 %define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
+%include "test/test_macros.inc"
 
 SECTION .data
 
@@ -105,11 +106,7 @@ _start:
     jne     .fail
 
     ; --- PASS ---
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 .fail:
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1

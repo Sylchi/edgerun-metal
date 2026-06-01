@@ -54,14 +54,10 @@ _start:
     call    sw_fb_fill
 
     ; Verify first pixel is blue
-    mov     eax, [rel fb]
-    mov     edx, [rel blue]
-    TEST                       ; fb[0] == blue
+    TEST_DWORD_MEM [rel fb], [rel blue]
 
     ; Verify last pixel (index 99) is blue
-    mov     eax, [rel fb + 99*4]
-    mov     edx, [rel blue]
-    TEST                       ; fb[99] == blue
+    TEST_DWORD_MEM [rel fb + 99*4], [rel blue]
 
     ; ===== 2. Fill partially (overwrite middle with red) =====
     mov     edi, 10
@@ -72,24 +68,16 @@ _start:
     call    sw_fb_fill
 
     ; Pixel at (0,0) should still be blue
-    mov     eax, [rel fb]
-    mov     edx, [rel blue]
-    TEST
+    TEST_DWORD_MEM [rel fb], [rel blue]
 
     ; Pixel at (3,3) = index 3*10+3 = 33 should be red
-    mov     eax, [rel fb + 33*4]
-    mov     edx, [rel red]
-    TEST
+    TEST_DWORD_MEM [rel fb + 33*4], [rel red]
 
     ; Pixel at (7,7) = index 7*10+7 = 77 should be red
-    mov     eax, [rel fb + 77*4]
-    mov     edx, [rel red]
-    TEST
+    TEST_DWORD_MEM [rel fb + 77*4], [rel red]
 
     ; Pixel at (9,9) = index 99 should still be blue
-    mov     eax, [rel fb + 99*4]
-    mov     edx, [rel blue]
-    TEST
+    TEST_DWORD_MEM [rel fb + 99*4], [rel blue]
 
     ; ===== 3. Empty rect (no-op) =====
     mov     edi, 10
@@ -100,9 +88,7 @@ _start:
     call    sw_fb_fill
 
     ; fb[99] should still be blue (unchanged)
-    mov     eax, [rel fb + 99*4]
-    mov     edx, [rel blue]
-    TEST
+    TEST_DWORD_MEM [rel fb + 99*4], [rel blue]
 
     ; ===== 4. Fill with rect partially off-screen =====
     mov     edi, 10
@@ -113,9 +99,7 @@ _start:
     call    sw_fb_fill
 
     ; Nothing should be written (off-screen). fb[99] still blue.
-    mov     eax, [rel fb + 99*4]
-    mov     edx, [rel blue]
-    TEST
+    TEST_DWORD_MEM [rel fb + 99*4], [rel blue]
 
     ; ===== 5. sw_fb_blend_pixel with alpha=0 =====
     ; Reset fb to black
@@ -138,9 +122,7 @@ _start:
     add     rsp, 8
 
     ; fb[0] should still be black (alpha=0 → no change)
-    mov     eax, [rel fb]
-    mov     edx, [rel black]
-    TEST
+    TEST_DWORD_MEM [rel fb], [rel black]
 
     ; ===== 6. Blend pixel with alpha=255 (full overwrite) =====
     mov     edi, 10
@@ -154,9 +136,7 @@ _start:
     add     rsp, 8
 
     ; fb[0] should now be red (full overwrite)
-    mov     eax, [rel fb]
-    mov     edx, [rel red]
-    TEST
+    TEST_DWORD_MEM [rel fb], [rel red]
 
     ; ===== 7. Blend pixel with partial alpha =====
     ; fb[0] is currently red. Let's blend blue on top with alpha=128
@@ -177,16 +157,7 @@ _start:
     ; A channel: min(255, 255 + (255*128/255)) = min(255, 255+128) = 255
     ; Result: A=255, B=128, G=0, R=127 → 0xFF80007F
 
-    mov     eax, [rel fb]
-    mov     edx, 0xFF80007F
-    TEST
+    TEST_DWORD_IMM [rel fb], 0xFF80007F
 
     ; ===== done =====
-    mov     rax, [rel passed]
-    mov     rdx, [rel total]
-    cmp     rax, rdx
-    sete    al
-    xor     al, 1               ; invert: 1→0 (all pass), 0→1 (fail)
-    movzx   edi, al
-    mov     eax, 60
-    syscall
+    TEST_EXIT_PASSED_TOTAL

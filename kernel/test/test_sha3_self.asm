@@ -1,6 +1,7 @@
 ; EdgeRun SHA3-256 self-hosted test runner — x86_64 assembly.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern er_sha3_256
 extern er_shake256
@@ -36,16 +37,6 @@ shake256_empty_64:
 SECTION .bss
 digest_out: resb 64
 
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
 SECTION .text
 global _start
 _start:
@@ -53,65 +44,22 @@ _start:
     xor     esi, esi
     lea     rdx, [rel digest_out]
     call    er_sha3_256
-    test    eax, eax
-    sete    al
-    movzx   eax, al
-    ASSERT eax
-    lea     rdi, [rel sha3_empty]
-    lea     rsi, [rel digest_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_EQ eax, 0
+    ASSERT_MEM_EQ [rel sha3_empty], [rel digest_out], 32
 
     lea     rdi, [rel msg_abc]
     mov     esi, 3
     lea     rdx, [rel digest_out]
     call    er_sha3_256
-    test    eax, eax
-    sete    al
-    movzx   eax, al
-    ASSERT eax
-    lea     rdi, [rel sha3_abc]
-    lea     rsi, [rel digest_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_EQ eax, 0
+    ASSERT_MEM_EQ [rel sha3_abc], [rel digest_out], 32
 
     xor     edi, edi
     xor     esi, esi
     lea     rdx, [rel digest_out]
     mov     ecx, 64
     call    er_shake256
-    test    eax, eax
-    sete    al
-    movzx   eax, al
-    ASSERT eax
-    lea     rdi, [rel shake256_empty_64]
-    lea     rsi, [rel digest_out]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_EQ eax, 0
+    ASSERT_MEM_EQ [rel shake256_empty_64], [rel digest_out], 64
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED

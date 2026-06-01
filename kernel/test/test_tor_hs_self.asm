@@ -2,6 +2,7 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_tor_hs_build_establish_rendezvous
 extern er_tor_hs_build_onion_address
@@ -217,26 +218,6 @@ last_cmd: resb 1
 last_len: resd 1
 last_body: resb TOR_HS_RELAY_DATA_MAX
 
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-%macro ASSERT_EQ 2
-    cmp     %1, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
 SECTION .text
 global _start
 _start:
@@ -245,11 +226,7 @@ _start:
     lea     rsi, [rel identity_pub]
     call    er_tor_hs_build_onion_address
     ASSERT_EQ eax, identity_onion_len
-    lea     rdi, [rel identity_onion]
-    lea     rsi, [rel onion_out]
-    mov     edx, identity_onion_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel identity_onion], [rel onion_out], identity_onion_len
 
     lea     rdi, [rel armor_out]
     mov     esi, 128
@@ -257,11 +234,7 @@ _start:
     mov     ecx, 6
     call    er_tor_hs_b64_encode
     ASSERT_EQ eax, b64_expected_len
-    lea     rdi, [rel b64_expected]
-    lea     rsi, [rel armor_out]
-    mov     edx, b64_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel b64_expected], [rel armor_out], b64_expected_len
 
     lea     rdi, [rel armor_out]
     mov     esi, 128
@@ -269,33 +242,21 @@ _start:
     mov     ecx, 6
     call    er_tor_hs_desc_armor_message
     ASSERT_EQ eax, armor_expected_len
-    lea     rdi, [rel armor_expected]
-    lea     rsi, [rel armor_out]
-    mov     edx, armor_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel armor_expected], [rel armor_out], armor_expected_len
     lea     rdi, [rel decode_out]
     mov     esi, 128
     lea     rdx, [rel armor_out]
     mov     ecx, armor_expected_len
     call    er_tor_hs_desc_unarmor_message
     ASSERT_EQ eax, 6
-    lea     rdi, [rel b64_input]
-    lea     rsi, [rel decode_out]
-    mov     edx, 6
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel b64_input], [rel decode_out], 6
     lea     rdi, [rel decode_out]
     mov     esi, 128
     lea     rdx, [rel b64_expected]
     mov     ecx, b64_expected_len
     call    er_tor_hs_b64_decode
     ASSERT_EQ eax, 6
-    lea     rdi, [rel b64_input]
-    lea     rsi, [rel decode_out]
-    mov     edx, 6
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel b64_input], [rel decode_out], 6
     lea     rax, [rel cert_sig]
     push    rax
     lea     rdi, [rel cert_out]
@@ -307,42 +268,26 @@ _start:
     call    er_tor_hs_cert_build
     add     rsp, 8
     ASSERT_EQ eax, cert_blob_len
-    lea     rdi, [rel cert_blob]
-    lea     rsi, [rel cert_out]
-    mov     edx, cert_blob_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cert_blob], [rel cert_out], cert_blob_len
     lea     rdi, [rel armor_out]
     mov     esi, 256
     lea     rdx, [rel cert_out]
     mov     ecx, cert_blob_len
     call    er_tor_hs_cert_armor_ed25519
     ASSERT_EQ eax, auth_cert_armor_len
-    lea     rdi, [rel auth_cert_armor]
-    lea     rsi, [rel armor_out]
-    mov     edx, auth_cert_armor_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel auth_cert_armor], [rel armor_out], auth_cert_armor_len
     lea     rdi, [rel cert_key_out]
     lea     rsi, [rel cert_blob]
     mov     edx, cert_blob_len
     call    er_tor_hs_cert_get_certified_key
     ASSERT_EQ eax, 0
-    lea     rdi, [rel cert_subject]
-    lea     rsi, [rel cert_key_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cert_subject], [rel cert_key_out], 32
     lea     rdi, [rel cert_key_out]
     lea     rsi, [rel cert_blob]
     mov     edx, cert_blob_len
     call    er_tor_hs_cert_get_signing_key_ext
     ASSERT_EQ eax, 0
-    lea     rdi, [rel cert_signer]
-    lea     rsi, [rel cert_key_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cert_signer], [rel cert_key_out], 32
     push    desc_intro_text_len
     lea     rax, [rel desc_intro_text]
     push    rax
@@ -356,26 +301,10 @@ _start:
     add     rsp, 16
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel copy_len], 30
-    lea     rdi, [rel cert_subject]
-    lea     rsi, [rel parse_auth_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel onion_key]
-    lea     rsi, [rel parse_onion_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel client_pk]
-    lea     rsi, [rel parse_enc_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel linkspecs]
-    lea     rsi, [rel copy_buf]
-    mov     edx, 30
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cert_subject], [rel parse_auth_out], 32
+    ASSERT_MEM_EQ [rel onion_key], [rel parse_onion_out], 32
+    ASSERT_MEM_EQ [rel client_pk], [rel parse_enc_out], 32
+    ASSERT_MEM_EQ [rel linkspecs], [rel copy_buf], 30
     sub     rsp, 16
     mov     qword [rsp], auth_cert_armor_len
     lea     rax, [rel client_pk]
@@ -389,11 +318,7 @@ _start:
     call    er_tor_hs_desc_build_intro_plaintext
     add     rsp, 16
     ASSERT_EQ eax, desc_intro_text_len
-    lea     rdi, [rel desc_intro_text]
-    lea     rsi, [rel desc_text_out]
-    mov     edx, desc_intro_text_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel desc_intro_text], [rel desc_text_out], desc_intro_text_len
 
     sub     rsp, 40
     mov     qword [rsp], 7
@@ -412,11 +337,7 @@ _start:
     call    er_tor_hs_desc_build_v3
     add     rsp, 40
     ASSERT_EQ eax, desc_v3_expected_len
-    lea     rdi, [rel desc_v3_expected]
-    lea     rsi, [rel desc_text_out]
-    mov     edx, desc_v3_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel desc_v3_expected], [rel desc_text_out], desc_v3_expected_len
 
     lea     rdi, [rel parse_link_id_out]
     lea     rsi, [rel parse_link_ip_out]
@@ -427,11 +348,7 @@ _start:
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel parse_link_ip_out], 0x0100007f
     ASSERT_EQ word [rel parse_link_port_out], 9001
-    lea     rdi, [rel linkspecs + 10]
-    lea     rsi, [rel parse_link_id_out]
-    mov     edx, 20
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel linkspecs + 10], [rel parse_link_id_out], 20
 
     lea     rax, [rel desc_plain]
     push    desc_plain_len
@@ -450,11 +367,7 @@ _start:
     call    er_tor_hs_desc_encrypt
     add     rsp, 40
     ASSERT_EQ eax, desc_expected_len
-    lea     rdi, [rel desc_expected]
-    lea     rsi, [rel desc_out]
-    mov     edx, desc_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel desc_expected], [rel desc_out], desc_expected_len
     lea     rax, [rel desc_out]
     push    desc_expected_len
     push    rax
@@ -472,11 +385,7 @@ _start:
     add     rsp, 40
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel plain_len], desc_plain_len
-    lea     rdi, [rel desc_plain]
-    lea     rsi, [rel plain_out]
-    mov     edx, desc_plain_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel desc_plain], [rel plain_out], desc_plain_len
     xor     byte [rel desc_out + desc_expected_len - 1], 1
     lea     rax, [rel desc_out]
     push    desc_expected_len
@@ -504,11 +413,7 @@ _start:
     mov     r9d, 3
     call    er_tor_hs_mac32_sha3
     ASSERT_EQ eax, 0
-    lea     rdi, [rel crypto_mac_expected]
-    lea     rsi, [rel crypto_out]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel crypto_mac_expected], [rel crypto_out], 32
 
     lea     rdi, [rel crypto_out]
     mov     esi, 64
@@ -518,21 +423,13 @@ _start:
     mov     r9d, 3
     call    er_tor_hs_kdf_sha3
     ASSERT_EQ eax, 0
-    lea     rdi, [rel crypto_kdf_expected]
-    lea     rsi, [rel crypto_out]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel crypto_kdf_expected], [rel crypto_out], 64
 
     lea     rdi, [rel buf]
     lea     rsi, [rel cookie]
     call    er_tor_hs_build_establish_rendezvous
     ASSERT_EQ eax, TOR_HS_RENDEZVOUS_COOKIE_LEN
-    lea     rdi, [rel cookie]
-    lea     rsi, [rel buf]
-    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cookie], [rel buf], TOR_HS_RENDEZVOUS_COOKIE_LEN
 
     lea     rdi, [rel buf]
     lea     rsi, [rel cookie]
@@ -540,16 +437,8 @@ _start:
     mov     ecx, 64
     call    er_tor_hs_build_rendezvous1
     ASSERT_EQ eax, TOR_HS_RENDEZVOUS_COOKIE_LEN + 64
-    lea     rdi, [rel cookie]
-    lea     rsi, [rel buf]
-    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel handshake]
-    lea     rsi, [rel buf + TOR_HS_RENDEZVOUS_COOKIE_LEN]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cookie], [rel buf], TOR_HS_RENDEZVOUS_COOKIE_LEN
+    ASSERT_MEM_EQ [rel handshake], [rel buf + TOR_HS_RENDEZVOUS_COOKIE_LEN], 64
 
     lea     rdi, [rel handshake]
     mov     esi, 64
@@ -558,11 +447,7 @@ _start:
     call    er_tor_hs_parse_rendezvous2
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel copy_len], 64
-    lea     rdi, [rel handshake]
-    lea     rsi, [rel copy_buf]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel handshake], [rel copy_buf], 64
 
     lea     rdi, [rel intro_ack_ok]
     mov     esi, 3
@@ -579,23 +464,12 @@ _start:
     mov     ecx, 8
     call    er_tor_hs_build_introduce1_prefix
     ASSERT_EQ eax, 64
-    cmp     byte [rel buf + 20], TOR_HS_AUTH_KEY_TYPE_ED25519
-    sete    al
-    movzx   eax, al
-    ASSERT eax
+    ASSERT_BYTE [rel buf + 20], TOR_HS_AUTH_KEY_TYPE_ED25519
     ASSERT_EQ byte [rel buf + 21], 0
     ASSERT_EQ byte [rel buf + 22], TOR_HS_INTRO_AUTH_KEY_LEN
     ASSERT_EQ byte [rel buf + 55], 0
-    lea     rdi, [rel auth_key]
-    lea     rsi, [rel buf + 23]
-    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel encrypted]
-    lea     rsi, [rel buf + 56]
-    mov     edx, 8
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel auth_key], [rel buf + 23], TOR_HS_INTRO_AUTH_KEY_LEN
+    ASSERT_MEM_EQ [rel encrypted], [rel buf + 56], 8
 
     lea     rdi, [rel buf]
     lea     rsi, [rel cookie]
@@ -610,21 +484,9 @@ _start:
     ASSERT_EQ byte [rel buf + 22], 0
     ASSERT_EQ byte [rel buf + 23], TOR_HS_ONION_KEY_LEN_NTOR
     ASSERT_EQ byte [rel buf + 56], 2
-    lea     rdi, [rel cookie]
-    lea     rsi, [rel buf]
-    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel onion_key]
-    lea     rsi, [rel buf + 24]
-    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel linkspecs]
-    lea     rsi, [rel buf + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
-    mov     edx, 30
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cookie], [rel buf], TOR_HS_RENDEZVOUS_COOKIE_LEN
+    ASSERT_MEM_EQ [rel onion_key], [rel buf + 24], TOR_HS_ONION_KEY_LEN_NTOR
+    ASSERT_MEM_EQ [rel linkspecs], [rel buf + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN], 30
 
     lea     rdi, [rel parse_linkspecs_out]
     mov     esi, 0x0100007f
@@ -632,11 +494,7 @@ _start:
     lea     rcx, [rel linkspecs + 10]
     call    er_tor_hs_build_linkspecs
     ASSERT_EQ eax, 30
-    lea     rdi, [rel linkspecs]
-    lea     rsi, [rel parse_linkspecs_out]
-    mov     edx, 30
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel linkspecs], [rel parse_linkspecs_out], 30
 
     sub     rsp, 16
     lea     rax, [rel buf]
@@ -651,21 +509,9 @@ _start:
     add     rsp, 16
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel parse_linkspecs_len_out], 30
-    lea     rdi, [rel cookie]
-    lea     rsi, [rel copy_buf]
-    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel onion_key]
-    lea     rsi, [rel parse_onion_out]
-    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel linkspecs]
-    lea     rsi, [rel parse_linkspecs_out]
-    mov     edx, 30
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cookie], [rel copy_buf], TOR_HS_RENDEZVOUS_COOKIE_LEN
+    ASSERT_MEM_EQ [rel onion_key], [rel parse_onion_out], TOR_HS_ONION_KEY_LEN_NTOR
+    ASSERT_MEM_EQ [rel linkspecs], [rel parse_linkspecs_out], 30
 
     lea     rdi, [rel buf]
     lea     rsi, [rel client_pk]
@@ -674,21 +520,9 @@ _start:
     lea     r8, [rel intro_mac]
     call    er_tor_hs_build_introduce1_encrypted
     ASSERT_EQ eax, TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
-    lea     rdi, [rel client_pk]
-    lea     rsi, [rel buf]
-    mov     edx, TOR_HS_CLIENT_PK_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel encrypted]
-    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN]
-    mov     edx, 8
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel intro_mac]
-    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN + 8]
-    mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel client_pk], [rel buf], TOR_HS_CLIENT_PK_LEN
+    ASSERT_MEM_EQ [rel encrypted], [rel buf + TOR_HS_CLIENT_PK_LEN], 8
+    ASSERT_MEM_EQ [rel intro_mac], [rel buf + TOR_HS_CLIENT_PK_LEN + 8], TOR_HS_INTRODUCE1_MAC_LEN
 
     lea     rdi, [rel crypto_out]
     lea     rsi, [rel auth_key]
@@ -712,11 +546,7 @@ _start:
     call    er_tor_hs_build_introduce1_ntor_encrypted
     add     rsp, 16
     ASSERT_EQ eax, TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
-    lea     rdi, [rel client_pk]
-    lea     rsi, [rel buf]
-    mov     edx, TOR_HS_CLIENT_PK_LEN
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel client_pk], [rel buf], TOR_HS_CLIENT_PK_LEN
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel zero_iv]
     mov     edx, 16
@@ -727,11 +557,7 @@ _start:
     lea     rcx, [rel crypto_out]
     lea     r8, [rel iv_copy]
     call    er_tor_aes256_ctr
-    lea     rdi, [rel encrypted]
-    lea     rsi, [rel copy_buf]
-    mov     edx, 8
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel encrypted], [rel copy_buf], 8
 
     ; Service-owned node path: derive the same hs-ntor INTRODUCE2 keys from
     ; our onion private key, open the encrypted field, and recover plaintext.
@@ -761,11 +587,7 @@ _start:
     lea     r9, [rel subcred]
     call    er_tor_hs_derive_intro_keys_service
     ASSERT_EQ eax, 0
-    lea     rdi, [rel crypto_out]
-    lea     rsi, [rel service_keys]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel crypto_out], [rel service_keys], 64
 
     sub     rsp, 16
     lea     rax, [rel encrypted]
@@ -795,12 +617,8 @@ _start:
     call    er_tor_hs_extract_introduce_encrypted
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel intro_encrypted_len_out], TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
-    mov     rax, [rel intro_encrypted_ptr_out]
     lea     rdx, [rel copy_buf + TOR_HS_INTRODUCE1_PREFIX_LEN]
-    cmp     rax, rdx
-    sete    al
-    movzx   eax, al
-    ASSERT eax
+    ASSERT_EQ qword [rel intro_encrypted_ptr_out], rdx
     lea     rdi, [rel intro_encrypted_ptr_out]
     lea     rsi, [rel intro_encrypted_len_out]
     lea     rdx, [rel buf]
@@ -824,11 +642,7 @@ _start:
     add     rsp, 16
     ASSERT_EQ eax, 0
     ASSERT_EQ dword [rel copy_len], 8
-    lea     rdi, [rel encrypted]
-    lea     rsi, [rel copy_buf]
-    mov     edx, 8
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel encrypted], [rel copy_buf], 8
 
     xor     byte [rel buf + TOR_HS_CLIENT_PK_LEN + 8], 0x01
     sub     rsp, 16
@@ -889,11 +703,7 @@ _start:
     mov     r9d, TOR_HS_INTRO_AUTH_KEY_LEN + 1 + TOR_HS_CLIENT_PK_LEN + 8
     call    er_tor_hs_mac32_sha3
     ASSERT_EQ eax, 0
-    lea     rdi, [rel copy_buf + 64]
-    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN + 8]
-    mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel copy_buf + 64], [rel buf + TOR_HS_CLIENT_PK_LEN + 8], TOR_HS_INTRODUCE1_MAC_LEN
 
     lea     rdi, [rel buf]
     lea     rsi, [rel auth_key]
@@ -908,21 +718,9 @@ _start:
     ASSERT_EQ byte [rel buf + 35], 0
     ASSERT_EQ byte [rel buf + 68], 0
     ASSERT_EQ byte [rel buf + 69], TOR_HS_ED25519_SIG_LEN
-    lea     rdi, [rel auth_key]
-    lea     rsi, [rel buf + 3]
-    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel handshake_auth]
-    lea     rsi, [rel buf + 36]
-    mov     edx, TOR_HS_INTRO_HANDSHAKE_AUTH_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel intro_sig]
-    lea     rsi, [rel buf + TOR_HS_ESTABLISH_INTRO_BASE_LEN]
-    mov     edx, TOR_HS_ED25519_SIG_LEN
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel auth_key], [rel buf + 3], TOR_HS_INTRO_AUTH_KEY_LEN
+    ASSERT_MEM_EQ [rel handshake_auth], [rel buf + 36], TOR_HS_INTRO_HANDSHAKE_AUTH_LEN
+    ASSERT_MEM_EQ [rel intro_sig], [rel buf + TOR_HS_ESTABLISH_INTRO_BASE_LEN], TOR_HS_ED25519_SIG_LEN
 
     lea     rdi, [rel intro_established_ok]
     mov     esi, 1
@@ -995,11 +793,7 @@ _start:
     ASSERT_EQ dword [rel last_circ], 10
     ASSERT_EQ byte [rel last_cmd], TOR_RELAY_INTRODUCE1
     ASSERT_EQ dword [rel copy_len], 64
-    lea     rdi, [rel handshake]
-    lea     rsi, [rel client_hs_out]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel handshake], [rel client_hs_out], 64
 
     sub     rsp, 32
     lea     rax, [rel desc_intro_text]
@@ -1021,16 +815,8 @@ _start:
     ASSERT_EQ dword [rel last_circ], 12
     ASSERT_EQ byte [rel last_cmd], TOR_RELAY_INTRODUCE1
     ASSERT_EQ dword [rel copy_len], 64
-    lea     rdi, [rel cert_subject]
-    lea     rsi, [rel last_body + 23]
-    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel handshake]
-    lea     rsi, [rel client_hs_out]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel cert_subject], [rel last_body + 23], TOR_HS_INTRO_AUTH_KEY_LEN
+    ASSERT_MEM_EQ [rel handshake], [rel client_hs_out], 64
 
     mov     edi, 11
     mov     esi, 3
@@ -1043,11 +829,7 @@ _start:
     ASSERT_EQ word [rel last_stream], 3
     ASSERT_EQ byte [rel last_cmd], TOR_RELAY_BEGIN
     ASSERT_EQ dword [rel last_len], onion_begin_len
-    lea     rdi, [rel onion_begin]
-    lea     rsi, [rel last_body]
-    mov     edx, onion_begin_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel onion_begin], [rel last_body], onion_begin_len
 
 %ifdef HS_BENCH
     lea     rdi, [rel msg_hs_total]
@@ -1140,29 +922,7 @@ _start:
     call    newline
 %endif
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED
 
 %ifdef HS_BENCH
 rdtsc64:

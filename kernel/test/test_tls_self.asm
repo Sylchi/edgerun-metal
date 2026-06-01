@@ -145,58 +145,34 @@ _start:
     ASSERT_RAX TLS_CLIENT_HELLO_RECORD_LEN
     ASSERT_RDX 0
 
-    movzx   eax, byte [rel out_buf + 0]
-    ASSERT_EQ eax, TLS_RECORD_HANDSHAKE
-    movzx   eax, byte [rel out_buf + 1]
-    ASSERT_EQ eax, TLS_RECORD_VERSION_MAJOR
-    movzx   eax, byte [rel out_buf + 2]
-    ASSERT_EQ eax, TLS_RECORD_VERSION_COMPAT_MINOR
-    movzx   eax, byte [rel out_buf + 4]
-    ASSERT_EQ eax, TLS_CLIENT_HELLO_PAYLOAD_LEN
+    ASSERT_BYTE [rel out_buf + 0], TLS_RECORD_HANDSHAKE
+    ASSERT_BYTE [rel out_buf + 1], TLS_RECORD_VERSION_MAJOR
+    ASSERT_BYTE [rel out_buf + 2], TLS_RECORD_VERSION_COMPAT_MINOR
+    ASSERT_BYTE [rel out_buf + 4], TLS_CLIENT_HELLO_PAYLOAD_LEN
 
-    movzx   eax, byte [rel out_buf + 5]
-    ASSERT_EQ eax, TLS_HANDSHAKE_CLIENT_HELLO
-    movzx   eax, byte [rel out_buf + 8]
-    ASSERT_EQ eax, TLS_CLIENT_HELLO_BODY_LEN
-    movzx   eax, byte [rel out_buf + 9]
-    ASSERT_EQ eax, TLS_RECORD_VERSION_MAJOR
-    movzx   eax, byte [rel out_buf + 10]
-    ASSERT_EQ eax, TLS_LEGACY_VERSION_MINOR
+    ASSERT_BYTE [rel out_buf + 5], TLS_HANDSHAKE_CLIENT_HELLO
+    ASSERT_BYTE [rel out_buf + 8], TLS_CLIENT_HELLO_BODY_LEN
+    ASSERT_BYTE [rel out_buf + 9], TLS_RECORD_VERSION_MAJOR
+    ASSERT_BYTE [rel out_buf + 10], TLS_LEGACY_VERSION_MINOR
 
-    movzx   eax, byte [rel out_buf + 43]
-    ASSERT_EQ eax, TLS_SESSION_ID_LEN
-    movzx   eax, byte [rel out_buf + 76]
-    ASSERT_EQ eax, 0
-    movzx   eax, byte [rel out_buf + 77]
-    ASSERT_EQ eax, 2
-    movzx   eax, word [rel out_buf + 78]
-    ASSERT_EQ eax, 0x0113
+    ASSERT_BYTE [rel out_buf + 43], TLS_SESSION_ID_LEN
+    ASSERT_BYTE [rel out_buf + 76], 0
+    ASSERT_BYTE [rel out_buf + 77], 2
+    ASSERT_WORD [rel out_buf + 78], 0x0113
 
-    movzx   eax, byte [rel out_buf + 82]
-    ASSERT_EQ eax, 0
-    movzx   eax, byte [rel out_buf + 83]
-    ASSERT_EQ eax, TLS_CLIENT_EXTENSIONS_LEN
+    ASSERT_BYTE [rel out_buf + 82], 0
+    ASSERT_BYTE [rel out_buf + 83], TLS_CLIENT_EXTENSIONS_LEN
 
-    movzx   eax, word [rel out_buf + 84]
-    ASSERT_EQ eax, 0x2B00
-    movzx   eax, word [rel out_buf + 91]
-    ASSERT_EQ eax, 0x0A00
-    movzx   eax, word [rel out_buf + 99]
-    ASSERT_EQ eax, 0x0D00
-    movzx   eax, word [rel out_buf + 111]
-    ASSERT_EQ eax, 0x3300
-    movzx   eax, word [rel out_buf + 117]
-    ASSERT_EQ eax, 0x1D00
-    movzx   eax, word [rel out_buf + 119]
-    ASSERT_EQ eax, 0x2000
+    ASSERT_WORD [rel out_buf + 84], 0x2B00
+    ASSERT_WORD [rel out_buf + 91], 0x0A00
+    ASSERT_WORD [rel out_buf + 99], 0x0D00
+    ASSERT_WORD [rel out_buf + 111], 0x3300
+    ASSERT_WORD [rel out_buf + 117], 0x1D00
+    ASSERT_WORD [rel out_buf + 119], 0x2000
 
     ; Private scalar was clamped.
-    movzx   eax, byte [rel priv_buf]
-    and     eax, 7
-    ASSERT_EQ eax, 0
-    movzx   eax, byte [rel priv_buf + 31]
-    and     eax, 0xC0
-    ASSERT_EQ eax, 0x40
+    ASSERT_BYTE_MASK [rel priv_buf], 7, 0
+    ASSERT_BYTE_MASK [rel priv_buf + 31], 0xC0, 0x40
 
     ; Strict ServerHello parse extracts the server X25519 key share.
     lea     rdi, [rel server_hello]
@@ -204,10 +180,8 @@ _start:
     lea     rdx, [rel server_key]
     call    er_tls_server_hello_parse
     ASSERT_RAX 0
-    movzx   eax, byte [rel server_key]
-    ASSERT_EQ eax, 0x70
-    movzx   eax, byte [rel server_key + 31]
-    ASSERT_EQ eax, 0x8f
+    ASSERT_BYTE [rel server_key], 0x70
+    ASSERT_BYTE [rel server_key + 31], 0x8f
 
     ; ServerHello processing computes the ECDHE shared secret.
     lea     rdi, [rel server_hello]
@@ -215,10 +189,8 @@ _start:
     lea     rdx, [rel shared_buf]
     call    er_tls_shared_secret_from_server_hello
     ASSERT_RAX 0
-    movzx   eax, byte [rel shared_buf]
-    ASSERT_EQ eax, 0xA5
-    movzx   eax, byte [rel shared_buf + 31]
-    ASSERT_EQ eax, 0xA5
+    ASSERT_BYTE [rel shared_buf], 0xA5
+    ASSERT_BYTE [rel shared_buf + 31], 0xA5
 
     ; HKDF helpers route through HMAC-SHA256 and produce 32 bytes.
     xor     rdi, rdi
@@ -228,8 +200,7 @@ _start:
     lea     r8, [rel hkdf_out]
     call    er_tls_hkdf_extract
     ASSERT_RAX 0
-    movzx   eax, byte [rel hkdf_out]
-    ASSERT_EQ eax, 0xC0
+    ASSERT_BYTE [rel hkdf_out], 0xC0
 
     lea     rdi, [rel hkdf_out]
     lea     rsi, [rel hkdf_label]
@@ -239,16 +210,14 @@ _start:
     lea     r9, [rel hkdf_out]
     call    er_tls_hkdf_expand_label
     ASSERT_RAX 0
-    movzx   eax, byte [rel hkdf_out]
-    ASSERT_EQ eax, 0xC0
+    ASSERT_BYTE [rel hkdf_out], 0xC0
 
     lea     rdi, [rel server_hello]
     mov     esi, server_hello_len
     lea     rdx, [rel hash_out]
     call    er_tls_transcript_hash_ch_sh
     ASSERT_RAX 0
-    movzx   eax, byte [rel hash_out]
-    ASSERT_EQ eax, 0xD0
+    ASSERT_BYTE [rel hash_out], 0xD0
 
     lea     rdi, [rel server_hello]
     mov     esi, server_hello_len
@@ -261,8 +230,7 @@ _start:
     lea     rdi, [rel hash_out2]
     call    er_tls_transcript_hash_current
     ASSERT_RAX 0
-    movzx   eax, byte [rel hash_out2]
-    ASSERT_EQ eax, 0xD0
+    ASSERT_BYTE [rel hash_out2], 0xD0
     lea     rdi, [rel finished_bad]
     mov     esi, finished_bad_len
     call    er_tls_server_finished_verify
@@ -294,8 +262,7 @@ _start:
     add     rsp, 8
     ASSERT_EQ eax, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
     ASSERT_EQ ecx, TLS_RECORD_HANDSHAKE
-    movzx   eax, byte [rel record_plain]
-    ASSERT_EQ eax, TLS_HANDSHAKE_FINISHED
+    ASSERT_BYTE [rel record_plain], TLS_HANDSHAKE_FINISHED
     call    er_tls_derive_application_secrets
     ASSERT_RAX 0
 
@@ -306,11 +273,7 @@ _start:
     lea     rcx, [rel gcm_key_zero]
     lea     r8, [rel gcm_j0]
     call    er_tor_aes_ctr
-    lea     rdi, [rel aes_block]
-    lea     rsi, [rel gcm_j0_mask_expected]
-    mov     edx, 16
-    call    _mem_eq
-    ASSERT_EQ eax, 1
+    ASSERT_MEM_EQ [rel aes_block], [rel gcm_j0_mask_expected], 16
 
     ; AES-128-GCM NIST SP 800-38D test case: zero key/IV, one zero block.
     lea     rdi, [rel gcm_ct]
@@ -326,16 +289,8 @@ _start:
     call    er_tls_aes128_gcm_encrypt
     add     rsp, 16
     ASSERT_RAX 0
-    lea     rdi, [rel gcm_ct]
-    lea     rsi, [rel gcm_ct_expected]
-    mov     edx, 16
-    call    _mem_eq
-    ASSERT_EQ eax, 1
-    lea     rdi, [rel gcm_tag]
-    lea     rsi, [rel gcm_tag_expected]
-    mov     edx, 16
-    call    _mem_eq
-    ASSERT_EQ eax, 1
+    ASSERT_MEM_EQ [rel gcm_ct], [rel gcm_ct_expected], 16
+    ASSERT_MEM_EQ [rel gcm_tag], [rel gcm_tag_expected], 16
     lea     rdi, [rel gcm_pt_dec]
     lea     rsi, [rel gcm_ct]
     mov     edx, 16
@@ -349,11 +304,7 @@ _start:
     call    er_tls_aes128_gcm_decrypt
     add     rsp, 16
     ASSERT_RAX 0
-    lea     rdi, [rel gcm_pt_dec]
-    lea     rsi, [rel gcm_pt_zero]
-    mov     edx, 16
-    call    _mem_eq
-    ASSERT_EQ eax, 1
+    ASSERT_MEM_EQ [rel gcm_pt_dec], [rel gcm_pt_zero], 16
     xor     byte [rel gcm_tag], 1
     lea     rdi, [rel gcm_pt_dec]
     lea     rsi, [rel gcm_ct]
@@ -382,14 +333,10 @@ _start:
     call    er_tls_record_encrypt
     add     rsp, 8
     ASSERT_EQ eax, record_msg_len + TLS_RECORD_OVERHEAD
-    movzx   eax, byte [rel record_buf]
-    ASSERT_EQ eax, TLS_RECORD_APPLICATION_DATA
-    movzx   eax, byte [rel record_buf + 1]
-    ASSERT_EQ eax, TLS_RECORD_VERSION_MAJOR
-    movzx   eax, byte [rel record_buf + 2]
-    ASSERT_EQ eax, TLS_LEGACY_VERSION_MINOR
-    movzx   eax, byte [rel record_buf + 4]
-    ASSERT_EQ eax, record_msg_len + TLS_INNER_CONTENT_TYPE_LEN + TLS_GCM_TAG_LEN
+    ASSERT_BYTE [rel record_buf], TLS_RECORD_APPLICATION_DATA
+    ASSERT_BYTE [rel record_buf + 1], TLS_RECORD_VERSION_MAJOR
+    ASSERT_BYTE [rel record_buf + 2], TLS_LEGACY_VERSION_MINOR
+    ASSERT_BYTE [rel record_buf + 4], record_msg_len + TLS_INNER_CONTENT_TYPE_LEN + TLS_GCM_TAG_LEN
     mov     rax, [rel record_seq_enc]
     ASSERT_RAX 1
 
@@ -404,11 +351,7 @@ _start:
     add     rsp, 8
     ASSERT_EQ eax, record_msg_len
     ASSERT_EQ ecx, TLS_RECORD_HANDSHAKE
-    lea     rdi, [rel record_plain]
-    lea     rsi, [rel record_msg]
-    mov     edx, record_msg_len
-    call    _mem_eq
-    ASSERT_EQ eax, 1
+    ASSERT_MEM_EQ [rel record_plain], [rel record_msg], record_msg_len
     mov     rax, [rel record_seq_dec]
     ASSERT_RAX 1
 
@@ -444,11 +387,7 @@ _start:
     mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
     call    er_tls_server_hs_record_decrypt
     ASSERT_EQ eax, record_msg_len
-    lea     rdi, [rel record_plain]
-    lea     rsi, [rel record_msg]
-    mov     edx, record_msg_len
-    call    _mem_eq
-    ASSERT_EQ eax, 1
+    ASSERT_MEM_EQ [rel record_plain], [rel record_msg], record_msg_len
     lea     rdi, [rel record_plain]
     lea     rsi, [rel record_buf]
     mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
@@ -470,29 +409,7 @@ _start:
     call    er_tls_connect
     ASSERT_RAX 0
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repe    cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED
 
 ; ------------------------------------------------------------------
 ; Test stubs for platform I/O and crypto dependency surfaces.

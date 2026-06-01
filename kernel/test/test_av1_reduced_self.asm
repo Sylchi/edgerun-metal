@@ -127,6 +127,9 @@ _start:
     mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_COLS], 2
     mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_ROWS], 2
     mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_COUNT], 4
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TX_MODE], AV1_TX_MODE_LARGEST
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_REFERENCE_SELECT], 0
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_SKIP_MODE_PRESENT], 0
     lea     rax, [rel tile0]
     mov     [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_PTR], rax
     mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2

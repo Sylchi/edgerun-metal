@@ -1,20 +1,18 @@
 ; input_kbd.asm — Keyboard input agent
 ;
 ; Registers as ephemeral identity (per-boot random, no TPM binding).
-; Polls i8042 each pipeline tick and forwards input cells directly
-; to the focused app's ring buffer.
+; Polls i8042 each pipeline tick and forwards input cells by focused identity.
 ;
 ; Ephemeral identity properties:
 ;   - 32 bytes generated from RDTSC + Xorshift32 (per-boot random)
 ;   - NOT derived from binary hash or TPM measurement
 ;   - Changes every boot — no cross-session linkability
-;   - LOCAL scope only (not routable via Tor)
+;   - Sender is local-only; focused app identity decides local vs remote route
 ;   - Collision-resistant for LOCAL_MAX_IDENTITIES (16 entries)
 ;
 ; Focus target is read from da_focused_hash (DA's BSS, same address
 ; space). The DA tracks which app has focus; this agent sends input
-; cells directly to the focused app's ring. Keystrokes never pass
-; through the DA compositor.
+; cells through the identity route. Keystrokes never pass through the DA compositor.
 ;
 ; WASM apps receive input via er.cell_recv — check payload[0]==5
 ; for DA_MSG_INPUT_EVENT.
@@ -27,10 +25,8 @@
 extern er_i8042_read_scancode
 extern er_i8042_scancode_to_ascii
 extern er_local_route_register
-extern er_local_route_lookup
-extern er_local_cell_send_to_slot
+extern er_local_cell_send
 extern er_memset
-extern er_memcmp
 
 ; DA's focus globals — read directly (same address space, no cell overhead)
 extern da_focused_slot
@@ -222,30 +218,20 @@ er_fn er_input_kbd_poll
     er_ret
 
 ; ==================================================================
-; _ik_forward — forward cell to focused app's ring
+; _ik_forward — forward cell to focused app identity
 ;
 ; rdi = cell_ptr (already populated input cell)
-; Reads da_focused_hash to find the app's route slot.
+; Reads da_focused_hash and lets the route layer choose local or remote delivery.
 ; ==================================================================
 _ik_forward:
-    push    rbx
     push    r12
 
     mov     r12, rdi
 
-    ; Look up route slot for the focused app's identity hash
     lea     rdi, [rel da_focused_hash]
-    call    er_local_route_lookup
-    test    edx, edx
-    jnz     .done
-
-    ; Write cell directly to app's ring
-    mov     edi, eax
     mov     rsi, r12
-    call    er_local_cell_send_to_slot
+    call    er_local_cell_send
 
-.done:
     pop     r12
-    pop     rbx
     xor     eax, eax
     ret

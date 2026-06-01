@@ -345,7 +345,7 @@ pub fn panelList(view: anytype, bounds: ui.Rect, props: PanelListProps) (ui.Rend
                 try view.selectableRowText(row_bounds, id, item.title, item.detail, item.active);
             }
         } else if (item.icon) |icon_value| {
-            try view.rowItemIconAt(row_bounds, 0, item.title, item.detail, icon_value, .{ .active = item.active });
+            try view.rowItemIconWithControlAt(row_bounds, 0, item.title, item.detail, icon_value, .{ .active = item.active });
         } else {
             try view.rowItemAt(row_bounds, 0, item.title, item.detail);
         }

@@ -57,7 +57,7 @@ pub const Scope = struct {
 
     pub fn indexed(self: Scope, role: Role, index: usize) HitId {
         var buf: [32]u8 = undefined;
-        const key = std.fmt.bufPrint(&buf, "{}", .{index}) catch return .{ .id = 0, .role = role, .key = "" };
+        const key = std.fmt.bufPrint(&buf, "{}", .{index}) catch return self.id(role, "");
         return self.id(role, key);
     }
 };
@@ -192,7 +192,9 @@ pub fn parseBytes(in: []const u8) !Hit {
     if (in.len < 8) return error.Corrupt;
     const kind_val = try readU32(in, &offset);
     const kind = if (kind_val < @typeInfo(ui.HitKind).@"enum".fields.len)
-        @as(ui.HitKind, @enumFromInt(@as(u8, @intCast(kind_val)))) else return error.Corrupt;
+        @as(ui.HitKind, @enumFromInt(@as(u8, @intCast(kind_val))))
+    else
+        return error.Corrupt;
     const id = try readU32(in, &offset);
     const location: ?LocationHit = location: {
         const tag = try readU8(in, &offset);

@@ -2,6 +2,8 @@
 ; Provides buffer-backed er_in_al_dx / er_out_dx_al and _start,
 ; linking against serial.o (which declares these functions extern).
 
+%include "test/test_macros.inc"
+
 ; -------------------------------------------------------------------
 ; Test I/O buffer
 ; -------------------------------------------------------------------
@@ -235,16 +237,7 @@ _start:
     TEST_STR rdi, rsi, dec32_max
 
     ; Report results
-    mov     rax, [test_fail]
-    test    rax, rax
-    jnz     .fail
-    xor     rdi, rdi
-    mov     rax, 60
-    syscall
-.fail:
-    mov     rdi, 1
-    mov     rax, 60
-    syscall
+    TEST_EXIT_QWORD_ZERO [test_fail]
 
 ; -------------------------------------------------------------------
 ; reset_buf — zero tx_count and the buffer

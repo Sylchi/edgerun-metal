@@ -566,7 +566,10 @@ _start:
     mov     dword [rel seq + AV1_SEQ_MAX_WIDTH], 320
     mov     dword [rel seq + AV1_SEQ_MAX_HEIGHT], 240
     mov     byte [rel seq + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_8
-    mov     byte [rel seq + AV1_SEQ_TIMING_INFO_PRESENT], 0
+    mov     byte [rel seq + AV1_SEQ_TIMING_INFO_PRESENT], 1
+    mov     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 1001
+    mov     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
+    mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
     mov     byte [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
     mov     byte [rel seq + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
     mov     word [rel seq + AV1_SEQ_OPERATING_POINT_IDC], 0
@@ -620,6 +623,14 @@ _start:
     cmp     dword [rel seq + AV1_SEQ_MAX_WIDTH], 320
     jne     .fail_sequence_non_reduced_decode
     cmp     dword [rel seq + AV1_SEQ_MAX_HEIGHT], 240
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_TIMING_INFO_PRESENT], 1
+    jne     .fail_sequence_non_reduced_decode
+    cmp     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 1001
+    jne     .fail_sequence_non_reduced_decode
+    cmp     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
     jne     .fail_sequence_non_reduced_decode
     cmp     byte [rel seq + AV1_SEQ_USE_128X128_SUPERBLOCK], 1
     jne     .fail_sequence_non_reduced_decode
@@ -681,8 +692,36 @@ _start:
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_sequence_encode_invalid
     inc     qword [rel passed]
-    jmp     .done
+    jmp     .sequence_encode_invalid_timing
 .fail_sequence_encode_invalid:
+    inc     qword [rel failed]
+
+.sequence_encode_invalid_timing:
+    mov     byte [rel seq + AV1_SEQ_TIMING_INFO_PRESENT], 1
+    mov     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 0
+    mov     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
+    mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, seq
+    call    er_av1_sequence_encode
+    test    eax, eax
+    jnz     .fail_sequence_encode_invalid_timing
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_sequence_encode_invalid_timing
+    mov     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 1001
+    mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 1
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, seq
+    call    er_av1_sequence_encode
+    test    eax, eax
+    jnz     .fail_sequence_encode_invalid_timing
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_sequence_encode_invalid_timing
+    inc     qword [rel passed]
+    jmp     .done
+.fail_sequence_encode_invalid_timing:
     inc     qword [rel failed]
 
 .done:

@@ -21,10 +21,12 @@
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/local_constants.inc"
 %include "x86_64/agent/agent_constants.inc"
+%include "x86_64/crypto/tor_constants.inc"
 
 extern er_memcpy
 extern er_memset
 extern er_memcmp
+extern er_tor_send_relay
 
 ; DA WASM import wrappers (from agent/da_wasm.asm)
 extern _wasm_import_da_surface_register
@@ -235,6 +237,12 @@ er_fn er_local_route_register
     mov     edx, 32
     call    er_memcpy
 
+    mov     edi, ebx
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .internal_error
+    mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
+
     inc     dword [local_identity_count]
 
     mov     eax, ebx
@@ -271,6 +279,72 @@ er_fn er_local_route_register
 er_fn er_local_route_lookup
     call    _local_route_find_by_hash
     ret
+
+; ==================================================================
+; er_local_route_register_tor_hs — register/update a Tor HS route
+; int er_local_route_register_tor_hs(hash[32], circ_id, stream_id)
+; rdi = identity hash, esi = rendezvous circ_id, edx = stream_id
+; ==================================================================
+global er_local_route_register_tor_hs
+er_fn er_local_route_register_tor_hs
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14w, dx
+    test    r13d, r13d
+    jz      .bad
+    test    r14w, r14w
+    jz      .bad
+
+    call    _local_route_find_by_hash
+    test    edx, edx
+    jz      .use_slot
+
+    call    _local_route_find_free
+    test    edx, edx
+    jnz     .done
+    mov     ebx, eax
+    mov     edi, ebx
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .bad
+    lea     rdi, [rax + LOCAL_ID_HASH]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcpy
+    inc     dword [local_identity_count]
+    jmp     .write
+
+.use_slot:
+    mov     ebx, eax
+.write:
+    mov     edi, ebx
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .bad
+    mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_TOR_HS
+    mov     [rax + LOCAL_ID_TOR_CIRC_ID], r13d
+    mov     [rax + LOCAL_ID_TOR_STREAM_ID], r14w
+    mov     eax, ebx
+    er_ok
+.done:
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
 
 ; ==================================================================
 ; er_local_route_unregister — unregister an identity
@@ -359,6 +433,7 @@ er_fn er_local_route_get_ring
 er_fn er_local_cell_send
     push    rbx
     push    r12
+    push    r13
 
     mov     r12, rsi        ; cell
 
@@ -367,21 +442,60 @@ er_fn er_local_cell_send
     jnz     .not_found
 
     mov     ebx, eax        ; slot_id
+    mov     edi, ebx
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .bad
+
+    movzx   ecx, byte [rax + LOCAL_ID_ROUTE_KIND]
+    cmp     ecx, LOCAL_ROUTE_KIND_TOR_HS
+    je      .send_tor
+    cmp     ecx, LOCAL_ROUTE_KIND_LOCAL
+    jne     .not_found
 
     mov     edi, ebx        ; slot_id
     mov     rsi, r12        ; cell
     call    er_local_cell_send_to_slot
 
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.send_tor:
+    mov     edi, [rax + LOCAL_ID_TOR_CIRC_ID]
+    movzx   esi, word [rax + LOCAL_ID_TOR_STREAM_ID]
+    mov     edx, TOR_RELAY_DATA
+    mov     rcx, r12
+    mov     r8d, LOCAL_CELL_SIZE
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .tor_fail
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.tor_fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_STREAM_FAIL
+    pop     r13
     pop     r12
     pop     rbx
     er_ret
 
 .not_found:
+    mov     eax, -1
+    er_err  ERROR_LOCAL_NOT_FOUND
+    pop     r13
     pop     r12
     pop     rbx
     er_ret
 
 .bad:
+    pop     r13
     pop     r12
     pop     rbx
     er_ret

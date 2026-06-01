@@ -422,14 +422,4 @@ _start:
 ; ═══════════════════════════════════════════════════════════════════
 ; Done — report results
 ; ═══════════════════════════════════════════════════════════════════
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-.exit_pass:
-    xor     edi, edi            ; return 0
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1              ; return 1
-.exit:
-    mov     eax, 60             ; sys_exit
-    syscall
+    TEST_EXIT_FAILED

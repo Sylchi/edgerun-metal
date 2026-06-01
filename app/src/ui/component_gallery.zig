@@ -4,6 +4,7 @@ const bytes = @import("../bytes.zig");
 const clock = @import("../clock.zig");
 const component_union = @import("components/Component.zig");
 const component_common = @import("component_common.zig");
+const component_test = @import("components/TestSupport.zig");
 const ui = @import("core.zig");
 const interaction = @import("interaction.zig");
 const design = @import("theme.zig");
@@ -905,12 +906,9 @@ test "component gallery catalog is the authoritative component list" {
 }
 
 test "component gallery catalog entries render reference previews with canonical components" {
-    var commands: [2048]ui.Command = undefined;
-    var clips: [128]ui.Rect = undefined;
-    var regions: [256]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
-    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
+    var h = component_test.ClippedInteractiveHarness(2048, 128, 256){};
+    h.init();
+    const app = component_union.renderer(&h.scene, &h.collector, .{ .style = componentStyle() });
     var rendered: usize = 0;
 
     for (component_catalog, 0..) |entry, index| {
@@ -921,12 +919,12 @@ test "component gallery catalog entries render reference previews with canonical
     }
 
     try std.testing.expectEqual(component_catalog.len, rendered);
-    try std.testing.expect(scene.written().len > component_catalog.len);
-    try std.testing.expect(collector.written().len > 40);
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 7));
-    try std.testing.expect(hasText(scene.written(), "Is it accessible?"));
-    try std.testing.expect(hasText(scene.written(), "Edit profile"));
-    try std.testing.expect(hasText(scene.written(), "Account"));
+    try std.testing.expect(h.written().len > component_catalog.len);
+    try std.testing.expect(h.hits().len > 40);
+    try h.expectHitId(preview_base_id + 7);
+    try h.expectText("Is it accessible?");
+    try h.expectText("Edit profile");
+    try h.expectText("Account");
 }
 
 test "component gallery preview path validates canonical component object" {
@@ -936,59 +934,50 @@ test "component gallery preview path validates canonical component object" {
     const canonical = source.toObject(&ui_raw, &object_raw, galleryEpoch()).?;
     const decoded = try component_union.Component.fromObject(canonical);
 
-    var commands: [16]ui.Command = undefined;
-    var clips: [4]ui.Rect = undefined;
-    var regions: [4]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
-    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
+    var h = component_test.ClippedInteractiveHarness(16, 4, 4){};
+    h.init();
+    const app = component_union.renderer(&h.scene, &h.collector, .{ .style = componentStyle() });
     try renderComponentPreview(app, ui.Rect.init(0, 0, 140, 36), source);
 
     try std.testing.expectEqualStrings("Default", switch (decoded) {
         .button => |button| button.label,
         else => "",
     });
-    try std.testing.expect(hasText(scene.written(), "Default"));
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 33));
+    try h.expectText("Default");
+    try h.expectHitId(preview_base_id + 33);
 }
 
 test "component gallery renders component wall commands and interaction regions" {
-    var commands: [4096]ui.Command = undefined;
-    var clips: [128]ui.Rect = undefined;
-    var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{});
+    var h = component_test.ClippedInteractiveHarness(4096, 128, 512){};
+    h.init();
+    try renderComponentGallery(&h.scene, &h.collector, ui.Rect.init(0, 0, 1440, 940), .{});
 
-    const stats = scene.stats();
+    const stats = h.scene.stats();
     try std.testing.expect(stats.rects > 150);
     try std.testing.expect(stats.text_quads > 120);
     try std.testing.expect(stats.icon_quads >= 2);
-    try std.testing.expect(collector.written().len > 60);
-    try std.testing.expect(hasText(scene.written(), "Component Catalog"));
-    try std.testing.expect(hasText(scene.written(), "Accordion"));
-    try std.testing.expect(hasText(scene.written(), "Tooltip"));
+    try std.testing.expect(h.hits().len > 60);
+    try h.expectText("Component Catalog");
+    try h.expectText("Accordion");
+    try h.expectText("Tooltip");
 }
 
 test "component gallery selected component renders selected component panel" {
-    var commands: [4096]ui.Command = undefined;
-    var clips: [128]ui.Rect = undefined;
-    var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.ClippedInteractiveHarness(4096, 128, 512){};
+    h.init();
     const index = indexBySlug("button").?;
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .selected_component_index = index });
+    try renderComponentGallery(&h.scene, &h.collector, ui.Rect.init(0, 0, 1440, 940), .{ .selected_component_index = index });
 
-    try std.testing.expect(hasText(scene.written(), "/docs/components/button"));
-    try std.testing.expect(hasText(scene.written(), "button"));
-    try std.testing.expect(hasText(scene.written(), "Rendered component"));
-    try std.testing.expect(hasText(scene.written(), "default"));
-    try std.testing.expect(hasText(scene.written(), "compact"));
-    try std.testing.expect(hasText(scene.written(), "small"));
+    try h.expectText("/docs/components/button");
+    try h.expectText("button");
+    try h.expectText("Rendered component");
+    try h.expectText("default");
+    try h.expectText("compact");
+    try h.expectText("small");
     const selected_preview_id = selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride;
-    try std.testing.expect(hasHit(collector.written(), selected_preview_id));
-    try std.testing.expect(hasHit(collector.written(), selected_preview_id + 1));
-    try std.testing.expect(hasHit(collector.written(), selected_preview_id + 2));
+    try h.expectHitId(selected_preview_id);
+    try h.expectHitId(selected_preview_id + 1);
+    try h.expectHitId(selected_preview_id + 2);
     try std.testing.expectEqual(index, indexByPreviewHit(selected_preview_id + 2).?);
     var source_path: [96]u8 = undefined;
     try std.testing.expectEqualStrings("src/ui/components/Button.zig", sourcePathForIndex(index, &source_path).?);
@@ -1002,69 +991,42 @@ test "component gallery derives responsive catalog columns" {
 }
 
 test "component gallery scrolls through later catalog cards" {
-    var commands: [4096]ui.Command = undefined;
-    var clips: [128]ui.Rect = undefined;
-    var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 900, 720), .{ .scroll_y = 4096 });
+    var h = component_test.ClippedInteractiveHarness(4096, 128, 512){};
+    h.init();
+    try renderComponentGallery(&h.scene, &h.collector, ui.Rect.init(0, 0, 900, 720), .{ .scroll_y = 4096 });
 
-    try std.testing.expect(hasText(scene.written(), "Table"));
-    try std.testing.expect(hasText(scene.written(), "Tooltip"));
+    try h.expectText("Table");
+    try h.expectText("Tooltip");
 }
 
 test "component gallery hover uses canonical card control state without changing interaction coverage" {
-    var base_commands: [4096]ui.Command = undefined;
-    var base_clips: [128]ui.Rect = undefined;
-    var base_regions: [512]interaction.Region = undefined;
-    var base_scene = ui.Scene.initWithClips(&base_commands, &base_clips);
-    var base_collector = interaction.Collector.init(&base_regions);
-    try renderComponentGallery(&base_scene, &base_collector, ui.Rect.init(0, 0, 1440, 940), .{});
+    var base = component_test.ClippedInteractiveHarness(4096, 128, 512){};
+    base.init();
+    try renderComponentGallery(&base.scene, &base.collector, ui.Rect.init(0, 0, 1440, 940), .{});
 
-    var hover_commands: [4096]ui.Command = undefined;
-    var hover_clips: [128]ui.Rect = undefined;
-    var hover_regions: [512]interaction.Region = undefined;
-    var hover_scene = ui.Scene.initWithClips(&hover_commands, &hover_clips);
-    var hover_collector = interaction.Collector.init(&hover_regions);
-    try renderComponentGallery(&hover_scene, &hover_collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 210 });
+    var hover = component_test.ClippedInteractiveHarness(4096, 128, 512){};
+    hover.init();
+    try renderComponentGallery(&hover.scene, &hover.collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 210 });
 
-    try std.testing.expect(!hasRectColor(base_scene.written(), component_common.state_hover_border));
-    try std.testing.expect(hasRectColor(hover_scene.written(), component_common.state_hover_border));
-    try std.testing.expectEqual(base_collector.written().len, hover_collector.written().len);
+    try base.expectNoRectColor(component_common.state_hover_border);
+    try hover.expectRectColor(component_common.state_hover_border);
+    try std.testing.expectEqual(base.hits().len, hover.hits().len);
 }
 
 test "component gallery buttons use shared optical label placement" {
-    var commands: [16]ui.Command = undefined;
-    var clips: [4]ui.Rect = undefined;
-    var regions: [8]interaction.Region = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.ClippedInteractiveHarness(16, 4, 8){};
+    h.init();
     const bounds = ui.Rect.init(10, 20, 140, 34);
-    const app = component_union.renderer(&scene, &collector, .{ .style = componentStyle() });
+    const app = component_union.renderer(&h.scene, &h.collector, .{ .style = componentStyle() });
     try renderComponentPreview(app, bounds, .{ .button = .{ .id = preview_base_id + 5010, .label = "Continue" } });
 
-    const label = textCommand(scene.written(), "Continue").?.text;
+    const label = textCommand(h.written(), "Continue").?.text;
     const center_delta = @abs((label.origin.x + label.origin.w * 0.5) - (bounds.x + bounds.w * 0.5));
     try std.testing.expectEqual(ui.TextAlign.center, label.alignment);
     try std.testing.expect(center_delta < 0.01);
     try std.testing.expect(label.origin.y + label.origin.h * 0.5 < bounds.y + bounds.h * 0.5);
     try std.testing.expect(label.origin.y >= bounds.y);
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 5010));
-}
-
-fn hasHit(regions: []const interaction.Region, id_value: u32) bool {
-    for (regions) |region| {
-        if (region.id == id_value) return true;
-    }
-    return false;
-}
-
-fn hasText(commands: []const ui.Command, value: []const u8) bool {
-    for (commands) |command| switch (command) {
-        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
-        else => {},
-    };
-    return false;
+    try h.expectHitId(preview_base_id + 5010);
 }
 
 fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
@@ -1073,12 +1035,4 @@ fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
         else => {},
     };
     return null;
-}
-
-fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
-    for (commands) |command| switch (command) {
-        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
-        else => {},
-    };
-    return false;
 }

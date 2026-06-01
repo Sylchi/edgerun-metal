@@ -331,6 +331,9 @@ er_fn er_identity_source_id
     mov     r12, rdi            ; source
     mov     r13, rsi            ; out_id
 
+    cmp     word [r12 + er_identity_source.kind], SOURCE_ED25519_PUBLIC
+    je      .si_ed25519_public
+
     ; Total prefix: domain(26) + header(4) = 30
     ; Total input: 30 + source.len
     mov     eax, [r12 + er_identity_source.len]
@@ -371,6 +374,18 @@ er_fn er_identity_source_id
 
     add     rsp, 4096
 
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ok
+    mov     eax, 1
+    er_ret
+.si_ed25519_public:
+    mov     rdi, r13
+    mov     esi, ID_SIZE
+    lea     rdx, [r12 + er_identity_source.material]
+    mov     ecx, ID_SIZE
+    call    er_bytes_copy
     pop     r13
     pop     r12
     pop     rbx

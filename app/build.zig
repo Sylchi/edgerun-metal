@@ -21,137 +21,68 @@ pub fn build(b: *std.Build) void {
     }
 
     const test_step = b.step("test", "Run Zig prototype tests");
+    const ui_test_step = b.step("ui-test", "Run all UI tests");
+    const host_test_step = b.step("host-test", "Run host integration tests");
 
-    const pi_usb_boot_host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/pi_usb_boot_host.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/pi_usb_boot_host.zig",
+        .step = "pi-usb-boot-host-test",
+        .description = "Run Pi USB boot host tests",
+        .default_step = test_step,
+        .suite_step = host_test_step,
     });
-    addBootstrapObjects(pi_usb_boot_host_tests, math_obj, runtime_obj);
-
-    const run_pi_usb_boot_host_tests = b.addRunArtifact(pi_usb_boot_host_tests);
-    test_step.dependOn(&run_pi_usb_boot_host_tests.step);
-
-    const pi_usb_control_host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/pi_usb_control_host.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/pi_usb_control_host.zig",
+        .step = "pi-usb-control-host-test",
+        .description = "Run Pi USB control host tests",
+        .default_step = test_step,
+        .suite_step = host_test_step,
     });
-    addBootstrapObjects(pi_usb_control_host_tests, math_obj, runtime_obj);
-
-    const run_pi_usb_control_host_tests = b.addRunArtifact(pi_usb_control_host_tests);
-    test_step.dependOn(&run_pi_usb_control_host_tests.step);
-
-    const clock_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/clock.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/clock.zig",
+        .step = "clock-test",
+        .description = "Run Zig clock tests",
     });
-    addBootstrapObjects(clock_tests, math_obj, runtime_obj);
-
-    const run_clock_tests = b.addRunArtifact(clock_tests);
-    const clock_test_step = b.step("clock-test", "Run Zig clock tests");
-    clock_test_step.dependOn(&run_clock_tests.step);
-
-    const identity_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/identity.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/identity.zig",
+        .step = "identity-test",
+        .description = "Run Zig identity tests",
     });
-    addBootstrapObjects(identity_tests, math_obj, runtime_obj);
-
-    const run_identity_tests = b.addRunArtifact(identity_tests);
-    const identity_test_step = b.step("identity-test", "Run Zig identity tests");
-    identity_test_step.dependOn(&run_identity_tests.step);
-
-    const object_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/object.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/object.zig",
+        .step = "object-test",
+        .description = "Run Zig object tests",
     });
-    addBootstrapObjects(object_tests, math_obj, runtime_obj);
-
-    const run_object_tests = b.addRunArtifact(object_tests);
-    const object_test_step = b.step("object-test", "Run Zig object tests");
-    object_test_step.dependOn(&run_object_tests.step);
-
-    const storage_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/store.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/store.zig",
+        .step = "storage-test",
+        .description = "Run Zig storage tests",
     });
-    addBootstrapObjects(storage_tests, math_obj, runtime_obj);
-
-    const run_storage_tests = b.addRunArtifact(storage_tests);
-    const storage_test_step = b.step("storage-test", "Run Zig storage tests");
-    storage_test_step.dependOn(&run_storage_tests.step);
-
-    const chat_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/encrypted_chat.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/encrypted_chat.zig",
+        .step = "chat-test",
+        .description = "Run encrypted chat app state tests",
+        .default_step = test_step,
     });
-    addBootstrapObjects(chat_tests, math_obj, runtime_obj);
-
-    const run_chat_tests = b.addRunArtifact(chat_tests);
-    const chat_test_step = b.step("chat-test", "Run encrypted chat app state tests");
-    chat_test_step.dependOn(&run_chat_tests.step);
-    test_step.dependOn(&run_chat_tests.step);
-
-    const chat_ui_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/app_encrypted_chat.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const chat_ui_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/app_encrypted_chat.zig",
+        .step = "chat-ui-test",
+        .description = "Run encrypted chat app UI tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(chat_ui_tests, math_obj, runtime_obj);
-
-    const run_chat_ui_tests = b.addRunArtifact(chat_ui_tests);
-    const chat_ui_test_step = b.step("chat-ui-test", "Run encrypted chat app UI tests");
-    chat_ui_test_step.dependOn(&run_chat_ui_tests.step);
-    test_step.dependOn(&run_chat_ui_tests.step);
-
-    const pipeline_ui_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/app_pipeline_dashboard.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const pipeline_ui_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/app_pipeline_dashboard.zig",
+        .step = "pipeline-ui-test",
+        .description = "Run user-scheduled pipeline UI tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(pipeline_ui_tests, math_obj, runtime_obj);
-
-    const run_pipeline_ui_tests = b.addRunArtifact(pipeline_ui_tests);
-    const pipeline_ui_test_step = b.step("pipeline-ui-test", "Run user-scheduled pipeline UI tests");
-    pipeline_ui_test_step.dependOn(&run_pipeline_ui_tests.step);
-    test_step.dependOn(&run_pipeline_ui_tests.step);
-
-    const sdk_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/sdk.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/sdk.zig",
+        .step = "sdk-test",
+        .description = "Run Zig SDK tests",
     });
-    addBootstrapObjects(sdk_tests, math_obj, runtime_obj);
-
-    const run_sdk_tests = b.addRunArtifact(sdk_tests);
-    const sdk_test_step = b.step("sdk-test", "Run Zig SDK tests");
-    sdk_test_step.dependOn(&run_sdk_tests.step);
 
     const sdk_cli = b.addExecutable(.{
         .name = "edgerun-sdk",
@@ -200,58 +131,30 @@ pub fn build(b: *std.Build) void {
     const media_video_dump_step = b.step("media-video-dump", "Decode a VP8 IVF/WebM file to PPM frames");
     media_video_dump_step.dependOn(&run_media_video_dump.step);
 
-    const media_video_dump_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/media_video_dump.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/media_video_dump.zig",
+        .step = "media-video-dump-test",
+        .description = "Run media video dump host-tool tests",
     });
-    addBootstrapObjects(media_video_dump_tests, math_obj, runtime_obj);
-
-    const run_media_video_dump_tests = b.addRunArtifact(media_video_dump_tests);
-    const media_video_dump_test_step = b.step("media-video-dump-test", "Run media video dump host-tool tests");
-    media_video_dump_test_step.dependOn(&run_media_video_dump_tests.step);
-
-    const ui_core_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui/core_test.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const ui_core_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/ui_core_test.zig",
+        .step = "ui-core-test",
+        .description = "Run Zig UI core tests",
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(ui_core_tests, math_obj, runtime_obj);
-
-    const run_ui_core_tests = b.addRunArtifact(ui_core_tests);
-    const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
-    ui_core_test_step.dependOn(&run_ui_core_tests.step);
-
-    const ui_codec_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_codec_test.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/ui_codec_test.zig",
+        .step = "ui-codec-test",
+        .description = "Run Zig UI codec and stream tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(ui_codec_tests, math_obj, runtime_obj);
-
-    const run_ui_codec_tests = b.addRunArtifact(ui_codec_tests);
-    const ui_codec_test_step = b.step("ui-codec-test", "Run Zig UI codec and stream tests");
-    ui_codec_test_step.dependOn(&run_ui_codec_tests.step);
-    test_step.dependOn(&run_ui_codec_tests.step);
-
-    const component_gallery_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/component_gallery_test.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const component_gallery_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/component_gallery_test.zig",
+        .step = "component-gallery-test",
+        .description = "Run canonical component gallery tests",
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(component_gallery_tests, math_obj, runtime_obj);
-
-    const run_component_gallery_tests = b.addRunArtifact(component_gallery_tests);
-    const component_gallery_test_step = b.step("component-gallery-test", "Run canonical component gallery tests");
-    component_gallery_test_step.dependOn(&run_component_gallery_tests.step);
 
     const build_dashboard = b.addExecutable(.{
         .name = "edgerun-build-dashboard",
@@ -299,18 +202,13 @@ pub fn build(b: *std.Build) void {
     const wayland_window_step = b.step("wayland-window", "Open a native Wayland shm window using canonical UI IR");
     wayland_window_step.dependOn(&run_wayland_window.step);
 
-    const wayland_window_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wayland_window_host.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const wayland_window_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/wayland_window_host.zig",
+        .step = "wayland-window-test",
+        .description = "Run native Wayland host protocol tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(wayland_window_tests, math_obj, runtime_obj);
-    const run_wayland_window_tests = b.addRunArtifact(wayland_window_tests);
-    const wayland_window_test_step = b.step("wayland-window-test", "Run native Wayland host protocol tests");
-    wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
-    test_step.dependOn(&run_wayland_window_tests.step);
 
     const xdg_shell_header_cmd = b.addSystemCommand(&.{
         "wayland-scanner",
@@ -339,18 +237,13 @@ pub fn build(b: *std.Build) void {
     const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
     drm_gbm_window_step.dependOn(&run_drm_gbm_window.step);
 
-    const drm_gbm_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/drm_gbm_host.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const drm_gbm_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/drm_gbm_host.zig",
+        .step = "drm-gbm-test",
+        .description = "Run DRM/GBM host tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
     });
-    addBootstrapObjects(drm_gbm_tests, math_obj, runtime_obj);
-    const run_drm_gbm_tests = b.addRunArtifact(drm_gbm_tests);
-    const drm_gbm_test_step = b.step("drm-gbm-test", "Run DRM/GBM host tests");
-    drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);
-    test_step.dependOn(&run_drm_gbm_tests.step);
 
     const wasm32_freestanding_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
@@ -503,4 +396,37 @@ pub fn build(b: *std.Build) void {
 fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.LazyPath, runtime_obj: ?std.Build.LazyPath) void {
     if (math_obj) |obj| compile.root_module.addObjectFile(obj);
     if (runtime_obj) |obj| compile.root_module.addObjectFile(obj);
+}
+
+const ZigTestOptions = struct {
+    root: []const u8,
+    step: []const u8,
+    description: []const u8,
+    default_step: ?*std.Build.Step = null,
+    suite_step: ?*std.Build.Step = null,
+};
+
+fn addZigTest(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    math_obj: ?std.Build.LazyPath,
+    runtime_obj: ?std.Build.LazyPath,
+    options: ZigTestOptions,
+) *std.Build.Step.Compile {
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(options.root),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    addBootstrapObjects(tests, math_obj, runtime_obj);
+
+    const run_tests = b.addRunArtifact(tests);
+    const test_step = b.step(options.step, options.description);
+    test_step.dependOn(&run_tests.step);
+    if (options.default_step) |step| step.dependOn(&run_tests.step);
+    if (options.suite_step) |step| step.dependOn(&run_tests.step);
+    return tests;
 }

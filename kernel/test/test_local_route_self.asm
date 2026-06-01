@@ -3,11 +3,13 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/local_constants.inc"
+%include "x86_64/crypto/tor_constants.inc"
 %include "x86_64/agent/agent_constants.inc"
 %include "test/test_macros.inc"
 
 extern er_local_cell_init
 extern er_local_route_register
+extern er_local_route_register_tor_hs
 extern er_local_route_set_handler
 extern er_local_cell_send
 extern er_local_cell_send_to_slot
@@ -21,6 +23,9 @@ sync_hash:
 async_hash:
     db "async-local-route-test-identity"
     times 32 - ($ - async_hash) db 0
+remote_hash:
+    db "remote-route-test-identity"
+    times 32 - ($ - remote_hash) db 0
 
 SECTION .bss
 passed:             resq 1
@@ -29,8 +34,14 @@ sync_slot:          resd 1
 async_slot:         resd 1
 sync_count:         resd 1
 async_count:        resd 1
+remote_count:       resd 1
 last_sync_sender:   resd 1
 last_async_sender:  resd 1
+last_remote_cell:   resq 1
+last_remote_circ:   resd 1
+last_remote_stream: resd 1
+last_remote_cmd:    resd 1
+last_remote_len:    resd 1
 test_cell:          resb LOCAL_CELL_SIZE
 out_cell:           resb LOCAL_CELL_SIZE
 
@@ -111,16 +122,31 @@ _start:
     ASSERT_EQ dword [rel sync_count], 2
     ASSERT_EQ dword [rel last_sync_sender], 13
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
+    ; Unknown identity is not delivered until a Tor HS route is registered.
+    lea     rdi, [rel remote_hash]
+    lea     rsi, [rel test_cell]
+    call    er_local_cell_send
+    ASSERT_RDX ERROR_LOCAL_NOT_FOUND
+
+    lea     rdi, [rel remote_hash]
+    mov     esi, 17
+    mov     edx, 19
+    call    er_local_route_register_tor_hs
+    ASSERT_RDX 0
+
+    lea     rdi, [rel remote_hash]
+    lea     rsi, [rel test_cell]
+    call    er_local_cell_send
+    ASSERT_RDX 0
+    ASSERT_EQ dword [rel last_remote_circ], 17
+    ASSERT_EQ dword [rel last_remote_stream], 19
+    ASSERT_EQ dword [rel last_remote_cmd], TOR_RELAY_DATA
+    ASSERT_EQ dword [rel remote_count], 1
+    lea     rax, [rel test_cell]
+    ASSERT_EQ qword [rel last_remote_cell], rax
+    ASSERT_EQ dword [rel last_remote_len], LOCAL_CELL_SIZE
+
+    TEST_EXIT_FAILED
 
 sync_handler:
     inc     dword [rel sync_count]
@@ -145,4 +171,16 @@ _wasm_import_da_surface_update:
 _wasm_import_da_surface_unregister:
     mov     eax, -1
     er_err  ERROR_NOT_PRESENT
+    ret
+
+global er_tor_send_relay
+er_tor_send_relay:
+    inc     dword [rel remote_count]
+    mov     [rel last_remote_circ], edi
+    mov     [rel last_remote_stream], esi
+    mov     [rel last_remote_cmd], edx
+    mov     [rel last_remote_cell], rcx
+    mov     [rel last_remote_len], r8d
+    xor     eax, eax
+    er_ok
     ret

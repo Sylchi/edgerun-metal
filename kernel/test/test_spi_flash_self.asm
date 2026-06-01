@@ -4,6 +4,7 @@
 ; Tests pass if the module links without error.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 SECTION .data
 pass_msg: db "PASS spi_flash (compile check only)", 10, 0
@@ -16,6 +17,4 @@ _start:
     mov     rdx, 37
     mov     rax, 1
     syscall
-    xor     edi, edi
-    mov     rax, 60
-    syscall
+    TEST_EXIT 0

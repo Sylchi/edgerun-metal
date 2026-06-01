@@ -2,6 +2,7 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_tor_hs_app_init
 extern er_tor_hs_app_build_contact_put
@@ -20,11 +21,11 @@ extern er_tor_hs_app_message_ptr
 extern er_memcpy
 
 %define ER_HS_CONTACT_NLEN 32
-%define ER_HS_CONTACT_ONION 36
-%define ER_HS_CONTACT_OLEN 100
-%define ER_HS_MSG_FLEN 32
-%define ER_HS_MSG_BODY 36
-%define ER_HS_MSG_BLEN 420
+%define ER_HS_CONTACT_ID 36
+%define ER_HS_ID_SIZE 32
+%define ER_HS_MSG_FROM_ID 0
+%define ER_HS_MSG_BODY 32
+%define ER_HS_MSG_BLEN 416
 
 SECTION .data
 passed: dq 0
@@ -32,8 +33,8 @@ failed: dq 0
 
 name_alice: db "alice"
 name_alice_len equ $ - name_alice
-onion_alice: db "aliceexamplehiddenservice.onion"
-onion_alice_len equ $ - onion_alice
+identity_alice: db 7
+    times 31 db 3
 body_hello: db "hello over onion inbox"
 body_hello_len equ $ - body_hello
 body_contact: db "contact book routed message"
@@ -47,26 +48,6 @@ last_stream: resw 1
 last_cmd: resb 1
 last_len: resd 1
 
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-%macro ASSERT_EQ 2
-    cmp     %1, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
 SECTION .text
 global _start
 _start:
@@ -78,12 +59,12 @@ _start:
     ASSERT_EQ eax, 0
 
     lea     rdi, [rel frame]
-    lea     rsi, [rel name_alice]
-    mov     edx, name_alice_len
-    lea     rcx, [rel onion_alice]
-    mov     r8d, onion_alice_len
+    lea     rsi, [rel identity_alice]
+    mov     edx, ER_HS_ID_SIZE
+    lea     rcx, [rel identity_alice]
+    mov     r8d, ER_HS_ID_SIZE
     call    er_tor_hs_app_build_contact_put
-    ASSERT eax
+    ASSERT_TRUE eax
     lea     rdi, [rel frame]
     mov     esi, eax
     call    er_tor_hs_app_handle_frame
@@ -92,20 +73,11 @@ _start:
     ASSERT_EQ eax, 1
     xor     edi, edi
     call    er_tor_hs_app_contact_ptr
-    ASSERT rax
+    ASSERT_TRUE rax
     mov     rbx, rax
     ASSERT_EQ dword [rbx + ER_HS_CONTACT_NLEN], name_alice_len
-    ASSERT_EQ dword [rbx + ER_HS_CONTACT_OLEN], onion_alice_len
-    lea     rdi, [rel name_alice]
-    lea     rsi, [rbx]
-    mov     edx, name_alice_len
-    call    _mem_eq
-    ASSERT eax
-    lea     rdi, [rel onion_alice]
-    lea     rsi, [rbx + ER_HS_CONTACT_ONION]
-    mov     edx, onion_alice_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel name_alice], [rbx], name_alice_len
+    ASSERT_MEM_EQ [rel identity_alice], [rbx + ER_HS_CONTACT_ID], ER_HS_ID_SIZE
 
     lea     rdi, [rel frame]
     lea     rsi, [rel name_alice]
@@ -113,7 +85,7 @@ _start:
     lea     rcx, [rel body_hello]
     mov     r8d, body_hello_len
     call    er_tor_hs_app_build_message_put
-    ASSERT eax
+    ASSERT_TRUE eax
     lea     rdi, [rel frame]
     mov     esi, eax
     call    er_tor_hs_app_handle_frame
@@ -122,22 +94,18 @@ _start:
     ASSERT_EQ eax, 1
     xor     edi, edi
     call    er_tor_hs_app_message_ptr
-    ASSERT rax
+    ASSERT_TRUE rax
     mov     rbx, rax
-    ASSERT_EQ dword [rbx + ER_HS_MSG_FLEN], name_alice_len
     ASSERT_EQ dword [rbx + ER_HS_MSG_BLEN], body_hello_len
-    lea     rdi, [rel body_hello]
-    lea     rsi, [rbx + ER_HS_MSG_BODY]
-    mov     edx, body_hello_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel identity_alice], [rbx + ER_HS_MSG_FROM_ID], ER_HS_ID_SIZE
+    ASSERT_MEM_EQ [rel body_hello], [rbx + ER_HS_MSG_BODY], body_hello_len
 
     sub     rsp, 8
     mov     qword [rsp], body_hello_len
     mov     edi, 77
     mov     esi, 3
-    lea     rdx, [rel name_alice]
-    mov     ecx, name_alice_len
+    lea     rdx, [rel identity_alice]
+    mov     ecx, ER_HS_ID_SIZE
     lea     r8, [rel body_hello]
     call    er_tor_hs_app_send_message
     add     rsp, 8
@@ -159,20 +127,20 @@ _start:
     ASSERT_EQ eax, 0
     lea     rdi, [rel name_alice]
     mov     esi, name_alice_len
-    lea     rdx, [rel onion_alice]
-    mov     ecx, onion_alice_len
+    lea     rdx, [rel identity_alice]
+    mov     ecx, ER_HS_ID_SIZE
     call    er_tor_hs_app_add_contact
     ASSERT_EQ eax, 0
     call    er_tor_hs_app_contact_count
     ASSERT_EQ eax, 1
 
     sub     rsp, 8
-    mov     qword [rsp], onion_alice_len
+    mov     qword [rsp], ER_HS_ID_SIZE
     mov     edi, 88
     mov     esi, 4
     lea     rdx, [rel name_alice]
     mov     ecx, name_alice_len
-    lea     r8, [rel onion_alice]
+    lea     r8, [rel identity_alice]
     call    er_tor_hs_app_send_contact
     add     rsp, 8
     ASSERT_EQ eax, 0
@@ -193,8 +161,8 @@ _start:
     ASSERT_EQ eax, 0
     lea     rdi, [rel name_alice]
     mov     esi, name_alice_len
-    lea     rdx, [rel onion_alice]
-    mov     ecx, onion_alice_len
+    lea     rdx, [rel identity_alice]
+    mov     ecx, ER_HS_ID_SIZE
     call    er_tor_hs_app_add_contact
     ASSERT_EQ eax, 0
     sub     rsp, 8
@@ -202,8 +170,8 @@ _start:
     mov     edi, 99
     mov     esi, 5
     xor     edx, edx
-    lea     rcx, [rel name_alice]
-    mov     r8d, name_alice_len
+    lea     rcx, [rel identity_alice]
+    mov     r8d, ER_HS_ID_SIZE
     lea     r9, [rel body_contact]
     call    er_tor_hs_app_send_message_to_contact
     add     rsp, 8
@@ -220,50 +188,25 @@ _start:
     ASSERT_EQ eax, 1
     xor     edi, edi
     call    er_tor_hs_app_message_ptr
-    ASSERT rax
+    ASSERT_TRUE rax
     mov     rbx, rax
     ASSERT_EQ dword [rbx + ER_HS_MSG_BLEN], body_contact_len
-    lea     rdi, [rel body_contact]
-    lea     rsi, [rbx + ER_HS_MSG_BODY]
-    mov     edx, body_contact_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel identity_alice], [rbx + ER_HS_MSG_FROM_ID], ER_HS_ID_SIZE
+    ASSERT_MEM_EQ [rel body_contact], [rbx + ER_HS_MSG_BODY], body_contact_len
 
     sub     rsp, 8
     mov     qword [rsp], body_contact_len
     mov     edi, 99
     mov     esi, 5
     mov     edx, 9
-    lea     rcx, [rel name_alice]
-    mov     r8d, name_alice_len
+    lea     rcx, [rel identity_alice]
+    mov     r8d, ER_HS_ID_SIZE
     lea     r9, [rel body_contact]
     call    er_tor_hs_app_send_message_to_contact
     add     rsp, 8
     ASSERT_EQ eax, -1
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED
 
 global er_tor_send_relay
 er_tor_send_relay:

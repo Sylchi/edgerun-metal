@@ -3,18 +3,9 @@
 ; Links against curve25519.o + runtime.o.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern _fe_mul
-
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
 
 SECTION .bss
 passed:     resq 1
@@ -48,11 +39,7 @@ _start:
     lea     rdx, [rel one]
     call    _fe_mul
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel nine]
-    mov     edx, 40
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel result], [rel nine], 40
 
 ; ================================================================
 ; Test 2: 9 * 9 = 81
@@ -62,11 +49,7 @@ _start:
     lea     rdx, [rel nine]
     call    _fe_mul
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel eighty_one]
-    mov     edx, 40
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel result], [rel eighty_one], 40
 
 ; ================================================================
 ; Test 3: 9 * (p-1) = p - 9  (-9 mod p)
@@ -76,11 +59,7 @@ _start:
     lea     rdx, [rel p_minus_1]
     call    _fe_mul
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel p_minus_9]
-    mov     edx, 40
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel result], [rel p_minus_9], 40
 
 ; ================================================================
 ; Test 4: (p+18)^2 mod p = 324
@@ -92,38 +71,9 @@ _start:
     lea     rdx, [rel p_plus_18]
     call    _fe_mul
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel fe_324]
-    mov     edx, 40
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel result], [rel fe_324], 40
 
 ; ================================================================
 ; Done — report results
 ; ================================================================
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-.exit_pass:
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-; Helper: _mem_eq(rdi=expected, rsi=actual, edx=len)
-; returns eax = 1 if equal, 0 if not
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED

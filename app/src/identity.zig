@@ -86,6 +86,8 @@ pub const Source = struct {
     }
 
     pub fn id(self: Source) Id {
+        if (self.kind == .ed25519_public) return .{ .bytes = self.material[0..id_size].* };
+
         var hasher = crypto.blake3.init(.{});
         var header: [4]u8 = undefined;
         _ = bytes.store16(header[0..2], @intFromEnum(self.kind));
@@ -244,6 +246,16 @@ test "strict source preparation enforces C identity material sizes" {
     const source = Source.prepare(.hash, &hashMaterial("manifest")).?;
     try testing.expect(source.valid());
     try testing.expect(Source.prepare(.p256_public, &([_]u8{1} ** 64)) != null);
+}
+
+test "ed25519 public source is the routable hidden service identity" {
+    const std = @import("std");
+    const testing = std.testing;
+    const public_key = [_]u8{7} ++ [_]u8{3} ** 31;
+    const source = Source.prepare(.ed25519_public, &public_key).?;
+    const id = source.id();
+
+    try testing.expect(bytes.eql(&public_key, &id.bytes));
 }
 
 test "identity derives child and delegated app identities" {

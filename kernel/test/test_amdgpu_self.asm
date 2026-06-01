@@ -42,10 +42,6 @@ pci_bar0_raw: resd 1
 pci_bar2_raw: resd 1
 pci_command: resd 1
 
-SECTION .rodata
-pass_msg: db "PASS amdgpu", 10, 0
-fail_msg: db "FAIL amdgpu", 10, 0
-
 SECTION .text
 global _start
 global er_amdgpu_selftest
@@ -63,26 +59,7 @@ global er_serial_putnewline
 global er_serial_getchar
 _start:
     call    er_amdgpu_selftest
-    test    eax, eax
-    jnz     .host_fail
-    mov     rdi, 1
-    lea     rsi, [rel pass_msg]
-    mov     rdx, 12
-    mov     rax, 1
-    syscall
-    xor     edi, edi
-    mov     rax, 60
-    syscall
-
-.host_fail:
-    mov     rdi, 1
-    lea     rsi, [rel fail_msg]
-    mov     rdx, 12
-    mov     rax, 1
-    syscall
-    mov     edi, 1
-    mov     rax, 60
-    syscall
+    TEST_EXIT_EAX_ZERO
 
 er_amdgpu_selftest:
     mov     qword [rel passed], 0
@@ -109,8 +86,7 @@ er_amdgpu_selftest:
     mov     rax, [rel out_bar2]
     lea     rdx, [rel fb]
     ASSERT_EQ rax, rdx
-    mov     eax, [rel pci_command]
-    ASSERT_EQ eax, 0x00000006
+    ASSERT_DWORD [rel pci_command], 0x00000006
 
     mov     dword [rel pci_bar0_raw], 0
     xor     edi, edi
@@ -191,69 +167,42 @@ er_amdgpu_selftest:
     call    er_amdgpu_dcn_get_stage
     ASSERT_EQ eax, AMDGPU_DCN_STAGE_OK
 
-    mov     eax, [rel bar0 + DCN_DC_IP_REQUEST_CNTL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DCCG_GATE_DISABLE_CNTL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DCCG_GATE_DISABLE_CNTL2]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DCFCLK_CNTL]
-    ASSERT_EQ eax, 5
-    mov     eax, [rel bar0 + DCN_DOMAIN0_PG_CONFIG]
-    ASSERT_EQ eax, 1
-    mov     eax, [rel bar0 + DCN_DOMAIN1_PG_CONFIG]
-    ASSERT_EQ eax, 1
-    mov     eax, [rel bar0 + DCN_DOMAIN16_PG_CONFIG]
-    ASSERT_EQ eax, 1
-    mov     eax, [rel bar0 + DCN_HPO_TOP_HW_CONTROL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DIO_MEM_PWR_CTRL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DCHUBBUB_GLOBAL_TIMER_CNTL]
-    ASSERT_EQ eax, AMDGPU_DCN_GLOBAL_TIMER_REFDIV2_EN
-    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH]
-    ASSERT_EQ eax, AMDGPU_FB_WIDTH
+    ASSERT_DWORD [rel bar0 + DCN_DC_IP_REQUEST_CNTL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DCCG_GATE_DISABLE_CNTL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DCCG_GATE_DISABLE_CNTL2], 0
+    ASSERT_DWORD [rel bar0 + DCN_DCFCLK_CNTL], 5
+    ASSERT_DWORD [rel bar0 + DCN_DOMAIN0_PG_CONFIG], 1
+    ASSERT_DWORD [rel bar0 + DCN_DOMAIN1_PG_CONFIG], 1
+    ASSERT_DWORD [rel bar0 + DCN_DOMAIN16_PG_CONFIG], 1
+    ASSERT_DWORD [rel bar0 + DCN_HPO_TOP_HW_CONTROL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DIO_MEM_PWR_CTRL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DCHUBBUB_GLOBAL_TIMER_CNTL], AMDGPU_DCN_GLOBAL_TIMER_REFDIV2_EN
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_SURFACE_PITCH], AMDGPU_FB_WIDTH
     mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR]
     lea     rbx, [rel fb]
     ASSERT_EQ eax, ebx
-    mov     eax, [rel bar0 + DCN_HUBP0_FLIP_CONTROL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
-    ASSERT_EQ eax, 1
-    mov     eax, [rel bar0 + DCN_DPP0_DPP_CONTROL]
-    ASSERT_EQ eax, AMDGPU_DPP_CONTROL_ENABLE
-    mov     eax, [rel bar0 + DCN_DPP0_CNVC_SURFACE_PIXEL_FORMAT]
-    ASSERT_EQ eax, AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
-    mov     eax, [rel bar0 + DCN_DPP0_FORMAT_CONTROL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_CNVC_PRE_DEALPHA]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_CNVC_PRE_CSC_MODE]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_CNVC_PRE_DEGAM]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_CNVC_PRE_REALPHA]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_DSCL_SCL_MODE]
-    ASSERT_EQ eax, AMDGPU_DPP_PIPE_BYPASS
-    mov     eax, [rel bar0 + DCN_DPP0_DSCL_CONTROL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_RECOUT_SIZE]
-    ASSERT_EQ eax, (AMDGPU_FB_HEIGHT << 16) | AMDGPU_FB_WIDTH
-    mov     eax, [rel bar0 + DCN_DPP0_MPC_SIZE]
-    ASSERT_EQ eax, (AMDGPU_FB_HEIGHT << 16) | AMDGPU_FB_WIDTH
-    mov     eax, [rel bar0 + DCN_DPP0_LB_DATA_FORMAT]
-    ASSERT_EQ eax, AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_FLIP_CONTROL], 0
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_DCHUBP_CNTL], 1
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_DPP_CONTROL], AMDGPU_DPP_CONTROL_ENABLE
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_CNVC_SURFACE_PIXEL_FORMAT], AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_FORMAT_CONTROL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_CNVC_PRE_DEALPHA], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_CNVC_PRE_CSC_MODE], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_CNVC_PRE_DEGAM], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_CNVC_PRE_REALPHA], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_DSCL_SCL_MODE], AMDGPU_DPP_PIPE_BYPASS
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_DSCL_CONTROL], 0
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_RECOUT_SIZE], (AMDGPU_FB_HEIGHT << 16) | AMDGPU_FB_WIDTH
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_MPC_SIZE], (AMDGPU_FB_HEIGHT << 16) | AMDGPU_FB_WIDTH
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_LB_DATA_FORMAT], AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
 
     lea     rdi, [rel bar0]
     mov     esi, 1920
     mov     edx, 1080
     call    er_amdgpu_program_dpp0_plane
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_RECOUT_SIZE]
-    ASSERT_EQ eax, (1080 << 16) | 1920
-    mov     eax, [rel bar0 + DCN_DPP0_MPC_SIZE]
-    ASSERT_EQ eax, (1080 << 16) | 1920
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_RECOUT_SIZE], (1080 << 16) | 1920
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_MPC_SIZE], (1080 << 16) | 1920
 
     lea     rdi, [rel bar0]
     mov     esi, 1
@@ -261,12 +210,9 @@ er_amdgpu_selftest:
     mov     ecx, 720
     call    er_amdgpu_program_dpp_plane
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_DPP0_DPP_CONTROL + DCN_DPP_PIPE_STRIDE]
-    ASSERT_EQ eax, AMDGPU_DPP_CONTROL_ENABLE
-    mov     eax, [rel bar0 + DCN_DPP0_RECOUT_SIZE + DCN_DPP_PIPE_STRIDE]
-    ASSERT_EQ eax, (720 << 16) | 1280
-    mov     eax, [rel bar0 + DCN_DPP0_LB_DATA_FORMAT + DCN_DPP_PIPE_STRIDE]
-    ASSERT_EQ eax, AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_DPP_CONTROL + DCN_DPP_PIPE_STRIDE], AMDGPU_DPP_CONTROL_ENABLE
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_RECOUT_SIZE + DCN_DPP_PIPE_STRIDE], (720 << 16) | 1280
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_LB_DATA_FORMAT + DCN_DPP_PIPE_STRIDE], AMDGPU_DPP_SURFACE_FORMAT_ARGB8888
 
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_LO], 0x32345000
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_HI], 0x00000003
@@ -279,12 +225,9 @@ er_amdgpu_selftest:
     mov     ecx, AMDGPU_MODE_720P60
     call    er_amdgpu_program_pipe
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + (DCN_HUBP_PIPE_STRIDE * 2)]
-    ASSERT_EQ eax, 0x32345000
-    mov     eax, [rel bar0 + DCN_DPP0_RECOUT_SIZE + (DCN_DPP_PIPE_STRIDE * 2)]
-    ASSERT_EQ eax, (720 << 16) | 1280
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL + (DCN_OTG_PIPE_STRIDE * 2)]
-    ASSERT_EQ eax, 1649
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + (DCN_HUBP_PIPE_STRIDE * 2)], 0x32345000
+    ASSERT_DWORD [rel bar0 + DCN_DPP0_RECOUT_SIZE + (DCN_DPP_PIPE_STRIDE * 2)], (720 << 16) | 1280
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL + (DCN_OTG_PIPE_STRIDE * 2)], 1649
 
     lea     rdi, [rel bar0]
     mov     esi, DCN_HUBP_PIPE_COUNT
@@ -310,69 +253,46 @@ er_amdgpu_selftest:
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 
-    mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
-    ASSERT_EQ eax, 1548
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
-    ASSERT_EQ eax, 2535
-    mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A]
-    ASSERT_EQ eax, (2335 << 16) | 2304
-    mov     eax, [rel bar0 + DCN_OTG0_V_SYNC_A]
-    ASSERT_EQ eax, (1512 << 16) | 1507
-    mov     eax, [rel bar0 + DCN_OTG0_H_BLANK_START_END]
-    ASSERT_EQ eax, (2255 << 16) | 280
-    mov     eax, [rel bar0 + DCN_OTG0_V_BLANK_START_END]
-    ASSERT_EQ eax, (1503 << 16) | 45
-    mov     eax, [rel bar0 + DCN_OTG0_INTERLACE_CONTROL]
-    ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN]
-    ASSERT_EQ eax, 1
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_TOTAL], 1548
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL], 2535
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_SYNC_A], (2335 << 16) | 2304
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_SYNC_A], (1512 << 16) | 1507
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_BLANK_START_END], (2255 << 16) | 280
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_BLANK_START_END], (1503 << 16) | 45
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_INTERLACE_CONTROL], 0
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_MASTER_EN], 1
 
-    mov     eax, [rel fb]
-    ASSERT_EQ eax, 0x00ffffff
-    mov     eax, [rel fb + 282 * 4]
-    ASSERT_EQ eax, 0x0000ffff
-    mov     eax, [rel fb + 2255 * 4]
-    ASSERT_EQ eax, 0
+    ASSERT_DWORD [rel fb], 0x00ffffff
+    ASSERT_DWORD [rel fb + 282 * 4], 0x0000ffff
+    ASSERT_DWORD [rel fb + 2255 * 4], 0
 
     lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_EDP_NATIVE_2256X1504_60
     call    er_amdgpu_program_otg0_mode
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
-    ASSERT_EQ eax, 2535
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL], 2535
 
     lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_720P60
     call    er_amdgpu_program_otg0_mode
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
-    ASSERT_EQ eax, 749
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
-    ASSERT_EQ eax, 1649
-    mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A]
-    ASSERT_EQ eax, (1429 << 16) | 1390
-    mov     eax, [rel bar0 + DCN_OTG0_V_SYNC_A]
-    ASSERT_EQ eax, (729 << 16) | 725
-    mov     eax, [rel bar0 + DCN_OTG0_H_BLANK_START_END]
-    ASSERT_EQ eax, (1279 << 16) | 370
-    mov     eax, [rel bar0 + DCN_OTG0_V_BLANK_START_END]
-    ASSERT_EQ eax, (719 << 16) | 30
-    mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN]
-    ASSERT_EQ eax, 1
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_TOTAL], 749
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL], 1649
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_SYNC_A], (1429 << 16) | 1390
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_SYNC_A], (729 << 16) | 725
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_BLANK_START_END], (1279 << 16) | 370
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_BLANK_START_END], (719 << 16) | 30
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_MASTER_EN], 1
 
     lea     rdi, [rel bar0]
     mov     esi, 1
     mov     edx, AMDGPU_MODE_720P60
     call    er_amdgpu_program_otg_mode
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL + DCN_OTG_PIPE_STRIDE]
-    ASSERT_EQ eax, 749
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE]
-    ASSERT_EQ eax, 1649
-    mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A + DCN_OTG_PIPE_STRIDE]
-    ASSERT_EQ eax, (1429 << 16) | 1390
-    mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN + DCN_OTG_PIPE_STRIDE]
-    ASSERT_EQ eax, 1
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_V_TOTAL + DCN_OTG_PIPE_STRIDE], 749
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE], 1649
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_SYNC_A + DCN_OTG_PIPE_STRIDE], (1429 << 16) | 1390
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_MASTER_EN + DCN_OTG_PIPE_STRIDE], 1
 
     lea     rdi, [rel bar0]
     mov     esi, DCN_OTG_PIPE_COUNT
@@ -404,15 +324,13 @@ er_amdgpu_selftest:
     lea     rsi, [rel timing_cfg]
     call    er_amdgpu_program_otg0_timing
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
-    ASSERT_EQ eax, 1649
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL], 1649
     lea     rdi, [rel bar0]
     mov     esi, 1
     lea     rdx, [rel timing_cfg]
     call    er_amdgpu_program_otg_timing
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE]
-    ASSERT_EQ eax, 1649
+    ASSERT_DWORD [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE], 1649
 
     mov     dword [rel timing_cfg + AMDGPU_TIMING_H_TOTAL], 0
     lea     rdi, [rel timing_cfg]
@@ -459,14 +377,10 @@ er_amdgpu_selftest:
     lea     rsi, [rel scanout_cfg]
     call    er_amdgpu_program_hubp0_scanout
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH]
-    ASSERT_EQ eax, 1280
-    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR]
-    ASSERT_EQ eax, 0x12345000
-    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4]
-    ASSERT_EQ eax, 1
-    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
-    ASSERT_EQ eax, 1
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_SURFACE_PITCH], 1280
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR], 0x12345000
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4], 1
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_DCHUBP_CNTL], 1
 
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_LO], 0x22345000
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_HI], 0x00000002
@@ -478,14 +392,10 @@ er_amdgpu_selftest:
     lea     rdx, [rel scanout_cfg]
     call    er_amdgpu_program_hubp_scanout
     ASSERT_EQ eax, 0
-    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH + DCN_HUBP_PIPE_STRIDE]
-    ASSERT_EQ eax, 1280
-    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE]
-    ASSERT_EQ eax, 0x22345000
-    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE + 4]
-    ASSERT_EQ eax, 2
-    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL + DCN_HUBP_PIPE_STRIDE]
-    ASSERT_EQ eax, 1
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_SURFACE_PITCH + DCN_HUBP_PIPE_STRIDE], 1280
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE], 0x22345000
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE + 4], 2
+    ASSERT_DWORD [rel bar0 + DCN_HUBP0_DCHUBP_CNTL + DCN_HUBP_PIPE_STRIDE], 1
 
     lea     rdi, [rel bar0]
     mov     esi, DCN_HUBP_PIPE_COUNT
@@ -552,14 +462,7 @@ er_amdgpu_selftest:
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .self_fail
-    xor     eax, eax
-    ret
-
-.self_fail:
-    mov     eax, -1
+    TEST_RETURN_FAILED
     ret
 
 ; Unused AMDGPU object dependencies for functions outside this test path.

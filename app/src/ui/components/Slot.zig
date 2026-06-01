@@ -56,11 +56,14 @@ pub fn Slot(comptime Component: type) type {
             const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
             return switch (root) {
                 .stack => |stack| {
-                    if (stack.children.len != 1) return error.Corrupt;
+                    if (stack.children.len == 0) return error.Corrupt;
                     return switch (stack.children[0]) {
-                        .slot => |slot| .{
-                            .id = slot.id,
-                            .child = try Component.fromNode(slot.child.*),
+                        .slot => |slot| blk: {
+                            if (stack.children.len != 2) return error.Corrupt;
+                            break :blk .{
+                                .id = slot.id,
+                                .child = try Component.fromNode(stack.children[1]),
+                            };
                         },
                         else => error.UnsupportedComponent,
                     };

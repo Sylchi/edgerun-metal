@@ -408,21 +408,19 @@ test "icon button component serializes to canonical object and deserializes" {
 
 test "icon button component renders centered icon and hit region" {
     const button = IconButton{ .id = 18, .label = "Search", .icon = Icon.named(.search), .variant = .outline };
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(8, 1){};
+    h.init();
     const bounds = ui.Rect.init(4, 8, icon_button_size, icon_button_size);
 
-    try button.render(&scene, bounds, .{});
-    try button.collectInteractions(&collector, bounds);
+    try h.render(button, bounds, .{});
+    try button.collectInteractions(&h.collector, bounds);
 
-    const icon_command = component_test.iconCommand(scene.written(), icon_pack.iconId(.search)).?;
+    const icon_command = component_test.iconCommand(h.written(), icon_pack.iconId(.search)).?;
     try std.testing.expectEqual(bounds.x + (bounds.w - icon_size) * 0.5, icon_command.icon_quad.bounds.x);
     try std.testing.expectEqual(bounds.y + (bounds.h - icon_size) * 0.5, icon_command.icon_quad.bounds.y);
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.button, collector.written()[0].kind);
-    try std.testing.expectEqual(@as(u32, 18), collector.written()[0].id);
+    try h.expectHitCount(1);
+    try h.expectHitKind(0, .button);
+    try h.expectHitId(0, 18);
 }
 
 test "button component measurement follows label width" {
@@ -461,13 +459,13 @@ test "button component measurement uses font glyph widths" {
 }
 
 test "button component constrains icon label content to button bounds" {
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(16){};
+    h.init();
     const bounds = ui.Rect.init(10, 10, 72, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
+    try renderButton(&h.scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
-    for (scene.written()) |command| switch (command) {
+    for (h.written()) |command| switch (command) {
         .text => |text_command| {
             try std.testing.expect(text_command.origin.x >= bounds.x);
             try std.testing.expect(text_command.origin.x + text_command.origin.w <= bounds.x + bounds.w);
@@ -481,40 +479,40 @@ test "button component constrains icon label content to button bounds" {
 }
 
 test "button component aligns icon slot and label centers" {
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
     const bounds = ui.Rect.init(10, 10, 132, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .cpu) }, .{});
+    try renderButton(&h.scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .cpu) }, .{});
 
-    const icon_command = component_test.iconCommand(scene.written(), Icon.named(.cpu).tag()).?.icon_quad;
-    const text_command = component_test.textCommand(scene.written(), "Compile").?.text;
+    const icon_command = component_test.iconCommand(h.written(), Icon.named(.cpu).tag()).?.icon_quad;
+    const text_command = component_test.textCommand(h.written(), "Compile").?.text;
     try std.testing.expectEqual(bounds.y + (bounds.h - label_line_height) * 0.5, text_command.origin.y);
     try std.testing.expect(text_command.origin.y + text_command.origin.h * 0.5 < icon_command.bounds.y + icon_command.bounds.h * 0.5);
     try std.testing.expect(icon_command.bounds.x + icon_command.bounds.w <= text_command.origin.x);
 }
 
 test "button component truncates overfull plain labels deterministically" {
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
     const label = "WWWWWWWWWW";
 
-    try renderButton(&scene, ui.Rect.init(0, 0, 72, height), .{ .id = 9, .label = label }, .{});
+    try renderButton(&h.scene, ui.Rect.init(0, 0, 72, height), .{ .id = 9, .label = label }, .{});
 
-    const command = component_test.firstTextCommand(scene.written()).?.text;
+    const command = component_test.firstTextCommand(h.written()).?.text;
     try std.testing.expect(command.value.len < label.len);
     try std.testing.expect(std.mem.startsWith(u8, label, command.value));
 }
 
 test "button component centers icon only content" {
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
     const bounds = ui.Rect.init(10, 10, 44, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
+    try renderButton(&h.scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
     var found = false;
-    for (scene.written()) |command| switch (command) {
+    for (h.written()) |command| switch (command) {
         .icon_quad => |icon_command| {
             found = true;
             try std.testing.expectEqual(bounds.x + (bounds.w - icon_size) * 0.5, icon_command.bounds.x);
@@ -527,16 +525,16 @@ test "button component centers icon only content" {
 }
 
 test "button component renders extended reference variants" {
-    var commands: [32]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(32){};
+    h.init();
 
-    try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete", .variant = .destructive }, .{});
-    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = IconSlot.named(.leading, .search) }, .{});
+    try renderButton(&h.scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete", .variant = .destructive }, .{});
+    try renderButton(&h.scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
-    try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
-    try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
-    try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
+    try h.expectRectColor(button_danger);
+    try std.testing.expect(!component_test.hasRectBounds(h.written(), ui.Rect.init(0, 44, 120, height)));
+    try std.testing.expect(component_test.hasTextColor(h.written(), ui.Color.accent));
+    try h.expectIcon(icon_pack.iconId(.search));
 }
 
 test "button deserializer rejects wrong component kind" {

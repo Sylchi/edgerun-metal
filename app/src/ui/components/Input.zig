@@ -147,12 +147,12 @@ test "input component serializes to canonical object and deserializes" {
 
 test "input component renders placeholder through shared control text" {
     const input = Input{ .id = 10, .placeholder = "Search objects" };
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
 
-    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
 
-    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
     try std.testing.expectEqual(ui.Color.muted, placeholder.text.color);
     try std.testing.expectEqual(@as(f32, 16.0), placeholder.text.origin.x);
     try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.y);
@@ -160,25 +160,25 @@ test "input component renders placeholder through shared control text" {
 
 test "input component renders leading icon as component state" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
 
-    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
 
-    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
+    try h.expectIcon(icon_pack.iconId(.search));
     try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
 }
 
 test "input component renders value instead of placeholder" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .value = "font", .icon_slot = IconSlot.named(.leading, .search) };
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
 
-    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
 
-    const value = component_test.textCommand(scene.written(), "font").?;
-    try std.testing.expect(component_test.textCommand(scene.written(), "Search objects") == null);
+    const value = component_test.textCommand(h.written(), "font").?;
+    try h.expectNoText("Search objects");
     try std.testing.expectEqual(ui.Color.text, value.text.color);
     try std.testing.expectEqual(@as(f32, 52.0), value.text.origin.x);
 }
@@ -196,12 +196,12 @@ test "input component size variants adjust preferred height and padding" {
     const small = input.measure(.{}, .{ .control_size = .small });
     const regular = input.measure(.{}, .{});
     const large = input.measure(.{}, .{ .control_size = .large });
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var h = component_test.SceneHarness(8){};
+    h.init();
 
-    try input.render(&scene, ui.Rect.init(4, 8, 220, 48), .{ .control_size = .large });
+    try h.render(input, ui.Rect.init(4, 8, 220, 48), .{ .control_size = .large });
 
-    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
     try std.testing.expect(small.preferred.h < regular.preferred.h);
     try std.testing.expect(large.preferred.h > regular.preferred.h);
     try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.x);

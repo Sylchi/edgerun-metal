@@ -44,10 +44,49 @@
     inc     qword [rel total]
 %endmacro
 
+; Pass if dword at %1 equals immediate %2.
+%macro TEST_DWORD_IMM 2
+    mov     eax, dword %1
+    mov     edx, %2
+    TEST
+%endmacro
+
+; Pass if dword at %1 equals dword at %2.
+%macro TEST_DWORD_MEM 2
+    mov     eax, dword %1
+    mov     edx, dword %2
+    TEST
+%endmacro
+
 ; ------------------------------------------------------------------
 ; Assert macros (reg, reg comparison)
 ; Expects: qword [rel passed] and qword [rel failed] in .bss
 ; ------------------------------------------------------------------
+
+; Assert %1 is non-zero.
+%macro ASSERT_TRUE 1
+    test    %1, %1
+    jz      %%fail
+    inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+%%done:
+%endmacro
+
+; Assert %1 is non-zero; exit immediately with %2 on failure.
+%macro ASSERT_TRUE_EXIT 2
+    test    %1, %1
+    jz      %%fail
+    inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+    mov     edi, %2
+    mov     eax, 60
+    syscall
+%%done:
+%endmacro
 
 ; Assert %1 == %2 (any same-size registers)
 %macro ASSERT_EQ 2
@@ -58,6 +97,28 @@
 %%fail:
     inc     qword [rel failed]
 %%done:
+%endmacro
+
+; Assert dword at %1 equals %2.
+%macro ASSERT_DWORD 2
+    ASSERT_EQ dword %1, %2
+%endmacro
+
+; Assert byte at %1 equals %2.
+%macro ASSERT_BYTE 2
+    ASSERT_EQ byte %1, %2
+%endmacro
+
+; Assert byte at %1 masked by %2 equals %3. Clobbers eax.
+%macro ASSERT_BYTE_MASK 3
+    movzx   eax, byte %1
+    and     eax, %2
+    ASSERT_EQ eax, %3
+%endmacro
+
+; Assert word at %1 equals %2.
+%macro ASSERT_WORD 2
+    ASSERT_EQ word %1, %2
 %endmacro
 
 ; Assert rax == immediate
@@ -139,5 +200,138 @@
     jmp     %%done
 %%fail:
     inc     qword [rel failed]
+%%done:
+%endmacro
+
+; Assert memory ranges are equal.
+; Arguments are effective addresses and byte count, e.g. [rel want], [rel got], 32.
+; Clobbers rdi, rsi, rcx.
+%macro ASSERT_MEM_EQ 3
+    push    rdi
+    push    rsi
+    push    rcx
+    lea     rdi, %1
+    lea     rsi, %2
+    mov     rcx, %3
+    cld
+    repe    cmpsb
+    jne     %%fail
+    inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+%%done:
+    pop     rcx
+    pop     rsi
+    pop     rdi
+%endmacro
+
+; Assert memory ranges are equal; exit immediately with %4 on failure.
+%macro ASSERT_MEM_EQ_EXIT 4
+    push    rdi
+    push    rsi
+    push    rcx
+    lea     rdi, %1
+    lea     rsi, %2
+    mov     rcx, %3
+    cld
+    repe    cmpsb
+    jne     %%fail
+    inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+    mov     edi, %4
+    mov     eax, 60
+    syscall
+%%done:
+    pop     rcx
+    pop     rsi
+    pop     rdi
+%endmacro
+
+; Branch to %2 unless eax equals %1. Does not update counters.
+%macro EXPECT_EAX 2
+    cmp     eax, %1
+    jne     %2
+%endmacro
+
+; Branch to %3 unless qword at %1 equals %2. Clobbers rax.
+%macro EXPECT_QWORD 3
+    mov     rax, qword %1
+    cmp     rax, %2
+    jne     %3
+%endmacro
+
+; Branch to %3 unless dword at %1 equals %2. Clobbers eax.
+%macro EXPECT_DWORD 3
+    mov     eax, dword %1
+    cmp     eax, %2
+    jne     %3
+%endmacro
+
+; Mark one whole test case as passed.
+%macro TEST_CASE_PASS 0
+    inc     qword [rel passed]
+%endmacro
+
+; Mark one whole test case as failed.
+%macro TEST_CASE_FAIL 0
+    inc     qword [rel failed]
+%endmacro
+
+; Exit with the supplied status code.
+%macro TEST_EXIT 1
+    mov     edi, %1
+    mov     eax, 60
+    syscall
+%endmacro
+
+; Exit with status 1 if failed is non-zero, else 0.
+%macro TEST_EXIT_FAILED 0
+    xor     edi, edi
+    cmp     qword [rel failed], 0
+    sete    dil
+    xor     dil, 1
+    mov     eax, 60
+    syscall
+%endmacro
+
+; Exit with status 0 when passed equals total, else 1.
+%macro TEST_EXIT_PASSED_TOTAL 0
+    mov     rax, [rel passed]
+    mov     rdx, [rel total]
+    cmp     rax, rdx
+    sete    al
+    xor     al, 1
+    movzx   edi, al
+    mov     eax, 60
+    syscall
+%endmacro
+
+; Exit with status 0 when eax is zero, else status 1.
+%macro TEST_EXIT_EAX_ZERO 0
+    xor     edi, edi
+    test    eax, eax
+    setnz   dil
+    mov     eax, 60
+    syscall
+%endmacro
+
+; Exit with status 0 when qword at %1 is zero, else 1.
+%macro TEST_EXIT_QWORD_ZERO 1
+    xor     edi, edi
+    cmp     qword %1, 0
+    setne   dil
+    mov     eax, 60
+    syscall
+%endmacro
+
+; Return eax=0 if failed is zero, else eax=-1.
+%macro TEST_RETURN_FAILED 0
+    xor     eax, eax
+    cmp     qword [rel failed], 0
+    je      %%done
+    mov     eax, -1
 %%done:
 %endmacro

@@ -4,6 +4,8 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "x86_64/crypto/local_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_tor_aes_ctr
 extern er_tor_aes256_ctr
@@ -14,6 +16,10 @@ extern er_tor_get_role
 extern er_tor_get_role_caps
 extern er_tor_hsdir_build_publish_header
 extern er_tor_hsdir_build_fetch_request
+extern er_tor_route_bind_hs_stream
+extern er_tor_route_bind_live_hs_identity
+extern er_local_cell_init
+extern er_local_cell_send
 extern er_memcpy
 
 SECTION .data
@@ -72,39 +78,34 @@ hsdir_fetch_expected:
           db "Host: tor", 0x0D, 0x0A
           db "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
 hsdir_fetch_expected_len equ $ - hsdir_fetch_expected
+route_hash:
+          db "tor-route-test-identity"
+          times 32 - ($ - route_hash) db 0
 
 SECTION .bss
 buf:      resb 64
 req_buf:  resb 512
 iv_copy:  resb 16
 bench_buf: resb TOR_CELL_LEN
+route_cell: resb LOCAL_CELL_SIZE
+last_relay_circ: resd 1
+last_relay_stream: resd 1
+last_relay_cmd: resd 1
+last_relay_data: resq 1
+last_relay_len: resd 1
 tor_conn_id: resd 1
 tor_rx_cell: resb TOR_CELL_LEN
 tor_recv_len: resd 1
-
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-%macro ASSERT_EQ 2
-    cmp     %1, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
+global tor_hs_live_last_circ_id
+global tor_hs_live_last_stream_id
+tor_hs_live_last_circ_id: resd 1
+tor_hs_live_last_stream_id: resw 1
 
 SECTION .text
 global _start
 _start:
+    call    er_local_cell_init
+    ASSERT_RDX 0
 
 %macro TEST_LABEL 1
     jmp     %%done
@@ -146,11 +147,7 @@ _start:
     lea     r8,  [rel iv_copy]
     call    er_tor_aes_ctr
 
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_ct]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_ct], [rel buf], 64
 
 ; ================================================================
 ; Test 2: AES-128-CTR roundtrip (decrypt = same operation in CTR)
@@ -180,11 +177,7 @@ _start:
     lea     r8,  [rel iv_copy]
     call    er_tor_aes_ctr
 
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_pt]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_pt], [rel buf], 64
 
 ; ================================================================
 ; Test 3: Partial block (non-16-byte aligned length)
@@ -203,11 +196,7 @@ _start:
     call    er_tor_aes_ctr
 
     ; First 7 bytes should match known ciphertext
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_ct]
-    mov     edx, 7
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_ct], [rel buf], 7
 
 ; ================================================================
 ; Test 4: Empty length (should be no-op)
@@ -226,11 +215,7 @@ _start:
     call    er_tor_aes_ctr
 
     ; IV should be unchanged (no blocks encrypted)
-    lea     rsi, [rel iv_copy]
-    lea     rdi, [rel test_iv]
-    mov     edx, 16
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_iv], [rel iv_copy], 16
 
 ; ================================================================
 ; Test 5: Multi-block XOR (3 blocks = 48 bytes)
@@ -248,11 +233,7 @@ _start:
     lea     r8,  [rel iv_copy]
     call    er_tor_aes_ctr
 
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_ct]
-    mov     edx, 48
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_ct], [rel buf], 48
 
 ; ================================================================
 ; Test 6: AES-256-CTR encrypt — known-answer test
@@ -271,11 +252,7 @@ _start:
     lea     r8,  [rel iv_copy]
     call    er_tor_aes256_ctr
 
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_ct256]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_ct256], [rel buf], 64
 
 ; ================================================================
 ; Test 7: AES-256-CTR roundtrip
@@ -305,11 +282,7 @@ _start:
     lea     r8,  [rel iv_copy]
     call    er_tor_aes256_ctr
 
-    lea     rsi, [rel buf]
-    lea     rdi, [rel test_pt]
-    mov     edx, 64
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel test_pt], [rel buf], 64
 
 ; ================================================================
 ; Test 8: Tor role state accepts every defined node role
@@ -421,11 +394,7 @@ _start:
     mov     edx, 123
     call    er_tor_hsdir_build_publish_header
     ASSERT_EQ eax, hsdir_publish_expected_len
-    lea     rdi, [rel hsdir_publish_expected]
-    lea     rsi, [rel req_buf]
-    mov     edx, hsdir_publish_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel hsdir_publish_expected], [rel req_buf], hsdir_publish_expected_len
 
 ; ================================================================
 ; Test 11: HSDir v3 descriptor fetch GET request
@@ -437,11 +406,50 @@ _start:
     mov     ecx, hsdir_blinded_len
     call    er_tor_hsdir_build_fetch_request
     ASSERT_EQ eax, hsdir_fetch_expected_len
-    lea     rdi, [rel hsdir_fetch_expected]
-    lea     rsi, [rel req_buf]
-    mov     edx, hsdir_fetch_expected_len
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel hsdir_fetch_expected], [rel req_buf], hsdir_fetch_expected_len
+
+; ================================================================
+; Test 12: identity route requires bound hidden-service stream
+; ================================================================
+    TEST_LABEL "12"
+    lea     rdi, [rel route_hash]
+    lea     rsi, [rel route_cell]
+    call    er_local_cell_send
+    ASSERT_RDX ERROR_LOCAL_NOT_FOUND
+
+    lea     rdi, [rel route_hash]
+    mov     esi, 7
+    mov     edx, 9
+    call    er_tor_route_bind_hs_stream
+    ASSERT_RDX 0
+
+    lea     rdi, [rel route_hash]
+    lea     rsi, [rel route_cell]
+    call    er_local_cell_send
+    ASSERT_RDX 0
+    ASSERT_EQ dword [rel last_relay_circ], 7
+    ASSERT_EQ dword [rel last_relay_stream], 9
+    ASSERT_EQ dword [rel last_relay_cmd], TOR_RELAY_DATA
+    lea     rax, [rel route_cell]
+    ASSERT_EQ qword [rel last_relay_data], rax
+    ASSERT_EQ dword [rel last_relay_len], LOCAL_CELL_SIZE
+
+; ================================================================
+; Test 13: live HS route binding uses last opened stream state
+; ================================================================
+    TEST_LABEL "13"
+    mov     dword [rel tor_hs_live_last_circ_id], 21
+    mov     word [rel tor_hs_live_last_stream_id], 23
+    lea     rdi, [rel route_hash]
+    call    er_tor_route_bind_live_hs_identity
+    ASSERT_RDX 0
+
+    lea     rdi, [rel route_hash]
+    lea     rsi, [rel route_cell]
+    call    er_local_cell_send
+    ASSERT_RDX 0
+    ASSERT_EQ dword [rel last_relay_circ], 21
+    ASSERT_EQ dword [rel last_relay_stream], 23
 
 %ifdef TOR_BENCH
 ; ================================================================
@@ -495,31 +503,7 @@ _start:
 ; ================================================================
 ; Done — report results
 ; ================================================================
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-; Helper: _mem_eq(rdi=expected, rsi=actual, edx=len)
-; returns eax = 1 if equal, 0 if not
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED
 
 %ifdef TOR_BENCH
 rdtsc64:
@@ -619,7 +603,6 @@ global er_tor_ntor_keygen
 global er_tcp_recv
 global er_fn_load_trusted
 global er_fn_call_args
-global er_wasm_runtime_ptr
 global edgerun_signing_wasm_start
 global edgerun_signing_wasm_len
 global er_serial_puts
@@ -632,12 +615,14 @@ global er_tor_relay_crypt
 global tor_conn_id
 global tor_rx_cell
 global tor_recv_len
+global _wasm_import_da_surface_register
+global _wasm_import_da_surface_update
+global _wasm_import_da_surface_unregister
 
 er_tor_cell_init:
 er_tor_link_handshake:
 er_tor_circuit_create:
 er_tor_circuit_extend:
-er_tor_send_relay:
 er_tor_recv_relay:
 er_tor_open_stream:
 er_tor_open_dir_stream:
@@ -667,9 +652,22 @@ er_serial_crlf:
 er_http_parse_status:
 er_http_find_body:
 er_tor_relay_crypt:
+_wasm_import_da_surface_register:
+_wasm_import_da_surface_update:
+_wasm_import_da_surface_unregister:
     xor     eax, eax
+    er_ok
     ret
 
-er_wasm_runtime_ptr: dq 0
+er_tor_send_relay:
+    mov     [rel last_relay_circ], edi
+    mov     [rel last_relay_stream], esi
+    mov     [rel last_relay_cmd], edx
+    mov     [rel last_relay_data], rcx
+    mov     [rel last_relay_len], r8d
+    xor     eax, eax
+    er_ok
+    ret
+
 edgerun_signing_wasm_start: db 0
 edgerun_signing_wasm_len: dq 0

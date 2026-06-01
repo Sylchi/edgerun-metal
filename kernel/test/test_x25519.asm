@@ -5,6 +5,7 @@
 ; Links against curve25519.o, tor_ntor.o, runtime.o.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 FE_LIMB_P0 equ 0x0007ffffffffffe0
 FE_LIMB_PN equ 0x0007ffffffffffff
@@ -23,19 +24,6 @@ extern _fe_sub
 extern _fe_normalize
 extern _fe_cswap
 extern _curve25519_ladder_step
-
-%macro ASSERT 2
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-    mov     edi, %2
-    mov     eax, 60
-    syscall
-%%done:
-%endmacro
 
 SECTION .bss
 passed:     resq 1
@@ -85,9 +73,7 @@ _start:
     inc     qword [rel passed]
     jmp     .test1_done
 .test1_fail:
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1
 .test1_done:
 
 ; ================================================================
@@ -96,11 +82,7 @@ _start:
     lea     rdi, [rel fe_c]
     lea     rsi, [rel fe_one]
     call    _fe_invert
-    lea     rdi, [rel fe_c]
-    lea     rsi, [rel fe_one]
-    mov     edx, 40
-    call    _mem_eq
-    ASSERT eax, 2
+    ASSERT_MEM_EQ_EXIT [rel fe_c], [rel fe_one], 40, 2
 
 ; ================================================================
 ; Test 3: frombytes→invert→mul≡1 for decoded point2
@@ -129,11 +111,7 @@ _start:
     lea     rsi, [rel fe_one]
     call    _fe_tobytes
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel expected]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax, 3
+    ASSERT_MEM_EQ_EXIT [rel result], [rel expected], 32, 3
 
 ; ================================================================
 ; Test 4: frombytes→tobytes round-trip for point2
@@ -146,11 +124,7 @@ _start:
     lea     rsi, [rel fe_a]
     call    _fe_tobytes
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel point2_masked]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax, 4
+    ASSERT_MEM_EQ_EXIT [rel result], [rel point2_masked], 32, 4
 
 ; ================================================================
 ; Test 5: RFC 7748 Test Vector 1 — full scalar multiplication
@@ -160,11 +134,7 @@ _start:
     lea     rdx, [rel point1]
     call    er_tor_curve25519_scalar_mult
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel output1]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax, 5
+    ASSERT_MEM_EQ_EXIT [rel result], [rel output1], 32, 5
 
 ; ================================================================
 ; Test 6: Check if point2 u-coordinate is a 2-torsion point
@@ -325,26 +295,12 @@ _start:
     lea     rdi, [rel result]
     call    dump_hex
 
-    lea     rdi, [rel result]
-    lea     rsi, [rel output2]
-    mov     edx, 32
-    call    _mem_eq
-    ASSERT eax, 7
+    ASSERT_MEM_EQ_EXIT [rel result], [rel output2], 32, 7
 
 ; ================================================================
 ; Done — report results
 ; ================================================================
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-.exit_pass:
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
+    TEST_EXIT_FAILED
 
 ; Debug: dump 32 bytes pointed by rdi to stderr as hex
 dump_hex:
@@ -391,20 +347,5 @@ dump_hex:
     pop     rdi
     pop     rsi
     pop     rdx
-    pop     rcx
-    ret
-
-; Helper: _mem_eq(rdi=expected, rsi=actual, edx=len)
-; returns eax = 1 if equal, 0 if not
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
     pop     rcx
     ret

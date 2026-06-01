@@ -539,11 +539,4 @@ _start:
     TESTQ
 
     ; ===== done =====
-    mov     rax, [rel passed]
-    mov     rdx, [rel total]
-    cmp     rax, rdx
-    sete    al
-    xor     al, 1               ; invert: 1→0 (all pass), 0→1 (fail)
-    movzx   edi, al
-    mov     eax, 60
-    syscall
+    TEST_EXIT_PASSED_TOTAL

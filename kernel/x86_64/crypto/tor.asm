@@ -35,6 +35,7 @@ extern er_tor_hs_service_wait_introduce2
 extern er_tor_hs_parse_introduce_plaintext
 extern er_tor_hs_send_rendezvous1
 extern er_tor_ntor_keygen
+extern er_local_route_register_tor_hs
 extern er_tcp_recv
 extern er_fn_load_trusted
 extern er_fn_call_args
@@ -119,10 +120,6 @@ tor_stream_id_app: resw 1  ; primary stream for app traffic
 tor_test_buf: resb 512
 
 ; Tor cell-tunnel state (local cell format over RELAY_DATA)
-tor_tunnel_dst_ip: resd 1
-tor_tunnel_dst_port: resw 1
-tor_tunnel_stream_id: resw 1
-tor_tunnel_stream_open: resd 1
 tor_dir_stream_id: resw 1
 tor_dir_stream_open: resd 1
 tor_tunnel_rx_head: resd 1
@@ -166,6 +163,8 @@ tor_hs_service_rend_relay_ip: resd 1
 tor_hs_service_rend_relay_port: resw 1
 tor_hs_service_rend_relay_onion_key: resb 32
 tor_hs_live_stream_next_id: resw 1
+tor_hs_live_last_circ_id: resd 1
+tor_hs_live_last_stream_id: resw 1
 tor_signing_runtime: resb RUNTIME_SIZE
 tor_signing_memory: resb 17 * 65536
 tor_signing_ticks: resq 1
@@ -856,18 +855,23 @@ er_fn er_tor_get_role_caps
     er_ret
 
 ; ==================================================================
-; er_tor_tunnel_set_exit — set destination endpoint for tunnel stream
-; edi = dst IPv4 (network byte order), esi = dst port (host order)
+; er_tor_route_bind_hs_stream — bind identity routing to an open HS stream
+; rdi = dest identity hash, esi = rendezvous circ_id, edx = stream_id
 ; ==================================================================
-global er_tor_tunnel_set_exit
-er_fn er_tor_tunnel_set_exit
-    mov     [tor_tunnel_dst_ip], edi
-    mov     [tor_tunnel_dst_port], si
-    mov     dword [tor_tunnel_stream_open], 0
-    mov     word [tor_tunnel_stream_id], 0
-    xor     eax, eax
-    er_ok
+global er_tor_route_bind_hs_stream
+er_fn er_tor_route_bind_hs_stream
+    call    er_local_route_register_tor_hs
     er_ret
+
+; ==================================================================
+; er_tor_route_bind_live_hs_identity — bind identity to last live HS stream
+; rdi = dest identity hash
+; ==================================================================
+global er_tor_route_bind_live_hs_identity
+er_fn er_tor_route_bind_live_hs_identity
+    mov     esi, [rel tor_hs_live_last_circ_id]
+    movzx   edx, word [rel tor_hs_live_last_stream_id]
+    jmp     er_tor_route_bind_hs_stream
 
 ; ==================================================================
 ; er_tor_open_directory_channel — open BEGIN_DIR stream on app circuit
@@ -1916,6 +1920,9 @@ er_fn er_tor_hs_open_stream_live_from_desc
     call    er_tor_hs_open_client_stream
     test    eax, eax
     js      .fail
+    mov     eax, [rel tor_hs_rend_circ_id]
+    mov     [rel tor_hs_live_last_circ_id], eax
+    mov     [rel tor_hs_live_last_stream_id], si
 
     xor     eax, eax
     er_ok
@@ -3122,65 +3129,6 @@ _tor_parse_consensus_first_relay:
     ret
 
 ; ==================================================================
-; _tor_tunnel_open_if_needed — open stream if not already open
-; returns eax=0 success, -1 on failure
-; ==================================================================
-_tor_tunnel_open_if_needed:
-    cmp     dword [tor_tunnel_stream_open], 1
-    je      .ok
-    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
-    jne     .fail
-    cmp     dword [tor_circ_id_app], 0
-    je      .fail
-
-    mov     edi, [tor_circ_id_app]
-    mov     esi, [tor_tunnel_dst_ip]
-    movzx   edx, word [tor_tunnel_dst_port]
-    lea     rcx, [tor_tunnel_stream_id]
-    call    er_tor_open_stream
-    test    eax, eax
-    js      .fail
-
-    mov     dword [tor_tunnel_stream_open], 1
-.ok:
-    xor     eax, eax
-    ret
-.fail:
-    mov     eax, -1
-    ret
-
-; ==================================================================
-; er_tor_tunnel_send_cell — send one 256-byte local cell over Tor
-; rdi = cell_ptr (LOCAL_CELL_SIZE)
-; ==================================================================
-global er_tor_tunnel_send_cell
-er_fn er_tor_tunnel_send_cell
-    push    rbx
-    mov     rbx, rdi
-    call    _tor_tunnel_open_if_needed
-    test    eax, eax
-    js      .fail
-
-    mov     edi, [tor_circ_id_app]
-    movzx   esi, word [tor_tunnel_stream_id]
-    mov     edx, TOR_RELAY_DATA
-    mov     rcx, rbx
-    mov     r8d, LOCAL_CELL_SIZE
-    call    er_tor_send_relay
-    test    eax, eax
-    js      .fail
-
-    xor     eax, eax
-    er_ok
-    pop     rbx
-    er_ret
-.fail:
-    mov     eax, -1
-    er_err  ERROR_TOR_STREAM_FAIL
-    pop     rbx
-    er_ret
-
-; ==================================================================
 ; er_tor_tunnel_recv_cell — recv one tunneled local cell (non-blocking)
 ; rdi = out_cell_ptr (LOCAL_CELL_SIZE)
 ; ==================================================================
@@ -3313,10 +3261,8 @@ er_fn er_tor_init
     call    er_tor_set_role
     test    eax, eax
     js      .link_fail
-    mov     dword [tor_tunnel_dst_ip], 0x607C10A8   ; 104.16.124.96
-    mov     word [tor_tunnel_dst_port], 80
-    mov     dword [tor_tunnel_stream_open], 0
-    mov     word [tor_tunnel_stream_id], 0
+    mov     dword [tor_hs_live_last_circ_id], 0
+    mov     word [tor_hs_live_last_stream_id], 0
     mov     dword [tor_dir_stream_open], 0
     mov     word [tor_dir_stream_id], 0
     mov     word [tor_hs_live_stream_next_id], 1
@@ -3631,11 +3577,12 @@ er_fn er_tor_poll
     movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
     xchg    cl, ch
 
-    ; Fast-path: tunnel cell payload (exactly one local cell) for the
-    ; configured tunnel stream. Drop when ring is full.
-    movzx   eax, word [tor_tunnel_stream_id]
+    ; Fast-path: local cell payload on the last live HS stream.
+    ; Drop when the local receive ring is full.
+    movzx   eax, word [rel tor_hs_live_last_stream_id]
     cmp     r14w, ax
     jne     .print_data
+.cell_stream:
     cmp     ecx, LOCAL_CELL_SIZE
     jne     .print_data
     mov     eax, [tor_tunnel_rx_head]

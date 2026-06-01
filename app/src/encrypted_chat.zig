@@ -8,11 +8,8 @@ const preimage = @import("preimage.zig");
 const seal = @import("seal.zig");
 
 pub const hash_size = preimage.hash_size;
-pub const contact_canonical_max = 2 + 2 + 2 + 2 + max_contact_route_bytes + max_name_bytes + max_route_bytes + max_public_key_bytes;
-pub const max_contact_route_bytes = 96;
+pub const contact_canonical_max = identity.id_size * 2 + 1 + max_name_bytes;
 pub const max_name_bytes = 64;
-pub const max_route_bytes = 128;
-pub const max_public_key_bytes = 96;
 pub const max_message_body_bytes = 1024;
 pub const max_media_ref_bytes = 160;
 pub const max_media_mime_bytes = 48;
@@ -20,7 +17,7 @@ pub const sealed_header_size = 114;
 
 const snapshot_magic = "ERCHAT01";
 const sealed_magic = "ERCHSEAL";
-const version: u16 = 2;
+const version: u16 = 3;
 
 pub const Error = error{
     BadArgument,
@@ -42,16 +39,12 @@ pub const MediaKind = enum(u8) {
 };
 
 pub const ContactImport = struct {
-    contact_route: []const u8,
+    identity_id: identity.Id,
     name: []const u8,
-    route: []const u8,
-    public_key: []const u8,
 
     pub fn valid(self: ContactImport) bool {
-        return self.contact_route.len != 0 and self.contact_route.len <= max_contact_route_bytes and
-            self.name.len != 0 and self.name.len <= max_name_bytes and
-            self.route.len != 0 and self.route.len <= max_route_bytes and
-            self.public_key.len != 0 and self.public_key.len <= max_public_key_bytes;
+        return self.identity_id.valid() and
+            self.name.len != 0 and self.name.len <= max_name_bytes;
     }
 };
 
@@ -59,29 +52,11 @@ pub const Contact = struct {
     id: identity.Id,
     details_hash: preimage.Hash,
     epoch: clock.Stamp,
-    contact_route: [max_contact_route_bytes]u8 = [_]u8{0} ** max_contact_route_bytes,
-    contact_route_len: usize = 0,
     name: [max_name_bytes]u8 = [_]u8{0} ** max_name_bytes,
     name_len: usize = 0,
-    route: [max_route_bytes]u8 = [_]u8{0} ** max_route_bytes,
-    route_len: usize = 0,
-    public_key: [max_public_key_bytes]u8 = [_]u8{0} ** max_public_key_bytes,
-    public_key_len: usize = 0,
-
-    pub fn contactRouteBytes(self: *const Contact) []const u8 {
-        return self.contact_route[0..self.contact_route_len];
-    }
 
     pub fn nameBytes(self: *const Contact) []const u8 {
         return self.name[0..self.name_len];
-    }
-
-    pub fn routeBytes(self: *const Contact) []const u8 {
-        return self.route[0..self.route_len];
-    }
-
-    pub fn publicKeyBytes(self: *const Contact) []const u8 {
-        return self.public_key[0..self.public_key_len];
     }
 };
 
@@ -142,14 +117,8 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
                 .details_hash = contactDetailsHash(value) orelse return error.BadArgument,
                 .epoch = epoch,
             };
-            _ = bytes.copy(contact.contact_route[0..value.contact_route.len], value.contact_route);
             _ = bytes.copy(contact.name[0..value.name.len], value.name);
-            _ = bytes.copy(contact.route[0..value.route.len], value.route);
-            _ = bytes.copy(contact.public_key[0..value.public_key.len], value.public_key);
-            contact.contact_route_len = value.contact_route.len;
             contact.name_len = value.name.len;
-            contact.route_len = value.route.len;
-            contact.public_key_len = value.public_key.len;
 
             if (self.findContactIndex(contact_id)) |index| {
                 self.contacts[index] = contact;
@@ -230,7 +199,7 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
             var i: usize = 0;
             while (i < self.contact_count) : (i += 1) {
                 const c = &self.contacts[i];
-                size += 134 + c.contact_route_len + c.name_len + c.route_len + c.public_key_len;
+                size += 130 + c.name_len;
             }
             i = 0;
             while (i < self.message_count) : (i += 1) {
@@ -258,14 +227,8 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
                 try writer.writeU64(c.epoch.slot);
                 try writer.writeU64(c.epoch.epoch);
                 try writer.writeU64(c.epoch.era);
-                try writer.writeU16(@intCast(c.contact_route_len));
                 try writer.writeU16(@intCast(c.name_len));
-                try writer.writeU16(@intCast(c.route_len));
-                try writer.writeU16(@intCast(c.public_key_len));
-                try writer.raw(c.contactRouteBytes());
                 try writer.raw(c.nameBytes());
-                try writer.raw(c.routeBytes());
-                try writer.raw(c.publicKeyBytes());
             }
 
             i = 0;
@@ -309,22 +272,13 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
                         .era = try reader.readU64(),
                     },
                 };
-                contact.contact_route_len = try reader.readU16();
                 contact.name_len = try reader.readU16();
-                contact.route_len = try reader.readU16();
-                contact.public_key_len = try reader.readU16();
                 if (!contact.id.valid() or !contact.epoch.valid() or
-                    contact.contact_route_len == 0 or contact.contact_route_len > max_contact_route_bytes or
-                    contact.name_len == 0 or contact.name_len > max_name_bytes or
-                    contact.route_len == 0 or contact.route_len > max_route_bytes or
-                    contact.public_key_len == 0 or contact.public_key_len > max_public_key_bytes)
+                    contact.name_len == 0 or contact.name_len > max_name_bytes)
                 {
                     return error.Corrupt;
                 }
-                _ = bytes.copy(contact.contact_route[0..contact.contact_route_len], try reader.raw(contact.contact_route_len));
                 _ = bytes.copy(contact.name[0..contact.name_len], try reader.raw(contact.name_len));
-                _ = bytes.copy(contact.route[0..contact.route_len], try reader.raw(contact.route_len));
-                _ = bytes.copy(contact.public_key[0..contact.public_key_len], try reader.raw(contact.public_key_len));
                 new_contacts[ci] = contact;
             }
 
@@ -382,9 +336,7 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
 
 pub fn deriveContactId(value: ContactImport) ?identity.Id {
     if (!value.valid()) return null;
-    const route_hash = preimage.hash("edgerun:zig:v1:encrypted-chat-contact-route", value.contact_route);
-    const source = identity.Source.prepare(.derived, &route_hash) orelse return null;
-    return source.id();
+    return value.identity_id;
 }
 
 pub fn contactDetailsHash(value: ContactImport) ?preimage.Hash {
@@ -395,7 +347,11 @@ pub fn contactDetailsHash(value: ContactImport) ?preimage.Hash {
 
 pub fn writeContactLink(out: []u8, value: ContactImport) Error![]const u8 {
     if (!value.valid()) return error.BadArgument;
-    return std.fmt.bufPrint(out, "{s}|{s}|{s}|{s}", .{ value.contact_route, value.name, value.route, value.public_key }) catch error.NoSpace;
+    if (out.len < identity.id_size * 2 + 1 + value.name.len) return error.NoSpace;
+    writeHex(out[0 .. identity.id_size * 2], &value.identity_id.bytes);
+    out[identity.id_size * 2] = '|';
+    _ = bytes.copy(out[identity.id_size * 2 + 1 ..][0..value.name.len], value.name);
+    return out[0 .. identity.id_size * 2 + 1 + value.name.len];
 }
 
 pub fn sealBytes(policy: seal.Policy, nonce_material: []const u8, plaintext: []const u8, out: []u8) Error![]const u8 {
@@ -447,31 +403,52 @@ pub fn unsealBytes(policy: seal.Policy, sealed_bytes: []const u8, out: []u8) Err
 fn canonicalContact(value: ContactImport, out: []u8) ?[]const u8 {
     if (!value.valid() or out.len < contact_canonical_max) return null;
     var writer = SliceWriter.init(out);
-    writer.writeU16(@intCast(value.contact_route.len)) catch return null;
     writer.writeU16(@intCast(value.name.len)) catch return null;
-    writer.writeU16(@intCast(value.route.len)) catch return null;
-    writer.writeU16(@intCast(value.public_key.len)) catch return null;
-    writer.raw(value.contact_route) catch return null;
+    writer.raw(&value.identity_id.bytes) catch return null;
     writer.raw(value.name) catch return null;
-    writer.raw(value.route) catch return null;
-    writer.raw(value.public_key) catch return null;
     return writer.written();
 }
 
 fn parseContactLine(line: []const u8) ?ContactImport {
     const first = bytes.indexOf(line, "|") orelse return null;
-    const rest = line[first + 1 ..];
-    const second_rel = bytes.indexOf(rest, "|") orelse return null;
-    const second = first + 1 + second_rel;
-    const tail = line[second + 1 ..];
-    const third_rel = bytes.indexOf(tail, "|") orelse return null;
-    const third = second + 1 + third_rel;
-    const contact_route = trim(line[0..first]);
-    const name = trim(line[first + 1 .. second]);
-    const route = trim(line[second + 1 .. third]);
-    const public_key = trim(line[third + 1 ..]);
-    const value = ContactImport{ .contact_route = contact_route, .name = name, .route = route, .public_key = public_key };
+    const identity_hex = trim(line[0..first]);
+    const name = trim(line[first + 1 ..]);
+    var id: [identity.id_size]u8 = undefined;
+    parseHexIdentity(identity_hex, &id) orelse return null;
+    const value = ContactImport{ .identity_id = .{ .bytes = id }, .name = name };
     return if (value.valid()) value else null;
+}
+
+fn writeHex(out: []u8, raw: []const u8) void {
+    var index: usize = 0;
+    while (index < raw.len) : (index += 1) {
+        out[index * 2] = hexChar(raw[index] >> 4);
+        out[index * 2 + 1] = hexChar(raw[index] & 0x0f);
+    }
+}
+
+fn parseHexIdentity(raw: []const u8, out: *[identity.id_size]u8) ?void {
+    if (raw.len != identity.id_size * 2) return null;
+    var index: usize = 0;
+    while (index < identity.id_size) : (index += 1) {
+        const hi = hexValue(raw[index * 2]) orelse return null;
+        const lo = hexValue(raw[index * 2 + 1]) orelse return null;
+        out[index] = (hi << 4) | lo;
+    }
+    return if (bytes.nonzero(out)) {} else null;
+}
+
+fn hexChar(value: u8) u8 {
+    return if (value < 10) '0' + value else 'a' + value - 10;
+}
+
+fn hexValue(value: u8) ?u8 {
+    return switch (value) {
+        '0'...'9' => value - '0',
+        'a'...'f' => value - 'a' + 10,
+        'A'...'F' => value - 'A' + 10,
+        else => null,
+    };
 }
 
 fn trim(value: []const u8) []const u8 {
@@ -628,7 +605,7 @@ fn testIdentity(kind: identity.Kind, label: []const u8, epoch: clock.Stamp) iden
     return identity.Identity.init(kind, identity.Source.prepare(.hash, &preimage.rawHash(label)).?, epoch).?;
 }
 
-test "contact id is the user-created route given to that contact" {
+test "contact id is the hidden service identity" {
     const testing = std.testing;
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
     const device = testIdentity(.device, "chat device", epoch);
@@ -636,21 +613,21 @@ test "contact id is the user-created route given to that contact" {
     const user = testIdentity(.user, "chat user", epoch);
     var chat = try ChatState(8, 8).init(device, app, user, epoch);
 
-    const alice_v1 = ContactImport{ .contact_route = "route-to-me-for-alice-1", .name = "Alice", .route = "alice.onion", .public_key = "alice-key-1" };
-    const alice_v1_updated = ContactImport{ .contact_route = "route-to-me-for-alice-1", .name = "Alice A.", .route = "alice-new.onion", .public_key = "alice-key-2" };
-    const alice_v2 = ContactImport{ .contact_route = "route-to-me-for-alice-2", .name = "Alice", .route = "alice-new.onion", .public_key = "alice-key-2" };
+    const alice_identity = identity.Id{ .bytes = [_]u8{7} ++ [_]u8{3} ** 31 };
+    const bob_identity = identity.Id{ .bytes = [_]u8{8} ++ [_]u8{4} ** 31 };
+    const alice_v1 = ContactImport{ .identity_id = alice_identity, .name = "Alice" };
+    const alice_v1_updated = ContactImport{ .identity_id = alice_identity, .name = "Alice A." };
+    const bob = ContactImport{ .identity_id = bob_identity, .name = "Bob" };
     const id_v1 = try chat.importContact(alice_v1, epoch);
     const id_v1_again = try chat.importContact(alice_v1_updated, epoch);
-    const id_v2 = try chat.importContact(alice_v2, epoch);
+    const id_v2 = try chat.importContact(bob, epoch);
 
     try testing.expect(id_v1.eql(id_v1_again));
     try testing.expect(!id_v1.eql(id_v2));
+    try testing.expect(id_v1.eql(alice_identity));
     try testing.expectEqual(@as(usize, 2), chat.contact_count);
-    try testing.expectEqualStrings("route-to-me-for-alice-1", chat.findContact(id_v1).?.contactRouteBytes());
     try testing.expectEqualStrings("Alice A.", chat.findContact(id_v1).?.nameBytes());
-    try testing.expectEqualStrings("alice-new.onion", chat.findContact(id_v1).?.routeBytes());
-    try testing.expectEqualStrings("route-to-me-for-alice-2", chat.findContact(id_v2).?.contactRouteBytes());
-    try testing.expectEqualStrings("alice-new.onion", chat.findContact(id_v2).?.routeBytes());
+    try testing.expectEqualStrings("Bob", chat.findContact(id_v2).?.nameBytes());
 }
 
 test "imports contact text appends messages and seals snapshot" {
@@ -661,32 +638,37 @@ test "imports contact text appends messages and seals snapshot" {
     const user = testIdentity(.user, "chat seal user", epoch);
     var chat = try ChatState(8, 8).init(device, app, user, epoch);
 
-    const imported = try chat.importContactsText(
-        \\route-to-me-for-alice|Alice|alice.onion|alice-key
-        \\route-to-me-for-bob|Bob|bob.onion|bob-key
-    , epoch);
+    const alice_identity = identity.Id{ .bytes = [_]u8{7} ++ [_]u8{3} ** 31 };
+    const bob_identity = identity.Id{ .bytes = [_]u8{8} ++ [_]u8{4} ** 31 };
+    var alice_line_buf: [contact_canonical_max]u8 = undefined;
+    var bob_line_buf: [contact_canonical_max]u8 = undefined;
+    const alice_line = try writeContactLink(&alice_line_buf, .{ .identity_id = alice_identity, .name = "Alice" });
+    const bob_line = try writeContactLink(&bob_line_buf, .{ .identity_id = bob_identity, .name = "Bob" });
+    var import_buf: [contact_canonical_max * 2 + 1]u8 = undefined;
+    const import_text = try std.fmt.bufPrint(&import_buf, "{s}\n{s}", .{ alice_line, bob_line });
+    const imported = try chat.importContactsText(import_text, epoch);
     try testing.expectEqual(@as(usize, 2), imported);
-    const alice = deriveContactId(.{ .contact_route = "route-to-me-for-alice", .name = "Alice", .route = "alice.onion", .public_key = "alice-key" }).?;
-    _ = try chat.appendMessage(alice, .outbound, "hello over our onion route");
+    const alice = deriveContactId(.{ .identity_id = alice_identity, .name = "Alice" }).?;
+    _ = try chat.appendMessage(alice, .outbound, "hello over our identity route");
     _ = try chat.appendMediaMessage(alice, .inbound, "photo proof", .image, "object://image/alice-proof", "image/erimg", 4096);
     _ = try chat.appendMediaMessage(alice, .outbound, "video proof", .video, "object://video/alice-proof", "video/ivf", 8192);
 
     var link_buf: [contact_canonical_max]u8 = undefined;
-    const share_line = try writeContactLink(&link_buf, .{ .contact_route = "route-to-me-for-alice", .name = "Alice", .route = "alice.onion", .public_key = "alice-key" });
-    try testing.expectEqualStrings("route-to-me-for-alice|Alice|alice.onion|alice-key", share_line);
+    const share_line = try writeContactLink(&link_buf, .{ .identity_id = alice_identity, .name = "Alice" });
+    try testing.expectEqualStrings(alice_line, share_line);
 
     var plaintext: [4096]u8 = undefined;
     var sealed_buf: [4096]u8 = undefined;
     const sealed_snapshot = try chat.sealSnapshot(chat.sealPolicy(), "first-import", &sealed_buf, &plaintext);
     try testing.expect(sealed_snapshot.len > sealed_header_size);
-    try testing.expect(bytes.indexOf(sealed_snapshot, "hello over our onion route") == null);
+    try testing.expect(bytes.indexOf(sealed_snapshot, "hello over our identity route") == null);
 
     var restored = try ChatState(8, 8).init(device, app, user, epoch);
     var open_buf: [4096]u8 = undefined;
     try restored.unsealSnapshot(restored.sealPolicy(), sealed_snapshot, &open_buf);
     try testing.expectEqual(@as(usize, 2), restored.contact_count);
     try testing.expectEqual(@as(usize, 3), restored.message_count);
-    try testing.expectEqualStrings("hello over our onion route", restored.messages[0].bodyBytes());
+    try testing.expectEqualStrings("hello over our identity route", restored.messages[0].bodyBytes());
     try testing.expectEqual(MediaKind.image, restored.messages[1].media_kind);
     try testing.expectEqualStrings("object://image/alice-proof", restored.messages[1].mediaRefBytes());
     try testing.expectEqualStrings("image/erimg", restored.messages[1].mediaMimeBytes());

@@ -1,6 +1,7 @@
 ; EdgeRun UVC descriptor capability parser self-hosted test.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern er_uvc_parse_config_caps
 extern er_uvc_set_config_blob
@@ -57,112 +58,82 @@ _start:
     lea     rsi, [rel cfg_mjpeg]
     mov     rdx, cfg_mjpeg_len
     call    er_xhci_set_port_config_blob
-    cmp     eax, 0
-    jne     .fail_case
+    EXPECT_EAX 0, .fail_case
     mov     edi, 1
     lea     rsi, [rel ptr_out]
     lea     rdx, [rel len_out]
     call    er_xhci_get_port_config_blob
-    cmp     eax, 0
-    jne     .fail_case
+    EXPECT_EAX 0, .fail_case
     mov     rax, [rel ptr_out]
     lea     rbx, [rel cfg_mjpeg]
     cmp     rax, rbx
     jne     .fail_case
-    mov     rax, [rel len_out]
-    cmp     rax, cfg_mjpeg_len
-    jne     .fail_case
+    EXPECT_QWORD [rel len_out], cfg_mjpeg_len, .fail_case
     mov     edi, 1
     xor     rsi, rsi
     xor     rdx, rdx
     call    er_xhci_set_port_config_blob
-    cmp     eax, 0
-    jne     .fail_case
+    EXPECT_EAX 0, .fail_case
     mov     edi, 1
     lea     rsi, [rel ptr_out]
     lea     rdx, [rel len_out]
     call    er_xhci_get_port_config_blob
-    cmp     eax, -1
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX -1, .fail_case
+    TEST_CASE_PASS
 
     ; Test 0: set/clear config blob API
     lea     rdi, [rel cfg_mjpeg]
     mov     rsi, cfg_mjpeg_len
     call    er_uvc_set_config_blob
-    cmp     eax, 0
-    jne     .fail_case
+    EXPECT_EAX 0, .fail_case
     xor     rdi, rdi
     xor     rsi, rsi
     call    er_uvc_set_config_blob
-    cmp     eax, 0
-    jne     .fail_case
+    EXPECT_EAX 0, .fail_case
     xor     rdi, rdi
     mov     rsi, 8
     call    er_uvc_set_config_blob
-    cmp     eax, -1
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX -1, .fail_case
+    TEST_CASE_PASS
 
     ; Test 1: MJPEG + VC/VS interfaces -> controls + rgb + mjpeg
     lea     rdi, [rel cfg_mjpeg]
     mov     rsi, cfg_mjpeg_len
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
-    cmp     eax, 0
-    jne     .fail_case
-    mov     eax, [rel caps_out]
-    mov     edx, UVC_CAP_CONTROLS | UVC_CAP_RGB_PRESENT | UVC_CAP_MJPEG
-    cmp     eax, edx
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX 0, .fail_case
+    EXPECT_DWORD [rel caps_out], UVC_CAP_CONTROLS | UVC_CAP_RGB_PRESENT | UVC_CAP_MJPEG, .fail_case
+    TEST_CASE_PASS
 
     ; Test 2: YUY2 uncompressed -> rgb + yuy2
     lea     rdi, [rel cfg_yuy2]
     mov     rsi, cfg_yuy2_len
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
-    cmp     eax, 0
-    jne     .fail_case
-    mov     eax, [rel caps_out]
-    mov     edx, UVC_CAP_RGB_PRESENT | UVC_CAP_YUY2
-    cmp     eax, edx
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX 0, .fail_case
+    EXPECT_DWORD [rel caps_out], UVC_CAP_RGB_PRESENT | UVC_CAP_YUY2, .fail_case
+    TEST_CASE_PASS
 
     ; Test 3: Y800 uncompressed -> ir present
     lea     rdi, [rel cfg_ir_y800]
     mov     rsi, cfg_ir_y800_len
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
-    cmp     eax, 0
-    jne     .fail_case
-    mov     eax, [rel caps_out]
-    mov     edx, UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT
-    cmp     eax, edx
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX 0, .fail_case
+    EXPECT_DWORD [rel caps_out], UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT, .fail_case
+    TEST_CASE_PASS
 
     ; Test 4: malformed descriptor fails
     lea     rdi, [rel cfg_bad]
     mov     rsi, cfg_bad_len
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
-    cmp     eax, -1
-    jne     .fail_case
-    inc     qword [rel passed]
+    EXPECT_EAX -1, .fail_case
+    TEST_CASE_PASS
     jmp     .done
 
 .fail_case:
-    inc     qword [rel failed]
+    TEST_CASE_FAIL
 
 .done:
-    cmp     qword [rel failed], 0
-    jne     .exit_fail
-    mov     rax, 60
-    xor     rdi, rdi
-    syscall
-.exit_fail:
-    mov     rax, 60
-    mov     rdi, 1
-    syscall
+    TEST_EXIT_FAILED

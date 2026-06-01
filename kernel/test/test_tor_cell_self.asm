@@ -2,6 +2,7 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_tor_build_extend2_body
 
@@ -21,26 +22,6 @@ handshake:
 SECTION .bss
 body: resb 119
 
-%macro ASSERT 1
-    test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-%macro ASSERT_EQ 2
-    cmp     %1, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
 SECTION .text
 global _start
 _start:
@@ -59,44 +40,14 @@ _start:
     ASSERT_EQ byte [rel body + 8], 0x29
     ASSERT_EQ byte [rel body + 9], 2
     ASSERT_EQ byte [rel body + 10], 20
-    lea     rdi, [rel node_id]
-    lea     rsi, [rel body + 11]
-    mov     edx, 20
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel node_id], [rel body + 11], 20
     ASSERT_EQ byte [rel body + 31], 0
     ASSERT_EQ byte [rel body + 32], 2
     ASSERT_EQ byte [rel body + 33], 0
     ASSERT_EQ byte [rel body + 34], 84
-    lea     rdi, [rel handshake]
-    lea     rsi, [rel body + 35]
-    mov     edx, 84
-    call    _mem_eq
-    ASSERT eax
+    ASSERT_MEM_EQ [rel handshake], [rel body + 35], 84
 
-    mov     rax, [rel failed]
-    test    rax, rax
-    jnz     .exit_fail
-    xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
-    mov     eax, 60
-    syscall
-
-_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
-    mov     rcx, rdx
-    repz    cmpsb
-    setz    al
-    movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    TEST_EXIT_FAILED
 
 global er_memcpy
 er_memcpy:

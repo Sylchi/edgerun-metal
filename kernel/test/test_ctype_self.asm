@@ -3,6 +3,7 @@
 ; Returns 0 if all tests pass, 1 on any failure.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern er_isdigit, er_isalpha, er_isalnum, er_isspace
 extern er_isxdigit, er_islower, er_isupper, er_tolower, er_toupper
@@ -93,11 +94,4 @@ _start:
     TEST_CTYPE er_toupper, '0', '0'
     TEST_CTYPE er_toupper, '{', '{'
 
-    ; Return 0 if passed == total, 1 otherwise
-    mov     rax, [rel passed]
-    mov     rdx, [rel total]
-    cmp     rax, rdx
-    setne   dil                 ; edi = 1 if failure, 0 if all passed
-
-    mov     eax, 60             ; sys_exit
-    syscall
+    TEST_EXIT_PASSED_TOTAL

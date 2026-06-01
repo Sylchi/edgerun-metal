@@ -8,6 +8,7 @@ const preimage = @import("preimage.zig");
 const ui = @import("ui/core.zig");
 const design = @import("ui/theme.zig");
 const component = @import("ui/components/Component.zig");
+const component_test = @import("ui/components/TestSupport.zig");
 
 const RenderOptions = @import("ui/component_common.zig").RenderOptions;
 
@@ -35,7 +36,7 @@ pub const State = struct {
     selected_index: usize = 0,
     theme_mode: ThemeMode = .dark,
     compose: []const u8 = "Message...",
-    import_preview: []const u8 = "local-route|Contact|remote-route|public-key",
+    import_preview: []const u8 = "identity|Contact",
     sealed: bool = false,
     status: []const u8 = "Active now",
     own_route_buf: [256]u8 = undefined,
@@ -51,25 +52,22 @@ pub const State = struct {
         const user = testIdentity(.user, "user", epoch);
         var chat = try Chat.init(device, app, user, epoch);
         const contact_1 = try chat.importContact(.{
-            .contact_route = "local-route-1",
+            .identity_id = demoContactIdentity(1),
             .name = "Jordan",
-            .route = "remote-route-1",
-            .public_key = "public-key-1",
         }, epoch);
         const contact_2 = try chat.importContact(.{
-            .contact_route = "local-route-2",
+            .identity_id = demoContactIdentity(2),
             .name = "Casey",
-            .route = "remote-route-2",
-            .public_key = "public-key-2",
         }, epoch);
         _ = try chat.appendMessage(contact_1, .inbound, "Hey, are you there? :)");
         _ = try chat.appendMessage(contact_1, .outbound, "Yes, I can read you.");
         _ = try chat.appendMediaMessage(contact_1, .inbound, "Image received", .image, "object://image/8f21", "image/erimg", 16384);
         _ = try chat.appendMediaMessage(contact_1, .outbound, "Video clip ready", .video, "object://video/34aa", "video/ivf", 98304);
-        _ = try chat.appendMessage(contact_2, .inbound, "Send me the route when ready.");
+        _ = try chat.appendMessage(contact_2, .inbound, "Send me the identity when ready.");
         var state = State{ .chat = chat };
         state.writeOwnRoute();
-        state.status = "Onion route ready";
+        state.import_preview = state.ownRouteBytes();
+        state.status = "Identity ready";
         return state;
     }
 
@@ -125,8 +123,9 @@ pub const State = struct {
         var remote_buf: []const u8 = "";
         var local_buf: []const u8 = "";
         if (selected) |contact| {
-            remote_buf = std.fmt.bufPrint(&self.remote_buf, "remote {s}", .{contact.routeBytes()}) catch contact.routeBytes();
-            local_buf = std.fmt.bufPrint(&self.route_buf, "local {s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
+            const remote = writeIdentityPreview(&self.route_buf, contact.id);
+            remote_buf = std.fmt.bufPrint(&self.remote_buf, "identity {s}", .{remote}) catch remote;
+            local_buf = "identity routed";
         }
         const shell = try app.workspaceSurface(bounds, .{
             .background = design.Palette.bg,
@@ -173,19 +172,19 @@ pub const State = struct {
         });
 
         if (self.own_route_len != 0) {
-            try app.subtleAt(ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0), "my onion route", self.ownRouteBytes());
+            try app.subtleAt(ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0), "my identity", self.ownRouteBytes());
         }
 
         var rows = app.column(ui.Rect.init(inner.x, body.y, inner.w, @max(1.0, bounds.y + bounds.h - body.y - 16.0)), 4.0);
         if (self.chat.contact_count == 0) {
-            try app.emptyAt(rows.take(@min(150.0, @max(96.0, rows.remaining().h))), "No contacts", "Import a route to begin.");
+            try app.emptyAt(rows.take(@min(150.0, @max(96.0, rows.remaining().h))), "No contacts", "Import an identity to begin.");
             return;
         }
         var index: usize = 0;
         while (index < self.chat.contact_count and rows.remaining().h >= 64.0) : (index += 1) {
             const contact = &self.chat.contacts[index];
             const row = rows.take(64.0);
-            const detail = std.fmt.bufPrint(&self.route_buf, "{s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
+            const detail = writeIdentityPreview(&self.route_buf, contact.id);
             try app.selectableRow(row, contact_row_base_id + @as(u32, @intCast(index)), contact.nameBytes(), detail, .message_2, index == self.selected_index);
         }
     }
@@ -193,7 +192,7 @@ pub const State = struct {
     fn renderConversation(self: *State, app: component.View, bounds: ui.Rect) !void {
         try app.fill(bounds, design.workspace_main_bg, 0.0);
         const selected = self.selectedContact() orelse {
-            try app.emptyAt(bounds.insetUniform(18.0), "No contact", "Import a route to begin.");
+            try app.emptyAt(bounds.insetUniform(18.0), "No contact", "Import an identity to begin.");
             return;
         };
 
@@ -324,18 +323,16 @@ pub const State = struct {
 
     fn writeOwnRoute(self: *State) void {
         const value = encrypted_chat.ContactImport{
-            .contact_route = "route-to-me-edgerun-chat",
+            .identity_id = demoContactIdentity(9),
             .name = "Me",
-            .route = "edgerun-chat-demo-hidden-service.onion",
-            .public_key = "edgerun-chat-demo-public-key",
         };
         const route = encrypted_chat.writeContactLink(&self.own_route_buf, value) catch {
             self.own_route_len = 0;
-            self.status = "Route failed";
+            self.status = "Identity failed";
             return;
         };
         self.own_route_len = route.len;
-        self.status = "Onion route ready";
+        self.status = "Identity ready";
     }
 
     fn ownRouteBytes(self: *const State) []const u8 {
@@ -348,7 +345,7 @@ pub const State = struct {
 
     fn actionButtons(self: *const State) [4]component.IconButtonSpec {
         return .{
-            .{ .id = create_route_button_id, .label = "Create route", .icon = .link_plus },
+            .{ .id = create_route_button_id, .label = "Create identity", .icon = .link_plus },
             .{ .id = import_button_id, .label = "Import", .icon = .download },
             .{ .id = seal_button_id, .label = if (self.sealed) "Unseal" else "Seal", .icon = if (self.sealed) .lock_open else .lock },
             .{ .id = theme_button_id, .label = "Theme", .icon = .moon },
@@ -418,36 +415,55 @@ fn testIdentity(kind: identity.Kind, label: []const u8, epoch: clock.Stamp) iden
     return identity.Identity.init(kind, identity.Source.prepare(.hash, &preimage.rawHash(label)).?, epoch).?;
 }
 
+fn demoContactIdentity(seed: u8) identity.Id {
+    var id = identity.Id{ .bytes = [_]u8{0} ** identity.id_size };
+    id.bytes[0] = seed;
+    var index: usize = 1;
+    while (index < id.bytes.len) : (index += 1) id.bytes[index] = seed;
+    return id;
+}
+
+fn writeIdentityPreview(out: []u8, id: identity.Id) []const u8 {
+    const len = @min(out.len, identity.id_size * 2);
+    var index: usize = 0;
+    while (index * 2 + 1 < len) : (index += 1) {
+        out[index * 2] = hexChar(id.bytes[index] >> 4);
+        out[index * 2 + 1] = hexChar(id.bytes[index] & 0x0f);
+    }
+    return out[0 .. index * 2];
+}
+
+fn hexChar(value: u8) u8 {
+    return if (value < 10) '0' + value else 'a' + value - 10;
+}
+
 const messenger_blue = ui.Color{ .r = 0, .g = 132, .b = 255 };
 
 test "encrypted chat app renders contacts conversation and actions" {
     var state = try State.initDemo();
-    var commands: [256]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [64]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
-    const component_test = @import("ui/components/TestSupport.zig");
+    var h = component_test.InteractiveHarness(256, 64){};
+    h.init();
 
-    try state.render(&scene, &collector, ui.Rect.init(0, 0, 1000, 700), .{});
+    try state.render(&h.scene, &h.collector, ui.Rect.init(0, 0, 1000, 700), .{});
 
-    try std.testing.expect(component_test.hasText(scene.written(), "EDGERUN"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Jordan"));
-    try std.testing.expect(component_test.hasText(scene.written(), "my onion route"));
-    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "route-to-me-edgerun-chat") != null);
-    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "local-route") != null);
-    try std.testing.expect(component_test.hasText(scene.written(), "Yes, I can read you."));
-    try std.testing.expect(component_test.hasText(scene.written(), "object://image/8f21"));
-    try std.testing.expect(component_test.hasText(scene.written(), "object://video/34aa"));
-    try std.testing.expect(hasRegion(collector.written(), .button, create_route_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, import_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, seal_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, theme_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, image_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, video_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, emoji_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .button, send_button_id));
-    try std.testing.expect(hasRegion(collector.written(), .textarea, compose_textarea_id));
-    try std.testing.expect(hasRegion(collector.written(), .row_item, contact_row_base_id));
+    try h.expectText("EDGERUN");
+    try h.expectText("Jordan");
+    try h.expectText("my identity");
+    try h.expectTextPrefix("090909");
+    try h.expectText("identity routed");
+    try h.expectText("Yes, I can read you.");
+    try h.expectText("object://image/8f21");
+    try h.expectText("object://video/34aa");
+    try h.expectHit(.button, create_route_button_id);
+    try h.expectHit(.button, import_button_id);
+    try h.expectHit(.button, seal_button_id);
+    try h.expectHit(.button, theme_button_id);
+    try h.expectHit(.button, image_button_id);
+    try h.expectHit(.button, video_button_id);
+    try h.expectHit(.button, emoji_button_id);
+    try h.expectHit(.button, send_button_id);
+    try h.expectHit(.textarea, compose_textarea_id);
+    try h.expectHit(.row_item, contact_row_base_id);
 }
 
 test "encrypted chat app activation selects imports sends and toggles theme" {
@@ -489,22 +505,12 @@ test "encrypted chat app activation selects imports sends and toggles theme" {
 test "encrypted chat app renders stacked layout and light theme" {
     var state = try State.initDemo();
     state.theme_mode = .light;
-    var commands: [384]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [64]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
-    const component_test = @import("ui/components/TestSupport.zig");
+    var h = component_test.InteractiveHarness(384, 64){};
+    h.init();
 
-    try state.render(&scene, &collector, ui.Rect.init(0, 0, 420, 760), .{});
+    try state.render(&h.scene, &h.collector, ui.Rect.init(0, 0, 420, 760), .{});
 
-    try std.testing.expect(component_test.hasText(scene.written(), "EDGERUN"));
-    try std.testing.expect(component_test.hasIcon(scene.written(), @import("ui/icon_pack.zig").iconId(.send)));
-    try std.testing.expect(hasRegion(collector.written(), .textarea, compose_textarea_id));
-}
-
-fn hasRegion(regions: []const interaction.Region, kind: ui.HitKind, id: u32) bool {
-    for (regions) |region| {
-        if (region.kind == kind and region.id == id) return true;
-    }
-    return false;
+    try h.expectText("EDGERUN");
+    try h.expectIcon(@import("ui/icon_pack.zig").iconId(.send));
+    try h.expectHit(.textarea, compose_textarea_id);
 }

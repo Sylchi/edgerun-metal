@@ -75,8 +75,31 @@ er_fn er_av1_sequence_decode
     call_read_bit
     mov     [r12 + AV1_SEQ_TIMING_INFO_PRESENT], al
     test    eax, eax
+    jnz     .timing_info
+    mov     dword [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 0
+    mov     dword [r12 + AV1_SEQ_TIME_SCALE], 0
+    mov     byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
+    jmp     .initial_display_delay
+
+.timing_info:
+    mov     rdi, rsp
+    mov     esi, 32
+    call    er_av1_bits_read
+    test    edx, edx
+    jnz     .done
+    mov     [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], eax
+    mov     rdi, rsp
+    mov     esi, 32
+    call    er_av1_bits_read
+    test    edx, edx
+    jnz     .done
+    mov     [r12 + AV1_SEQ_TIME_SCALE], eax
+    call_read_bit
+    mov     [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], al
+    test    eax, eax
     jnz     .unsupported
 
+.initial_display_delay:
     mov     byte [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
     call_read_bit
     mov     [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY], al
@@ -111,6 +134,9 @@ er_fn er_av1_sequence_decode
 
 .reduced_operating_point:
     mov     byte [r12 + AV1_SEQ_TIMING_INFO_PRESENT], 0
+    mov     dword [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 0
+    mov     dword [r12 + AV1_SEQ_TIME_SCALE], 0
+    mov     byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
     mov     byte [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
     mov     byte [r12 + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
     mov     word [r12 + AV1_SEQ_OPERATING_POINT_IDC], 0
@@ -392,7 +418,14 @@ er_fn er_av1_sequence_encode
     cmp     eax, AV1_SEQ_HEIGHT_BITS_MAX
     ja      .invalid_param
     cmp     byte [r12 + AV1_SEQ_TIMING_INFO_PRESENT], 0
+    je      .validate_initial_display_delay
+    cmp     dword [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 0
+    je      .invalid_param
+    cmp     dword [r12 + AV1_SEQ_TIME_SCALE], 0
+    je      .invalid_param
+    cmp     byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
     jne     .unsupported
+.validate_initial_display_delay:
     cmp     byte [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
     jne     .unsupported
     cmp     byte [r12 + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
@@ -428,7 +461,25 @@ er_fn er_av1_sequence_encode
     cmp     byte [r12 + AV1_SEQ_REDUCED_STILL], 1
     je      .write_reduced_level
 
-    write_bits 0, 1
+    movzx   esi, byte [r12 + AV1_SEQ_TIMING_INFO_PRESENT]
+    write_one_from_esi
+    cmp     byte [r12 + AV1_SEQ_TIMING_INFO_PRESENT], 0
+    je      .write_initial_display_delay
+    mov     esi, [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK]
+    mov     rdi, rsp
+    mov     edx, 32
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+    mov     esi, [r12 + AV1_SEQ_TIME_SCALE]
+    mov     rdi, rsp
+    mov     edx, 32
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+    movzx   esi, byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL]
+    write_one_from_esi
+.write_initial_display_delay:
     write_bits 0, 1
     write_bits 0, 5
     movzx   esi, word [r12 + AV1_SEQ_OPERATING_POINT_IDC]
