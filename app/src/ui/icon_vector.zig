@@ -708,9 +708,17 @@ test "iterator decodes clip path control ops" {
     };
     var iter = Iterator.init(&values);
 
-    try std.testing.expectEqual(Op.begin_clip_path, (try iter.next()).?);
-    try std.testing.expectEqual(Op.end_clip_path, (try iter.next()).?);
-    try std.testing.expectEqual(Op.clear_clip_path, (try iter.next()).?);
+    switch ((try iter.next()).?) {
+        .begin_clip_path => {},
+        else => return error.TestExpectedEqual,
+    }
+    switch ((try iter.next()).?) {
+        .end_clip_path => {},
+        else => return error.TestExpectedEqual,
+    }
+    switch ((try iter.next()).?) {
+        .clear_clip_path => {},
+        else => return error.TestExpectedEqual,
+    }
     try std.testing.expectEqual(@as(?Op, null), try iter.next());
 }
-

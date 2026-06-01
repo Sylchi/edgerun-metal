@@ -207,6 +207,8 @@ tok_div: db "div"
 tok_div_len equ $ - tok_div
 tok_imul: db "imul"
 tok_imul_len equ $ - tok_imul
+tok_setz: db "setz"
+tok_setz_len equ $ - tok_setz
 tok_call: db "call"
 tok_call_len equ $ - tok_call
 tok_push: db "push"
@@ -327,8 +329,14 @@ tok_dword: db "dword"
 tok_dword_len equ $ - tok_dword
 tok_byte: db "byte"
 tok_byte_len equ $ - tok_byte
+tok_word: db "word"
+tok_word_len equ $ - tok_word
 tok_mem_rdi: db "[rdi]"
 tok_mem_rdi_len equ $ - tok_mem_rdi
+tok_mem_edi: db "[edi]"
+tok_mem_edi_len equ $ - tok_mem_edi
+tok_mem_edi_open: db "[edi"
+tok_mem_edi_open_len equ $ - tok_mem_edi_open
 tok_mem_rsi: db "[rsi]"
 tok_mem_rsi_len equ $ - tok_mem_rsi
 tok_mem_rcx: db "[rcx]"
@@ -345,6 +353,8 @@ tok_mem_r13: db "[r13]"
 tok_mem_r13_len equ $ - tok_mem_r13
 tok_mem_r14: db "[r14]"
 tok_mem_r14_len equ $ - tok_mem_r14
+tok_mem_ebda_seg_ptr: db "[EBDA_SEG_PTR]"
+tok_mem_ebda_seg_ptr_len equ $ - tok_mem_ebda_seg_ptr
 tok_mem_r12_open: db "[r12"
 tok_mem_r12_open_len equ $ - tok_mem_r12_open
 tok_mem_rdi_rcx: db "[rdi"
@@ -375,6 +385,8 @@ tok_r10_close: db "r10]"
 tok_r10_close_len equ $ - tok_r10_close
 tok_one_close: db "1]"
 tok_one_close_len equ $ - tok_one_close
+tok_four_close: db "4]"
+tok_four_close_len equ $ - tok_four_close
 tok_two_close: db "2]"
 tok_two_close_len equ $ - tok_two_close
 tok_three_close: db "3]"

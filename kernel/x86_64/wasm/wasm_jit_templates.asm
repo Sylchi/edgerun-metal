@@ -17,6 +17,72 @@
 ;   No callee-save needed — orchestrator saves/restores around each template call.
 ; =================================================================+
 
+%macro jit_template_push_rax 0
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+%endm
+
+%macro jit_template_push_rax_ret 0
+    jit_template_push_rax
+    ret
+%endm
+
+%macro jit_template_pop_rcx_rax 0
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+%endm
+
+%macro jit_template_setcc_push_ret 0
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    jit_template_push_rax_ret
+%endm
+
+%macro jit_template_setcc_push 0
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_setcc_and_push 0
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_setcc_or_push 0
+    call    jit_emit_setcc
+    call    jit_emit_or_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_f32_sse_bin_tail 1
+    mov     al, 0xF3
+    mov     ch, %1
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_f64_sse_bin_tail 1
+    mov     al, 0xF2
+    mov     ch, %1
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
 ; ------------------------------------------------------------------
 ; Template: unreachable (0x00)
 ; Emit: ud2
@@ -76,9 +142,7 @@ er_fn jit_template_local_get
     mov     eax, r11d
     call    jit_emit_dword
     ; push rax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; Template: local.set index (0x21)
@@ -164,9 +228,7 @@ er_fn jit_template_global_get
     call    jit_emit_modrm
     mov     eax, r11d
     call    jit_emit_dword
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; Template: global.set index (0x24)
@@ -284,9 +346,7 @@ er_fn jit_template_i64_const
     or      rax, rdx
     call    jit_emit_qword
     ; push rax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; Emit: push imm32 (5-byte push)
@@ -336,145 +396,82 @@ er_fn jit_template_i32_eq
 ; i32 ne (0x47)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_ne
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x95         ; setne
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 lt_s (0x48)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_lt_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x9C         ; setl
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 lt_u (0x49)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_lt_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x92         ; setb
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 gt_s (0x4A)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_gt_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x9F         ; setg
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 gt_u (0x4B)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_gt_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x97         ; seta
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 le_s (0x4C)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_le_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x9E         ; setle
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 le_u (0x4D)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_le_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x96         ; setbe
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 ge_s (0x4E)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_ge_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x9D         ; setge
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 ge_u (0x4F)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_ge_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp32
     mov     cl, 0x93         ; setae
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i32 clz (0x67)
@@ -484,9 +481,7 @@ er_fn jit_template_i32_clz
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_lzcnt32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 ctz (0x68)
@@ -495,9 +490,7 @@ er_fn jit_template_i32_ctz
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_tzcnt32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 popcnt (0x69)
@@ -506,9 +499,7 @@ er_fn jit_template_i32_popcnt
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_popcnt32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 add (0x6A)
@@ -528,53 +519,35 @@ er_fn jit_template_i32_add
 ; i32 sub (0x6B)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_sub
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_sub32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 mul (0x6C)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_mul
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_imul32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 div_s (0x6D)
 ; Emit: pop rcx; pop rax; cdq; idiv ecx; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_div_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     mov     al, 0x99         ; cdq
     call    jit_emit_byte
     call    jit_emit_idiv32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 div_u (0x6E)
 ; Emit: pop rcx; pop rax; xor edx, edx; div ecx; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_div_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_xor_eax_eax ; zero edx via xor edx, edx
     ; Actually jit_emit_xor_eax_eax does xor eax, eax. We need xor edx, edx.
     ; Emit: xor edx, edx
@@ -583,19 +556,14 @@ er_fn jit_template_i32_div_u
     mov     al, 0xD2         ; xor edx, edx
     call    jit_emit_modrm
     call    jit_emit_div32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 rem_s (0x6F)
 ; Emit: pop rcx; pop rax; cdq; idiv ecx; mov eax, edx; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_rem_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     mov     al, 0x99         ; cdq
     call    jit_emit_byte
     call    jit_emit_idiv32
@@ -604,19 +572,14 @@ er_fn jit_template_i32_rem_s
     call    jit_emit_byte
     mov     al, 0xD0         ; mov eax, edx
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 rem_u (0x70)
 ; Emit: pop rcx; pop rax; xor edx, edx; div ecx; mov eax, edx; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_rem_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     mov     al, 0x31
     call    jit_emit_byte
     mov     al, 0xD2         ; xor edx, edx
@@ -626,114 +589,72 @@ er_fn jit_template_i32_rem_u
     call    jit_emit_byte
     mov     al, 0xD0         ; mov eax, edx
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 and (0x71)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_and
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_and32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 or (0x72)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_or
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_or32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 xor (0x73)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_xor
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_xor32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 shl (0x74)
 ; Emit: pop rcx; pop rax; shl eax, cl; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_shl
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_shl32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 shr_s (0x75)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_shr_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_sar32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 shr_u (0x76)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_shr_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_shr32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 rotl (0x77)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_rotl
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rol32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 rotr (0x78)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i32_rotr
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_ror32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32 wrap_i64 (0xA7)
@@ -748,9 +669,7 @@ er_fn jit_template_i32_wrap_i64
     call    jit_emit_byte
     mov     al, 0xC0
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 extend_i32_s (0xAC)
@@ -766,9 +685,7 @@ er_fn jit_template_i64_extend_i32_s
     call    jit_emit_byte
     mov     al, 0xC0         ; ModRM: mod=11, reg=0(rax), rm=0(rax/eax)
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 extend_i32_u (0xAD)
@@ -781,9 +698,7 @@ er_fn jit_template_i64_extend_i32_u
     call    jit_emit_byte
     mov     al, 0xC0         ; mov eax, eax
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ==================================================================
 ; Sign extension templates
@@ -953,9 +868,7 @@ er_fn jit_template_i32_load
     mov     cl, 1
     call    jit_emit_pop_reg      ; pop rcx (address)
     call    jit_emit_mem_load32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64.load (0x29) — pop address, load 8 bytes, push
@@ -964,9 +877,7 @@ er_fn jit_template_i64_load
     mov     cl, 1
     call    jit_emit_pop_reg
     call    jit_emit_mem_load64
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i32.store (0x36) — pop address, pop value, store 4 bytes
@@ -983,10 +894,7 @@ er_fn jit_template_i32_store
 ; i64.store (0x37) — pop address, pop value, store 8 bytes
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_store
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_mem_store64
     ret
 
@@ -1052,19 +960,13 @@ er_fn jit_template_i64_load32_s
 
 ; i32.store8 (0x3A)
 er_fn jit_template_i32_store8
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_mem_store8
     ret
 
 ; i32.store16 (0x3B)
 er_fn jit_template_i32_store16
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_mem_store16
     ret
 
@@ -1080,171 +982,97 @@ er_fn jit_template_i64_eqz
     call    jit_emit_pop_reg
     call    jit_emit_test64
     mov     cl, 0x94
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 eq (0x51)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_eq
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x94
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 ne (0x52)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_ne
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x95
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 lt_s (0x53)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_lt_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x9C
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 lt_u (0x54)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_lt_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x92
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 gt_s (0x55)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_gt_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x9F
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 gt_u (0x56)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_gt_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x97
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 le_s (0x57)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_le_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x9E
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 le_u (0x58)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_le_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x96
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 ge_s (0x59)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_ge_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x9D
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ------------------------------------------------------------------
 ; i64 ge_u (0x5A)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_ge_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cmp64
     mov     cl, 0x93
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_setcc_push_ret
 
 ; ==================================================================
 ; i64 unary arithmetic (clz, ctz, popcnt)
@@ -1257,9 +1085,7 @@ er_fn jit_template_i64_clz
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_lzcnt64
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 ctz (0x7A)
@@ -1268,9 +1094,7 @@ er_fn jit_template_i64_ctz
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_tzcnt64
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 popcnt (0x7B)
@@ -1279,9 +1103,7 @@ er_fn jit_template_i64_popcnt
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_popcnt64
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ==================================================================
 ; i64 binary arithmetic
@@ -1291,82 +1113,54 @@ er_fn jit_template_i64_popcnt
 ; i64 add (0x7C)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_add
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_add32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 sub (0x7D)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_sub
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_sub32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 mul (0x7E)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_mul
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_imul32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 div_s (0x7F)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_div_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cqo
     call    jit_emit_rex_nob
     call    jit_emit_idiv32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 div_u (0x80)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_div_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_xor_edx_edx
     call    jit_emit_rex_nob
     call    jit_emit_div32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 rem_s (0x81)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_rem_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_cqo
     call    jit_emit_rex_nob
     call    jit_emit_idiv32
@@ -1376,18 +1170,13 @@ er_fn jit_template_i64_rem_s
     call    jit_emit_byte
     mov     al, 0xD0         ; mov rax, rdx
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 rem_u (0x82)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_rem_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_xor_edx_edx
     call    jit_emit_rex_nob
     call    jit_emit_div32
@@ -1397,121 +1186,79 @@ er_fn jit_template_i64_rem_u
     call    jit_emit_byte
     mov     al, 0xD0         ; mov rax, rdx
     call    jit_emit_modrm
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 and (0x83)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_and
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_and32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 or (0x84)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_or
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_or32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 xor (0x85)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_xor
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_xor32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 shl (0x86)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_shl
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_shl32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 shr_s (0x87) — arithmetic shift right
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_shr_s
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_sar32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 shr_u (0x88) — logical shift right
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_shr_u
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_shr32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 rotl (0x89)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_rotl
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_rol32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; i64 rotr (0x8A)
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_rotr
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_rex_nob
     call    jit_emit_ror32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
 ; Template: call (0x10) — compile-time trampoline
@@ -1590,8 +1337,7 @@ er_fn jit_template_call
 
     cmp     r12, 1
     jl      .call_no_result
-    xor     ecx, ecx
-    call    jit_emit_push_reg
+    jit_template_push_rax
 .call_no_result:
 
     pop     r12
@@ -1684,8 +1430,7 @@ er_fn jit_template_call_indirect
 
     cmp     r12, 1
     jl      .ci_no_result
-    xor     ecx, ecx
-    call    jit_emit_push_reg
+    jit_template_push_rax
 .ci_no_result:
 
     pop     r12
@@ -1781,22 +1526,14 @@ er_fn jit_template_f32_eq
     call    jit_emit_f32_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x94
-    call    jit_emit_setcc         ; sete al
-    call    jit_emit_and_al_ah     ; and al, ah → al = eq && ordered
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f32.ne (0x5C)
 er_fn jit_template_f32_ne
     call    jit_emit_f32_cmp_prologue
     call    jit_emit_setp_save_ah
     mov     cl, 0x95
-    call    jit_emit_setcc         ; setne al
-    call    jit_emit_or_al_ah      ; or al, ah → al = setne | PF
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_or_push
 ; ACTUALLY: setp al; mov ah, al; setne al; or al, ah
 
 ; f32.lt (0x5D)
@@ -1804,40 +1541,26 @@ er_fn jit_template_f32_lt
     call    jit_emit_f32_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x92               ; setb (CF=1, below)
-    call    jit_emit_setcc
-    call    jit_emit_and_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f32.gt (0x5E)
 er_fn jit_template_f32_gt
     call    jit_emit_f32_cmp_prologue
     mov     cl, 0x97               ; seta (CF=0,ZF=0)
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_push
 
 ; f32.le (0x5F)
 er_fn jit_template_f32_le
     call    jit_emit_f32_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x96               ; setbe (CF=1 or ZF=1)
-    call    jit_emit_setcc
-    call    jit_emit_and_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f32.ge (0x60)
 er_fn jit_template_f32_ge
     call    jit_emit_f32_cmp_prologue
     mov     cl, 0x93               ; setae (CF=0)
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_push
 
 ; ==================================================================
 ; F64 comparison templates (0x61-0x66)
@@ -1848,62 +1571,40 @@ er_fn jit_template_f64_eq
     call    jit_emit_f64_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x94
-    call    jit_emit_setcc
-    call    jit_emit_and_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f64.ne (0x62)
 er_fn jit_template_f64_ne
     call    jit_emit_f64_cmp_prologue
     call    jit_emit_setp_save_ah
     mov     cl, 0x95
-    call    jit_emit_setcc
-    call    jit_emit_or_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_or_push
 
 ; f64.lt (0x63)
 er_fn jit_template_f64_lt
     call    jit_emit_f64_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x92
-    call    jit_emit_setcc
-    call    jit_emit_and_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f64.gt (0x64)
 er_fn jit_template_f64_gt
     call    jit_emit_f64_cmp_prologue
     mov     cl, 0x97
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_push
 
 ; f64.le (0x65)
 er_fn jit_template_f64_le
     call    jit_emit_f64_cmp_prologue
     call    jit_emit_setnp_save_ah
     mov     cl, 0x96
-    call    jit_emit_setcc
-    call    jit_emit_and_al_ah
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_and_push
 
 ; f64.ge (0x66)
 er_fn jit_template_f64_ge
     call    jit_emit_f64_cmp_prologue
     mov     cl, 0x93
-    call    jit_emit_setcc
-    call    jit_emit_movzx_al_eax
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_setcc_push
 
 ; ==================================================================
 ; F32 constant and unary templates
@@ -1939,9 +1640,7 @@ er_fn jit_template_f64_const
     shl     rdx, 32
     or      rax, rdx
     call    jit_emit_qword
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    ret
+    jit_template_push_rax_ret
 
 ; -----------------------------------------------------------------+
 ; f32.abs (0x8B) — pop; clear sign bit 31; push
@@ -2030,61 +1729,28 @@ er_fn jit_template_f32_add
     call    jit_emit_pop_reg           ; pop rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
-    mov     al, 0xF3
-    mov     ch, 0x58                   ; addss opcode
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_sse_bin_tail 0x58
 
 ; f32.sub (0x93)
 er_fn jit_template_f32_sub
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
-    mov     al, 0xF3
-    mov     ch, 0x5C                   ; subss
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_sse_bin_tail 0x5C
 
 ; f32.mul (0x94)
 er_fn jit_template_f32_mul
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
-    mov     al, 0xF3
-    mov     ch, 0x59                   ; mulss
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_sse_bin_tail 0x59
 
 ; f32.div (0x95)
 er_fn jit_template_f32_div
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
-    mov     al, 0xF3
-    mov     ch, 0x5E                   ; divss
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_sse_bin_tail 0x5E
 
 ; ==================================================================
 ; F64 SSE binary arithmetic templates (0xA0-0xA3)
@@ -2093,67 +1759,31 @@ er_fn jit_template_f32_div
 
 ; f64.add (0xA0)
 er_fn jit_template_f64_add
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
-    mov     al, 0xF2
-    mov     ch, 0x58                   ; addsd
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_sse_bin_tail 0x58
 
 ; f64.sub (0xA1)
 er_fn jit_template_f64_sub
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
-    mov     al, 0xF2
-    mov     ch, 0x5C                   ; subsd
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_sse_bin_tail 0x5C
 
 ; f64.mul (0xA2)
 er_fn jit_template_f64_mul
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
-    mov     al, 0xF2
-    mov     ch, 0x59                   ; mulsd
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_sse_bin_tail 0x59
 
 ; f64.div (0xA3)
 er_fn jit_template_f64_div
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
-    mov     al, 0xF2
-    mov     ch, 0x5E                   ; divsd
-    mov     cl, 0xC1
-    call    jit_emit_sse_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_sse_bin_tail 0x5E
 
 ; ==================================================================
 ; SSE4.1 rounding templates
@@ -2690,8 +2320,7 @@ er_fn jit_emit_fixup_nan_f64
     call    jit_emit_byte
     mov     rax, 0x7FF8000000000000
     call    jit_emit_qword
-    xor     ecx, ecx
-    call    jit_emit_push_reg
+    jit_template_push_rax
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_movq_xmm0_rax
@@ -2704,10 +2333,7 @@ er_fn jit_emit_fixup_nan_f64
 
 ; f32.min (0x96)
 er_fn jit_template_f32_min
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
     mov     al, 0xF3
@@ -2721,10 +2347,7 @@ er_fn jit_template_f32_min
 
 ; f32.max (0x97)
 er_fn jit_template_f32_max
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
     mov     al, 0xF3
@@ -2738,10 +2361,7 @@ er_fn jit_template_f32_max
 
 ; f64.min (0xA4)
 er_fn jit_template_f64_min
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
     mov     al, 0xF2
@@ -2755,10 +2375,7 @@ er_fn jit_template_f64_min
 
 ; f64.max (0xA5)
 er_fn jit_template_f64_max
-    mov     cl, 1
-    call    jit_emit_pop_reg
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
+    jit_template_pop_rcx_rax
     call    jit_emit_movq_xmm1_rcx
     call    jit_emit_movq_xmm0_rax
     mov     al, 0xF2

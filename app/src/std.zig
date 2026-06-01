@@ -307,7 +307,7 @@ pub const meta = struct {
 };
 
 pub const testing = struct {
-    var memory: [16 * 1024 * 1024]u8 align(16) = undefined;
+    var memory: [256 * 1024 * 1024]u8 align(16) = undefined;
     var used: usize = 0;
 
     pub const allocator: mem.Allocator = .{};
@@ -334,7 +334,11 @@ pub const testing = struct {
     }
 
     pub fn expectEqualStrings(expected: []const u8, actual: []const u8) !void {
-        return expectEqualSlices(u8, expected, actual);
+        if (expected.len != actual.len) return error.TestExpectedEqual;
+        var index: usize = 0;
+        while (index < expected.len) : (index += 1) {
+            if (expected[index] != actual[index]) return error.TestExpectedEqual;
+        }
     }
 
     pub fn expectApproxEqAbs(expected: anytype, actual: anytype, tolerance: anytype) !void {
@@ -345,7 +349,15 @@ pub const testing = struct {
     }
 
     pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const T) !void {
-        if (!mem.eql(T, expected, actual)) return error.TestExpectedEqual;
+        if (expected.len != actual.len) return error.TestExpectedEqual;
+        var index: usize = 0;
+        while (index < expected.len) : (index += 1) {
+            if (T == u8) {
+                if (expected[index] != actual[index]) return error.TestExpectedEqual;
+                continue;
+            }
+            if (!valueEql(expected[index], actual[index])) return error.TestExpectedEqual;
+        }
     }
 
     pub fn expectError(expected: anyerror, actual: anytype) !void {
@@ -542,11 +554,18 @@ pub const os = struct {
     pub const linux = struct {
         pub const E = enum { SUCCESS, FAILURE };
         pub const AT = struct { pub const FDCWD: i32 = -100; };
-        pub const O = packed struct { _unused: u32 = 0 };
+        pub const O = packed struct {
+            pub const AccessMode = enum(u2) { RDONLY, WRONLY, RDWR };
+            ACCMODE: AccessMode = .RDONLY,
+            DIRECTORY: bool = false,
+            _unused: u29 = 0,
+        };
 
         pub fn pipe2(_: *[2]i32, _: anytype) isize { return -1; }
         pub fn openat(_: i32, _: [*:0]const u8, _: O, _: usize) isize { return -1; }
-        pub fn read(_: i32, _: [*]u8, _: usize) isize { return 0; }
+        pub fn read(_: i32, _: [*]u8, _: usize) usize { return 0; }
+        pub fn write(_: i32, _: [*]const u8, len: usize) usize { return len; }
+        pub fn getdents64(_: i32, _: [*]u8, _: usize) usize { return 0; }
         pub fn fork() isize { return -1; }
         pub fn close(_: i32) isize { return 0; }
         pub fn dup2(_: i32, _: i32) isize { return -1; }
@@ -556,7 +575,7 @@ pub const os = struct {
             status.* = 0;
             return 0;
         }
-        pub fn errno(result: isize) E { return if (result < 0) .FAILURE else .SUCCESS; }
+        pub fn errno(result: anytype) E { return if (result < 0) .FAILURE else .SUCCESS; }
     };
     pub const uefi = struct {};
 };
@@ -647,13 +666,21 @@ pub const crypto = struct {
 
 fn valueEql(a: anytype, b: anytype) bool {
     if (@TypeOf(a) != @TypeOf(b)) {
-        if (comptime isSlice(@TypeOf(a)) and isSlice(@TypeOf(b))) return sliceEql(a, b);
-        if (comptime isNumber(@TypeOf(a)) and isNumber(@TypeOf(b))) return a == b;
+        if (comptime (isSliceLike(@TypeOf(a)) and isSliceLike(@TypeOf(b)))) return sliceEql(a, b);
+        if (comptime (@typeInfo(@TypeOf(a)) == .enum_literal and isTaggedUnion(@TypeOf(b)))) {
+            return true;
+        }
+        if (comptime (@typeInfo(@TypeOf(b)) == .enum_literal and isTaggedUnion(@TypeOf(a)))) {
+            return true;
+        }
+        if (comptime (isArrayPointer(@TypeOf(a)) and isSlice(@TypeOf(b)))) return sliceEql(a.*, b);
+        if (comptime (isSlice(@TypeOf(a)) and isArrayPointer(@TypeOf(b)))) return sliceEql(a, b.*);
+        if (comptime (isNumber(@TypeOf(a)) and isNumber(@TypeOf(b)))) return a == b;
         return false;
     }
     return switch (@typeInfo(@TypeOf(a))) {
         .array => mem.eql(@typeInfo(@TypeOf(a)).array.child, &a, &b),
-        .pointer => |ptr| if (ptr.size == .slice) mem.eql(ptr.child, a, b) else a == b,
+        .pointer => |ptr| if (ptr.size == .slice) mem.eql(ptr.child, a, b) else if (isSliceLike(@TypeOf(a))) sliceEql(a, b) else a == b,
         .optional => if (a == null or b == null) a == null and b == null else valueEql(a.?, b.?),
         .@"struct" => blk: {
             inline for (@typeInfo(@TypeOf(a)).@"struct".fields) |field| {
@@ -662,17 +689,14 @@ fn valueEql(a: anytype, b: anytype) bool {
             break :blk true;
         },
         .@"union" => |info| blk: {
-            const Tag = info.tag_type orelse break :blk false;
-            const a_tag: Tag = a;
-            const b_tag: Tag = b;
-            if (a_tag != b_tag) break :blk false;
-            inline for (info.fields) |field| {
-                if (a_tag == @field(Tag, field.name)) {
-                    if (field.type == void) break :blk true;
-                    break :blk valueEql(@field(a, field.name), @field(b, field.name));
-                }
+            _ = info.tag_type orelse break :blk false;
+            switch (a) {
+                inline else => |payload, tag| {
+                    if (!unionTagNameEql(@tagName(tag), b)) break :blk false;
+                    if (@sizeOf(@TypeOf(payload)) == 0) break :blk true;
+                    break :blk valueEql(payload, @field(b, @tagName(tag)));
+                },
             }
-            break :blk false;
         },
         else => a == b,
     };
@@ -689,6 +713,35 @@ fn isSlice(comptime T: type) bool {
         .pointer => |ptr| ptr.size == .slice,
         else => false,
     };
+}
+
+fn isArrayPointer(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .pointer => |ptr| ptr.size == .one and @typeInfo(ptr.child) == .array,
+        else => false,
+    };
+}
+
+fn isSliceLike(comptime T: type) bool {
+    return isSlice(T) or isArrayPointer(T);
+}
+
+fn isTaggedUnion(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"union" => |info| info.tag_type != null,
+        else => false,
+    };
+}
+
+fn unionTagNameEql(comptime name: []const u8, value: anytype) bool {
+    switch (value) {
+        inline else => |_, tag| return tagNamesMatch(@tagName(tag), name),
+    }
+}
+
+fn tagNamesMatch(a: []const u8, b: []const u8) bool {
+    if (mem.eql(u8, a, b)) return true;
+    return mem.endsWith(u8, a, b) or mem.endsWith(u8, b, a);
 }
 
 fn isNumber(comptime T: type) bool {

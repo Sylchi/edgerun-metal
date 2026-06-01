@@ -4,8 +4,7 @@
 
 .op_i32_const:
     ; Read i32 const value via LEB128
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_i32
     er_check_nonzero rdx, .corrupt_error
     ; Update reader offset (LEB consumed bytes in rsi - body_ptr)
@@ -15,8 +14,7 @@
     jmp     .dispatch_next
 
 .op_i64_const:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_i64
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -26,8 +24,7 @@
 
 .op_local_get:
     ; Read local index (LEB128)
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     ; Update reader
@@ -42,8 +39,7 @@
     jmp     .dispatch_next
 
 .op_local_set:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -57,8 +53,7 @@
     jmp     .dispatch_next
 
 .op_local_tee:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -72,8 +67,7 @@
     jmp     .dispatch_next
 
 .op_global_get:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -89,8 +83,7 @@
     jmp     .dispatch_next
 
 .op_global_set:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -279,8 +272,7 @@
 
 .op_br:
     ; Read branch depth
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -291,8 +283,7 @@
     jmp     .dispatch_next
 
 .op_br_if:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -308,8 +299,7 @@
 
 .op_call:
     ; Read function index
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -360,13 +350,11 @@
     jmp     .push_results
 
 .op_call_indirect:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32    ; type_index
     er_check_nonzero rdx, .corrupt_error
     push    rax
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32    ; table_index
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -421,8 +409,7 @@
 
 .op_br_table:
     ; Read target count
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     mov     r15d, eax       ; target_count
@@ -433,8 +420,7 @@
 .br_table_loop:
     cmp     r13d, r15d
     jae     .br_table_default
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -444,8 +430,7 @@
     jmp     .br_table_loop
 .br_table_default:
     ; Read default target
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -928,8 +913,7 @@
 
 .op_ref_func:
     ; Read function index
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -1216,8 +1200,7 @@
 ; Table ops
 ; =================================================================+
 .op_table_get:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -1232,8 +1215,7 @@
     jmp     .dispatch_next
 
 .op_table_set:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -1308,8 +1290,7 @@
 ; Constant ops
 ; -----------------------------------------------------------------+
 .op_f32_const:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     mov     rax, [exec_reader_offset]
     add     rax, 4
     cmp     rax, [exec_code_body_len]
@@ -1321,8 +1302,7 @@
     jmp     .dispatch_next
 
 .op_f64_const:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     mov     rax, [exec_reader_offset]
     add     rax, 8
     cmp     rax, [exec_code_body_len]
@@ -2253,8 +2233,7 @@
 ; =================================================================+
 .extended_opcode:
     ; Read extended opcode
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -2512,14 +2491,12 @@
 
 .ext_memory_init:
     ; Read segment index, then memory index
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     push    rax             ; segment index
     wasm_exec_save_reader_offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2577,8 +2554,7 @@
     jmp     .dispatch_next
 
 .ext_data_drop:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -2601,14 +2577,12 @@
 
 .ext_memory_copy:
     ; Read dest memory index, then src memory index
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
     wasm_exec_save_reader_offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2649,8 +2623,7 @@
     jmp     .dispatch_next
 
 .ext_memory_fill:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2686,14 +2659,12 @@
 ; Table bulk ops
 ; =================================================================+
 .ext_table_init:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     mov     r15, rax            ; element segment index
     wasm_exec_save_reader_offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2737,8 +2708,7 @@
     jmp     .table_init_loop
 
 .ext_elem_drop:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     wasm_exec_save_reader_offset
@@ -2752,14 +2722,12 @@
     jmp     .dispatch_next
 
 .ext_table_copy:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
     wasm_exec_save_reader_offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2807,8 +2775,7 @@
     jmp     .dispatch_next
 
 .ext_table_grow:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2850,8 +2817,7 @@
     jmp     .dispatch_next
 
 .ext_table_size:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2862,8 +2828,7 @@
     jmp     .dispatch_next
 
 .ext_table_fill:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
@@ -2944,24 +2909,21 @@
     ret
 
 .skip_leb:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
     ret
 
 .skip_leb_i32:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_i32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
     ret
 
 .skip_leb_i64:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_i64
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
@@ -2978,8 +2940,7 @@
     ret
 
 .skip_call_indirect:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32    ; type_index
     er_check_nonzero rdx, .skip_error
     call    er_wasm_read_leb_u32    ; table_index
@@ -2989,13 +2950,11 @@
 
 .skip_load_store:
     ; Two LEBs: alignment then offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
@@ -3003,31 +2962,27 @@
 
 .skip_br_table:
     ; Read target count, then targets, then default
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     mov     r15d, eax      ; target count
 .skip_br_table_loop:
     er_check_zero r15d, .skip_br_table_default
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
     dec     r15d
     jmp     .skip_br_table_loop
 .skip_br_table_default:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     wasm_exec_save_reader_offset
     ret
 
 .skip_select_typed:
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
     cmp     eax, 1

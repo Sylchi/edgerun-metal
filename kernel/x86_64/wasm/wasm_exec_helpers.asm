@@ -8,6 +8,11 @@ extern er_memset
     pop     rsi
 %endm
 
+%macro wasm_exec_reader_ptr 0
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+%endm
+
 er_fn er_fn_pop
     er_frame_push
 
@@ -428,14 +433,12 @@ er_fn exec_branch_to_control
 ; Returns address in rax
 er_fn exec_memory_prepare
     ; Read alignment (LEB, skip it)
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_mem
     wasm_exec_save_reader_offset
     ; Read offset (LEB)
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
+    wasm_exec_reader_ptr
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_mem
     wasm_exec_save_reader_offset
