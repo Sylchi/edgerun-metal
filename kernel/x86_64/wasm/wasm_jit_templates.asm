@@ -83,6 +83,91 @@
     jmp     jit_emit_push_reg
 %endm
 
+%macro jit_template_f32_round 1
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0A
+    mov     cl, 0xC0
+    mov     ch, %1
+    call    jit_emit_sse3a_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_f64_round 1
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x0B
+    mov     cl, 0xC0
+    mov     ch, %1
+    call    jit_emit_sse3a_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_modrm_c0_push_rax 0
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+%endm
+
+%macro jit_template_modrm82_disp_r11 0
+    mov     al, 0x82
+    call    jit_emit_modrm
+    mov     eax, r11d
+    call    jit_emit_dword
+%endm
+
+%macro jit_template_patch_rel32 1
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, %1
+    sub     rax, 4
+    mov     rdi, %1
+    call    jit_emit_patch_dword
+%endm
+
+%macro jit_template_jns_rel32_placeholder 1
+    mov     %1, [jit_state.code_ptr]
+    add     %1, 2
+    mov     cl, 0x09
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+%endm
+
+%macro jit_template_jmp_rel32_placeholder 1
+    mov     %1, [jit_state.code_ptr]
+    inc     %1
+    mov     al, 0xE9
+    call    jit_emit_byte
+    xor     eax, eax
+    call    jit_emit_dword
+%endm
+
+%macro jit_template_push_imm64_parts 0
+    mov     eax, r10d
+    mov     edx, r11d
+    shl     rdx, 32
+    or      rax, rdx
+    mov     cl, 1
+    mov     ch, 0
+    xor     r8b, r8b
+    xor     r9b, r9b
+    call    jit_emit_rex
+    mov     al, 0xB8
+    call    jit_emit_byte
+    mov     eax, r10d
+    mov     edx, r11d
+    shl     rdx, 32
+    or      rax, rdx
+    call    jit_emit_qword
+    jit_template_push_rax_ret
+%endm
+
 ; ------------------------------------------------------------------
 ; Template: unreachable (0x00)
 ; Emit: ud2
@@ -224,10 +309,7 @@ er_fn jit_template_global_get
     call    jit_emit_rex_nob
     mov     al, 0x8B
     call    jit_emit_byte
-    mov     al, 0x82
-    call    jit_emit_modrm
-    mov     eax, r11d
-    call    jit_emit_dword
+    jit_template_modrm82_disp_r11
     jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
@@ -250,10 +332,7 @@ er_fn jit_template_global_set
     call    jit_emit_rex_nob
     mov     al, 0x89
     call    jit_emit_byte
-    mov     al, 0x82
-    call    jit_emit_modrm
-    mov     eax, r11d
-    call    jit_emit_dword
+    jit_template_modrm82_disp_r11
     pop     rax
     ret
 
@@ -328,25 +407,7 @@ er_fn jit_template_i32_const
 er_fn jit_template_i64_const
     mov     r10d, [rdi + 12]  ; imm0 (low)
     mov     r11d, [rdi + 16]  ; imm1 (high)
-    mov     eax, r10d
-    mov     edx, r11d
-    shl     rdx, 32
-    or      rax, rdx
-    ; mov rax, imm64
-    mov     cl, 1            ; W=1
-    mov     ch, 0
-    xor     r8b, r8b
-    xor     r9b, r9b
-    call    jit_emit_rex
-    mov     al, 0xB8         ; mov rax, imm64
-    call    jit_emit_byte
-    mov     eax, r10d
-    mov     edx, r11d
-    shl     rdx, 32
-    or      rax, rdx
-    call    jit_emit_qword
-    ; push rax
-    jit_template_push_rax_ret
+    jit_template_push_imm64_parts
 
 ; ------------------------------------------------------------------
 ; Emit: push imm32 (5-byte push)
@@ -712,10 +773,7 @@ er_fn jit_template_i32_extend8_s
     call    jit_emit_byte
     mov     al, 0xBE
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; i32.extend16_s (0xC1) — movsx eax, ax
 er_fn jit_template_i32_extend16_s
@@ -725,10 +783,7 @@ er_fn jit_template_i32_extend16_s
     call    jit_emit_byte
     mov     al, 0xBF
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; i64.extend8_s (0xC2) — REX.W movsx rax, al
 er_fn jit_template_i64_extend8_s
@@ -740,10 +795,7 @@ er_fn jit_template_i64_extend8_s
     call    jit_emit_byte
     mov     al, 0xBE
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; i64.extend16_s (0xC3) — REX.W movsx rax, ax
 er_fn jit_template_i64_extend16_s
@@ -755,10 +807,7 @@ er_fn jit_template_i64_extend16_s
     call    jit_emit_byte
     mov     al, 0xBF
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; i64.extend32_s (0xC4) — REX.W movsxd rax, eax
 er_fn jit_template_i64_extend32_s
@@ -768,10 +817,7 @@ er_fn jit_template_i64_extend32_s
     call    jit_emit_byte
     mov     al, 0x63
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; ==================================================================
 ; Reference type templates
@@ -802,10 +848,7 @@ er_fn jit_template_ref_is_null
     call    jit_emit_byte
     mov     al, 0xB6
     call    jit_emit_byte
-    mov     al, 0xC0
-    call    jit_emit_modrm
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_modrm_c0_push_rax
 
 ; ref.func (0xD2) — push function index as reference
 er_fn jit_template_ref_func
@@ -1624,23 +1667,7 @@ er_fn jit_template_f32_const
 er_fn jit_template_f64_const
     mov     r10d, [rdi + 12]
     mov     r11d, [rdi + 16]
-    mov     eax, r10d
-    mov     edx, r11d
-    shl     rdx, 32
-    or      rax, rdx
-    mov     cl, 1
-    mov     ch, 0
-    xor     r8b, r8b
-    xor     r9b, r9b
-    call    jit_emit_rex
-    mov     al, 0xB8
-    call    jit_emit_byte
-    mov     eax, r10d
-    mov     edx, r11d
-    shl     rdx, 32
-    or      rax, rdx
-    call    jit_emit_qword
-    jit_template_push_rax_ret
+    jit_template_push_imm64_parts
 
 ; -----------------------------------------------------------------+
 ; f32.abs (0x8B) — pop; clear sign bit 31; push
@@ -1723,10 +1750,7 @@ er_fn jit_template_f64_sqrt
 
 ; f32.add (0x92)
 er_fn jit_template_f32_add
-    mov     cl, 1
-    call    jit_emit_pop_reg           ; pop rcx
-    xor     ecx, ecx
-    call    jit_emit_pop_reg           ; pop rax
+    jit_template_pop_rcx_rax
     call    jit_emit_movd_xmm1_ecx
     call    jit_emit_movd_xmm0_eax
     jit_template_f32_sse_bin_tail 0x58
@@ -1794,107 +1818,35 @@ er_fn jit_template_f64_div
 
 ; f32.ceil (0x8D)
 er_fn jit_template_f32_ceil
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movd_xmm0_eax
-    mov     al, 0x0A
-    mov     cl, 0xC0
-    mov     ch, 0x0A                   ; ceil (2) | 0x08 = 0x0A
-    call    jit_emit_sse3a_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_round 0x0A
 
 ; f32.floor (0x8E)
 er_fn jit_template_f32_floor
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movd_xmm0_eax
-    mov     al, 0x0A
-    mov     cl, 0xC0
-    mov     ch, 0x09                   ; floor (1) | 0x08 = 0x09
-    call    jit_emit_sse3a_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_round 0x09
 
 ; f32.trunc (0x8F)
 er_fn jit_template_f32_trunc
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movd_xmm0_eax
-    mov     al, 0x0A
-    mov     cl, 0xC0
-    mov     ch, 0x0B                   ; trunc (3) | 0x08 = 0x0B
-    call    jit_emit_sse3a_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_round 0x0B
 
 ; f32.nearest (0x90)
 er_fn jit_template_f32_nearest
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movd_xmm0_eax
-    mov     al, 0x0A
-    mov     cl, 0xC0
-    mov     ch, 0x08                   ; nearest (0) | 0x08 = 0x08
-    call    jit_emit_sse3a_op
-    call    jit_emit_movd_eax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f32_round 0x08
 
 ; f64.ceil (0x9B)
 er_fn jit_template_f64_ceil
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movq_xmm0_rax
-    mov     al, 0x0B
-    mov     cl, 0xC0
-    mov     ch, 0x0A
-    call    jit_emit_sse3a_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_round 0x0A
 
 ; f64.floor (0x9C)
 er_fn jit_template_f64_floor
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movq_xmm0_rax
-    mov     al, 0x0B
-    mov     cl, 0xC0
-    mov     ch, 0x09
-    call    jit_emit_sse3a_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_round 0x09
 
 ; f64.trunc (0x9D)
 er_fn jit_template_f64_trunc
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movq_xmm0_rax
-    mov     al, 0x0B
-    mov     cl, 0xC0
-    mov     ch, 0x0B
-    call    jit_emit_sse3a_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_round 0x0B
 
 ; f64.nearest (0x9E)
 er_fn jit_template_f64_nearest
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    call    jit_emit_movq_xmm0_rax
-    mov     al, 0x0B
-    mov     cl, 0xC0
-    mov     ch, 0x08
-    call    jit_emit_sse3a_op
-    call    jit_emit_movq_rax_xmm0
-    xor     ecx, ecx
-    jmp     jit_emit_push_reg
+    jit_template_f64_round 0x08
 
 ; ==================================================================
 ; Reinterpret ops — no-op on x86_64 (WASM stack holds raw bits)
@@ -1939,12 +1891,7 @@ er_fn jit_template_f32_convert_i32_u
     call    jit_emit_pop_reg               ; pop rax
     call    jit_emit_test32                ; test eax, eax
 
-    mov     rdx, [jit_state.code_ptr]
-    add     rdx, 2                         ; jns disp field address
-
-    mov     cl, 0x09                       ; jns condition
-    xor     eax, eax
-    call    jit_emit_jcc_rel32
+    jit_template_jns_rel32_placeholder rdx
 
     mov     eax, 0x80000000
     call    jit_emit_sub_eax_imm32
@@ -1964,21 +1911,11 @@ er_fn jit_template_f32_convert_i32_u
     mov     cl, 0xC1
     call    jit_emit_sse_op               ; addss xmm0, xmm1
 
-    mov     r8, [jit_state.code_ptr]
-    inc     r8                             ; jmp disp field address
-
-    mov     al, 0xE9
-    call    jit_emit_byte
-    xor     eax, eax
-    call    jit_emit_dword
+    jit_template_jmp_rel32_placeholder r8
 
     ; .positive:
     ; Patch jns displacement
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, rdx
-    sub     rax, 4
-    mov     rdi, rdx
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 rdx
 
     mov     al, 0xF3
     mov     ch, 0x2A
@@ -1987,11 +1924,7 @@ er_fn jit_template_f32_convert_i32_u
 
     ; .done:
     ; Patch jmp displacement
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, r8
-    sub     rax, 4
-    mov     rdi, r8
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 r8
 
     call    jit_emit_movd_eax_xmm0
     xor     ecx, ecx
@@ -2015,12 +1948,7 @@ er_fn jit_template_f32_convert_i64_u
     call    jit_emit_pop_reg
     call    jit_emit_test64                ; test rax, rax
 
-    mov     rdx, [jit_state.code_ptr]
-    add     rdx, 2
-
-    mov     cl, 0x09
-    xor     eax, eax
-    call    jit_emit_jcc_rel32
+    jit_template_jns_rel32_placeholder rdx
 
     ; Unsigned path: clear sign bit, convert, add 2^63
     ; btr rax, 63
@@ -2043,20 +1971,10 @@ er_fn jit_template_f32_convert_i64_u
     mov     cl, 0xC1
     call    jit_emit_sse_op               ; addss xmm0, xmm1
 
-    mov     r8, [jit_state.code_ptr]
-    inc     r8
-
-    mov     al, 0xE9
-    call    jit_emit_byte
-    xor     eax, eax
-    call    jit_emit_dword
+    jit_template_jmp_rel32_placeholder r8
 
     ; .positive:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, rdx
-    sub     rax, 4
-    mov     rdi, rdx
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 rdx
 
     mov     al, 0xF3
     mov     ch, 0x2A
@@ -2064,11 +1982,7 @@ er_fn jit_template_f32_convert_i64_u
     call    jit_emit_sse64_op              ; cvtsi2ss xmm0, rax
 
     ; .done:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, r8
-    sub     rax, 4
-    mov     rdi, r8
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 r8
 
     call    jit_emit_movd_eax_xmm0
     xor     ecx, ecx
@@ -2106,12 +2020,7 @@ er_fn jit_template_f64_convert_i32_u
     call    jit_emit_pop_reg
     call    jit_emit_test32
 
-    mov     rdx, [jit_state.code_ptr]
-    add     rdx, 2
-
-    mov     cl, 0x09
-    xor     eax, eax
-    call    jit_emit_jcc_rel32
+    jit_template_jns_rel32_placeholder rdx
 
     mov     eax, 0x80000000
     call    jit_emit_sub_eax_imm32
@@ -2135,20 +2044,10 @@ er_fn jit_template_f64_convert_i32_u
     mov     cl, 0xC1
     call    jit_emit_sse_op               ; addsd xmm0, xmm1
 
-    mov     r8, [jit_state.code_ptr]
-    inc     r8
-
-    mov     al, 0xE9
-    call    jit_emit_byte
-    xor     eax, eax
-    call    jit_emit_dword
+    jit_template_jmp_rel32_placeholder r8
 
     ; .positive:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, rdx
-    sub     rax, 4
-    mov     rdi, rdx
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 rdx
 
     mov     al, 0xF2
     mov     ch, 0x2A
@@ -2156,11 +2055,7 @@ er_fn jit_template_f64_convert_i32_u
     call    jit_emit_sse_op               ; cvtsi2sd xmm0, eax
 
     ; .done:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, r8
-    sub     rax, 4
-    mov     rdi, r8
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 r8
 
     call    jit_emit_movq_rax_xmm0
     xor     ecx, ecx
@@ -2184,12 +2079,7 @@ er_fn jit_template_f64_convert_i64_u
     call    jit_emit_pop_reg
     call    jit_emit_test64
 
-    mov     rdx, [jit_state.code_ptr]
-    add     rdx, 2
-
-    mov     cl, 0x09
-    xor     eax, eax
-    call    jit_emit_jcc_rel32
+    jit_template_jns_rel32_placeholder rdx
 
     mov     cl, 63
     call    jit_emit_btr_rax
@@ -2212,20 +2102,10 @@ er_fn jit_template_f64_convert_i64_u
     mov     cl, 0xC1
     call    jit_emit_sse_op               ; addsd xmm0, xmm1
 
-    mov     r8, [jit_state.code_ptr]
-    inc     r8
-
-    mov     al, 0xE9
-    call    jit_emit_byte
-    xor     eax, eax
-    call    jit_emit_dword
+    jit_template_jmp_rel32_placeholder r8
 
     ; .positive:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, rdx
-    sub     rax, 4
-    mov     rdi, rdx
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 rdx
 
     mov     al, 0xF2
     mov     ch, 0x2A
@@ -2233,11 +2113,7 @@ er_fn jit_template_f64_convert_i64_u
     call    jit_emit_sse64_op
 
     ; .done:
-    mov     rax, [jit_state.code_ptr]
-    sub     rax, r8
-    sub     rax, 4
-    mov     rdi, r8
-    call    jit_emit_patch_dword
+    jit_template_patch_rel32 r8
 
     call    jit_emit_movq_rax_xmm0
     xor     ecx, ecx

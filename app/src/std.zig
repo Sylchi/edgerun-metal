@@ -530,21 +530,28 @@ pub const Io = struct {
 };
 
 pub const process = struct {
-    pub const Init = struct { minimal: struct { args: Args } = .{ .args = &.{} }, io: Io = .{} };
+    pub const Init = struct { minimal: struct { args: Args, environ: Environ = .{} } = .{ .args = .{} }, io: Io = .{} };
+    pub const Environ = struct { block: ?[*:null]const ?[*:0]const u8 = null };
     pub const Args = struct {
-        items: []const []const u8 = &.{},
+        vector: []const [*:0]const u8 = &.{},
         pub const Iterator = struct {
             args: Args,
             index: usize = 0,
             pub fn init(args: Args) Iterator { return .{ .args = args }; }
             pub fn next(self: *Iterator) ?[]const u8 {
-                if (self.index >= self.args.items.len) return null;
+                if (self.index >= self.args.vector.len) return null;
                 defer self.index += 1;
-                return self.args.items[self.index];
+                return cStringSlice(self.args.vector[self.index]);
             }
         };
     };
 };
+
+fn cStringSlice(value: [*:0]const u8) []const u8 {
+    var len: usize = 0;
+    while (value[len] != 0) len += 1;
+    return value[0..len];
+}
 
 pub const fs = struct {
     pub fn openDirAbsolute(_: []const u8, _: anytype) !Io.Dir { return .{}; }

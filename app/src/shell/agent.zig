@@ -968,7 +968,7 @@ fn TextBuf(comptime capacity: usize) type {
             self.len = len;
         }
 
-        pub fn slice(self: @This()) []const u8 {
+        pub fn slice(self: *const @This()) []const u8 {
             return self.buf[0..self.len];
         }
     };

@@ -9,8 +9,8 @@ const UsageError = error{
     ExtraArgument,
 };
 
-pub fn main(init: std.process.Init) !void {
-    const profile = try parseArgs(init.minimal.args);
+pub fn main() !void {
+    const profile = sdk.Profile.standard;
     var memory: [sdk.max_parent_memory_bytes]u8 = undefined;
     var storage_bytes: [sdk.max_parent_storage_bytes]u8 = undefined;
     var slots: [sdk.max_parent_slots]store.Blob = undefined;
@@ -24,7 +24,7 @@ pub fn main(init: std.process.Init) !void {
     });
 
     var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writer(init.io, &stdout_buffer);
+    var stdout_writer = std.Io.File.stdout().writer(.{}, &stdout_buffer);
     const out = &stdout_writer.interface;
     defer out.flush() catch {};
     try out.print("profile={s}\n", .{profileName(profile)});

@@ -767,7 +767,7 @@ er_fn er_vp8_decode_frame_with_reference
 .inter_header_row_loop:
     mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
     cmp     eax, [rsp + VP8_DECODE_STACK_MB_HEIGHT]
-    jae     .copy_reference_yuv
+    jae     .write_inter_rgba
     lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_MODES]
     mov     esi, VP8_INTRA4_MODE_DC
     mov     edx, VP8_BLOCK_SIZE
@@ -787,20 +787,95 @@ er_fn er_vp8_decode_frame_with_reference
     jnz     .done_decode_reference
     cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
     je      .unsupported
+.copy_inter_mb:
+    xor     r8d, r8d
+    xor     r9d, r9d
+    cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    jne     .read_inter_luma
+    movsx   r8d, word [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_ROW]
+    test    r8d, VP8_MOTION_VECTOR_FRACTION_MASK
+    jnz     .unsupported
+    sar     r8d, VP8_MOTION_VECTOR_WHOLE_PIXEL_SHIFT
+    movsx   r9d, word [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_COL]
+    test    r9d, VP8_MOTION_VECTOR_FRACTION_MASK
+    jnz     .unsupported
+    sar     r9d, VP8_MOTION_VECTOR_WHOLE_PIXEL_SHIFT
+.read_inter_luma:
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     r10, [rsp + VP8_DECODE_STACK_Y_PLANE]
+    push    r10
+    push    qword [rsp + 8 + VP8_DECODE_STACK_LEFT_Y]
+    call    er_vp8_read_reference_luma_nearest
+    add     rsp, 16
+    test    edx, edx
+    jnz     .done_decode_reference
+    xor     r8d, r8d
+    xor     r9d, r9d
+    cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    jne     .read_inter_chroma
+    movsx   r8d, word [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_ROW]
+    test    r8d, VP8_MOTION_VECTOR_CHROMA_FRACTION_MASK
+    jnz     .unsupported
+    sar     r8d, VP8_MOTION_VECTOR_CHROMA_SHIFT
+    movsx   r9d, word [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_COL]
+    test    r9d, VP8_MOTION_VECTOR_CHROMA_FRACTION_MASK
+    jnz     .unsupported
+    sar     r9d, VP8_MOTION_VECTOR_CHROMA_SHIFT
+.read_inter_chroma:
+    mov     r10, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    lea     r11, [r10 + rax]
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     r10, [r11 + rax]
+    mov     edi, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     rax, [rsp + VP8_DECODE_STACK_V_PLANE]
+    push    rax
+    lea     rax, [rsp + 8 + VP8_DECODE_STACK_U_PLANE]
+    push    rax
+    push    r10
+    push    r11
+    call    er_vp8_read_reference_chroma_nearest
+    add     rsp, 32
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     r8, [rsp + VP8_DECODE_STACK_Y_PLANE]
+    mov     r9, [rsp + VP8_DECODE_STACK_YUV]
+    call    er_vp8_write_luma_macroblock
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     edi, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     r8, [rsp + VP8_DECODE_STACK_U_PLANE]
+    lea     r9, [rsp + VP8_DECODE_STACK_V_PLANE]
+    mov     r10, [rsp + VP8_DECODE_STACK_YUV]
+    mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    lea     r11, [r10 + rax]
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     r10, [r11 + rax]
+    push    r10
+    push    r11
+    call    er_vp8_write_chroma_macroblock
+    add     rsp, 16
+    test    edx, edx
+    jnz     .done_decode_reference
     inc     dword [rsp + VP8_DECODE_STACK_MB_X]
     jmp     .inter_header_mb_loop
 .next_inter_header_row:
     inc     dword [rsp + VP8_DECODE_STACK_MB_Y]
     jmp     .inter_header_row_loop
-.copy_reference_yuv:
-    mov     rdi, [rsp + VP8_DECODE_STACK_YUV]
-    mov     rsi, [rsp + VP8_DECODE_STACK_LEFT_Y]
-    mov     edx, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
-    mov     ecx, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
-    lea     edx, [rdx + rcx * 2]
-    call    er_vp8_memcpy
-    test    edx, edx
-    jnz     .done_decode_reference
+.write_inter_rgba:
     mov     rdi, [rsp + VP8_DECODE_STACK_YUV]
     mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
     lea     rsi, [rdi + rax]

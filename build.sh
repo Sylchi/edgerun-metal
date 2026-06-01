@@ -1617,7 +1617,69 @@ cmd_test_core() {
 }
 
 cmd_test_app() {
- (cd app && zig build --summary none test)
+ local roots=(
+  src/pi_usb_boot_host.zig
+  src/pi_usb_control_host.zig
+  src/bytes.zig
+  src/math.zig
+  src/crypto.zig
+  src/preimage.zig
+  src/seal.zig
+  src/kernel_authority_test.zig
+  src/encrypted_chat.zig
+  src/app_encrypted_chat.zig
+  src/app_pipeline_dashboard.zig
+  src/project_intro_video.zig
+  src/media_video_dump.zig
+  src/media_test.zig
+  src/ui_codec_test.zig
+  src/svg_path_parser.zig
+  src/jc3248_display_frame.zig
+  src/wayland_window_host.zig
+  src/drm_gbm_host.zig
+ )
+ local root
+ for root in "${roots[@]}"; do
+  (cd app && zig test -ODebug --dep er_std -Mroot="$root" -Mer_std=src/std.zig)
+ done
+}
+
+cmd_app_ui_wasm() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  -target wasm32-freestanding \
+  -fno-entry \
+  -fsingle-threaded \
+  --export-memory \
+  --export=er_ui_wasm_version \
+  --export=er_ui_wasm_max_slots \
+  --export=er_ui_wasm_slot_count \
+  --export=er_ui_wasm_alloc \
+  --export=er_ui_wasm_free \
+  --export=er_ui_wasm_clear \
+  --export=er_ui_wasm_deserialize \
+  --export=er_ui_wasm_serialize \
+  --export=er_ui_wasm_render \
+  --export=er_ui_wasm_measure \
+  --export=er_ui_wasm_new_text \
+  --export=er_ui_wasm_new_button \
+  --export=er_ui_wasm_new_row_item \
+  --export=er_ui_wasm_new_badge \
+  --export=er_ui_wasm_new_separator \
+  --export=er_ui_wasm_new_icon \
+  --export=er_ui_wasm_new_checkbox \
+  --export=er_ui_wasm_new_input \
+  --export=er_ui_wasm_new_slider \
+  --export=er_ui_wasm_new_card \
+  --dep er_std \
+  -Mroot=src/ui_wasm_root.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin=../${BUILD_DIR}/app/edgerun-ui-components.wasm)
+}
+
+cmd_app() {
+ cmd_test_app
+ cmd_app_ui_wasm
 }
 
 cmd_test() {
@@ -2238,6 +2300,8 @@ EdgeRun build targets:
   test-status --subsystem NAME Run default tests in one subsystem
   test-status --core    Run default unit + contract tests as TSV status
   deps-audit         Check for undeclared external dependency manifests and blobs
+  app                Run owned app build path without app/build.zig
+  app-ui-wasm        Build UI WASM directly without app/build.zig
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
 EOF
  cmd_test_help
@@ -2288,6 +2352,8 @@ case "${1:-help}" in
 	test-list)      cmd_test_list ;;
 	test-status)    shift; cmd_test_status "$@" ;;
 	deps-audit)     cmd_deps_audit ;;
+	app)            cmd_app ;;
+	app-ui-wasm)    cmd_app_ui_wasm ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;
 	test-*)         cmd_test_registered "$1" ;;
 	bench-tor)      cmd_bench_tor ;;

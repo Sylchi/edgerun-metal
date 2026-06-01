@@ -249,6 +249,8 @@ tok_eax: db "eax"
 tok_eax_len equ $ - tok_eax
 tok_ebx: db "ebx"
 tok_ebx_len equ $ - tok_ebx
+tok_bl: db "bl"
+tok_bl_len equ $ - tok_bl
 tok_ecx: db "ecx"
 tok_ecx_len equ $ - tok_ecx
 tok_edx: db "edx"
@@ -305,6 +307,8 @@ tok_r13d: db "r13d"
 tok_r13d_len equ $ - tok_r13d
 tok_r14: db "r14"
 tok_r14_len equ $ - tok_r14
+tok_r14d: db "r14d"
+tok_r14d_len equ $ - tok_r14d
 tok_r15: db "r15"
 tok_r15_len equ $ - tok_r15
 tok_ax: db "ax"
@@ -353,6 +357,8 @@ tok_mem_r13: db "[r13]"
 tok_mem_r13_len equ $ - tok_mem_r13
 tok_mem_r14: db "[r14]"
 tok_mem_r14_len equ $ - tok_mem_r14
+tok_mem_r15: db "[r15]"
+tok_mem_r15_len equ $ - tok_mem_r15
 tok_mem_ebda_seg_ptr: db "[EBDA_SEG_PTR]"
 tok_mem_ebda_seg_ptr_len equ $ - tok_mem_ebda_seg_ptr
 tok_mem_r12_open: db "[r12"
@@ -387,6 +393,18 @@ tok_one_close: db "1]"
 tok_one_close_len equ $ - tok_one_close
 tok_four_close: db "4]"
 tok_four_close_len equ $ - tok_four_close
+tok_rsdp_revision_close: db "RSDP_REVISION]"
+tok_rsdp_revision_close_len equ $ - tok_rsdp_revision_close
+tok_rsdp_rsdt_addr_close: db "RSDP_RSDT_ADDR]"
+tok_rsdp_rsdt_addr_close_len equ $ - tok_rsdp_rsdt_addr_close
+tok_rsdp_xsdt_addr_close: db "RSDP_XSDT_ADDR]"
+tok_rsdp_xsdt_addr_close_len equ $ - tok_rsdp_xsdt_addr_close
+tok_rsdp_length_close: db "RSDP_LENGTH]"
+tok_rsdp_length_close_len equ $ - tok_rsdp_length_close
+tok_sdt_length_close: db "SDT_LENGTH]"
+tok_sdt_length_close_len equ $ - tok_sdt_length_close
+tok_sdt_header_len: db "SDT_HEADER_LEN"
+tok_sdt_header_len_len equ $ - tok_sdt_header_len
 tok_two_close: db "2]"
 tok_two_close_len equ $ - tok_two_close
 tok_three_close: db "3]"

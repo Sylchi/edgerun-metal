@@ -77,7 +77,14 @@ pub fn activateHovered(state: *State) void {
         agent.thinking = true;
         agent.progress = 0.05;
         agent.status.set("waiting for ui_stream from host");
-        agent.run_label.set("Running");
+        agent.run_label.buf[0] = 'R';
+        agent.run_label.buf[1] = 'u';
+        agent.run_label.buf[2] = 'n';
+        agent.run_label.buf[3] = 'n';
+        agent.run_label.buf[4] = 'i';
+        agent.run_label.buf[5] = 'n';
+        agent.run_label.buf[6] = 'g';
+        agent.run_label.len = 7;
         state.agent = agent;
         return;
     }
@@ -156,9 +163,7 @@ test "native input starts agent stream from run action" {
     try std.testing.expect(state.agent.connected);
     try std.testing.expect(state.agent.thinking);
     try std.testing.expectEqual(@as(f32, 0.05), state.agent.progress);
-    const run_label = state.agent.run_label.slice();
-    try std.testing.expectEqual(@as(usize, "Running".len), run_label.len);
-    try std.testing.expectEqualSlices(u8, "Running", run_label);
+    try std.testing.expectEqualStrings("Running", state.agent.run_label.slice());
 }
 
 test "native input pointer path uses shared runtime activation" {

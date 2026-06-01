@@ -1,3 +1,10 @@
+%macro wasm_decode_finish_op 0
+    mov     eax, esi
+    sub     eax, edi
+    mov     [decoded_ops + rbx + 4], eax
+    inc     dword [decoded_op_count]
+%endm
+
 er_wasm_decode_body:
     er_frame_push_regs rbx, r12, r13, r14, r15
 
@@ -165,19 +172,13 @@ er_wasm_decode_body:
     ; Read memory index (must be 0)
     er_call er_wasm_read_leb_u32, .error
     er_check_nonzero eax, .unsupported
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_i32_const:
     er_call er_wasm_read_leb_i32, .error
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = value (as bit pattern)
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_i64_const:
@@ -185,20 +186,14 @@ er_wasm_decode_body:
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = low 32 bits
     shr     rax, 32
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = high 32 bits
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_f32_const:
     mov     eax, [rsi]
     add     rsi, 4
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = f32 bits
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_f64_const:
@@ -207,10 +202,7 @@ er_wasm_decode_body:
     mov     eax, [rsi + 4]
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = high 32 bits
     add     rsi, 8
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_block_type:
@@ -235,10 +227,7 @@ er_wasm_decode_body:
     dec     rsi                 ; put back the byte
     er_call er_wasm_read_leb_u32, .error
 .block_done:
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_call_indirect:
@@ -247,10 +236,7 @@ er_wasm_decode_body:
     er_call er_wasm_read_leb_u32, .error
     er_check_nonzero eax, .unsupported
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = table_index
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_select_typed:
@@ -259,10 +245,7 @@ er_wasm_decode_body:
     cmp     eax, 1
     jne     .unsupported
     er_call er_wasm_read_value_type, .error
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_table:
@@ -270,10 +253,7 @@ er_wasm_decode_body:
     er_check_nonzero edx, .error
     er_check_nonzero eax, .unsupported
     mov     [decoded_ops + rbx + 12], eax
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_ref_null:
@@ -281,10 +261,7 @@ er_wasm_decode_body:
     inc     rsi
     cmp     al, WASM_FUNCREF_TYPE
     jne     .unsupported
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_br_table:
@@ -300,10 +277,7 @@ er_wasm_decode_body:
 .br_table_done:
     call    er_wasm_read_leb_u32  ; default target
     er_check_nonzero edx, .error
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .decode_extended:
@@ -393,10 +367,7 @@ er_wasm_decode_body:
     er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_done:
-    mov     eax, esi
-    sub     eax, edi
-    mov     [decoded_ops + rbx + 4], eax
-    inc     dword [decoded_op_count]
+    wasm_decode_finish_op
     jmp     .decode_loop
 
 .done:
