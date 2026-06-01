@@ -359,6 +359,8 @@ tok_mem_r14: db "[r14]"
 tok_mem_r14_len equ $ - tok_mem_r14
 tok_mem_r15: db "[r15]"
 tok_mem_r15_len equ $ - tok_mem_r15
+tok_mem_rbx: db "[rbx]"
+tok_mem_rbx_len equ $ - tok_mem_rbx
 tok_mem_ebda_seg_ptr: db "[EBDA_SEG_PTR]"
 tok_mem_ebda_seg_ptr_len equ $ - tok_mem_ebda_seg_ptr
 tok_mem_r12_open: db "[r12"
@@ -401,6 +403,22 @@ tok_rsdp_xsdt_addr_close: db "RSDP_XSDT_ADDR]"
 tok_rsdp_xsdt_addr_close_len equ $ - tok_rsdp_xsdt_addr_close
 tok_rsdp_length_close: db "RSDP_LENGTH]"
 tok_rsdp_length_close_len equ $ - tok_rsdp_length_close
+tok_madt_lapic_addr_close: db "MADT_LAPIC_ADDR]"
+tok_madt_lapic_addr_close_len equ $ - tok_madt_lapic_addr_close
+tok_madt_ioapic_addr_close: db "MADT_IOAPIC_ADDR]"
+tok_madt_ioapic_addr_close_len equ $ - tok_madt_ioapic_addr_close
+tok_madt_ioapic_gsi_base_close: db "MADT_IOAPIC_GSI_BASE]"
+tok_madt_ioapic_gsi_base_close_len equ $ - tok_madt_ioapic_gsi_base_close
+tok_mcfg_allocations: db "MCFG_ALLOCATIONS"
+tok_mcfg_allocations_len equ $ - tok_mcfg_allocations
+tok_mcfg_alloc_entry: db "MCFG_ALLOC_ENTRY"
+tok_mcfg_alloc_entry_len equ $ - tok_mcfg_alloc_entry
+tok_mcfg_alloc_base_close: db "MCFG_ALLOC_BASE]"
+tok_mcfg_alloc_base_close_len equ $ - tok_mcfg_alloc_base_close
+tok_mcfg_alloc_start_close: db "MCFG_ALLOC_START]"
+tok_mcfg_alloc_start_close_len equ $ - tok_mcfg_alloc_start_close
+tok_mcfg_alloc_end_close: db "MCFG_ALLOC_END]"
+tok_mcfg_alloc_end_close_len equ $ - tok_mcfg_alloc_end_close
 tok_sdt_length_close: db "SDT_LENGTH]"
 tok_sdt_length_close_len equ $ - tok_sdt_length_close
 tok_sdt_header_len: db "SDT_HEADER_LEN"

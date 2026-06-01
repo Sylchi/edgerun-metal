@@ -5,6 +5,7 @@ pub const builtin = struct {
 pub const time = struct {
     pub const ms_per_s: i64 = 1000;
     pub const ns_per_ms: i64 = 1000 * 1000;
+    pub const ns_per_s: i64 = 1000 * 1000 * 1000;
 };
 
 pub const posix = struct {
@@ -457,8 +458,8 @@ pub const fmt = struct {
         return if (negative) -out else out;
     }
 
-    pub fn bytesToHex(value: anytype, _: enum { lower, upper }) [@TypeOf(value).len * 2]u8 {
-        var out: [@TypeOf(value).len * 2]u8 = undefined;
+    pub fn bytesToHex(value: anytype, _: enum { lower, upper }) [@typeInfo(@TypeOf(value)).array.len * 2]u8 {
+        var out: [@typeInfo(@TypeOf(value)).array.len * 2]u8 = undefined;
         for (value, 0..) |byte, index| {
             out[index * 2] = hex(byte >> 4);
             out[index * 2 + 1] = hex(byte & 0xf);
@@ -510,6 +511,7 @@ pub const Io = struct {
         pub fn stdout() File { return .{}; }
         pub fn writer(_: File, _: Io, _: []u8) struct { interface: Writer = .{} } { return .{}; }
         pub fn writeAll(_: File, _: Io, _: []const u8) !void {}
+        pub fn writeStreamingAll(_: File, _: Io, _: []const u8) !void {}
         pub fn close(_: File, _: Io) void {}
     };
 
@@ -560,15 +562,23 @@ pub const fs = struct {
 pub const os = struct {
     pub const linux = struct {
         pub const E = enum { SUCCESS, FAILURE };
+        pub const CLOCK = enum { MONOTONIC };
         pub const AT = struct { pub const FDCWD: i32 = -100; };
+        pub const timespec = extern struct { sec: isize, nsec: isize };
         pub const O = packed struct {
             pub const AccessMode = enum(u2) { RDONLY, WRONLY, RDWR };
             ACCMODE: AccessMode = .RDONLY,
             DIRECTORY: bool = false,
-            _unused: u29 = 0,
+            CLOEXEC: bool = false,
+            _unused: u28 = 0,
         };
 
         pub fn pipe2(_: *[2]i32, _: anytype) isize { return -1; }
+        pub fn clock_gettime(_: CLOCK, out: *timespec) isize {
+            out.* = .{ .sec = 0, .nsec = 0 };
+            return 0;
+        }
+        pub fn open(_: [*:0]const u8, _: O, _: usize) isize { return -1; }
         pub fn openat(_: i32, _: [*:0]const u8, _: O, _: usize) isize { return -1; }
         pub fn read(_: i32, _: [*]u8, _: usize) usize { return 0; }
         pub fn write(_: i32, _: [*]const u8, len: usize) usize { return len; }

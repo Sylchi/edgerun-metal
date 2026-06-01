@@ -116,6 +116,13 @@
     jmp     jit_emit_push_reg
 %endm
 
+%macro jit_template_emit_mov_accum_rdx 0
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0xD0
+    call    jit_emit_modrm
+%endm
+
 %macro jit_template_modrm82_disp_r11 0
     mov     al, 0x82
     call    jit_emit_modrm
@@ -222,10 +229,7 @@ er_fn jit_template_local_get
     call    jit_emit_rex_nob
     mov     al, 0x8B         ; mov r64, r/m64
     call    jit_emit_byte
-    mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
-    call    jit_emit_modrm
-    mov     eax, r11d
-    call    jit_emit_dword
+    jit_template_modrm82_disp_r11
     ; push rax
     jit_template_push_rax_ret
 
@@ -252,10 +256,7 @@ er_fn jit_template_local_set
     call    jit_emit_rex_nob
     mov     al, 0x89         ; mov r/m64, r64
     call    jit_emit_byte
-    mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
-    call    jit_emit_modrm
-    mov     eax, r11d
-    call    jit_emit_dword
+    jit_template_modrm82_disp_r11
     pop     rax              ; consumed
     ret
 
@@ -284,10 +285,7 @@ er_fn jit_template_local_tee
     call    jit_emit_rex_nob
     mov     al, 0x89
     call    jit_emit_byte
-    mov     al, 0x82         ; mov [rdx + disp32], rax
-    call    jit_emit_modrm
-    mov     eax, r11d
-    call    jit_emit_dword
+    jit_template_modrm82_disp_r11
     ret
 
 ; ------------------------------------------------------------------
@@ -629,10 +627,7 @@ er_fn jit_template_i32_rem_s
     call    jit_emit_byte
     call    jit_emit_idiv32
     ; mov eax, edx
-    mov     al, 0x89
-    call    jit_emit_byte
-    mov     al, 0xD0         ; mov eax, edx
-    call    jit_emit_modrm
+    jit_template_emit_mov_accum_rdx
     jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
@@ -646,10 +641,7 @@ er_fn jit_template_i32_rem_u
     mov     al, 0xD2         ; xor edx, edx
     call    jit_emit_modrm
     call    jit_emit_div32
-    mov     al, 0x89
-    call    jit_emit_byte
-    mov     al, 0xD0         ; mov eax, edx
-    call    jit_emit_modrm
+    jit_template_emit_mov_accum_rdx
     jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
@@ -1209,10 +1201,7 @@ er_fn jit_template_i64_rem_s
     call    jit_emit_idiv32
     mov     al, 0x48         ; REX.W for mov rdx, rax
     call    jit_emit_byte
-    mov     al, 0x89
-    call    jit_emit_byte
-    mov     al, 0xD0         ; mov rax, rdx
-    call    jit_emit_modrm
+    jit_template_emit_mov_accum_rdx
     jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------
@@ -1225,10 +1214,7 @@ er_fn jit_template_i64_rem_u
     call    jit_emit_div32
     mov     al, 0x48         ; REX.W for mov rax, rdx
     call    jit_emit_byte
-    mov     al, 0x89
-    call    jit_emit_byte
-    mov     al, 0xD0         ; mov rax, rdx
-    call    jit_emit_modrm
+    jit_template_emit_mov_accum_rdx
     jit_template_push_rax_ret
 
 ; ------------------------------------------------------------------

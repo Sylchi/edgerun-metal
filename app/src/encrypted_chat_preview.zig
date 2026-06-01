@@ -27,9 +27,9 @@ const IrStorage = renderer_ir.FixedBuffers(
     0,
 );
 
-pub fn main(init: std.process.Init) !void {
+pub fn main() !void {
     const alloc = std.heap.page_allocator;
-    const io = init.io;
+    const io: std.Io = .{};
 
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);

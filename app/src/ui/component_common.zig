@@ -308,7 +308,7 @@ pub fn offsetId(id: u32, offset: u32) u32 {
     return id + offset;
 }
 
-pub const encoded_icon_count: u16 = @typeInfo(icon.Icon).@"enum".fields.len + 1;
+pub const encoded_icon_count: u16 = icon.icon_count + 1;
 
 pub fn optionalIconTag(value: ?icon.Icon) u16 {
     return if (value) |icon_value| @as(u16, @intFromEnum(icon_value)) + 1 else 0;
@@ -316,7 +316,5 @@ pub fn optionalIconTag(value: ?icon.Icon) u16 {
 
 pub fn optionalIconFromTag(tag: u16) Error!?icon.Icon {
     if (tag == 0) return null;
-    const raw = tag - 1;
-    if (raw >= @typeInfo(icon.Icon).@"enum".fields.len) return error.Corrupt;
-    return @enumFromInt(raw);
+    return icon.fromId(tag) orelse error.Corrupt;
 }

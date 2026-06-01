@@ -129,8 +129,11 @@ er_fn emit_flat_binary
     test    eax, eax
     js      .bad
     mov     ebx, eax
+    cmp     qword [rel generic_instr_mode], 1
+    je      .write
     cmp     qword [rel exit_subset_bad], 0
     jne     .bad
+.write:
     mov     edi, ebx
     lea     rsi, [rel text_buf]
     mov     rdx, [rel text_len]
@@ -326,34 +329,62 @@ er_fn scan_source
     cmp     qword [rel exit_subset_bad], 0
     jne     .exit_instruction
 .try_real_instruction:
+    push    qword [rel text_len]
     push    r14
     call    track_real_instruction
     test    eax, eax
     jnz     .real_instruction_done
     pop     r14
+    pop     rax
 .exit_instruction:
+    push    qword [rel text_len]
     push    r14
     call    track_real_instruction
     test    eax, eax
     jnz     .real_instruction_done
     pop     r14
+    pop     rax
+    push    qword [rel text_len]
     call    track_exit_instruction
+    pop     r10
+    cmp     qword [rel exit_subset_bad], 0
+    je      .instruction_done
+    cmp     r10, 0
+    jne     .instruction_done
+    cmp     qword [rel text_len], r10
+    jne     .instruction_done
+    mov     qword [rel generic_instr_bad], 1
     jmp     .instruction_done
 .real_instruction_done:
     pop     r11
+    pop     r10
+    cmp     qword [rel exit_subset_bad], 0
+    je      .real_instruction_ok
+    cmp     qword [rel text_len], r10
+    jne     .real_instruction_ok
+    mov     qword [rel generic_instr_bad], 1
+.real_instruction_ok:
     mov     qword [rel generic_instr_mode], 1
     jmp     .instruction_done
 .generic_instruction:
+    push    qword [rel text_len]
     push    r14
     call    track_real_instruction
     test    eax, eax
     jnz     .real_instruction_done
     pop     r14
+    pop     rax
     mov     qword [rel generic_instr_bad], 1
 .instruction_done:
     inc     qword [rel instr_count]
     jmp     .skip_line
 .directive:
+    cmp     qword [rel exit_subset_bad], 0
+    je      .directive_count
+    cmp     qword [rel text_len], 0
+    jne     .directive_count
+    mov     qword [rel generic_instr_bad], 1
+.directive_count:
     inc     qword [rel directive_count]
     jmp     .skip_line
 .next_line:

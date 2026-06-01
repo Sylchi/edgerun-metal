@@ -1,6 +1,6 @@
 const std = @import("er_std");
 const video = @import("media/video.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 
 const max_input_bytes: usize = 64 * 1024 * 1024;
 const default_max_frames: usize = 16;
@@ -61,17 +61,41 @@ fn writeFramePpm(io: std.Io, output: anytype, frame_index: usize, width: usize, 
 }
 
 test "ppm frame writer emits deterministic header and rgb bytes" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
     const pixels = [_]ui.Color{
         .{ .r = 1, .g = 2, .b = 3, .a = 255 },
         .{ .r = 4, .g = 5, .b = 6, .a = 255 },
     };
-    try writeFramePpm(std.testing.io, tmp.dir, 7, 2, 1, &pixels);
+    var buffer: [64]u8 = undefined;
+    var out = TestOutput{ .buffer = &buffer };
+    try writeFramePpm(.{}, &out, 7, 2, 1, &pixels);
 
-    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "frame_0007.ppm", std.testing.allocator, .limited(64));
-    defer std.testing.allocator.free(bytes);
+    const bytes = out.bytes();
     try std.testing.expectEqualStrings("P6\n2 1\n255\n", bytes[0..11]);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3, 4, 5, 6 }, bytes[11..]);
 }
+
+const TestOutput = struct {
+    buffer: []u8,
+    len: usize = 0,
+
+    fn createFile(self: *@This(), _: std.Io, _: []const u8, _: anytype) !TestFile {
+        self.len = 0;
+        return .{ .output = self };
+    }
+
+    fn bytes(self: *const @This()) []const u8 {
+        return self.buffer[0..self.len];
+    }
+};
+
+const TestFile = struct {
+    output: *TestOutput,
+
+    fn close(_: @This(), _: std.Io) void {}
+
+    fn writeStreamingAll(self: @This(), _: std.Io, data: []const u8) !void {
+        if (self.output.len + data.len > self.output.buffer.len) return error.OutOfMemory;
+        @memcpy(self.output.buffer[self.output.len..][0..data.len], data);
+        self.output.len += data.len;
+    }
+};

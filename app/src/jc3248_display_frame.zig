@@ -13,8 +13,8 @@ const frame_path = ".build/app/jc3248_ui.rgb565";
 
 const IrStorage = renderer_ir.FixedBuffers(max_rects, 0, max_text_vertices, 0, 0, 0, 0);
 
-pub fn main(init: std.process.Init) !void {
-    const io = init.io;
+pub fn main() !void {
+    const io: std.Io = .{};
     const alloc = std.heap.page_allocator;
 
     const frame = try alloc.alloc(u8, jc3248_frame.frame_bytes);

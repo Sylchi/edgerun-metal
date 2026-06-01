@@ -54,8 +54,8 @@ const slides = [_]Slide{
     },
 };
 
-pub fn main(init: std.process.Init) !void {
-    const io = init.io;
+pub fn main() !void {
+    const io: std.Io = .{};
     const alloc = std.heap.page_allocator;
     try std.Io.Dir.cwd().createDirPath(io, ".build/app/project_intro_frames");
 

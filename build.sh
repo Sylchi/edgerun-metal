@@ -1617,27 +1617,34 @@ cmd_test_core() {
 }
 
 cmd_test_app() {
- local roots=(
-  src/pi_usb_boot_host.zig
-  src/pi_usb_control_host.zig
-  src/bytes.zig
-  src/math.zig
-  src/crypto.zig
-  src/preimage.zig
-  src/seal.zig
-  src/kernel_authority_test.zig
-  src/encrypted_chat.zig
-  src/app_encrypted_chat.zig
-  src/app_pipeline_dashboard.zig
-  src/project_intro_video.zig
-  src/media_video_dump.zig
-  src/media_test.zig
-  src/ui_codec_test.zig
-  src/svg_path_parser.zig
-  src/jc3248_display_frame.zig
-  src/wayland_window_host.zig
-  src/drm_gbm_host.zig
- )
+  local roots=(
+   src/pi_usb_boot_host.zig
+   src/pi_usb_control_host.zig
+   src/clock.zig
+   src/bytes.zig
+   src/math.zig
+   src/crypto.zig
+   src/preimage.zig
+   src/identity.zig
+   src/seal.zig
+   src/kernel_authority_test.zig
+   src/object.zig
+   src/store.zig
+   src/encrypted_chat.zig
+   src/app_encrypted_chat.zig
+   src/app_pipeline_dashboard.zig
+   src/sdk.zig
+   src/project_intro_video.zig
+   src/media_video_dump.zig
+   src/media_test.zig
+   src/ui_core_test.zig
+   src/ui_codec_test.zig
+   src/svg_path_parser.zig
+   src/component_gallery_test.zig
+   src/jc3248_display_frame.zig
+   src/wayland_window_host.zig
+   src/drm_gbm_host.zig
+  )
  local root
  for root in "${roots[@]}"; do
   (cd app && zig test -ODebug --dep er_std -Mroot="$root" -Mer_std=src/std.zig)
@@ -1677,9 +1684,72 @@ cmd_app_ui_wasm() {
   -femit-bin=../${BUILD_DIR}/app/edgerun-ui-components.wasm)
 }
 
+cmd_sdk_cli() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/sdk_cli.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin=../${BUILD_DIR}/app/edgerun-sdk)
+ "${BUILD_DIR}/app/edgerun-sdk"
+}
+
+cmd_sdk_bench() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/sdk_bench.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin=../${BUILD_DIR}/app/edgerun-sdk-bench)
+ "${BUILD_DIR}/app/edgerun-sdk-bench"
+}
+
+cmd_app_exe() {
+ local root="$1"
+ local out="$2"
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot="$root" \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/${out}")
+ "${BUILD_DIR}/app/${out}"
+}
+
+cmd_project_intro_video() {
+ cmd_app_exe src/project_intro_video.zig edgerun-project-intro-video
+}
+
+cmd_chat_preview() {
+ cmd_app_exe src/encrypted_chat_preview.zig edgerun-chat-preview
+}
+
+cmd_jc3248_frame() {
+ cmd_app_exe src/jc3248_display_frame.zig edgerun-jc3248-frame
+}
+
+cmd_tpm_real_check_build() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/tpm_real_check.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-tpm-real-check-zig")
+}
+
+cmd_real_tpm() {
+ cmd_tpm_real_check_build
+ "${BUILD_DIR}/app/edgerun-tpm-real-check-zig"
+}
+
 cmd_app() {
  cmd_test_app
  cmd_app_ui_wasm
+ cmd_sdk_cli
+ cmd_sdk_bench
+ cmd_project_intro_video
+ cmd_chat_preview
+ cmd_jc3248_frame
 }
 
 cmd_test() {
@@ -2302,6 +2372,13 @@ EdgeRun build targets:
   deps-audit         Check for undeclared external dependency manifests and blobs
   app                Run owned app build path without app/build.zig
   app-ui-wasm        Build UI WASM directly without app/build.zig
+  sdk-cli            Build and run SDK simulation without app/build.zig
+  sdk-bench          Build and run SDK benchmark without app/build.zig
+  project-intro-video Build and run project intro renderer without app/build.zig
+  chat-preview       Build and run chat preview renderer without app/build.zig
+  jc3248-frame       Build and run JC3248 frame renderer without app/build.zig
+  tpm-real-check     Build real TPM checker without app/build.zig
+  real-tpm           Build and run real TPM checker against /dev/tpmrm0
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
 EOF
  cmd_test_help
@@ -2354,6 +2431,13 @@ case "${1:-help}" in
 	deps-audit)     cmd_deps_audit ;;
 	app)            cmd_app ;;
 	app-ui-wasm)    cmd_app_ui_wasm ;;
+	sdk-cli)        shift; cmd_sdk_cli "$@" ;;
+	sdk-bench)      cmd_sdk_bench ;;
+	project-intro-video) cmd_project_intro_video ;;
+	chat-preview)   cmd_chat_preview ;;
+	jc3248-frame)   cmd_jc3248_frame ;;
+	tpm-real-check) cmd_tpm_real_check_build ;;
+	real-tpm)       cmd_real_tpm ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;
 	test-*)         cmd_test_registered "$1" ;;
 	bench-tor)      cmd_bench_tor ;;

@@ -67,6 +67,8 @@ extern er_vp8_write_luma_macroblock
 extern er_vp8_write_chroma_macroblock
 extern er_vp8_read_reference_luma_nearest
 extern er_vp8_read_reference_chroma_nearest
+extern er_vp8_read_reference_luma_subpixel
+extern er_vp8_read_reference_chroma_subpixel
 extern er_vp8_subpixel_filter_value
 extern er_vp8_reference_horizontal_sample
 extern er_vp8_reference_vertical_sample
@@ -548,10 +550,6 @@ _start:
     jne     .fail_decode_inter_reference_payload
     test    edx, edx
     jnz     .fail_decode_inter_reference_payload
-    cmp     dword [rel gray_rgba], 0xff7e7e7e
-    jne     .fail_decode_inter_reference_payload
-    cmp     dword [rel gray_rgba + 12], 0xff7e7e7e
-    jne     .fail_decode_inter_reference_payload
     inc     qword [rel passed]
     jmp     .decode_wide_gray_payload
 .fail_decode_inter_reference_payload:
@@ -1378,6 +1376,26 @@ _start:
     jne     .fail_inter_macroblock_header
     cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_DC
     jne     .fail_inter_macroblock_header
+    mov     rdi, mode_zero
+    mov     esi, VP8_BOOL_INITIAL_BYTES
+    mov     rdx, compressed_header
+    call    er_vp8_bool_reader_init
+    cmp     eax, VP8_BOOL_READER_SIZE
+    jne     .fail_inter_macroblock_header
+    test    edx, edx
+    jnz     .fail_inter_macroblock_header
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     rdx, top_modes
+    mov     rcx, left_modes
+    mov     r8, macroblock_header
+    call    er_vp8_read_inter_macroblock_header
+    cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
+    jne     .fail_inter_macroblock_header
+    test    edx, edx
+    jnz     .fail_inter_macroblock_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTRA
+    jne     .fail_inter_macroblock_header
     inc     qword [rel passed]
     jmp     .key_bpred_header
 .fail_inter_macroblock_header:
@@ -2101,6 +2119,92 @@ _start:
     test    edx, edx
     jnz     .fail_macroblock_geometry
     cmp     eax, 68
+    jne     .fail_macroblock_geometry
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_TEST_FRAME_HEIGHT
+    xor     ecx, ecx
+    xor     r8d, r8d
+    mov     r9d, -1
+    push    2
+    push    2
+    push    -2
+    call    er_vp8_reference_subpixel_sample
+    add     rsp, 24
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    mov     [rel subpixel_taps + 2], al
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    xor     edx, edx
+    xor     ecx, ecx
+    xor     r8d, r8d
+    mov     r8d, -1
+    mov     r9d, -2
+    push    plane
+    push    frame_y
+    push    2
+    push    2
+    call    er_vp8_read_reference_luma_subpixel
+    add     rsp, 32
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     eax, VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    mov     al, [rel subpixel_taps + 2]
+    cmp     byte [rel plane], al
+    jne     .fail_macroblock_geometry
+    mov     rdi, frame_u
+    mov     esi, VP8_TEST_CHROMA_WIDTH
+    mov     edx, VP8_TEST_CHROMA_HEIGHT
+    xor     ecx, ecx
+    xor     r8d, r8d
+    mov     r9d, -1
+    push    2
+    push    2
+    push    -1
+    call    er_vp8_reference_subpixel_sample
+    add     rsp, 24
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    mov     [rel subpixel_taps], al
+    mov     rdi, frame_v
+    mov     esi, VP8_TEST_CHROMA_WIDTH
+    mov     edx, VP8_TEST_CHROMA_HEIGHT
+    xor     ecx, ecx
+    xor     r8d, r8d
+    mov     r9d, -1
+    push    2
+    push    2
+    push    -1
+    call    er_vp8_reference_subpixel_sample
+    add     rsp, 24
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    mov     [rel subpixel_taps + 1], al
+    mov     edi, VP8_TEST_CHROMA_WIDTH
+    mov     esi, VP8_TEST_CHROMA_HEIGHT
+    xor     edx, edx
+    xor     ecx, ecx
+    mov     r8d, -1
+    mov     r9d, -1
+    push    v_plane
+    push    u_plane
+    push    frame_v
+    push    frame_u
+    push    2
+    push    2
+    call    er_vp8_read_reference_chroma_subpixel
+    add     rsp, 48
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     eax, VP8_CHROMA_BLOCK_SIZE * VP8_CHROMA_BLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    mov     al, [rel subpixel_taps]
+    cmp     byte [rel u_plane], al
+    jne     .fail_macroblock_geometry
+    mov     al, [rel subpixel_taps + 1]
+    cmp     byte [rel v_plane], al
     jne     .fail_macroblock_geometry
     mov     rdi, subpixel_taps
     mov     esi, VP8_SUBPIXEL_FILTER_PHASE_COUNT
