@@ -87,6 +87,8 @@ tok_er_ok: db "er_ok"
 tok_er_ok_len equ $ - tok_er_ok
 tok_er_err: db "er_err"
 tok_er_err_len equ $ - tok_er_err
+tok_er_call: db "er_call"
+tok_er_call_len equ $ - tok_er_call
 tok_er_check_zero: db "er_check_zero"
 tok_er_check_zero_len equ $ - tok_er_check_zero
 tok_er_check_nonzero: db "er_check_nonzero"
@@ -245,6 +247,8 @@ tok_jmp: db "jmp"
 tok_jmp_len equ $ - tok_jmp
 tok_syscall: db "syscall"
 tok_syscall_len equ $ - tok_syscall
+tok_pause: db "pause"
+tok_pause_len equ $ - tok_pause
 tok_ret: db "ret"
 tok_ret_len equ $ - tok_ret
 tok_eax: db "eax"
@@ -377,6 +381,8 @@ tok_mem_rdi_rcx: db "[rdi"
 tok_mem_rdi_rcx_len equ $ - tok_mem_rdi_rcx
 tok_mem_rsi_open: db "[rsi"
 tok_mem_rsi_open_len equ $ - tok_mem_rsi_open
+tok_mem_rsp_open: db "[rsp"
+tok_mem_rsp_open_len equ $ - tok_mem_rsp_open
 tok_mem_rdi_open: db "[rdi"
 tok_mem_rdi_open_len equ $ - tok_mem_rdi_open
 tok_mem_rdx_open: db "[rdx"
@@ -401,6 +407,8 @@ tok_r10_close: db "r10]"
 tok_r10_close_len equ $ - tok_r10_close
 tok_one_close: db "1]"
 tok_one_close_len equ $ - tok_one_close
+tok_ten_close: db "10]"
+tok_ten_close_len equ $ - tok_ten_close
 tok_four_close: db "4]"
 tok_four_close_len equ $ - tok_four_close
 tok_rsdp_revision_close: db "RSDP_REVISION]"
@@ -437,6 +445,22 @@ tok_lsr_thr_empty: db "LSR_THR_EMPTY"
 tok_lsr_thr_empty_len equ $ - tok_lsr_thr_empty
 tok_lsr_data_ready: db "LSR_DATA_READY"
 tok_lsr_data_ready_len equ $ - tok_lsr_data_ready
+tok_error_no_data: db "ERROR_NO_DATA"
+tok_error_no_data_len equ $ - tok_error_no_data
+tok_error_timeout: db "ERROR_TIMEOUT"
+tok_error_timeout_len equ $ - tok_error_timeout
+tok_er_in_al_dx_sym: db "er_in_al_dx"
+tok_er_in_al_dx_sym_len equ $ - tok_er_in_al_dx_sym
+tok_er_out_dx_al_sym: db "er_out_dx_al"
+tok_er_out_dx_al_sym_len equ $ - tok_er_out_dx_al_sym
+tok_i8042_in_status: db "_i8042_in_status"
+tok_i8042_in_status_len equ $ - tok_i8042_in_status
+tok_i8042_in_data: db "_i8042_in_data"
+tok_i8042_in_data_len equ $ - tok_i8042_in_data
+tok_i8042_out_cmd: db "_i8042_out_cmd"
+tok_i8042_out_cmd_len equ $ - tok_i8042_out_cmd
+tok_i8042_out_data: db "_i8042_out_data"
+tok_i8042_out_data_len equ $ - tok_i8042_out_data
 tok_madt_ioapic_addr_close: db "MADT_IOAPIC_ADDR]"
 tok_madt_ioapic_addr_close_len equ $ - tok_madt_ioapic_addr_close
 tok_madt_ioapic_gsi_base_close: db "MADT_IOAPIC_GSI_BASE]"

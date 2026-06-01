@@ -567,6 +567,29 @@ er_fn match_more_and
     jmp     .yes
 .and_rcx_real:
     pop     r14
+    lea     rdi, [rel tok_al]
+    mov     esi, tok_al_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .and_rcx_real_actual
+    pop     r11
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    expect_imm8_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0x24
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_byte
+    jmp     .yes
+.and_rcx_real_actual:
+    pop     r14
     lea     rdi, [rel tok_rcx]
     mov     esi, tok_rcx_len
     push    r14
@@ -2596,6 +2619,29 @@ er_fn match_more_unary
     call    append_text_byte
     jmp     .yes
 .or_cl_al:
+    pop     r14
+    lea     rdi, [rel tok_al]
+    mov     esi, tok_al_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .or_cl_al_real
+    pop     r11
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    expect_imm8_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0x0c
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_byte
+    jmp     .yes
+.or_cl_al_real:
     pop     r14
     lea     rdi, [rel tok_cl]
     mov     esi, tok_cl_len

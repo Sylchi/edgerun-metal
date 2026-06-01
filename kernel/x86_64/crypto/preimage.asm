@@ -243,6 +243,7 @@ er_fn er_preimage_encode_epoch
     cmp     ebx, EPOCH_SIZE
     jb      .ee_fail
 
+    mov     rdi, r12
     call    er_stamp_valid
     er_check_zero eax, .ee_fail
 
@@ -336,6 +337,7 @@ er_fn er_preimage_decode_epoch
     mov     [r13 + 56], rax
 
     ; Validate stamp
+    mov     rdi, r13
     mov     rdi, r13
     call    er_stamp_valid
     er_check_zero eax, .de_fail

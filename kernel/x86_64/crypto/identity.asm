@@ -23,6 +23,8 @@ extern er_stamp_order
 %define DELEGATION_MATERIAL_SIZE 96
 %define EPOCH_SIZE             64
 %define ID_DOMAIN_LEN          26
+%define CHILD_DOMAIN_LEN       29
+%define APP_SCOPE_DOMAIN_LEN   33
 
 ; ── SourceKind enum values (u16) ──
 %define SOURCE_HASH                     1
@@ -545,6 +547,258 @@ er_fn er_identity_eql
     xor     eax, eax
     er_pop  rbx, r12, r13
     er_ret
+
+; ==================================================================
+; er_identity_instantiate — create a non-derived/non-delegated Identity
+; int er_identity_instantiate(uint16_t kind, uint16_t source_kind,
+;     const uint8_t* material, uint32_t material_len,
+;     const void* epoch, void* out_identity)
+; rdi=kind, rsi=source_kind, rdx=material, rcx=material_len, r8=epoch, r9=out
+; ==================================================================
+er_fn er_identity_instantiate
+    er_push rbx, r12, r13, r14, r15
+    push    r8
+
+    mov     r12d, edi           ; kind
+    mov     r13d, esi           ; source_kind
+    mov     r14, rdx            ; material
+    mov     r15d, ecx           ; material_len
+    mov     rbx, r9             ; out_identity
+
+    cmp     r13d, SOURCE_DELEGATION
+    je      .inst_fail
+    cmp     r13d, SOURCE_DERIVED
+    je      .inst_fail
+
+    sub     rsp, er_identity_source_size
+    mov     edi, r13d
+    mov     rsi, r14
+    mov     edx, r15d
+    mov     rcx, rsp
+    call    er_identity_source_prepare
+    er_check_zero eax, .inst_pop_fail
+
+    mov     edi, r12d
+    mov     rsi, rsp
+    mov     rdx, [rsp + er_identity_source_size]
+    mov     rcx, rbx
+    call    er_identity_init
+    add     rsp, er_identity_source_size
+    pop     r8
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+.inst_pop_fail:
+    add     rsp, er_identity_source_size
+.inst_fail:
+    xor     eax, eax
+    pop     r8
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; ==================================================================
+; er_identity_derive_child — derive a child identity from a valid parent.
+; int er_identity_derive_child(const void* parent, uint16_t child_kind,
+;     const void* epoch, const uint8_t* label, uint32_t label_len,
+;     const uint8_t* material, uint32_t material_len, void* out_identity)
+; rdi=parent, rsi=child_kind, rdx=epoch, rcx=label, r8=label_len, r9=material
+; stack: [rbp+16]=material_len, [rbp+24]=out_identity
+; ==================================================================
+er_fn er_identity_derive_child
+    er_frame_push_regs rbx, r12, r13, r14, r15
+    push    r9
+
+    mov     r12, rdi            ; parent
+    mov     r13d, esi           ; child_kind
+    mov     r14, rdx            ; epoch
+    mov     r15, rcx            ; label
+    mov     ebx, r8d            ; label_len
+
+    mov     rdi, r12
+    call    er_identity_valid
+    er_check_zero eax, .dc_fail
+
+    mov     rdi, r14
+    call    er_stamp_valid
+    er_check_zero eax, .dc_fail
+
+    mov     rdi, r15
+    mov     esi, ebx
+    call    er_bytes_nonzero
+    er_check_zero eax, .dc_fail
+
+    mov     rdi, [rbp - 48]
+    mov     esi, [rbp + 16]
+    call    er_bytes_nonzero
+    er_check_zero eax, .dc_fail
+
+    mov     eax, CHILD_DOMAIN_LEN + ID_SIZE + 2
+    add     eax, ebx
+    add     eax, [rbp + 16]
+    cmp     eax, 4096
+    ja      .dc_fail
+
+    sub     rsp, 4096 + HASH_SIZE + er_identity_source_size
+    mov     r10, rsp                            ; input buffer
+    lea     r11, [rsp + 4096]                   ; child material hash
+    lea     rdx, [rsp + 4096 + HASH_SIZE]       ; derived source
+
+    mov     rdi, r10
+    mov     esi, CHILD_DOMAIN_LEN
+    lea     rdx, [rel .child_domain]
+    call    _id_memcpy
+
+    lea     rdi, [r10 + CHILD_DOMAIN_LEN]
+    mov     esi, ID_SIZE
+    lea     rdx, [r12 + er_identity.id]
+    call    _id_memcpy
+
+    mov     [r10 + CHILD_DOMAIN_LEN + ID_SIZE], r13w
+
+    lea     rdi, [r10 + CHILD_DOMAIN_LEN + ID_SIZE + 2]
+    mov     esi, ebx
+    mov     rdx, r15
+    call    _id_memcpy
+
+    lea     rdi, [r10 + CHILD_DOMAIN_LEN + ID_SIZE + 2]
+    add     rdi, rbx
+    mov     esi, [rbp + 16]
+    mov     rdx, [rbp - 48]
+    call    _id_memcpy
+
+    mov     eax, CHILD_DOMAIN_LEN + ID_SIZE + 2
+    add     eax, ebx
+    add     eax, [rbp + 16]
+    mov     rdi, rsp
+    mov     esi, eax
+    lea     rdx, [rsp + 4096]
+    call    er_blake3_hash_bytes
+    er_check_zero eax, .dc_pop_fail
+
+    mov     edi, SOURCE_DERIVED
+    lea     rsi, [rsp + 4096]
+    mov     edx, HASH_SIZE
+    lea     rcx, [rsp + 4096 + HASH_SIZE]
+    call    er_identity_source_prepare
+    er_check_zero eax, .dc_pop_fail
+
+    mov     edi, r13d
+    lea     rsi, [rsp + 4096 + HASH_SIZE]
+    mov     rdx, r14
+    mov     rcx, [rbp + 24]
+    call    er_identity_init
+    add     rsp, 4096 + HASH_SIZE + er_identity_source_size
+    pop     r9
+    er_pop  rbx, r12, r13, r14, r15
+    er_frame_pop
+    er_ret
+.dc_pop_fail:
+    add     rsp, 4096 + HASH_SIZE + er_identity_source_size
+.dc_fail:
+    xor     eax, eax
+    pop     r9
+    er_pop  rbx, r12, r13, r14, r15
+    er_frame_pop
+    er_ret
+
+.child_domain: db "edgerun:zig:v1:identity-child"
+
+; ==================================================================
+; er_identity_instantiate_app — derive delegated app identity.
+; int er_identity_instantiate_app(const void* parent,
+;     const uint8_t* app_material, uint32_t app_material_len,
+;     const uint8_t* scope_hash, uint32_t scope_hash_len,
+;     const void* epoch, uint32_t operation, void* out_identity)
+; rdi=parent, rsi=app_material, rdx=app_material_len, rcx=scope_hash,
+; r8=scope_hash_len, r9=epoch, stack: [rbp+16]=operation, [rbp+24]=out
+; ==================================================================
+er_fn er_identity_instantiate_app
+    er_frame_push_regs rbx, r12, r13, r14, r15
+    push    r9
+
+    mov     r12, rdi            ; parent
+    mov     r13, rsi            ; app_material
+    mov     r14d, edx           ; app_material_len
+    mov     r15, rcx            ; scope_hash
+    mov     ebx, r8d            ; scope_hash_len
+
+    mov     rdi, r12
+    call    er_identity_valid
+    er_check_zero eax, .ia_fail
+
+    cmp     ebx, HASH_SIZE
+    jne     .ia_fail
+    mov     rdi, r15
+    mov     esi, HASH_SIZE
+    call    er_bytes_nonzero
+    er_check_zero eax, .ia_fail
+
+    mov     rdi, [rbp - 48]
+    call    er_stamp_valid
+    er_check_zero eax, .ia_fail
+
+    sub     rsp, er_identity_source_size + er_identity_size + 4096 + HASH_SIZE + er_identity_source_size
+    mov     edi, SOURCE_HASH
+    mov     rsi, r13
+    mov     edx, r14d
+    mov     rcx, rsp
+    call    er_identity_source_prepare
+    er_check_zero eax, .ia_pop_fail
+
+    mov     edi, KIND_APP
+    mov     rsi, rsp
+    mov     rdx, [rbp - 48]
+    lea     rcx, [rsp + er_identity_source_size]
+    call    er_identity_init
+    er_check_zero eax, .ia_pop_fail
+
+    lea     r10, [rsp + er_identity_source_size + er_identity_size]
+
+    mov     rdi, r10
+    mov     esi, APP_SCOPE_DOMAIN_LEN
+    lea     rdx, [rel .app_scope_domain]
+    call    _id_memcpy
+
+    mov     eax, [rbp + 16]
+    mov     [r10 + APP_SCOPE_DOMAIN_LEN], eax
+
+    lea     rdi, [r10 + APP_SCOPE_DOMAIN_LEN + 4]
+    mov     esi, HASH_SIZE
+    mov     rdx, r15
+    call    _id_memcpy
+
+    mov     rdi, r10
+    mov     esi, APP_SCOPE_DOMAIN_LEN + 4 + HASH_SIZE
+    lea     rdx, [rsp + er_identity_source_size + er_identity_size + 4096]
+    call    er_blake3_hash_bytes
+    er_check_zero eax, .ia_pop_fail
+
+    lea     rcx, [rsp + er_identity_source_size + er_identity_size + 4096 + HASH_SIZE]
+    lea     rsi, [rsp + er_identity_source_size + er_identity.id]
+    lea     rdi, [r12 + er_identity.id]
+    lea     rdx, [rsp + er_identity_source_size + er_identity_size + 4096]
+    call    er_identity_source_prepare_delegation
+    er_check_zero eax, .ia_pop_fail
+
+    mov     edi, KIND_DELEGATED
+    lea     rsi, [rsp + er_identity_source_size + er_identity_size + 4096 + HASH_SIZE]
+    mov     rdx, [rbp - 48]
+    mov     rcx, [rbp + 24]
+    call    er_identity_init
+    add     rsp, er_identity_source_size + er_identity_size + 4096 + HASH_SIZE + er_identity_source_size
+    pop     r9
+    er_pop  rbx, r12, r13, r14, r15
+    er_frame_pop
+    er_ret
+.ia_pop_fail:
+    add     rsp, er_identity_source_size + er_identity_size + 4096 + HASH_SIZE + er_identity_source_size
+.ia_fail:
+    xor     eax, eax
+    pop     r9
+    er_pop  rbx, r12, r13, r14, r15
+    er_frame_pop
+    er_ret
+
+.app_scope_domain: db "edgerun:zig:v1:identity-app-scope"
 
 ; ==================================================================
 ; Internal helper: _id_memcpy(rdi=dst, esi=len, rdx=src)

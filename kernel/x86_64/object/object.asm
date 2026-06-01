@@ -1081,6 +1081,7 @@ er_fn er_object_view_decode
     movzx   r8d, word [r14 + 16 + 18]
     mov     r10d, [r14 + 16 + 20]
     mov     r9,  [r14 + 16 + 24]
+    mov     [rsp + 88], r9
     movzx   r15d, word [r14 + 16]
 
     mov     edi, r15d
@@ -1099,15 +1100,16 @@ er_fn er_object_view_decode
     cmp     r15w, 2
     je      .set_body
     mov     rdx, [r14 + 16 + 8]
-    cmp     rdx, r9
+    cmp     rdx, [rsp + 88]
     jne     .corrupt_pop
 
 .set_body:
     mov     rax, [rsp + 80]
-    sub     rax, r9
+    sub     rax, [rsp + 88]
     add     rax, r12
     mov     [r14], rax
-    mov     [r14 + 8], r9
+    mov     rdx, [rsp + 88]
+    mov     [r14 + 8], rdx
 
     er_check_zero ebx, .check_env
     xor     r15d, r15d

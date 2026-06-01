@@ -1,0 +1,72 @@
+; EdgeRun BLAKE3 self-test — x86_64 assembly.
+
+%include "x86_64/macros.inc"
+%include "test/test_macros.inc"
+
+extern er_blake3_hash_bytes
+
+HASH_SIZE equ 32
+DATA_SIZE equ 1500
+
+SECTION .bss
+TEST_BSS_PASSED_FAILED
+hash_out: resb HASH_SIZE
+data: resb DATA_SIZE
+
+SECTION .data
+empty_input: db 0
+abc_input: db "abc"
+
+expected_empty:
+    db 0xaf, 0x13, 0x49, 0xb9, 0xf5, 0xf9, 0xa1, 0xa6
+    db 0xa0, 0x40, 0x4d, 0xea, 0x36, 0xdc, 0xc9, 0x49
+    db 0x9b, 0xcb, 0x25, 0xc9, 0xad, 0xc1, 0x12, 0xb7
+    db 0xcc, 0x9a, 0x93, 0xca, 0xe4, 0x1f, 0x32, 0x62
+
+expected_abc:
+    db 0x64, 0x37, 0xb3, 0xac, 0x38, 0x46, 0x51, 0x33
+    db 0xff, 0xb6, 0x3b, 0x75, 0x27, 0x3a, 0x8d, 0xb5
+    db 0x48, 0xc5, 0x58, 0x46, 0x5d, 0x79, 0xdb, 0x03
+    db 0xfd, 0x35, 0x9c, 0x6c, 0xd5, 0xbd, 0x9d, 0x85
+
+expected_1500:
+    db 0xf3, 0x9b, 0xf6, 0xcb, 0xbf, 0x1d, 0xa8, 0xee
+    db 0x9d, 0x12, 0x63, 0x46, 0xf7, 0x23, 0x50, 0x10
+    db 0x17, 0x92, 0xed, 0x2d, 0x8e, 0x0c, 0x01, 0xc5
+    db 0x39, 0x95, 0xeb, 0xc3, 0xf4, 0x76, 0x12, 0x3c
+
+SECTION .text
+global _start
+_start:
+    lea     rdi, [rel empty_input]
+    xor     esi, esi
+    lea     rdx, [rel hash_out]
+    call    er_blake3_hash_bytes
+    ASSERT_RAX 1
+    ASSERT_MEM_EQ [rel expected_empty], [rel hash_out], HASH_SIZE
+
+    lea     rdi, [rel abc_input]
+    mov     esi, 3
+    lea     rdx, [rel hash_out]
+    call    er_blake3_hash_bytes
+    ASSERT_RAX 1
+    ASSERT_MEM_EQ [rel expected_abc], [rel hash_out], HASH_SIZE
+
+    xor     ecx, ecx
+.fill_data:
+    mov     eax, ecx
+    imul    eax, eax, 31
+    add     eax, 7
+    mov     [rel data + rcx], al
+    inc     ecx
+    cmp     ecx, DATA_SIZE
+    jb      .fill_data
+
+    lea     rdi, [rel data]
+    mov     esi, DATA_SIZE
+    lea     rdx, [rel hash_out]
+    call    er_blake3_hash_bytes
+    ASSERT_RAX 1
+    ASSERT_MEM_EQ [rel expected_1500], [rel hash_out], HASH_SIZE
+
+    TEST_EXIT_FAILED

@@ -20,8 +20,13 @@ unset GOCACHE
 BUILD_DIR=".build"
 ASM_BUILD="${BUILD_DIR}/kernel"
 ASM_DIR="kernel/x86_64"
+KERNEL_X86_SOURCES="${ASM_DIR}/kernel_sources.erobj"
 TEST_DIR="kernel/test"
-TEST_REGISTRY="${TEST_DIR}/registry.tsv"
+TEST_REGISTRY="${TEST_DIR}/registry.erobj"
+APP_TEST_ROOTS="app/test_roots.erobj"
+APP_BUILD_STEPS="app/build_steps.erobj"
+BUILD_HELP_TOP="docs/build-help-top.erobj"
+BUILD_HELP_BOTTOM="docs/build-help-bottom.erobj"
 ER_ASM="${ER_ASM:-}"
 YASM="${YASM:-yasm}"
 ASM_INC="-I kernel"
@@ -60,6 +65,34 @@ asm_x86_obj() {
 	test -f "$dst"
 }
 
+object_body() {
+	local path="$1"
+	local magic version kind flags logical_len owners envelopes children body_len file_size reserved
+	magic=$(dd if="$path" bs=8 count=1 2>/dev/null)
+	if [ "$magic" != "EROBJ001" ]; then
+		echo "error: expected EROBJ001 object: ${path}" >&2
+		return 1
+	fi
+	version=$(od -An -tu2 -j 8 -N 2 "$path" | tr -d ' ')
+	kind=$(od -An -tu2 -j 10 -N 2 "$path" | tr -d ' ')
+	flags=$(od -An -tu4 -j 12 -N 4 "$path" | tr -d ' ')
+	logical_len=$(od -An -tu8 -j 16 -N 8 "$path" | tr -d ' ')
+	owners=$(od -An -tu2 -j 24 -N 2 "$path" | tr -d ' ')
+	envelopes=$(od -An -tu2 -j 26 -N 2 "$path" | tr -d ' ')
+	children=$(od -An -tu4 -j 28 -N 4 "$path" | tr -d ' ')
+	body_len=$(od -An -tu8 -j 32 -N 8 "$path" | tr -d ' ')
+	reserved=$(od -An -tx1 -j 132 -N 16 "$path" | tr -d ' \n')
+	file_size=$(stat -c '%s' "$path")
+	if [ "$version" != "1" ] || [ "$kind" != "1" ] || [ "$flags" != "0" ] || \
+		[ "$owners" != "0" ] || [ "$envelopes" != "0" ] || [ "$children" != "0" ] || \
+		[ "$logical_len" != "$body_len" ] || [ "$file_size" -ne $((148 + body_len)) ] || \
+		[ "$reserved" != "00000000000000000000000000000000" ]; then
+		echo "error: invalid build data object: ${path}" >&2
+		return 1
+	fi
+	tail -c +149 "$path"
+}
+
 elf64()   { asm_x86_obj elf64 "$2" "$1"; }
 elf32()   { asm_x86_obj elf32 "$2" "$1"; }
 elf64_dbg() { asm_x86_obj elf64 "$2" "$1" -dX25519_DEBUG; }
@@ -80,94 +113,7 @@ kernel_objs() {
 }
 
 # ---- kernel objects (elf32) ----
-KERNEL_ASM_SRCS="
-	crypto/blake3.asm
-	rt/bytes.asm
-	rt/clock.asm
-	rt/ctype.asm
-	crypto/identity.asm
-	rt/math.asm
-	rt/runtime.asm
-	../driver/serial.asm
-	tpm/tpm.asm
-	tpm/tpm_crb.asm
-	../driver/cmos.asm
-	../driver/i8042.asm
-	../driver/cros_ec.asm
-	../driver/dw_i2c.asm
-	../driver/i2c_hid.asm
-	../driver/pci.asm
-	../driver/nvme.asm
-	../driver/store.asm
-	../driver/amdgpu.asm
-	crypto/preimage.asm
-	../driver/display.asm
-	../driver/fb_text.asm
-	../driver/acpi.asm
-	../driver/portio.asm
-	../driver/hda.asm
-	../driver/xhci.asm
-	../driver/uvc.asm
-	../driver/rtl8125.asm
-	../driver/rtl8922.asm
-	../driver/ax210.asm
-	../driver/bt.asm
-	../driver/virtio.asm
-	../driver/virtio_gpu.asm
-	../driver/virtio_net.asm
-	../driver/smn.asm
-	../driver/psp_mailbox.asm
-	../driver/psp_rom_armor.asm
-	../driver/spi_flash.asm
-	../driver/intel_sdhci.asm
-	../driver/intel_gpu.asm
-	net/net.asm
-	net/arp.asm
-	net/ipv4.asm
-	net/tcp.asm
-	net/http.asm
-	crypto/sha256.asm
-	crypto/sha512.asm
-	crypto/sha3.asm
-	crypto/ed25519.asm
-	crypto/curve25519.asm
-	crypto/tor_ntor.asm
-	crypto/tor_aes.asm
-	crypto/tls.asm
-	crypto/tor_cell.asm
-	crypto/tor_digest.asm
-	crypto/tor_hs.asm
-	crypto/tor_hs_app.asm
-	crypto/tor.asm
-	crypto/local_cell.asm
-	crypto/local_route.asm
-	crypto/local_circuit.asm
-	media/av1_bits.asm
-	media/vp8.asm
-	media/vp9.asm
-	media/image_formats.asm
-	media/webp.asm
-	media/mp4.asm
-	media/av1_obu.asm
-	media/av1_ivf.asm
-	media/av1_sequence.asm
-	media/av1_frame.asm
-	media/av1_tile.asm
-	media/av1_block.asm
-	media/av1_reduced.asm
-	agent/http_agent.asm
-	agent/da.asm
-	agent/da_wasm.asm
-	agent/input_kbd.asm
-	ui/render_ir.asm
-	ui/sw_fb.asm
-	wasm/wasm_interpreter.asm
-	wasm/wasm_compiler.asm
-	wasm/tsx_parser.asm
-	wasm/wasm_test_data.asm
-	wasm/da_wasm_test.asm
-	entry.asm
-"
+KERNEL_ASM_SRCS="$(object_body "${KERNEL_X86_SOURCES}")"
 
 # ---- assemble_kernel ----
 assemble_kernel() {
@@ -450,7 +396,8 @@ build_test_stubbed() {
 }
 
 test_registry() {
- cat "${TEST_REGISTRY}"
+ object_body "${TEST_REGISTRY}"
+ printf '%s\n' 'test-object-asm|unit|object|yes|cmd_test_object_asm|Run object serialization ASM test'
 }
 
 cmd_test_registry() {
@@ -495,7 +442,7 @@ cmd_test_registry() {
  if [ "$failed" -ne 0 ]; then
   exit 1
  fi
- printf 'PASS test-registry %d entries\n' "$count"
+	printf 'PASS test-registry %d entries\n' "$count"
 }
 
 cmd_check_x86_asm_boundary() {
@@ -1554,36 +1501,14 @@ cmd_test_core() {
 }
 
 cmd_test_app() {
-  local roots=(
-   src/clock.zig
-   src/bytes.zig
-   src/math.zig
-   src/crypto.zig
-   src/preimage.zig
-   src/identity.zig
-   src/seal.zig
-   src/kernel_authority_test.zig
-   src/object.zig
-   src/store.zig
-   src/encrypted_chat.zig
-   src/app_encrypted_chat.zig
-   src/app_pipeline_dashboard.zig
-   src/sdk.zig
-   src/project_intro_video.zig
-   src/media_video_dump.zig
-   src/media_test.zig
-   src/ui_core_test.zig
-   src/ui_codec_test.zig
-   src/svg_path_parser.zig
-   src/component_gallery_test.zig
-   src/jc3248_display_frame.zig
-   src/wayland_window_host.zig
-   src/drm_gbm_host.zig
-  )
  local root
- for root in "${roots[@]}"; do
+ while IFS= read -r root; do
+  [ -n "$root" ] || continue
+  case "$root" in
+   src/crypto.zig|src/identity.zig|src/seal.zig|src/kernel_authority_test.zig) continue ;;
+  esac
   (cd app && zig test -ODebug --dep er_std -Mroot="$root" -Mer_std=src/std.zig)
- done
+ done < <(object_body "${APP_TEST_ROOTS}")
 }
 
 cmd_app_ui_wasm() {
@@ -1757,21 +1682,22 @@ cmd_real_tpm() {
 }
 
 cmd_app() {
- cmd_test_app
- cmd_app_ui_wasm
- cmd_immutable_kernel_gop_smoke_efi
- cmd_sdk_cli
- cmd_sdk_bench
- cmd_app_exe_build_only src/project_intro_video.zig edgerun-project-intro-video
- cmd_app_exe_build_only src/encrypted_chat_preview.zig edgerun-chat-preview
- cmd_app_exe_build_only src/jc3248_display_frame.zig edgerun-jc3248-frame
- cmd_build_dashboard
- cmd_media_video_dump
- cmd_ifstatus
- cmd_pi_usb_boot
- cmd_pi_usb_control
- cmd_wayland_window
- cmd_drm_gbm_window
+ local kind arg1 arg2
+ while IFS='|' read -r kind arg1 arg2; do
+  [ -n "$kind" ] || continue
+  case "$kind" in
+   runner)
+    "$arg1"
+    ;;
+   build-only)
+    cmd_app_exe_build_only "$arg1" "$arg2"
+    ;;
+   *)
+    echo "error: invalid app build step: ${kind}" >&2
+    exit 1
+    ;;
+  esac
+ done < <(object_body "${APP_BUILD_STEPS}")
 }
 
 cmd_test() {
@@ -1819,8 +1745,32 @@ cmd_test_clock() {
 	build_test_self "test_clock_self" "rt/clock" "rt/bytes" "rt/runtime"
 }
 
+cmd_test_bytes() {
+	build_test_self "test_bytes_self" "rt/bytes" "rt/runtime"
+}
+
 cmd_test_identity() {
 	build_test_self "test_identity_self" "crypto/identity" "crypto/blake3" "rt/bytes" "rt/clock" "rt/runtime"
+}
+
+cmd_test_preimage() {
+	build_test_self "test_preimage_self" "crypto/preimage" "crypto/blake3" "rt/clock" "rt/bytes" "rt/runtime"
+}
+
+cmd_test_seal() {
+	build_test_self "test_seal_self" "crypto/seal" "crypto/preimage" "crypto/blake3" "rt/bytes" "rt/clock" "rt/runtime"
+}
+
+cmd_test_kernel_authority() {
+	build_test_self "test_kernel_authority_self" "content/kernel_authority" "rt/bytes" "rt/runtime"
+}
+
+cmd_test_object_asm() {
+	build_test_self "test_object_self" "object/object" "crypto/preimage" "crypto/blake3" "rt/bytes" "rt/clock" "rt/runtime"
+}
+
+cmd_test_blake3() {
+	build_test_self "test_blake3_self" "crypto/blake3"
 }
 
 cmd_test_serial() {
@@ -2141,31 +2091,6 @@ cmd_bench_wasm_jit() {
 	"$bin"
 }
 
-build_zig_wasm_bench_artifacts() {
-	local zig_src="app/bench/zig_wasm_bench.zig"
-	local native_obj="${ASM_BUILD}/zig_wasm_bench_native.o"
-	local wasm_bin="${ASM_BUILD}/zig_wasm_bench.wasm"
-	local asm_src="${TEST_DIR}/bench_zig_wasm.asm"
-	local asm_obj="${ASM_BUILD}/bench_zig_wasm.o"
-	local bin="${ASM_BUILD}/bench_zig_wasm"
-	zig build-obj -O ReleaseFast -fstrip -target x86_64-linux -femit-bin="$native_obj" "$zig_src"
-	zig build-exe -O ReleaseFast -fstrip -target wasm32-freestanding -fno-entry -rdynamic -femit-bin="$wasm_bin" "$zig_src"
-	local wasm_abs="${PWD}/${wasm_bin}"
-	asm_x86_obj elf64 "$asm_obj" "$asm_src" -DZIG_WASM_BENCH_PATH="\"${wasm_abs}\""
-	local runtime_o="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$runtime_o" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$asm_obj" "$native_obj" "$runtime_o"
-	echo "  LD  ${bin}"
-}
-
-cmd_bench_zig_wasm() {
-	build_zig_wasm_bench_artifacts
-	local bin="${ASM_BUILD}/bench_zig_wasm"
-	"$bin"
-}
-
 build_tor_host_objects() {
 	mkdir -p "${ASM_BUILD}"
 	local runtime_o="${ASM_BUILD}/lib_runtime.o"
@@ -2224,6 +2149,7 @@ PI_KERNEL_ELF="${PI_BUILD}/kernel.elf"
 PI_KERNEL_IMG="${PI_BUILD}/kernel.img"
 PI_USB_BOOT="${HOST_BUILD}/pi_usb_boot"
 ASM_ARM_DIR="kernel/arm/pi"
+PI_KERNEL_SOURCES="${ASM_ARM_DIR}/kernel_sources.erobj"
 ARM_AS="${ARM_AS:-arm-none-eabi-as}"
 ARM_LD="${ARM_LD:-arm-none-eabi-ld}"
 ARM_OBJCOPY="${ARM_OBJCOPY:-arm-none-eabi-objcopy}"
@@ -2235,14 +2161,16 @@ arm_obj() {
 
 cmd_pi_kernel() {
 	mkdir -p "${PI_BUILD}"
-	arm_obj "${ASM_ARM_DIR}/start.asm" "${PI_BUILD}/start.o"
-	arm_obj "${ASM_ARM_DIR}/emmc.asm" "${PI_BUILD}/emmc.o"
-	arm_obj "${ASM_ARM_DIR}/dwc2.asm" "${PI_BUILD}/dwc2.o"
-	arm_obj "${ASM_ARM_DIR}/gpio.asm" "${PI_BUILD}/gpio.o"
-	arm_obj "${ASM_ARM_DIR}/audio.asm" "${PI_BUILD}/audio.o"
-	arm_obj "${ASM_ARM_DIR}/bt.asm" "${PI_BUILD}/bt.o"
-	arm_obj "${ASM_ARM_DIR}/gpu.asm" "${PI_BUILD}/gpu.o"
-	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "${PI_KERNEL_ELF}" "${PI_BUILD}/start.o" "${PI_BUILD}/emmc.o" "${PI_BUILD}/dwc2.o" "${PI_BUILD}/gpio.o" "${PI_BUILD}/audio.o" "${PI_BUILD}/bt.o" "${PI_BUILD}/gpu.o"
+	local objs=""
+	local src base obj
+	while IFS= read -r src; do
+		[ -n "$src" ] || continue
+		base="${src%.asm}"
+		obj="${PI_BUILD}/${base##*/}.o"
+		arm_obj "${ASM_ARM_DIR}/${src}" "$obj"
+		objs="${objs} ${obj}"
+	done < <(object_body "${PI_KERNEL_SOURCES}")
+	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "${PI_KERNEL_ELF}" ${objs}
 	${ARM_OBJCOPY} -O binary "${PI_KERNEL_ELF}" "${PI_KERNEL_IMG}"
 	local esize=$(stat -c '%s' "${PI_KERNEL_ELF}" 2>/dev/null || echo 0)
 	local bsize=$(stat -c '%s' "${PI_KERNEL_IMG}" 2>/dev/null || echo 0)
@@ -2343,16 +2271,24 @@ cmd_deps_audit() {
 	local binaries
 	binaries=$(find . \( "${prunes[@]}" \) -prune -o -type f \( \
 		-name '*.a' -o -name '*.bin' -o -name '*.clm_blob' -o -name '*.elf' -o \
+		-name '*.erobj' -o \
 		-name '*.fw' -o -name '*.hcd' -o -name '*.img' -o -name '*.o' -o \
 		-name '*.so' -o -name '*.dylib' -o -name '*.dll' -o \
 		-name '*.ucode' -o -name '*.wasm' -o -name '*.jar' -o -name '*.class' -o -name '*.pyc' \
 		\) -print | sort | while IFS= read -r path; do
 		case "$path" in
+			./app/build_steps.erobj|\
+			./app/test_roots.erobj|\
+			./docs/build-help-bottom.erobj|\
+			./docs/build-help-top.erobj|\
 			./app/src/gen/icon_asset_pack_index.bin|\
 			./app/src/gen/icon_asset_pack_ir.bin|\
 			./app/src/gen/icon_names.bin|\
 			./kernel/driver/font_atlas.bin|\
 			./kernel/driver/font_glyph_table.bin|\
+			./kernel/arm/pi/kernel_sources.erobj|\
+			./kernel/test/registry.erobj|\
+			./kernel/x86_64/kernel_sources.erobj|\
 			./kernel/x86_64/wasm/agent_minimal.wasm|\
 			./kernel/x86_64/wasm/da_test.wasm|\
 			./kernel/x86_64/wasm/test_imports.wasm|\
@@ -2381,68 +2317,9 @@ cmd_deps_audit() {
 }
 
 cmd_help() {
-	cat <<'EOF'
-EdgeRun build targets:
-  kernel              Build flat x86_64 kernel.bin
-  kernel-hello        Build kernel.img and boot it in QEMU (serial)
-  kernel-vnc          Build kernel.img and boot it in QEMU (VNC :0)
-  kernel-net          Build kernel.img and boot it in QEMU with virtio-net
-  kernel-net-tpm      Build kernel.img and boot it in QEMU with swtpm + virtio-net
-  kernel-net-tor      Build kernel.img with Tor autostart + boot QEMU net/TPM
-  kernel-tpm-live-test    Build kernel with TPM live test main
-  kernel-tpm-live-test-qemu Build + run in QEMU with swtpm
-  kernel-efi          Build kernel.efi
-  install-efi         Build + install kernel.efi to ESP + add boot entry
-  test                Run all self-hosted ASM tests
-  test-core           Run default unit + contract tests, excluding emulator tests
-  test-unit           Run default unit tests
-  test-contract       Run default architecture contract tests
-  test-emulator       Run default emulator-backed tests
-  test-subsystem NAME Run default tests for one subsystem (wasm, route, ui, media, crypto, driver, rt, net, pi)
-  test-list           List tests as TSV: target, category, subsystem, default, description
-  test-status [TARGET...] Run tests and emit TSV: target, category, subsystem, status, log
-  test-status --category NAME Run default tests in one category
-  test-status --subsystem NAME Run default tests in one subsystem
-  test-status --core    Run default unit + contract tests as TSV status
-  deps-audit         Check for undeclared external dependency manifests and blobs
-  app                Run owned app build path without app/build.zig
-  app-ui-wasm        Build UI WASM directly without app/build.zig
-  immutable-kernel-gop-smoke-efi Build UEFI native renderer GOP smoke without app/build.zig
-  sdk-cli            Build and run SDK simulation without app/build.zig
-  sdk-bench          Build and run SDK benchmark without app/build.zig
-  project-intro-video Build and run project intro renderer without app/build.zig
-  chat-preview       Build and run chat preview renderer without app/build.zig
-  jc3248-frame       Build and run JC3248 frame renderer without app/build.zig
-  build-dashboard    Build dashboard renderer without app/build.zig
-  media-video-dump   Build media video dump tool without app/build.zig
-  ifstatus           Build interface status publisher without app/build.zig
-  pi-usb-load        Build Pi USB boot host tool (x86_64 ASM)
-  pi-usb-control     Build Pi USB control host tool (x86_64 ASM)
-  wayland-window     Build Wayland native window host without app/build.zig
-  drm-gbm-window     Build DRM/GBM native window host without app/build.zig
-  tpm-real-check     Build real TPM checker without app/build.zig
-  real-tpm           Build and run real TPM checker against /dev/tpmrm0
-  x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
-EOF
- cmd_test_help
- cat <<'EOF'
-  bench-tor           Run Tor local AES cell latency/throughput benchmark
-  bench-tor-hs        Run hidden-service local self-connect benchmark
-  bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
-  bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
-  er-asm              Build owned x86 ASM assembler front-end
-  er-asm-obj SRC [O] Assemble one x86 source flat binary with owned er_asm; no yasm fallback
-  er-asm-all          Try every x86 .asm source as a flat binary with owned er_asm; no yasm fallback
-  tor-hs-host         Build hosted hidden-service library smoke binary
-  tor-live-host       Build hosted live Tor ORPort probe binary
-  pi-kernel           Build Pi Zero W kernel.img (ARMv6)
-  pi-usb-boot         Build Pi USB boot host tool (x86_64)
-  pi-boot             Build + boot Pi Zero via USB
-  esp32-serial-boot   Build ESP32 serial boot host tool (x86_64)
-  er-efiboot          Build repo-owned EFI variable manager
-  jc3248-firmware     Build JC3248W535 ESP32-S3 firmware descriptor
-  clean               Remove .build/
-EOF
+	object_body "${BUILD_HELP_TOP}"
+	cmd_test_help
+	object_body "${BUILD_HELP_BOTTOM}"
 }
 
 # ---- dispatch ----
@@ -2494,7 +2371,6 @@ case "${1:-help}" in
 	bench-tor)      cmd_bench_tor ;;
 	bench-tor-hs)   cmd_bench_tor_hs ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
-	bench-zig-wasm) cmd_bench_zig_wasm ;;
 	er-asm)          cmd_er_asm ;;
 	er-asm-obj)      shift; cmd_er_asm_obj "$@" ;;
 	er-asm-all)      cmd_er_asm_all ;;

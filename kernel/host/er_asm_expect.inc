@@ -701,6 +701,28 @@ er_fn expect_symbol_value_operand
     sub     r11, r10
     test    r11, r11
     jz      .bad
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_error_no_data]
+    mov     ecx, tok_error_no_data_len
+    call    token_eq
+    test    eax, eax
+    jz      .error_timeout
+    mov     qword [rel imm_u32_value], 23
+    mov     eax, 1
+    jmp     .done
+.error_timeout:
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_error_timeout]
+    mov     ecx, tok_error_timeout_len
+    call    token_eq
+    test    eax, eax
+    jz      .label
+    mov     qword [rel imm_u32_value], 20
+    mov     eax, 1
+    jmp     .done
+.label:
     call    find_label_value
     test    eax, eax
     jz      .equ

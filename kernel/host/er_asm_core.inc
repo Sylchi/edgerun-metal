@@ -322,6 +322,9 @@ er_fn scan_source
 .not_equ:
     mov     r12, r10
     mov     r13, r11
+    call    expand_macro_invocation
+    test    eax, eax
+    jnz     .skip_line
     cmp     qword [rel generic_instr_mode], 1
     je      .generic_instruction
     cmp     qword [rel exit_instr_step], 0
@@ -916,9 +919,7 @@ er_fn handle_preproc
     call    token_eq
     test    eax, eax
     jz      .ifdef
-    lea     rdx, [rel tok_percent_endmacro]
-    mov     ecx, tok_percent_endmacro_len
-    call    skip_to_preproc_token
+    call    record_macro_definition
     jmp     .done
 .ifdef:
     mov     rdi, r12
@@ -1009,6 +1010,262 @@ er_fn skip_to_preproc_token
     mov     r14, rbx
 .done:
     er_pop  rbx, r12, r13
+    ret
+
+er_fn record_macro_definition
+    er_push rbx, r10, r11, r12, r13, r15
+    mov     rbx, [rel macro_count]
+    cmp     rbx, ER_ASM_MACRO_CAP
+    jae     .bad
+    call    skip_space_inline
+    mov     r10, r14
+    call    skip_token
+    mov     r11, r14
+    sub     r11, r10
+    test    r11, r11
+    jz      .bad
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    cmp     qword [rel imm_u32_value], ER_ASM_MACRO_ARG_CAP
+    ja      .bad
+    mov     [rel macro_name_ptr + rbx * 8], r10
+    mov     [rel macro_name_len + rbx * 8], r11
+    mov     rax, [rel imm_u32_value]
+    mov     [rel macro_arg_count + rbx * 8], rax
+.header_eol:
+    cmp     r14, r15
+    jae     .bad
+    movzx   eax, byte [r14]
+    inc     r14
+    cmp     al, 10
+    jne     .header_eol
+    mov     r12, r14
+.find_line:
+    cmp     r14, r15
+    jae     .bad
+    mov     r13, r14
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], '%'
+    jne     .next_line
+    mov     rdi, r14
+    call    skip_token
+    mov     rsi, r14
+    sub     rsi, rdi
+    lea     rdx, [rel tok_percent_endmacro]
+    mov     ecx, tok_percent_endmacro_len
+    call    token_eq
+    test    eax, eax
+    jnz     .found
+    mov     r14, r13
+.next_line:
+    cmp     r14, r15
+    jae     .bad
+    movzx   eax, byte [r14]
+    inc     r14
+    cmp     al, 10
+    jne     .next_line
+    jmp     .find_line
+.found:
+    mov     [rel macro_body_ptr + rbx * 8], r12
+    mov     rax, r13
+    sub     rax, r12
+    mov     [rel macro_body_len + rbx * 8], rax
+    mov     r14, r13
+    inc     qword [rel macro_count]
+    mov     eax, 1
+    jmp     .done
+.bad:
+    mov     qword [rel exit_subset_bad], 1
+    xor     eax, eax
+.done:
+    er_pop  rbx, r10, r11, r12, r13, r15
+    ret
+
+er_fn expand_macro_invocation
+    er_push rbx, r10, r11, r12, r13, r14, r15
+    xor     ebx, ebx
+.find:
+    cmp     rbx, [rel macro_count]
+    jae     .no
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, [rel macro_name_ptr + rbx * 8]
+    mov     rcx, [rel macro_name_len + rbx * 8]
+    call    token_eq
+    test    eax, eax
+    jnz     .found
+    inc     rbx
+    jmp     .find
+.found:
+    mov     r10, [rel macro_arg_count + rbx * 8]
+    call    parse_macro_args
+    test    eax, eax
+    jz      .bad
+    mov     r12, [rel macro_body_ptr + rbx * 8]
+    mov     r13, [rel macro_body_len + rbx * 8]
+    call    build_macro_expansion
+    test    eax, eax
+    jz      .bad
+    lea     r14, [rel macro_expand_buf]
+    lea     r15, [rel macro_expand_buf + rax]
+    call    scan_source
+    mov     eax, 1
+    jmp     .done
+.bad:
+    mov     qword [rel generic_instr_bad], 1
+    mov     eax, 1
+    jmp     .done
+.no:
+    xor     eax, eax
+.done:
+    er_pop  rbx, r10, r11, r12, r13, r14, r15
+    ret
+
+; parse_macro_args(r10=expected argc, r14=cursor after macro name) -> eax=1/0.
+er_fn parse_macro_args
+    er_push rbx, r11, r12, r13
+    xor     ebx, ebx
+    test    r10, r10
+    jz      .no_args
+.arg_loop:
+    cmp     rbx, r10
+    jae     .check_end
+    call    skip_space_inline
+    mov     r12, r14
+    mov     r13, r14
+.scan_arg:
+    cmp     r14, r15
+    jae     .arg_done
+    movzx   eax, byte [r14]
+    cmp     al, ','
+    je      .arg_done
+    cmp     al, 10
+    je      .arg_done
+    cmp     al, ';'
+    je      .arg_done
+    inc     r14
+    mov     r13, r14
+    jmp     .scan_arg
+.arg_done:
+    cmp     r13, r12
+    jb      .bad
+.trim:
+    cmp     r13, r12
+    jbe     .store
+    movzx   eax, byte [r13 - 1]
+    cmp     al, ' '
+    jne     .store
+    dec     r13
+    jmp     .trim
+.store:
+    mov     [rel macro_arg_ptr + rbx * 8], r12
+    mov     rax, r13
+    sub     rax, r12
+    mov     [rel macro_arg_len + rbx * 8], rax
+    inc     rbx
+    cmp     r14, r15
+    jae     .check_end
+    cmp     byte [r14], ','
+    jne     .check_end
+    inc     r14
+    jmp     .arg_loop
+.no_args:
+    call    expect_line_end
+    jmp     .done
+.check_end:
+    cmp     rbx, r10
+    jne     .bad
+    call    expect_line_end
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx, r11, r12, r13
+    ret
+
+; build_macro_expansion(r12=body ptr, r13=body len) -> eax=len or 0 on failure.
+er_fn build_macro_expansion
+    er_push rbx, r10, r11, r12, r13, r14, r15
+    lea     r14, [rel macro_expand_buf]
+    xor     ebx, ebx
+.copy:
+    cmp     rbx, r13
+    jae     .finish
+    movzx   eax, byte [r12 + rbx]
+    cmp     al, '%'
+    jne     .copy_byte
+    mov     r10, rbx
+    inc     r10
+    cmp     r10, r13
+    jae     .copy_byte
+    movzx   eax, byte [r12 + r10]
+    cmp     al, '1'
+    jb      .copy_percent
+    cmp     al, '8'
+    ja      .copy_percent
+    sub     al, '1'
+    movzx   r11d, al
+    mov     r15, [rel macro_arg_len + r11 * 8]
+    test    r15, r15
+    jz      .bad
+    mov     r10, [rel macro_arg_ptr + r11 * 8]
+.copy_arg:
+    test    r15, r15
+    jz      .arg_done
+    movzx   eax, byte [r10]
+    push    rax
+    call    macro_expand_room
+    test    eax, eax
+    jz      .bad_pop
+    pop     rax
+    mov     [r14], al
+    inc     r14
+    inc     r10
+    dec     r15
+    jmp     .copy_arg
+.arg_done:
+    add     rbx, 2
+    jmp     .copy
+.copy_percent:
+    mov     eax, '%'
+.copy_byte:
+    push    rax
+    call    macro_expand_room
+    test    eax, eax
+    jz      .bad_pop
+    pop     rax
+    mov     [r14], al
+    inc     r14
+    inc     rbx
+    jmp     .copy
+.finish:
+    lea     rax, [rel macro_expand_buf]
+    mov     rdx, r14
+    sub     rdx, rax
+    mov     rax, rdx
+    jmp     .done
+.bad:
+    xor     eax, eax
+    jmp     .done
+.bad_pop:
+    pop     rax
+    xor     eax, eax
+.done:
+    er_pop  rbx, r10, r11, r12, r13, r14, r15
+    ret
+
+er_fn macro_expand_room
+    lea     rax, [rel macro_expand_buf]
+    add     rax, ER_ASM_MACRO_EXPAND_CAP
+    cmp     r14, rax
+    jae     .no
+    mov     eax, 1
+    ret
+.no:
+    xor     eax, eax
     ret
 
 er_fn record_define

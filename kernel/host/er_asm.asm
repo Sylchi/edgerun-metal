@@ -24,6 +24,9 @@ ER_ASM_GLOBAL_CAP equ 256
 ER_ASM_LABEL_CAP equ 256
 ER_ASM_BRANCH_CAP equ 256
 ER_ASM_PATH_SIZE equ 4096
+ER_ASM_MACRO_CAP equ 64
+ER_ASM_MACRO_ARG_CAP equ 8
+ER_ASM_MACRO_EXPAND_CAP equ 16384
 ASCII_0 equ '0'
 ASCII_9 equ '9'
 ASCII_A equ 'A'
@@ -85,6 +88,15 @@ pending_call_ptr: resq ER_ASM_BRANCH_CAP
 pending_call_len: resq ER_ASM_BRANCH_CAP
 pending_call_off: resq ER_ASM_BRANCH_CAP
 pending_call_count: resq 1
+macro_name_ptr: resq ER_ASM_MACRO_CAP
+macro_name_len: resq ER_ASM_MACRO_CAP
+macro_arg_count: resq ER_ASM_MACRO_CAP
+macro_body_ptr: resq ER_ASM_MACRO_CAP
+macro_body_len: resq ER_ASM_MACRO_CAP
+macro_count: resq 1
+macro_arg_ptr: resq ER_ASM_MACRO_ARG_CAP
+macro_arg_len: resq ER_ASM_MACRO_ARG_CAP
+macro_expand_buf: resb ER_ASM_MACRO_EXPAND_CAP
 source_dir_buf: resb ER_ASM_PATH_SIZE
 include_path_buf: resb ER_ASM_PATH_SIZE
 num_buf:        resb 32

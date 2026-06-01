@@ -248,6 +248,20 @@ er_fn emit_short_branch_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_in_al_dx_sym]
+    mov     ecx, tok_er_in_al_dx_sym_len
+    call    token_eq
+    test    eax, eax
+    jnz     .inline_in_al_dx
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_out_dx_al_sym]
+    mov     ecx, tok_er_out_dx_al_sym_len
+    call    token_eq
+    test    eax, eax
+    jnz     .inline_out_dx_al
     call    expect_line_end
     test    eax, eax
     jz      .bad
@@ -293,6 +307,22 @@ er_fn emit_short_branch_operand
     inc     qword [rel pending_branch_count]
     mov     eax, 1
     jmp     .done
+.inline_in_al_dx:
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0xec
+    call    append_text_byte
+    mov     eax, 1
+    jmp     .done
+.inline_out_dx_al:
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0xee
+    call    append_text_byte
+    mov     eax, 1
+    jmp     .done
 .bad:
     mov     qword [rel exit_subset_bad], 1
     xor     eax, eax
@@ -310,6 +340,20 @@ er_fn emit_call_label_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_in_al_dx_sym]
+    mov     ecx, tok_er_in_al_dx_sym_len
+    call    token_eq
+    test    eax, eax
+    jnz     .inline_in_al_dx
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_out_dx_al_sym]
+    mov     ecx, tok_er_out_dx_al_sym_len
+    call    token_eq
+    test    eax, eax
+    jnz     .inline_out_dx_al
     call    expect_line_end
     test    eax, eax
     jz      .bad
@@ -339,6 +383,22 @@ er_fn emit_call_label_operand
     mov     [rel pending_call_len + rax * 8], r13
     mov     [rel pending_call_off + rax * 8], rbx
     inc     qword [rel pending_call_count]
+    mov     eax, 1
+    jmp     .done
+.inline_in_al_dx:
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0xec
+    call    append_text_byte
+    mov     eax, 1
+    jmp     .done
+.inline_out_dx_al:
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0xee
+    call    append_text_byte
     mov     eax, 1
     jmp     .done
 .bad:
