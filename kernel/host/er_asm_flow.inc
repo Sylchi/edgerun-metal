@@ -463,6 +463,20 @@ er_fn track_real_instruction
     push    r14
     jmp     .math_mov_after_more
 .math_mov_try_more_runtime:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_shl]
+    mov     ecx, tok_shl_len
+    call    token_eq
+    test    eax, eax
+    jnz     .math_mov_skip_more_runtime
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_shr]
+    mov     ecx, tok_shr_len
+    call    token_eq
+    test    eax, eax
+    jnz     .math_mov_skip_more_runtime
     push    r14
     call    match_more_runtime_ops
     test    eax, eax
@@ -470,6 +484,9 @@ er_fn track_real_instruction
     pop     r11
     mov     eax, 1
     ret
+.math_mov_skip_more_runtime:
+    push    r14
+    jmp     .math_mov_after_more
 .math_mov_after_more:
     pop     r14
     push    r14
@@ -525,6 +542,20 @@ er_fn track_real_instruction
     ret
 .xor_more_runtime:
     pop     r14
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_shl]
+    mov     ecx, tok_shl_len
+    call    token_eq
+    test    eax, eax
+    jnz     .xor_more_runtime_skip
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_shr]
+    mov     ecx, tok_shr_len
+    call    token_eq
+    test    eax, eax
+    jnz     .xor_more_runtime_skip
     push    r14
     call    match_more_runtime_ops
     test    eax, eax
@@ -532,6 +563,9 @@ er_fn track_real_instruction
     pop     r11
     mov     eax, 1
     ret
+.xor_more_runtime_skip:
+    push    r14
+    jmp     .shift
 .shift:
     pop     r14
     push    r14

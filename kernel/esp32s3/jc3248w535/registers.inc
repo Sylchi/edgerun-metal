@@ -19,6 +19,13 @@
 
 %define JC3248_TOUCH_I2C_ADDR       0x3b
 
+%define JC3248_BLE_FRAME_MAGIC      0x49555245
+%define JC3248_BLE_FRAME_VERSION    1
+%define JC3248_BLE_FRAME_HEADER     8
+%define JC3248_BLE_LEGACY_PAYLOAD   27
+%define JC3248_BLE_ROUTE_DISPLAY    1
+%define JC3248_BLE_ROUTE_CONTROL    2
+
 %define ESP32S3_GPIO_BASE           0x60004000
 %define ESP32S3_GPIO_OUT_W1TS       0x60004008
 %define ESP32S3_GPIO_OUT_W1TC       0x6000400c
@@ -92,6 +99,7 @@
 %define ESP32S3_FSPID_OUT           103
 %define ESP32S3_FSPID_IN            103
 %define ESP32S3_FSPIHD_OUT          104
+%define ESP32S3_FSPIHD_IN              104
 %define ESP32S3_FSPIHD_IN           104
 %define ESP32S3_FSPIWP_OUT          105
 %define ESP32S3_FSPIWP_IN           105

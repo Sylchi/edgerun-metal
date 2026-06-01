@@ -216,6 +216,28 @@ pub fn build(b: *std.Build) void {
     const chat_preview_step = b.step("chat-preview", "Render encrypted chat UI preview PPM");
     chat_preview_step.dependOn(&run_chat_preview.step);
 
+    const jc3248_frame = b.addExecutable(.{
+        .name = "edgerun-jc3248-frame",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/jc3248_display_frame.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = strip_release,
+        }),
+    });
+    addBootstrapObjects(jc3248_frame, math_obj, runtime_obj);
+
+    const run_jc3248_frame = b.addRunArtifact(jc3248_frame);
+    const jc3248_frame_step = b.step("jc3248-frame", "Render JC3248W535 UI frame as raw RGB565");
+    jc3248_frame_step.dependOn(&run_jc3248_frame.step);
+
+    _ = addZigTest(b, target, optimize, .{
+        .root = "src/jc3248_display_frame.zig",
+        .step = "jc3248-frame-test",
+        .description = "Run JC3248W535 UI frame renderer tests",
+        .suite_step = ui_test_step,
+    });
+
     const wayland_window = b.addExecutable(.{
         .name = "edgerun-wayland-window",
         .root_module = b.createModule(.{

@@ -1286,6 +1286,7 @@ cmd_test_er_efiboot() {
 	cmd_er_efiboot >/dev/null
 	local tool="${HOST_BUILD}/er_efiboot"
 	local guid="8be4df61-93ca-11d2-aa0d-00e098032b8c"
+	local db_guid="d719b2cb-3d3a-4596-a3bc-dad00e67656f"
 	local out
 	out=$("$tool" --dry-run --set-next 0007)
 	[ "$out" = "dry-run /sys/firmware/efi/efivars/BootNext-${guid}6 bytes" ] || {
@@ -1317,8 +1318,32 @@ cmd_test_er_efiboot() {
 		echo "FAIL er-efiboot delete-file dry-run: ${out}" >&2
 		return 1
 	}
+	out=$("$tool" --dry-run --read-secure SecureBoot)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/SecureBoot-${guid}0 bytes" ] || {
+		echo "FAIL er-efiboot read-secure dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --read-secure db)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/db-${db_guid}0 bytes" ] || {
+		echo "FAIL er-efiboot read-secure db dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --write-auth PK /dev/null)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/PK-${guid}4 bytes" ] || {
+		echo "FAIL er-efiboot write-auth dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --capsule /dev/null)
+	[ "$out" = "dry-run /dev/efi_capsule_loader0 bytes" ] || {
+		echo "FAIL er-efiboot capsule dry-run: ${out}" >&2
+		return 1
+	}
 	if "$tool" --set-next bad >/dev/null 2>&1; then
 		echo "FAIL er-efiboot rejected invalid boot number" >&2
+		return 1
+	fi
+	if "$tool" --dry-run --write-auth SecureBoot /dev/null >/dev/null 2>&1; then
+		echo "FAIL er-efiboot rejected unauthenticated secure variable write" >&2
 		return 1
 	fi
 	echo "PASS er-efiboot"

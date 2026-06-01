@@ -12,6 +12,9 @@ extern er_vp8_bool_read_flag
 extern er_vp8_bool_read_literal
 extern er_vp9_read_tx_mode
 extern er_vp9_parse_tx_size_probability_updates
+extern er_vp9_tx_mode_max_tx_size
+extern er_vp9_parse_coef_probability_updates
+extern er_vp9_parse_skip_probability_updates
 extern er_vp9_parse_compressed_header_prefix
 extern er_vp9_parse_superframe_index
 extern er_vp9_validate_frame_payload
@@ -441,8 +444,88 @@ _start:
     cmp     byte [rel compressed_desc + VP9_COMPRESSED_HEADER_TX_UPDATES + VP9_TX_PROB_UPDATE_TOTAL - 1], 0
     jne     .fail_tx_prob_updates
     inc     qword [rel passed]
-    jmp     .compressed_header_prefix
+    jmp     .coef_prob_updates
 .fail_tx_prob_updates:
+    inc     qword [rel failed]
+
+.coef_prob_updates:
+    mov     edi, VP9_TX_MODE_SELECT
+    call    er_vp9_tx_mode_max_tx_size
+    cmp     eax, VP9_TX_SIZE_32X32
+    jne     .fail_coef_prob_updates
+    test    edx, edx
+    jnz     .fail_coef_prob_updates
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .fail_coef_prob_updates
+    mov     rdi, bool_reader
+    mov     esi, VP9_TX_MODE_ONLY_4X4
+    mov     rdx, compressed_desc
+    call    er_vp9_parse_coef_probability_updates
+    test    eax, eax
+    jnz     .fail_coef_prob_updates
+    test    edx, edx
+    jnz     .fail_coef_prob_updates
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], 0
+    jne     .fail_coef_prob_updates
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
+    jne     .fail_coef_prob_updates
+    mov     rdi, bool_one
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .fail_coef_prob_updates
+    mov     rdi, bool_reader
+    mov     esi, VP9_TX_MODE_ONLY_4X4
+    mov     rdx, compressed_desc
+    call    er_vp9_parse_coef_probability_updates
+    test    eax, eax
+    jnz     .fail_coef_prob_updates
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_coef_prob_updates
+    inc     qword [rel passed]
+    jmp     .skip_prob_updates
+.fail_coef_prob_updates:
+    inc     qword [rel failed]
+
+.skip_prob_updates:
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .fail_skip_prob_updates
+    mov     rdi, bool_reader
+    mov     rsi, compressed_desc
+    call    er_vp9_parse_skip_probability_updates
+    test    eax, eax
+    jnz     .fail_skip_prob_updates
+    test    edx, edx
+    jnz     .fail_skip_prob_updates
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_SKIP_UPDATE_COUNT], 0
+    jne     .fail_skip_prob_updates
+    cmp     byte [rel compressed_desc + VP9_COMPRESSED_HEADER_SKIP_UPDATES + VP9_SKIP_CONTEXTS - 1], 0
+    jne     .fail_skip_prob_updates
+    mov     rdi, bool_one
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .fail_skip_prob_updates
+    mov     rdi, bool_reader
+    mov     rsi, compressed_desc
+    call    er_vp9_parse_skip_probability_updates
+    test    eax, eax
+    jnz     .fail_skip_prob_updates
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_skip_prob_updates
+    inc     qword [rel passed]
+    jmp     .compressed_header_prefix
+.fail_skip_prob_updates:
     inc     qword [rel failed]
 
 .compressed_header_prefix:
@@ -458,6 +541,12 @@ _start:
     jne     .fail_compressed_header_prefix
     cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], 0
     jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], 0
+    jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
+    jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_SKIP_UPDATE_COUNT], 0
+    jne     .fail_compressed_header_prefix
     cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_READER + VP9_BOOL_READER_INPUT_INDEX], VP9_BOOL_INITIAL_BYTES
     jne     .fail_compressed_header_prefix
     mov     rdi, compressed_select_no_updates
@@ -471,6 +560,12 @@ _start:
     cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_TX_MODE], VP9_TX_MODE_SELECT
     jne     .fail_compressed_header_prefix
     cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], 0
+    jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], 0
+    jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
+    jne     .fail_compressed_header_prefix
+    cmp     dword [rel compressed_desc + VP9_COMPRESSED_HEADER_SKIP_UPDATE_COUNT], 0
     jne     .fail_compressed_header_prefix
     cmp     byte [rel compressed_desc + VP9_COMPRESSED_HEADER_TX_UPDATES + VP9_TX_PROB_UPDATE_TOTAL - 1], 0
     jne     .fail_compressed_header_prefix

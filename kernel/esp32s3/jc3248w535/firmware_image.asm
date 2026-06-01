@@ -1,8 +1,4 @@
-; JC3248W535 ESP32-S3 firmware image descriptor.
-; Target-side code is emitted as explicit bytes until the repo-owned Xtensa
-; assembler exists. This file is intentionally not a flash image yet: it is a
-; deterministic artifact that records the board contract and refuses to masquerade
-; as executable firmware.
+; JC3248W535 ESP32-S3 board and BLE UI contract descriptor.
 
 %include "esp32s3/jc3248w535/registers.inc"
 
@@ -36,7 +32,13 @@ firmware_descriptor:
     dd ESP32S3_GPIO_BASE
     dd ESP32S3_I2C0_BASE
     dd ESP32S3_USB_SERIAL_JTAG
-    db "jc3248w535 esp32-s3 axs15231b qspi display controller", 0
+    dd JC3248_BLE_FRAME_MAGIC
+    dd JC3248_BLE_FRAME_VERSION
+    dd JC3248_BLE_FRAME_HEADER
+    dd JC3248_BLE_LEGACY_PAYLOAD
+    dd JC3248_BLE_ROUTE_DISPLAY
+    dd JC3248_BLE_ROUTE_CONTROL
+    db "jc3248w535 esp32-s3 ble display control", 0
 firmware_descriptor_end:
 
 times 256 - ($ - $$) db 0

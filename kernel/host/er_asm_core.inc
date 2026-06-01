@@ -515,7 +515,6 @@ er_fn scan_source
     jmp     .instruction_done
 .real_instruction_done:
     pop     r11
-    mov     qword [rel exit_subset_bad], 0
     mov     qword [rel generic_instr_mode], 1
     jmp     .instruction_done
 .generic_instruction:

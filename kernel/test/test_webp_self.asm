@@ -12,12 +12,14 @@ extern er_webp_parse_vp8x
 extern er_webp_parse_vp8l_header
 extern er_webp_parse_header
 extern er_webp_decode_vp8_key_frame
+extern er_webp_apply_alpha_values
 
 TEST_BSS_PASSED_FAILED
 hdr:        resb WEBP_HDR_SIZE
 chunk:      resb WEBP_CHUNK_DESC_SIZE
 yuv:        resb 6
 rgba:       resd 4
+alpha_rgba: resd 6
 
 SECTION .data
 vp8_gray_payload:
@@ -74,6 +76,28 @@ webp_alpha_vp8:
     db 0x04, 0x74, 0x00, 0x00, 0xe4, 0x40, 0x00, 0x00
 webp_alpha_vp8_len equ $ - webp_alpha_vp8
 
+webp_alpha_raw_vp8:
+    db 'R','I','F','F'
+    dd webp_alpha_raw_vp8_len - 8
+    db 'W','E','B','P'
+    db 'V','P','8','X'
+    dd WEBP_VP8X_PAYLOAD_SIZE
+    db WEBP_VP8X_FLAG_ALPHA
+    db 0, 0, 0
+    db 1, 0, 0
+    db 1, 0, 0
+    db 'A','L','P','H'
+    dd 5
+    db WEBP_ALPH_COMPRESSION_NONE
+    db 0, 64, 128, 255
+    db 0
+    db 'V','P','8',' '
+    dd vp8_gray_payload_len
+    db 0x50, 0x01, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00
+    db 0x02, 0x00, 0x01, 0x40, 0x26, 0x25, 0xa4, 0x00
+    db 0x04, 0x74, 0x00, 0x00, 0xe4, 0x40, 0x00, 0x00
+webp_alpha_raw_vp8_len equ $ - webp_alpha_raw_vp8
+
 webp_bad_riff_len:
     db 'R','I','F','F'
     dd 5
@@ -110,6 +134,22 @@ vp8x_payload:
 
 vp8l_header:
     db 0x2f, 0x01, 0x80, 0x00, 0x00
+
+alpha_raw_payload:
+    db WEBP_ALPH_COMPRESSION_NONE
+    db 0, 64, 128, 255
+
+alpha_horizontal_payload:
+    db WEBP_ALPH_FILTER_HORIZONTAL << WEBP_ALPH_FILTER_SHIFT
+    db 10, 10, 10, 30, 10, 10
+
+alpha_gradient_payload:
+    db WEBP_ALPH_FILTER_GRADIENT << WEBP_ALPH_FILTER_SHIFT
+    db 10, 10, 10, 10, 10, 10
+
+alpha_compressed_payload:
+    db WEBP_ALPH_COMPRESSION_VP8L
+    db 0, 0, 0, 0
 
 SECTION .text
 global _start
@@ -273,8 +313,149 @@ _start:
     cmp     byte [rel hdr + WEBP_HDR_FLAGS], WEBP_VP8X_FLAG_ALPHA
     jne     .fail_parse_alpha_webp
     inc     qword [rel passed]
-    jmp     .reject_anim
+    jmp     .apply_raw_alpha
 .fail_parse_alpha_webp:
+    inc     qword [rel failed]
+
+.apply_raw_alpha:
+    mov     dword [rel alpha_rgba], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 4], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 8], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 12], 0xff7e7e7e
+    mov     rdi, alpha_raw_payload
+    mov     esi, 5
+    mov     edx, 2
+    mov     ecx, 2
+    mov     r8, alpha_rgba
+    mov     r9d, 4
+    call    er_webp_apply_alpha_values
+    cmp     eax, 4
+    jne     .fail_apply_raw_alpha
+    test    edx, edx
+    jnz     .fail_apply_raw_alpha
+    cmp     byte [rel alpha_rgba + 3], 0
+    jne     .fail_apply_raw_alpha
+    cmp     byte [rel alpha_rgba + 7], 64
+    jne     .fail_apply_raw_alpha
+    cmp     byte [rel alpha_rgba + 11], 128
+    jne     .fail_apply_raw_alpha
+    cmp     byte [rel alpha_rgba + 15], 255
+    jne     .fail_apply_raw_alpha
+    inc     qword [rel passed]
+    jmp     .apply_filtered_alpha
+.fail_apply_raw_alpha:
+    inc     qword [rel failed]
+
+.apply_filtered_alpha:
+    mov     dword [rel alpha_rgba], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 4], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 8], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 12], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 16], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 20], 0xff7e7e7e
+    mov     rdi, alpha_horizontal_payload
+    mov     esi, 7
+    mov     edx, 3
+    mov     ecx, 2
+    mov     r8, alpha_rgba
+    mov     r9d, 6
+    call    er_webp_apply_alpha_values
+    cmp     eax, 6
+    jne     .fail_apply_filtered_alpha
+    test    edx, edx
+    jnz     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 3], 10
+    jne     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 7], 20
+    jne     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 11], 30
+    jne     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 15], 40
+    jne     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 19], 50
+    jne     .fail_apply_filtered_alpha
+    cmp     byte [rel alpha_rgba + 23], 60
+    jne     .fail_apply_filtered_alpha
+    inc     qword [rel passed]
+    jmp     .apply_gradient_alpha
+.fail_apply_filtered_alpha:
+    inc     qword [rel failed]
+
+.apply_gradient_alpha:
+    mov     dword [rel alpha_rgba], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 4], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 8], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 12], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 16], 0xff7e7e7e
+    mov     dword [rel alpha_rgba + 20], 0xff7e7e7e
+    mov     rdi, alpha_gradient_payload
+    mov     esi, 7
+    mov     edx, 3
+    mov     ecx, 2
+    mov     r8, alpha_rgba
+    mov     r9d, 6
+    call    er_webp_apply_alpha_values
+    cmp     eax, 6
+    jne     .fail_apply_gradient_alpha
+    test    edx, edx
+    jnz     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 3], 10
+    jne     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 7], 20
+    jne     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 11], 30
+    jne     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 15], 20
+    jne     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 19], 40
+    jne     .fail_apply_gradient_alpha
+    cmp     byte [rel alpha_rgba + 23], 60
+    jne     .fail_apply_gradient_alpha
+    inc     qword [rel passed]
+    jmp     .decode_alpha_webp
+.fail_apply_gradient_alpha:
+    inc     qword [rel failed]
+
+.decode_alpha_webp:
+    mov     rdi, webp_alpha_raw_vp8
+    mov     esi, webp_alpha_raw_vp8_len
+    mov     rdx, yuv
+    mov     ecx, 6
+    mov     r8, rgba
+    mov     r9d, 4
+    call    er_webp_decode_vp8_key_frame
+    cmp     eax, 4
+    jne     .fail_decode_alpha_webp
+    test    edx, edx
+    jnz     .fail_decode_alpha_webp
+    cmp     byte [rel rgba + 3], 0
+    jne     .fail_decode_alpha_webp
+    cmp     byte [rel rgba + 7], 64
+    jne     .fail_decode_alpha_webp
+    cmp     byte [rel rgba + 11], 128
+    jne     .fail_decode_alpha_webp
+    cmp     byte [rel rgba + 15], 255
+    jne     .fail_decode_alpha_webp
+    inc     qword [rel passed]
+    jmp     .reject_compressed_alpha
+.fail_decode_alpha_webp:
+    inc     qword [rel failed]
+
+.reject_compressed_alpha:
+    mov     rdi, alpha_compressed_payload
+    mov     esi, 5
+    mov     edx, 2
+    mov     ecx, 2
+    mov     r8, alpha_rgba
+    mov     r9d, 4
+    call    er_webp_apply_alpha_values
+    test    eax, eax
+    jnz     .fail_reject_compressed_alpha
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_reject_compressed_alpha
+    inc     qword [rel passed]
+    jmp     .reject_anim
+.fail_reject_compressed_alpha:
     inc     qword [rel failed]
 
 .reject_anim:

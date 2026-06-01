@@ -5,6 +5,7 @@
 %include "x86_64/media/vp9_constants.inc"
 
 extern er_vp8_bool_reader_init
+extern er_vp8_bool_read
 extern er_vp8_bool_read_flag
 extern er_vp8_bool_read_literal
 
@@ -285,6 +286,244 @@ er_fn er_vp9_parse_tx_size_probability_updates
     er_pop  rbx, r12, r13, r14
     er_ret
 
+; er_vp9_tx_mode_max_tx_size(tx_mode) -> eax=max tx size, rdx=error
+; edi=VP9_TX_MODE_*.
+er_fn er_vp9_tx_mode_max_tx_size
+    cmp     edi, VP9_TX_MODE_ONLY_4X4
+    je      .only4
+    cmp     edi, VP9_TX_MODE_ALLOW_8X8
+    je      .allow8
+    cmp     edi, VP9_TX_MODE_ALLOW_16X16
+    je      .allow16
+    cmp     edi, VP9_TX_MODE_ALLOW_32X32
+    je      .allow32
+    cmp     edi, VP9_TX_MODE_SELECT
+    je      .allow32
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.only4:
+    mov     eax, VP9_TX_SIZE_4X4
+    er_ok
+    er_ret
+.allow8:
+    mov     eax, VP9_TX_SIZE_8X8
+    er_ok
+    er_ret
+.allow16:
+    mov     eax, VP9_TX_SIZE_16X16
+    er_ok
+    er_ret
+.allow32:
+    mov     eax, VP9_TX_SIZE_32X32
+    er_ok
+    er_ret
+
+; er_vp9_parse_coef_probability_updates(reader, tx_mode, desc)
+; -> eax=updated coefficient probability count, rdx=error
+; Parses the leading read_coef_probs() update flag. Streams that request
+; coefficient remapping fail explicitly until VP9 subexp probability remap is
+; implemented.
+; rdi=reader, esi=tx_mode, rdx=compressed desc
+er_fn er_vp9_parse_coef_probability_updates
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rdx
+    mov     edi, esi
+    call    er_vp9_tx_mode_max_tx_size
+    test    edx, edx
+    jnz     .done
+    mov     rdi, r12
+    call    er_vp8_bool_read_flag
+    test    edx, edx
+    jnz     .done
+    mov     [r13 + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], eax
+    mov     dword [r13 + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
+    test    eax, eax
+    jnz     .unsupported
+    xor     eax, eax
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_vp9_inv_map(delta) -> eax=remapped delta, rdx=error
+; Algorithmic form of the VP9 inv_map_table permutation.
+; edi=delta in range 0..254.
+er_fn er_vp9_inv_map
+    cmp     edi, VP9_INV_MAP_LAST_INDEX
+    ja      .invalid_param
+    cmp     edi, VP9_INV_MAP_FAST_COUNT
+    jae     .slow
+    mov     eax, edi
+    imul    eax, VP9_INV_MAP_FAST_STEP
+    add     eax, VP9_INV_MAP_FAST_FIRST
+    er_ok
+    er_ret
+.slow:
+    cmp     edi, VP9_INV_MAP_LAST_INDEX
+    jne     .search
+    mov     eax, VP9_INV_MAP_LAST_VALUE
+    er_ok
+    er_ret
+.search:
+    mov     r8d, edi
+    sub     r8d, VP9_INV_MAP_FAST_COUNT
+    xor     ecx, ecx
+    xor     eax, eax
+.loop:
+    inc     eax
+    cmp     eax, VP9_INV_MAP_LAST_VALUE
+    ja      .invalid_param
+    mov     edx, eax
+    sub     edx, VP9_INV_MAP_FAST_FIRST
+    js      .candidate
+    mov     r9d, edx
+    mov     edx, r9d
+    mov     r10d, VP9_INV_MAP_FAST_STEP
+    div     r10d
+    test    edx, edx
+    jz      .loop
+.candidate:
+    cmp     ecx, r8d
+    je      .ok
+    inc     ecx
+    jmp     .loop
+.ok:
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp9_inv_recenter_nonneg(v, m) -> eax=value, rdx=error
+; edi=v, esi=m.
+er_fn er_vp9_inv_recenter_nonneg
+    mov     eax, esi
+    shl     eax, 1
+    cmp     edi, eax
+    ja      .return_v
+    test    edi, 1
+    jnz     .odd
+    mov     eax, edi
+    shr     eax, 1
+    add     eax, esi
+    er_ok
+    er_ret
+.odd:
+    mov     eax, edi
+    inc     eax
+    shr     eax, 1
+    mov     ecx, esi
+    sub     ecx, eax
+    mov     eax, ecx
+    er_ok
+    er_ret
+.return_v:
+    mov     eax, edi
+    er_ok
+    er_ret
+
+; er_vp9_inv_remap_prob(delta, prob) -> eax=probability, rdx=error
+; edi=deltaProb, esi=current probability.
+er_fn er_vp9_inv_remap_prob
+    er_push rbx, r12
+    test    esi, esi
+    jz      .invalid_param
+    cmp     esi, VP9_PROBABILITY_MAX
+    ja      .invalid_param
+    mov     ebx, esi
+    call    er_vp9_inv_map
+    test    edx, edx
+    jnz     .done
+    mov     r12d, eax
+    dec     ebx
+    mov     eax, ebx
+    shl     eax, 1
+    cmp     eax, VP9_PROBABILITY_MAX
+    ja      .high
+    mov     edi, r12d
+    mov     esi, ebx
+    call    er_vp9_inv_recenter_nonneg
+    test    edx, edx
+    jnz     .done
+    inc     eax
+    er_ok
+    jmp     .done
+.high:
+    mov     esi, VP9_PROBABILITY_MAX - 1
+    sub     esi, ebx
+    mov     edi, r12d
+    call    er_vp9_inv_recenter_nonneg
+    test    edx, edx
+    jnz     .done
+    mov     ecx, VP9_PROBABILITY_MAX
+    sub     ecx, eax
+    mov     eax, ecx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12
+    er_ret
+
+; er_vp9_parse_skip_probability_updates(reader, desc)
+; -> eax=updated skip probability count, rdx=error
+; rdi=reader, rsi=compressed desc
+er_fn er_vp9_parse_skip_probability_updates
+    er_push rbx, r12, r13, r14
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    xor     ebx, ebx
+    xor     r14d, r14d
+.loop:
+    cmp     ebx, VP9_SKIP_CONTEXTS
+    jae     .ok
+    mov     byte [r13 + VP9_COMPRESSED_HEADER_SKIP_UPDATES + rbx], 0
+    mov     rdi, r12
+    mov     esi, VP9_DIFF_UPDATE_PROB
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jnz     .unsupported
+    inc     ebx
+    jmp     .loop
+.ok:
+    mov     [r13 + VP9_COMPRESSED_HEADER_SKIP_UPDATE_COUNT], r14d
+    mov     eax, r14d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done:
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
 ; er_vp9_parse_compressed_header_prefix(buf, len, desc)
 ; -> eax=VP9_COMPRESSED_HEADER_SIZE, rdx=error
 ; Parses VP9 compressed-header tx_mode and tx-size probability update syntax,
@@ -306,6 +545,9 @@ er_fn er_vp9_parse_compressed_header_prefix
     jnz     .done
     mov     [r12 + VP9_COMPRESSED_HEADER_TX_MODE], eax
     mov     dword [r12 + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], 0
+    mov     dword [r12 + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], 0
+    mov     dword [r12 + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
+    mov     dword [r12 + VP9_COMPRESSED_HEADER_SKIP_UPDATE_COUNT], 0
     cmp     eax, VP9_TX_MODE_SELECT
     jne     .ok
     mov     rdi, r12
@@ -315,6 +557,17 @@ er_fn er_vp9_parse_compressed_header_prefix
     jnz     .done
     mov     [r12 + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], eax
 .ok:
+    mov     rdi, r12
+    mov     esi, [r12 + VP9_COMPRESSED_HEADER_TX_MODE]
+    mov     rdx, r12
+    call    er_vp9_parse_coef_probability_updates
+    test    edx, edx
+    jnz     .done
+    mov     rdi, r12
+    mov     rsi, r12
+    call    er_vp9_parse_skip_probability_updates
+    test    edx, edx
+    jnz     .done
     mov     eax, VP9_COMPRESSED_HEADER_SIZE
     er_ok
     jmp     .done

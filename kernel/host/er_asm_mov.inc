@@ -1564,7 +1564,7 @@ er_fn match_common_mov
     jmp     .yes
 .eax_value_common:
     pop     r14
-    call    expect_value_operand
+    call    expect_u32_operand
     test    eax, eax
     jz      .bad
     call    expect_line_end

@@ -198,6 +198,176 @@ er_fn er_webp_parse_vp8l_header
     er_err  ERROR_CORRUPT
     er_ret
 
+; er_webp_vp8l_bits_read(state, count) -> eax=value, rdx=error
+er_fn er_webp_vp8l_bits_read
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, 24
+    ja      .corrupt
+    mov     r8d, [rdi + WEBP_VP8L_BITS_LEN]
+    shl     r8d, 3
+    jc      .corrupt
+    mov     r9d, [rdi + WEBP_VP8L_BITS_INDEX]
+    cmp     r9d, r8d
+    ja      .corrupt
+    mov     r10d, r8d
+    sub     r10d, r9d
+    cmp     esi, r10d
+    ja      .corrupt
+    xor     eax, eax
+    xor     r10d, r10d
+    mov     r11, [rdi + WEBP_VP8L_BITS_DATA]
+.loop:
+    cmp     r10d, esi
+    jae     .ok
+    mov     r8d, r9d
+    add     r8d, r10d
+    mov     ecx, r8d
+    shr     ecx, 3
+    and     r8d, 7
+    movzx   edx, byte [r11 + rcx]
+    mov     ecx, r8d
+    shr     edx, cl
+    and     edx, 1
+    mov     ecx, r10d
+    shl     edx, cl
+    or      eax, edx
+    inc     r10d
+    jmp     .loop
+.ok:
+    add     [rdi + WEBP_VP8L_BITS_INDEX], esi
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
+; er_webp_vp8l_read_simple_code(state, symbol_count, desc) -> eax=kind, rdx=error
+er_fn er_webp_vp8l_read_simple_code
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     ebx, esi
+    mov     r13, rdx
+    mov     esi, 1
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    cmp     eax, 1
+    jne     .unsupported
+    mov     rdi, r12
+    mov     esi, 1
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    mov     r9d, eax
+    mov     rdi, r12
+    mov     esi, 1
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    mov     esi, WEBP_VP8L_SIMPLE_CODE_SHORT_BITS
+    test    eax, eax
+    jz      .read_symbol0
+    add     esi, WEBP_VP8L_SIMPLE_CODE_SELECTOR_BITS
+.read_symbol0:
+    mov     rdi, r12
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    cmp     eax, ebx
+    jae     .corrupt
+    mov     [r13 + WEBP_VP8L_CODE_LOW], eax
+    test    r9d, r9d
+    jnz     .read_symbol1
+    mov     dword [r13 + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_ONE
+    mov     dword [r13 + WEBP_VP8L_CODE_HIGH], 0
+    mov     eax, WEBP_VP8L_CODE_ONE
+    er_ok
+    jmp     .done
+.read_symbol1:
+    mov     rdi, r12
+    mov     esi, WEBP_VP8L_SIMPLE_CODE_SYMBOL_BITS
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    cmp     eax, ebx
+    jae     .corrupt
+    mov     ecx, [r13 + WEBP_VP8L_CODE_LOW]
+    cmp     ecx, eax
+    jbe     .store_pair
+    mov     [r13 + WEBP_VP8L_CODE_LOW], eax
+    mov     eax, ecx
+.store_pair:
+    mov     [r13 + WEBP_VP8L_CODE_HIGH], eax
+    mov     dword [r13 + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_TWO
+    mov     eax, WEBP_VP8L_CODE_TWO
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_webp_vp8l_read_code_symbol(state, desc) -> eax=symbol, rdx=error
+er_fn er_webp_vp8l_read_code_symbol
+    er_push rbx, r12
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     rbx, rsi
+    cmp     dword [rbx + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_ONE
+    je      .one
+    cmp     dword [rbx + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_TWO
+    jne     .corrupt
+    mov     esi, 1
+    call    er_webp_vp8l_bits_read
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .low
+    mov     eax, [rbx + WEBP_VP8L_CODE_HIGH]
+    er_ok
+    jmp     .done
+.one:
+    mov     eax, [rbx + WEBP_VP8L_CODE_LOW]
+    er_ok
+    jmp     .done
+.low:
+    mov     eax, [rbx + WEBP_VP8L_CODE_LOW]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12
+    er_ret
+
 ; er_webp_parse_header(buf, len, desc) -> eax=WEBP_HDR_SIZE, rdx=error
 er_fn er_webp_parse_header
     er_push rbx, r12, r13, r14, r15

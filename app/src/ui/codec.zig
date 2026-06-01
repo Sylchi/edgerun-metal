@@ -362,22 +362,8 @@ pub const Error = error{
     Corrupt,
 };
 
-/// Wire format:
-///   [0] kind          — PatchKind
-///   [1] component_id  — target component (0-255)
-///   [2..] payload     — kind-specific
-///
-/// Payload encodings:
-///   bool:                         [1] 0/1
-///   u16:                          [2] LE
-///   f32:                          [4] LE
-///   []const u8:                   [1 len] [N]
-///   struct{title,detail}:         string string
-///   struct{title,detail,bool}:    string string [1]
-///   struct{first,second}:         string string
-///   Color:                        [4] RGBA
-///
-/// Strings are encoded as: [1 len] [N bytes UTF-8], max 255 bytes.
+/// Wire format: [kind:1][component_id:1][kind-specific payload]. Strings are
+/// encoded as [len:1][bytes], so every string payload is bounded to 255 bytes.
 pub const PatchKind = enum(u8) {
     text_value = 0,
     accordion_open = 1,
@@ -563,6 +549,7 @@ fn encodeF32(buf: []u8, kind: PatchKind, component_id: u8, value: f32) ?[]u8 {
 }
 
 fn encodeString(buf: []u8, kind: PatchKind, component_id: u8, value: []const u8) ?[]u8 {
+    if (value.len > 0xff) return null;
     const len: u8 = @intCast(value.len);
     const total: usize = 3 + value.len;
     if (buf.len < total) return null;
@@ -574,6 +561,7 @@ fn encodeString(buf: []u8, kind: PatchKind, component_id: u8, value: []const u8)
 }
 
 fn encodeTwoStrings(buf: []u8, kind: PatchKind, component_id: u8, a: []const u8, b: []const u8) ?[]u8 {
+    if (a.len > 0xff or b.len > 0xff) return null;
     const a_len: u8 = @intCast(a.len);
     const b_len: u8 = @intCast(b.len);
     const total: usize = 4 + a.len + b.len;
@@ -588,6 +576,7 @@ fn encodeTwoStrings(buf: []u8, kind: PatchKind, component_id: u8, a: []const u8,
 }
 
 fn encodeTwoStringsBool(buf: []u8, kind: PatchKind, component_id: u8, a: []const u8, b: []const u8, flag: bool) ?[]u8 {
+    if (a.len > 0xff or b.len > 0xff) return null;
     const a_len: u8 = @intCast(a.len);
     const b_len: u8 = @intCast(b.len);
     const total: usize = 5 + a.len + b.len;
@@ -1068,6 +1057,14 @@ test "encode/decode fails on short buffer" {
     try std.testing.expect(encodePatch(&buf, 0, ui.Patch{ .progress_value = 0.5 }) == null);
     // Empty slice (< 2 bytes) returns null
     try std.testing.expect(decodePatch(&.{}) == null);
+}
+
+test "encode rejects overlong string payloads without truncation" {
+    var buf: [512]u8 = undefined;
+    const long = "x" ** 256;
+    try std.testing.expect(encodePatch(&buf, 1, ui.Patch{ .label_value = long }) == null);
+    try std.testing.expect(encodePatch(&buf, 2, ui.Patch{ .card_text = .{ .title = long, .detail = "ok" } }) == null);
+    try std.testing.expect(encodePatch(&buf, 3, ui.Patch{ .alert = .{ .title = "ok", .detail = long, .destructive = false } }) == null);
 }
 
 test "encode returns correct BLE-friendly sizes" {
