@@ -161,8 +161,8 @@ contracts.
 
 Temporary gaps still present:
 
-- App authoring and the signing WASM guest still use Zig until the host-side
-  compiler replaces enough of the source-to-WASM path.
+- App authoring still uses Zig until the host-side compiler replaces enough of
+  the source-to-WASM path.
 - Some hardware paths are probe/test slices; the kernel should keep one explicit
   path per device class and delete placeholders as real behavior lands.
 

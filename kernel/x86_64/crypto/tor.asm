@@ -5,7 +5,6 @@
 ;              er_tor_poll() — called explicitly by a Tor role owner
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/tor_constants.inc"
 %include "x86_64/crypto/local_constants.inc"
 
@@ -36,11 +35,6 @@ extern er_tor_hs_parse_introduce_plaintext
 extern er_tor_hs_send_rendezvous1
 extern er_tor_ntor_keygen
 extern er_tcp_recv
-extern er_fn_load_trusted
-extern er_fn_call_args
-extern er_wasm_runtime_ptr
-extern edgerun_signing_wasm_start
-extern edgerun_signing_wasm_len
 extern er_ed25519_sign
 extern er_ed25519_blind_sign
 
@@ -99,10 +93,6 @@ str_tor_dir_fail: db "tor: directory FAIL", 0x0A, 0
 str_tor_stream:  db "tor: stream ", 0
 str_tor_ok:      db "ok", 0x0A, 0
 str_tor_arrow:   db " -> ", 0
-tor_signing_name_sign: db "edgerun_signing_sign"
-tor_signing_name_sign_len equ $ - tor_signing_name_sign
-tor_signing_name_blind_sign: db "edgerun_signing_blind_sign"
-tor_signing_name_blind_sign_len equ $ - tor_signing_name_blind_sign
 tor_hs_desc_sig_prefix: db "Tor onion service descriptor sig v3"
 tor_hs_desc_sig_prefix_len equ $ - tor_hs_desc_sig_prefix
 tor_hs_desc_signature_line: db "signature "
@@ -161,79 +151,15 @@ tor_hs_service_rend_relay_ip: resd 1
 tor_hs_service_rend_relay_port: resw 1
 tor_hs_service_rend_relay_onion_key: resb 32
 tor_hs_live_stream_next_id: resw 1
-tor_signing_runtime: resb RUNTIME_SIZE
-tor_signing_memory: resb 17 * 65536
-tor_signing_ticks: resq 1
-tor_signing_args: resq 6
-tor_signing_loaded: resd 1
 tor_signing_zero_sig: resb TOR_HS_ED25519_SIG_LEN
 tor_signing_cert_buf: resb 160
 tor_signing_sig_buf: resb TOR_HS_ED25519_SIG_LEN
 tor_hs_signing_cert_armor: resb 512
 tor_hs_descriptor_sig_msg: resb TOR_RECV_BUF_SIZE
 
-%define TOR_SIGNING_PAGES 17
-%define TOR_SIGNING_MEM_SIZE (17 * 65536)
-%define TOR_SIGNING_SEED_OFF 1050000
-%define TOR_SIGNING_BLIND_OFF (TOR_SIGNING_SEED_OFF + 32)
-%define TOR_SIGNING_MSG_OFF (TOR_SIGNING_BLIND_OFF + 32)
-%define TOR_SIGNING_SIG_OFF (TOR_SIGNING_MSG_OFF + 16384)
-%define TOR_SIGNING_PUB_OFF (TOR_SIGNING_SIG_OFF + 64)
 %define TOR_SIGNING_MAX_MSG 16384
 
 SECTION .text
-
-; ==================================================================
-; _tor_signing_prepare_runtime
-; Loads the embedded signing WASM once into a private runtime/memory.
-; ==================================================================
-_tor_signing_prepare_runtime:
-    cmp     dword [tor_signing_loaded], 1
-    je      .ok
-    push    rbx
-
-    lea     rdi, [tor_signing_memory]
-    xor     esi, esi
-    mov     edx, TOR_SIGNING_MEM_SIZE
-    call    er_memset
-
-    lea     rbx, [tor_signing_runtime]
-    lea     rax, [tor_signing_memory]
-    mov     [rbx + RUNTIME_MEMORY_PTR_OFF], rax
-    mov     qword [rbx + RUNTIME_MEMORY_LEN_OFF], TOR_SIGNING_MEM_SIZE
-    lea     rax, [tor_signing_ticks]
-    mov     [rbx + RUNTIME_TICKS_PTR_OFF], rax
-    mov     qword [rbx + RUNTIME_MEM_GROW_FN_OFF], 0
-    mov     qword [rbx + RUNTIME_MEM_GROW_CTX_OFF], 0
-    mov     qword [rbx + RUNTIME_TABLE_GROW_FN_OFF], 0
-    mov     qword [rbx + RUNTIME_TABLE_GROW_CTX_OFF], 0
-    mov     qword [rbx + RUNTIME_INITIAL_PAGES_OFF], TOR_SIGNING_PAGES
-    mov     byte [rbx + RUNTIME_HAS_PAGES_OFF], 1
-    mov     qword [rbx + RUNTIME_IMPORTS_PTR_OFF], 0
-    mov     qword [rbx + RUNTIME_IMPORTS_LEN_OFF], 0
-    mov     [rel er_wasm_runtime_ptr], rbx
-
-    mov     rdi, rbx
-    lea     rsi, [rel edgerun_signing_wasm_start]
-    mov     rdx, [rel edgerun_signing_wasm_len]
-    call    er_fn_load_trusted
-    test    rdx, rdx
-    jnz     .fail_pop
-    mov     dword [tor_signing_loaded], 1
-    xor     eax, eax
-    er_ok
-    pop     rbx
-    ret
-.fail_pop:
-    mov     dword [tor_signing_loaded], 0
-    mov     eax, -1
-    er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     rbx
-    ret
-.ok:
-    xor     eax, eax
-    er_ok
-    ret
 
 ; ==================================================================
 ; er_tor_hs_signing_sign

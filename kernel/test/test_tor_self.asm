@@ -564,10 +564,6 @@ global er_tor_hs_cert_build
 global er_tor_hs_cert_armor_ed25519
 global er_tor_ntor_keygen
 global er_tcp_recv
-global er_fn_load_trusted
-global er_fn_call_args
-global edgerun_signing_wasm_start
-global edgerun_signing_wasm_len
 global er_serial_puts
 global er_serial_putchar
 global er_serial_puthex32
@@ -606,8 +602,6 @@ er_tor_hs_cert_build:
 er_tor_hs_cert_armor_ed25519:
 er_tor_ntor_keygen:
 er_tcp_recv:
-er_fn_load_trusted:
-er_fn_call_args:
 er_serial_puts:
 er_serial_putchar:
 er_serial_puthex32:
@@ -638,6 +632,3 @@ er_tor_send_cell:
     xor     eax, eax
     er_ok
     ret
-
-edgerun_signing_wasm_start: db 0
-edgerun_signing_wasm_len: dq 0

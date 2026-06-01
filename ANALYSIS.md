@@ -47,7 +47,7 @@ compute-heavy workloads.
 | Area | Direction | Stop Condition |
 |------|-----------|----------------|
 | App compiler | Keep moving source/TSX parsing and WASM emission into `kernel/x86_64/wasm/` | Kernel can compile the app-authoring subset without Zig |
-| Signing guest | Move the Zig-built signing WASM guest to repo-owned source-to-WASM output | `./build.sh kernel` has no Zig signing-guest compiler dependency |
+| Signing path | Keep Ed25519 signing in host-side ASM and remove stale WASM guest hooks | No signing-specific Zig/WASM build target or embedded guest remains |
 | DA/app bridge | Route all app UI updates through local cells and DA surface messages | No parallel browser/native-only app runtime contract |
 | Object authority | Reconcile Zig object/grant concepts with ASM object serialization and route enforcement | Kernel checks the same requirements app code declares |
 | Hardware bring-up | Keep one explicit path per device class | Probe-only placeholders are either completed or removed |

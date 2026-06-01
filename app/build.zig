@@ -295,29 +295,6 @@ pub fn build(b: *std.Build) void {
     const ui_wasm_step = b.step("ui-components-wasm", "Build the standalone UI component library wasm");
     ui_wasm_step.dependOn(&install_ui_wasm.step);
 
-    const signing_wasm = b.addExecutable(.{
-        .name = "edgerun_signing",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/signing_wasm.zig"),
-            .target = wasm32_freestanding_target,
-            .optimize = optimize,
-            .single_threaded = true,
-            .strip = strip_release,
-        }),
-    });
-    signing_wasm.entry = .disabled;
-    signing_wasm.export_memory = true;
-    signing_wasm.root_module.export_symbol_names = &.{
-        "edgerun_signing_public_key",
-        "edgerun_signing_sign",
-        "edgerun_signing_verify",
-        "edgerun_signing_blind_public_key",
-        "edgerun_signing_blind_sign",
-    };
-    const install_signing_wasm = b.addInstallArtifact(signing_wasm, .{});
-    const signing_wasm_step = b.step("signing-wasm", "Build the Ed25519 signing wasm guest");
-    signing_wasm_step.dependOn(&install_signing_wasm.step);
-
     const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "x86_64-uefi",
     }) catch unreachable);

@@ -11,6 +11,9 @@ extern er_av1_symbol_write_init
 extern er_av1_symbol_write_symbol
 extern er_av1_symbol_write_bool
 extern er_av1_symbol_write_finish
+extern er_av1_bits_write_init
+extern er_av1_bits_write
+extern er_av1_bits_bytes_written
 
 AV1_TILE_WALK_BLOCK                 equ 0
 AV1_TILE_WALK_COEFFS                equ 16
@@ -35,6 +38,22 @@ AV1_TILE_WALK_REFS_PTR              equ 600
 AV1_TILE_WALK_REF_PLANE             equ 608
 AV1_TILE_WALK_REF_INDEX             equ 632
 AV1_TILE_WALK_STACK_SIZE            equ 640
+
+AV1_COEFF_BULK_MAX_SYMBOLS          equ AV1_BLOCK_PIXELS_8X8 * 3
+AV1_COEFF_BULK_PTRS                 equ 0
+AV1_COEFF_BULK_NSYM                 equ AV1_COEFF_BULK_PTRS + AV1_COEFF_BULK_MAX_SYMBOLS * 8
+AV1_COEFF_BULK_SYM                  equ AV1_COEFF_BULK_NSYM + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_T                    equ AV1_COEFF_BULK_SYM + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_SHIFT                equ AV1_COEFF_BULK_T + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_LOW                  equ AV1_COEFF_BULK_SHIFT + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_HIGH                 equ AV1_COEFF_BULK_LOW + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_ALLOW_LOW            equ AV1_COEFF_BULK_HIGH + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_ALLOW_HIGH           equ AV1_COEFF_BULK_ALLOW_LOW + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_BITS                 equ AV1_COEFF_BULK_ALLOW_HIGH + AV1_COEFF_BULK_MAX_SYMBOLS * 4
+AV1_COEFF_BULK_COUNT                equ AV1_COEFF_BULK_BITS + AV1_BITS_SIZE
+AV1_COEFF_BULK_CAP                  equ AV1_COEFF_BULK_COUNT + 4
+AV1_COEFF_BULK_CUR                  equ AV1_COEFF_BULK_CAP + 4
+AV1_COEFF_BULK_STACK_SIZE           equ AV1_COEFF_BULK_CUR + 16
 
 SECTION .text
 

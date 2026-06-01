@@ -159,7 +159,6 @@ KERNEL_ASM_SRCS="
 	wasm/tsx_parser.asm
 	wasm/wasm_test_data.asm
 	wasm/da_wasm_test.asm
-	wasm/edgerun_signing_wasm.asm
 	entry.asm
 "
 
@@ -202,7 +201,6 @@ assemble_kernel_efi() {
 
 # ---- targets ----
 cmd_kernel() {
-	cmd_signing_wasm
 	assemble_kernel
 	local objs=$(kernel_objs "kernel" ".o" "kernel_main_elf32.o")
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
@@ -227,7 +225,6 @@ cmd_kernel_vnc() {
 }
 
 cmd_kernel_efi() {
-	cmd_signing_wasm
 	assemble_kernel_efi
 	local objs=$(kernel_objs "kernel_efi" ".o" "kernel_main_efi64.o")
 	ld -m i386pep -T "${KERNEL_EFI_LD}" --subsystem 10 --image-base 0x100000 \
@@ -426,7 +423,6 @@ test-pi-wifi-sdio|emulator|pi|yes|cmd_test_pi_wifi_sdio|Run Pi Zero W CYW43438 S
 test-sha3|unit|crypto|yes|cmd_test_sha3|Run SHA3-256 known-answer tests
 test-sha512|unit|crypto|yes|cmd_test_sha512|Run SHA-512 known-answer tests
 test-ed25519|unit|crypto|yes|cmd_test_ed25519|Run Ed25519 ASM helper tests
-test-signing-wasm|unit|crypto|yes|cmd_test_signing_wasm|Run signing WASM guest deterministic tests
 test-tls|contract|crypto|yes|cmd_test_tls|Run TLS ClientHello self-test
 test-tor|contract|crypto|yes|cmd_test_tor|Run Tor AES-128-CTR KAT test
 test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper test
@@ -1805,20 +1801,6 @@ EOF
 	node "$node_bench" "$wasm_bin"
 }
 
-cmd_signing_wasm() {
-	local wasm_src="${BUILD_DIR}/app/bin/edgerun_signing.wasm"
-	local wasm_dst="${ASM_BUILD}/edgerun_signing.wasm"
-	zig build --build-file app/build.zig -p "${BUILD_DIR}/app" -Doptimize=ReleaseSmall signing-wasm
-	cp "$wasm_src" "$wasm_dst"
-	local wsize=$(stat -c '%s' "$wasm_dst")
-	printf 'signing-wasm: %s (%d bytes)\n' "$wasm_dst" "$wsize"
-}
-
-cmd_test_signing_wasm() {
-	zig test app/src/signing_wasm.zig
-	cmd_signing_wasm
-}
-
 cmd_lib_tor() {
 	local lib_dir="${BUILD_DIR}/lib"
 	mkdir -p "${lib_dir}" "${ASM_BUILD}"
@@ -1988,7 +1970,6 @@ EOF
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
   er-asm              Build owned x86 ASM assembler front-end
-  signing-wasm        Compile Ed25519 signing WASM guest
   lib-tor             Build reusable Tor static archives under .build/lib
   tor-hs-host         Build hosted hidden-service library smoke binary
   tor-live-host       Build hosted live Tor ORPort probe binary
@@ -2033,7 +2014,6 @@ case "${1:-help}" in
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	bench-zig-wasm) cmd_bench_zig_wasm ;;
 	er-asm)          cmd_er_asm ;;
-	signing-wasm)    cmd_signing_wasm ;;
 	lib-tor)         cmd_lib_tor ;;
 	tor-hs-host)     cmd_tor_hs_host ;;
 	tor-live-host)   cmd_tor_live_host ;;
