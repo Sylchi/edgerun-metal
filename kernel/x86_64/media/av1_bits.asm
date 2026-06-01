@@ -470,11 +470,44 @@ er_fn er_av1_symbol_write_symbol
 .target_upper_range:
     mov     eax, [r12 + AV1_SYMBOL_RANGE]
 .target_have_upper:
+    mov     [rsp + 12], eax
+    cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
+    je      .target_pick
+    mov     ecx, [r12 + AV1_SYMBOL_PENDING_SHIFT]
+    cmp     ecx, 32
+    jae     .target_corrupt
+    mov     r8d, 1
+    shl     r8d, cl
+    mov     r9d, r8d
+    dec     r9d
+    not     r9d
+    mov     eax, [r12 + AV1_SYMBOL_PENDING_BASE]
+    and     eax, r9d
+    mov     r10d, eax
+    add     r10d, r8d
+    jc      .target_corrupt
+    cmp     eax, [rsp + 8]
+    jbe     .target_lower_ok
+    mov     [rsp + 8], eax
+.target_lower_ok:
+    cmp     r10d, [rsp + 12]
+    jae     .target_upper_ok
+    mov     [rsp + 12], r10d
+.target_upper_ok:
+    mov     eax, [rsp + 12]
+    cmp     eax, [rsp + 8]
+    jbe     .target_unsupported
+.target_pick:
+    mov     eax, [rsp + 12]
     sub     eax, [rsp + 8]
-    jbe     .target_corrupt
+    jbe     .target_unsupported
     shr     eax, 1
     add     eax, [rsp + 8]
     er_ok
+    ret
+.target_unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
     ret
 .target_corrupt:
     xor     eax, eax

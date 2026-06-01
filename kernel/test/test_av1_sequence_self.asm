@@ -376,8 +376,52 @@ _start:
     cmp     eax, 1
     jne     .fail_symbol_write_roundtrip
     inc     qword [rel passed]
-    jmp     .symbol_write_literal_roundtrip
+    jmp     .symbol_write_unsupported
 .fail_symbol_write_roundtrip:
+    inc     qword [rel failed]
+
+.symbol_write_unsupported:
+    mov     qword [rel outbuf], 0
+    mov     qword [rel outbuf + 8], 0
+    mov     word [rel cdf4_rt_w], 8192
+    mov     word [rel cdf4_rt_w + 2], 16384
+    mov     word [rel cdf4_rt_w + 4], 24576
+    mov     word [rel cdf4_rt_w + 6], AV1_CDF_PROB_TOP
+    mov     rdi, symctx
+    mov     rsi, outbuf
+    mov     edx, 32
+    call    er_av1_symbol_write_init
+    test    edx, edx
+    jnz     .fail_symbol_write_unsupported
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_w
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_unsupported
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_w
+    mov     edx, 4
+    mov     ecx, 1
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_unsupported
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_w
+    mov     edx, 4
+    mov     ecx, 2
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    test    eax, eax
+    jnz     .fail_symbol_write_unsupported
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_symbol_write_unsupported
+    inc     qword [rel passed]
+    jmp     .symbol_write_literal_roundtrip
+.fail_symbol_write_unsupported:
     inc     qword [rel failed]
 
 .symbol_write_literal_roundtrip:

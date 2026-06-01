@@ -40,12 +40,6 @@ extern er_local_ring_write
 extern er_local_ring_read
 extern er_local_ring_available
 
-; Import circuit functions from local_circuit.asm
-extern er_local_open_circuit
-extern er_local_send_cell
-extern er_local_recv_cell
-extern er_local_close_circuit
-
 ; ==================================================================
 ; BSS data — routing table
 ; ==================================================================

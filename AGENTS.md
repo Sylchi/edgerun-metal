@@ -172,8 +172,9 @@ A circuit caches destination slot_id for fast send.
 - `er_local_send_cell(fd, cell)` / `er_local_recv_cell(fd, out_cell)`
 - `er_local_close_circuit(fd)`
 
-WASM imports expose these as `circuit_open`, `circuit_send`, `circuit_recv`, and
-`circuit_close` through `er_local_cell_imports`.
+Circuits are kernel-internal authority. `er_local_cell_imports` exposes only
+constrained DA imports to WASM apps; raw route, slot, and circuit authority is
+not an app import surface.
 
 ### Agent Dispatch
 When a cell arrives for a registered identity, the kernel either synchronously calls the handler (SYNC flag) or leaves it in the ring buffer for the consumer to poll.

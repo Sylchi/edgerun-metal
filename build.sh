@@ -433,6 +433,7 @@ test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper 
 test-tor-hs|contract|crypto|yes|cmd_test_tor_hs|Run Tor onion-service message tests
 test-tor-hs-app|contract|crypto|yes|cmd_test_tor_hs_app|Run Tor hidden-service app message tests
 test-local-route|contract|route|yes|cmd_test_local_route|Run local cell route queue/dispatch test
+test-local-circuit|contract|route|yes|cmd_test_local_circuit|Run local circuit open/send/recv/close test
 test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
 test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
 test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
@@ -1656,6 +1657,10 @@ cmd_test_tor_hs_app() {
 
 cmd_test_local_route() {
 	build_test_self "test_local_route_self" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
+}
+
+cmd_test_local_circuit() {
+	build_test_self "test_local_circuit_self" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
 
 cmd_bench_tor() {

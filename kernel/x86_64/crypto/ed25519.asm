@@ -59,6 +59,9 @@ ed25519_d2_bytes:
     db 0x56,0xb1,0x83,0x82,0x9a,0x14,0xe0,0x00
     db 0x30,0xd1,0xf3,0xee,0xf2,0x80,0x8e,0x19
     db 0xe7,0xfc,0xdf,0x56,0xdc,0xd9,0x06,0x24
+ed25519_zero32: times 32 db 0
+ed25519_rh_blind_string: db "Derive temporary signing key hash input"
+ed25519_rh_blind_string_len equ $ - ed25519_rh_blind_string
 
 SECTION .text
 
@@ -534,6 +537,203 @@ er_fn er_ed25519_sign
     ret
 .fail_pop:
     add     rsp, 576
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+.fail:
+    mov     eax, -1
+    mov     edx, 1
+    ret
+
+; er_ed25519_blind_sign(seed32, blind32, msg, msg_len, out_sig64, out_pub32_or_null)
+; Deterministic blinded signing used by Tor onion-service descriptor signing.
+er_fn er_ed25519_blind_sign
+    test    rdi, rdi
+    jz      .fail
+    test    rsi, rsi
+    jz      .fail
+    test    r8, r8
+    jz      .fail
+    test    ecx, ecx
+    jz      .args_ok
+    test    rdx, rdx
+    jz      .fail
+.args_ok:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 736
+    ; 0 identity scalar, 32 prefix, 64 blind scalar, 96 blinded scalar,
+    ; 128 blinded public, 160 rh hash, 224 nonce hash, 288 nonce,
+    ; 320 R, 352 challenge hash, 416 challenge, 448 s, 480 sha512 ctx,
+    ; 704 out_sig pointer, 720 out_pub pointer.
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     r15d, ecx
+    mov     [rsp + 704], r8
+    mov     [rsp + 720], r9
+
+    mov     rdi, r12
+    lea     rsi, [rsp]
+    lea     rdx, [rsp + 32]
+    call    er_ed25519_seed_scalar_prefix
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 64]
+    mov     rsi, r13
+    mov     ecx, ED25519_SCALAR_LEN
+    rep     movsb
+    and     byte [rsp + 64], 248
+    and     byte [rsp + 64 + 31], 63
+    or      byte [rsp + 64 + 31], 64
+
+    lea     rdi, [rsp + 64]
+    lea     rsi, [rsp]
+    lea     rdx, [rel ed25519_zero32]
+    lea     rcx, [rsp + 96]
+    call    er_ed25519_scalar_muladd
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 128]
+    lea     rsi, [rsp + 96]
+    call    er_ed25519_point_base_mul
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 480]
+    call    er_sha512_init
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rel ed25519_rh_blind_string]
+    mov     edx, ed25519_rh_blind_string_len
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 32]
+    mov     edx, ED25519_PREFIX_LEN
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 160]
+    call    er_sha512_final
+    test    rax, rax
+    jz      .fail_pop
+
+    lea     rdi, [rsp + 480]
+    call    er_sha512_init
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 160]
+    mov     edx, 32
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    test    r15d, r15d
+    jz      .nonce_final
+    lea     rdi, [rsp + 480]
+    mov     rsi, r14
+    mov     edx, r15d
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+.nonce_final:
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 224]
+    call    er_sha512_final
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 224]
+    lea     rsi, [rsp + 288]
+    call    er_ed25519_scalar_reduce64
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 320]
+    lea     rsi, [rsp + 288]
+    call    er_ed25519_point_base_mul
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 480]
+    call    er_sha512_init
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 320]
+    mov     edx, 32
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 128]
+    mov     edx, 32
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    test    r15d, r15d
+    jz      .challenge_final
+    lea     rdi, [rsp + 480]
+    mov     rsi, r14
+    mov     edx, r15d
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+.challenge_final:
+    lea     rdi, [rsp + 480]
+    lea     rsi, [rsp + 352]
+    call    er_sha512_final
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 416]
+    call    er_ed25519_scalar_reduce64
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 416]
+    lea     rsi, [rsp + 96]
+    lea     rdx, [rsp + 288]
+    lea     rcx, [rsp + 448]
+    call    er_ed25519_scalar_muladd
+    test    eax, eax
+    jnz     .fail_pop
+
+    mov     rdi, [rsp + 704]
+    lea     rsi, [rsp + 320]
+    mov     ecx, 32
+    rep     movsb
+    lea     rsi, [rsp + 448]
+    mov     ecx, 32
+    rep     movsb
+    cmp     qword [rsp + 720], 0
+    je      .done
+    mov     rdi, [rsp + 720]
+    lea     rsi, [rsp + 128]
+    mov     ecx, 32
+    rep     movsb
+.done:
+    xor     eax, eax
+    er_ok
+    add     rsp, 736
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.fail_pop:
+    add     rsp, 736
     pop     r15
     pop     r14
     pop     r13

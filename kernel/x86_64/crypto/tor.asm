@@ -42,6 +42,7 @@ extern er_wasm_runtime_ptr
 extern edgerun_signing_wasm_start
 extern edgerun_signing_wasm_len
 extern er_ed25519_sign
+extern er_ed25519_blind_sign
 
 extern er_serial_puts
 extern er_serial_putchar
@@ -315,52 +316,16 @@ er_fn er_tor_hs_signing_blind_sign
 .msg_ready:
     cmp     r14d, TOR_SIGNING_MAX_MSG
     ja      .fail
-    call    _tor_signing_prepare_runtime
-    test    eax, eax
-    js      .fail
-
-    lea     rdi, [tor_signing_memory + TOR_SIGNING_SEED_OFF]
-    mov     rsi, rbx
-    mov     edx, 32
-    call    er_memcpy
-    lea     rdi, [tor_signing_memory + TOR_SIGNING_BLIND_OFF]
+    mov     rdi, rbx
     mov     rsi, r12
-    mov     edx, 32
-    call    er_memcpy
-    test    r14d, r14d
-    jz      .call
-    lea     rdi, [tor_signing_memory + TOR_SIGNING_MSG_OFF]
-    mov     rsi, r13
-    mov     edx, r14d
-    call    er_memcpy
-.call:
-    mov     qword [tor_signing_args], TOR_SIGNING_SEED_OFF
-    mov     qword [tor_signing_args + 8], TOR_SIGNING_BLIND_OFF
-    mov     qword [tor_signing_args + 16], TOR_SIGNING_MSG_OFF
-    mov     [tor_signing_args + 24], r14
-    mov     qword [tor_signing_args + 32], TOR_SIGNING_SIG_OFF
-    mov     qword [tor_signing_args + 40], TOR_SIGNING_PUB_OFF
-    lea     rdi, [tor_signing_runtime]
-    lea     rsi, [rel tor_signing_name_blind_sign]
-    mov     edx, tor_signing_name_blind_sign_len
-    lea     rcx, [tor_signing_args]
-    mov     r8d, 6
-    call    er_fn_call_args
-    test    rdx, rdx
-    jnz     .fail
+    mov     rdx, r13
+    mov     ecx, r14d
+    mov     r8, r15
+    mov     r9, [rsp]
+    call    er_ed25519_blind_sign
     test    eax, eax
     jnz     .fail
 
-    mov     rdi, r15
-    lea     rsi, [tor_signing_memory + TOR_SIGNING_SIG_OFF]
-    mov     edx, TOR_HS_ED25519_SIG_LEN
-    call    er_memcpy
-    cmp     qword [rsp], 0
-    je      .done
-    mov     rdi, [rsp]
-    lea     rsi, [tor_signing_memory + TOR_SIGNING_PUB_OFF]
-    mov     edx, 32
-    call    er_memcpy
 .done:
     xor     eax, eax
     er_ok
