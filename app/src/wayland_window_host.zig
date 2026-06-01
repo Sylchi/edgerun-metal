@@ -214,10 +214,9 @@ pub const default_refresh_hz = app_import.default_refresh_hz;
 
 // ── Entry point ──
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
-    const args = try init.minimal.args.toSlice(allocator);
-    defer allocator.free(args);
+pub fn main() !void {}
+
+fn run(args: []const [:0]const u8, io: std.Io, allocator: std.mem.Allocator, socket_path: []const u8) !void {
     const opts = options_import.parseOptions(args) catch |err| {
         if (err == error.HelpRequested) {
             options_import.help();
@@ -225,10 +224,8 @@ pub fn main(init: std.process.Init) !void {
         }
         return err;
     };
-    const socket_path = try options_import.waylandSocketPath(init, allocator);
-    defer allocator.free(socket_path);
-    var client = try client_import.WaylandClient.connect(init.io, socket_path);
-    defer client.close(init.io);
+    var client = try client_import.WaylandClient.connect(io, socket_path);
+    defer client.close(io);
     try client.bootstrap();
     try client.createWindow(opts.width, opts.height);
     const app = try app_import.NativeApp.create(&client, allocator, opts);

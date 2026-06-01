@@ -179,9 +179,18 @@ pub const mem = struct {
         }
     }
 
-    pub fn sliceAsBytes(slice: anytype) []const u8 {
+    pub fn sliceAsBytes(slice: anytype) if (@typeInfo(@TypeOf(slice)).pointer.is_const) []const u8 else []u8 {
         const Child = @TypeOf(slice[0]);
-        return @as([*]const u8, @ptrCast(slice.ptr))[0 .. slice.len * @sizeOf(Child)];
+        const Slice = @typeInfo(@TypeOf(slice)).pointer;
+        const Bytes = if (Slice.is_const) [*]const u8 else [*]u8;
+        return @as(Bytes, @ptrCast(slice.ptr))[0 .. slice.len * @sizeOf(Child)];
+    }
+
+    pub fn asBytes(value: anytype) if (@typeInfo(@TypeOf(value)).pointer.is_const) []const u8 else []u8 {
+        const Ptr = @TypeOf(value);
+        const info = @typeInfo(Ptr).pointer;
+        const Bytes = if (info.is_const) [*]const u8 else [*]u8;
+        return @as(Bytes, @ptrCast(value))[0..@sizeOf(info.child)];
     }
 
     pub fn splitScalar(comptime T: type, buffer: []const T, delimiter: T) SplitScalar(T) {
@@ -523,6 +532,28 @@ pub const Io = struct {
         pub fn flush(_: *Writer) !void {}
     };
 
+    pub const Reader = struct {
+        buffer: []const u8 = &.{},
+        index: usize = 0,
+
+        pub fn fixed(buffer: []const u8) Reader {
+            return .{ .buffer = buffer };
+        }
+
+        pub fn readSliceAll(self: *Reader, out: []u8) !void {
+            if (out.len > self.buffer.len - self.index) return error.EndOfStream;
+            @memcpy(out, self.buffer[self.index..][0..out.len]);
+            self.index += out.len;
+        }
+
+        pub fn readSliceShort(self: *Reader, out: []u8) !usize {
+            const len = @min(out.len, self.buffer.len - self.index);
+            @memcpy(out[0..len], self.buffer[self.index..][0..len]);
+            self.index += len;
+            return len;
+        }
+    };
+
     pub const File = struct {
         pub fn stdout() File { return .{}; }
         pub fn writer(_: File, _: Io, _: []u8) struct { interface: Writer = .{} } { return .{}; }
@@ -648,12 +679,315 @@ pub const os = struct {
         pub fn ioctl(_: i32, _: u32, _: usize) usize { return 1; }
         pub fn errno(result: anytype) E { return if (result < 0) .FAILURE else .SUCCESS; }
     };
-    pub const uefi = struct {};
+    pub const uefi = struct {
+        pub const Page = [4096]u8;
+        pub const Handle = *opaque {};
+        pub const Event = *opaque {};
+        pub const EventRegistration = *const opaque {};
+        pub const UnexpectedError = error{Unexpected};
+        pub const cc = switch (@import("builtin").target.cpu.arch) {
+            .x86_64 => @typeInfo(fn () callconv(.{ .x86_64_win = .{} }) void).@"fn".calling_convention,
+            else => @typeInfo(fn () callconv(.c) void).@"fn".calling_convention,
+        };
+
+        pub var handle: Handle = undefined;
+        pub var system_table: *tables.SystemTable = undefined;
+
+        pub const Guid = extern struct {
+            time_low: u32 align(8),
+            time_mid: u16,
+            time_high_and_version: u16,
+            clock_seq_high_and_reserved: u8,
+            clock_seq_low: u8,
+            node: [6]u8,
+        };
+
+        pub const Status = enum(usize) {
+            success = 0,
+            invalid_parameter = (1 << (@typeInfo(usize).int.bits - 1)) | 2,
+            unsupported = (1 << (@typeInfo(usize).int.bits - 1)) | 3,
+            device_error = (1 << (@typeInfo(usize).int.bits - 1)) | 7,
+            out_of_resources = (1 << (@typeInfo(usize).int.bits - 1)) | 9,
+            not_found = (1 << (@typeInfo(usize).int.bits - 1)) | 14,
+            warn_unknown_glyph = 1,
+            _,
+        };
+
+        pub fn unexpectedStatus(_: Status) UnexpectedError {
+            return error.Unexpected;
+        }
+
+        pub const tables = struct {
+            pub const TableHeader = extern struct {
+                signature: u64,
+                revision: u32,
+                header_size: u32,
+                crc32: u32,
+                reserved: u32,
+            };
+
+            pub const MemoryType = enum(u32) {
+                reserved_memory_type,
+                loader_code,
+                loader_data,
+                boot_services_code,
+                boot_services_data,
+                runtime_services_code,
+                runtime_services_data,
+                conventional_memory,
+                unusable_memory,
+                acpi_reclaim_memory,
+                acpi_memory_nvs,
+                memory_mapped_io,
+                memory_mapped_io_port_space,
+                pal_code,
+                persistent_memory,
+                unaccepted_memory,
+                max_memory_type,
+                invalid_start,
+                invalid_end = 0x6fffffff,
+                oem_start = 0x70000000,
+                oem_end = 0x7fffffff,
+                vendor_start = 0x80000000,
+                vendor_end = 0xffffffff,
+                _,
+            };
+
+            pub const AllocateType = enum(u32) { any, max_address, address };
+            pub const AllocateLocation = union(AllocateType) {
+                any,
+                max_address: [*]align(4096) Page,
+                address: [*]align(4096) Page,
+            };
+            pub const MemoryMapKey = enum(usize) { _ };
+            pub const TaskPriorityLevel = usize;
+            pub const TimerDelay = enum(u32) { cancel, periodic, relative };
+            pub const InterfaceType = enum(u32) { native };
+            pub const LocateSearchType = enum(u32) { all_handles, by_register_notify, by_protocol };
+            pub const OpenProtocolAttributes = enum(u32) { by_handle_protocol = 1, get_protocol = 2, test_protocol = 4, by_child_controller = 8, by_driver = 16, by_driver_exclusive = 48, exclusive = 32, _ };
+            pub const EventNotify = *const fn (event: Event, ctx: *anyopaque) callconv(cc) void;
+            pub const DevicePathProtocol = opaque {};
+            pub const RuntimeServices = opaque {};
+            pub const ConfigurationTable = extern struct { guid: Guid, table: *anyopaque };
+            pub const MemoryDescriptor = extern struct {
+                type: MemoryType,
+                physical_start: u64,
+                virtual_start: u64,
+                number_of_pages: u64,
+                attribute: u64,
+            };
+            pub const ProtocolInformationEntry = extern struct {
+                agent_handle: ?Handle,
+                controller_handle: ?Handle,
+                attributes: OpenProtocolAttributes,
+                open_count: u32,
+            };
+
+            pub const SystemTable = extern struct {
+                hdr: TableHeader,
+                firmware_vendor: [*:0]u16,
+                firmware_revision: u32,
+                console_in_handle: ?Handle,
+                con_in: ?*anyopaque,
+                console_out_handle: ?Handle,
+                con_out: ?*protocol.SimpleTextOutput,
+                standard_error_handle: ?Handle,
+                std_err: ?*protocol.SimpleTextOutput,
+                runtime_services: *RuntimeServices,
+                boot_services: ?*BootServices,
+                number_of_table_entries: usize,
+                configuration_table: [*]ConfigurationTable,
+            };
+
+            pub const BootServices = extern struct {
+                hdr: TableHeader,
+                raiseTpl: *const fn (new_tpl: TaskPriorityLevel) callconv(cc) TaskPriorityLevel,
+                restoreTpl: *const fn (old_tpl: TaskPriorityLevel) callconv(cc) void,
+                _allocatePages: *const fn (alloc_type: AllocateType, mem_type: MemoryType, pages: usize, memory: *[*]align(4096) Page) callconv(cc) Status,
+                _freePages: *const fn (memory: [*]align(4096) Page, pages: usize) callconv(cc) Status,
+                _getMemoryMap: *const fn (mmap_size: *usize, mmap: ?[*]align(@alignOf(MemoryDescriptor)) u8, map_key: *MemoryMapKey, descriptor_size: *usize, descriptor_version: *u32) callconv(cc) Status,
+                _allocatePool: *const fn (pool_type: MemoryType, size: usize, buffer: *[*]align(8) u8) callconv(cc) Status,
+                _freePool: *const fn (buffer: [*]align(8) u8) callconv(cc) Status,
+                _createEvent: *const fn (type: u32, notify_tpl: TaskPriorityLevel, notify_func: ?*const fn (Event, ?*anyopaque) callconv(cc) void, notify_ctx: ?*anyopaque, event: *Event) callconv(cc) Status,
+                _setTimer: *const fn (event: Event, type: TimerDelay, trigger_time: u64) callconv(cc) Status,
+                _waitForEvent: *const fn (event_len: usize, events: [*]const Event, index: *usize) callconv(cc) Status,
+                _signalEvent: *const fn (event: Event) callconv(cc) Status,
+                _closeEvent: *const fn (event: Event) callconv(cc) Status,
+                _checkEvent: *const fn (event: Event) callconv(cc) Status,
+                _installProtocolInterface: *const fn (handle: Handle, protocol: *const Guid, interface_type: InterfaceType, interface: *anyopaque) callconv(cc) Status,
+                _reinstallProtocolInterface: *const fn (handle: Handle, protocol: *const Guid, old_interface: *anyopaque, new_interface: *anyopaque) callconv(cc) Status,
+                _uninstallProtocolInterface: *const fn (handle: Handle, protocol: *const Guid, interface: *anyopaque) callconv(cc) Status,
+                _handleProtocol: *const fn (handle: Handle, protocol: *const Guid, interface: *?*anyopaque) callconv(cc) Status,
+                _reserved: *anyopaque,
+                _registerProtocolNotify: *const fn (protocol: *const Guid, event: Event, registration: *EventRegistration) callconv(cc) Status,
+                _locateHandle: *const fn (search_type: LocateSearchType, protocol: ?*const Guid, search_key: ?*const anyopaque, buffer_size: *usize, buffer: ?[*]Handle) callconv(cc) Status,
+                _locateDevicePath: *const fn (protocols: *const Guid, device_path: **const DevicePathProtocol, device: *?Handle) callconv(cc) Status,
+                _installConfigurationTable: *const fn (guid: *const Guid, table: ?*anyopaque) callconv(cc) Status,
+                _loadImage: *const fn (boot_policy: bool, parent_image_handle: Handle, device_path: ?*const DevicePathProtocol, source_buffer: ?[*]const u8, source_size: usize, image_handle: *Handle) callconv(cc) Status,
+                _startImage: *const fn (image_handle: Handle, exit_data_size: ?*usize, exit_data: ?*[*]u16) callconv(cc) Status,
+                _exit: *const fn (image_handle: Handle, exit_status: Status, exit_data_size: usize, exit_data: ?[*]align(2) const u8) callconv(cc) Status,
+                _unloadImage: *const fn (image_handle: Handle) callconv(cc) Status,
+                _exitBootServices: *const fn (image_handle: Handle, map_key: MemoryMapKey) callconv(cc) Status,
+                _getNextMonotonicCount: *const fn (count: *u64) callconv(cc) Status,
+                _stall: *const fn (microseconds: usize) callconv(cc) Status,
+                _setWatchdogTimer: *const fn (timeout: usize, watchdog_code: u64, data_size: usize, watchdog_data: ?[*]const u16) callconv(cc) Status,
+                _connectController: *const fn (controller_handle: Handle, driver_image_handle: ?[*:null]?Handle, remaining_device_path: ?*const DevicePathProtocol, recursive: bool) callconv(cc) Status,
+                _disconnectController: *const fn (controller_handle: Handle, driver_image_handle: ?Handle, child_handle: ?Handle) callconv(cc) Status,
+                _openProtocol: *const fn (handle: Handle, protocol: *const Guid, interface: ?*?*anyopaque, agent_handle: ?Handle, controller_handle: ?Handle, attributes: OpenProtocolAttributes) callconv(cc) Status,
+                _closeProtocol: *const fn (handle: Handle, protocol: *const Guid, agent_handle: Handle, controller_handle: ?Handle) callconv(cc) Status,
+                _openProtocolInformation: *const fn (handle: Handle, protocol: *const Guid, entry_buffer: *[*]ProtocolInformationEntry, entry_count: *usize) callconv(cc) Status,
+                _protocolsPerHandle: *const fn (handle: Handle, protocol_buffer: *[*]*const Guid, protocol_buffer_count: *usize) callconv(cc) Status,
+                _locateHandleBuffer: *const fn (search_type: LocateSearchType, protocol: ?*const Guid, search_key: ?*const anyopaque, num_handles: *usize, buffer: *[*]Handle) callconv(cc) Status,
+                _locateProtocol: *const fn (protocol: *const Guid, registration: ?EventRegistration, interface: *?*const anyopaque) callconv(cc) Status,
+                _installMultipleProtocolInterfaces: *const fn (handle: *Handle, ...) callconv(.c) Status,
+                _uninstallMultipleProtocolInterfaces: *const fn (handle: *Handle, ...) callconv(.c) Status,
+                _calculateCrc32: *const fn (data: [*]const u8, data_size: usize, *u32) callconv(cc) Status,
+                _copyMem: *const fn (dest: [*]u8, src: [*]const u8, len: usize) callconv(cc) void,
+                _setMem: *const fn (buffer: [*]u8, size: usize, value: u8) callconv(cc) void,
+                _createEventEx: *const fn (type: u32, notify_tpl: usize, notify_func: EventNotify, notify_ctx: *const anyopaque, event_group: *const Guid, event: *Event) callconv(cc) Status,
+
+                pub fn allocatePages(self: *BootServices, location: AllocateLocation, mem_type: MemoryType, pages: usize) (UnexpectedError || error{ OutOfResources, InvalidParameter, NotFound })![]align(4096) Page {
+                    var ptr: [*]align(4096) Page = switch (location) {
+                        .any => undefined,
+                        .address, .max_address => |address| address,
+                    };
+                    switch (self._allocatePages(meta.activeTag(location), mem_type, pages, &ptr)) {
+                        .success => return ptr[0..pages],
+                        .out_of_resources => return error.OutOfResources,
+                        .invalid_parameter => return error.InvalidParameter,
+                        .not_found => return error.NotFound,
+                        else => |status| return unexpectedStatus(status),
+                    }
+                }
+
+                pub fn locateProtocol(self: *const BootServices, comptime Protocol: type, registration: ?EventRegistration) (UnexpectedError || error{InvalidParameter})!?*Protocol {
+                    var interface: *Protocol = undefined;
+                    switch (self._locateProtocol(&Protocol.guid, registration, @ptrCast(&interface))) {
+                        .success => return interface,
+                        .not_found => return null,
+                        .invalid_parameter => return error.InvalidParameter,
+                        else => |status| return unexpectedStatus(status),
+                    }
+                }
+            };
+        };
+
+        pub const protocol = struct {
+            pub const SimpleTextOutput = extern struct {
+                _reset: *const fn (*SimpleTextOutput, bool) callconv(cc) Status,
+                _output_string: *const fn (*SimpleTextOutput, [*:0]const u16) callconv(cc) Status,
+                _test_string: *const fn (*const SimpleTextOutput, [*:0]const u16) callconv(cc) Status,
+                _query_mode: *const fn (*const SimpleTextOutput, usize, *usize, *usize) callconv(cc) Status,
+                _set_mode: *const fn (*SimpleTextOutput, usize) callconv(cc) Status,
+                _set_attribute: *const fn (*SimpleTextOutput, usize) callconv(cc) Status,
+                _clear_screen: *const fn (*SimpleTextOutput) callconv(cc) Status,
+                _set_cursor_position: *const fn (*SimpleTextOutput, usize, usize) callconv(cc) Status,
+                _enable_cursor: *const fn (*SimpleTextOutput, bool) callconv(cc) Status,
+                mode: *Mode,
+
+                pub const Mode = extern struct {
+                    max_mode: i32,
+                    mode: i32,
+                    attribute: i32,
+                    cursor_column: i32,
+                    cursor_row: i32,
+                    cursor_visible: bool,
+                };
+
+                pub fn outputString(self: *SimpleTextOutput, message: [*:0]const u16) (UnexpectedError || error{ DeviceError, Unsupported })!bool {
+                    switch (self._output_string(self, message)) {
+                        .success => return true,
+                        .warn_unknown_glyph => return false,
+                        .device_error => return error.DeviceError,
+                        .unsupported => return error.Unsupported,
+                        else => |status| return unexpectedStatus(status),
+                    }
+                }
+            };
+
+            pub const GraphicsOutput = extern struct {
+                _query_mode: *const fn (*const GraphicsOutput, u32, *usize, **Mode.Info) callconv(cc) Status,
+                _set_mode: *const fn (*GraphicsOutput, u32) callconv(cc) Status,
+                _blt: *const fn (*GraphicsOutput, ?[*]BltPixel, BltOperation, usize, usize, usize, usize, usize, usize, usize) callconv(cc) Status,
+                mode: *Mode,
+
+                pub const guid align(8) = Guid{
+                    .time_low = 0x9042a9de,
+                    .time_mid = 0x23dc,
+                    .time_high_and_version = 0x4a38,
+                    .clock_seq_high_and_reserved = 0x96,
+                    .clock_seq_low = 0xfb,
+                    .node = [_]u8{ 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a },
+                };
+
+                pub const Mode = extern struct {
+                    max_mode: u32,
+                    mode: u32,
+                    info: *Info,
+                    size_of_info: usize,
+                    frame_buffer_base: u64,
+                    frame_buffer_size: usize,
+
+                    pub const Info = extern struct {
+                        version: u32,
+                        horizontal_resolution: u32,
+                        vertical_resolution: u32,
+                        pixel_format: PixelFormat,
+                        pixel_information: PixelBitmask,
+                        pixels_per_scan_line: u32,
+                    };
+                };
+
+                pub const PixelFormat = enum(u32) {
+                    red_green_blue_reserved_8_bit_per_color,
+                    blue_green_red_reserved_8_bit_per_color,
+                    bit_mask,
+                    blt_only,
+                };
+
+                pub const PixelBitmask = extern struct {
+                    red_mask: u32,
+                    green_mask: u32,
+                    blue_mask: u32,
+                    reserved_mask: u32,
+                };
+
+                pub const BltPixel = extern struct { blue: u8, green: u8, red: u8, reserved: u8 };
+                pub const BltOperation = enum(u32) { blt_video_fill, blt_video_to_blt_buffer, blt_buffer_to_video, blt_video_to_video };
+            };
+        };
+    };
 };
 
 pub const DynLib = struct {};
-pub const compress = struct { pub const flate = struct { pub const max_window_len: usize = 32768; }; };
-pub const hash = struct { pub const Crc32 = struct { pub fn init() Crc32 { return .{}; } }; };
+pub const compress = struct {
+    pub const flate = struct {
+        pub const max_window_len: usize = 32768;
+    };
+};
+pub const hash = struct {
+    pub const Crc32 = struct {
+        value: u32 = 0xffffffff,
+
+        pub fn init() Crc32 {
+            return .{};
+        }
+
+        pub fn update(self: *Crc32, bytes: []const u8) void {
+            for (bytes) |byte| {
+                self.value ^= byte;
+                var bit: u3 = 0;
+                while (bit < 8) : (bit += 1) {
+                    self.value = if ((self.value & 1) != 0) (self.value >> 1) ^ 0xedb88320 else self.value >> 1;
+                }
+            }
+        }
+
+        pub fn final(self: Crc32) u32 {
+            return self.value ^ 0xffffffff;
+        }
+    };
+};
 pub const crypto = struct {
     pub const hash = struct {
         pub const sha2 = struct {

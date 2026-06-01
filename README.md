@@ -247,15 +247,13 @@ target names instead of copying a hand-maintained list from this README.
 Build the standalone component WASM artifact:
 
 ```sh
-cd app
-zig build --cache-dir ../.build/app ui-components-wasm
+./build.sh app-ui-wasm
 ```
 
 Open the native UI preview:
 
 ```sh
-cd app
-zig build wayland-window
+./build.sh wayland-window
 ```
 
 Build and run the main host-side kernel paths:

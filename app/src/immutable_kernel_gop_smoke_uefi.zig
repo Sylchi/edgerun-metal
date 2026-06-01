@@ -2,7 +2,6 @@ const std = @import("er_std");
 const uefi = std.os.uefi;
 const app_frame = @import("shell/frame.zig");
 const app_location = @import("location.zig");
-const app_images = @import("app_images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
 const interaction = @import("ui/interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
@@ -47,6 +46,12 @@ var framebuffer: gop_framebuffer.Framebuffer = undefined;
 var scene_state: SceneState = .{};
 var font_atlas: renderer_font_atlas.Atlas = undefined;
 var virtio_gpu_queue: virtio_gpu.QueueStorage = .{};
+var boot_texture_pixels = [_]ui.Color{
+    .{ .r = 91, .g = 219, .b = 134, .a = 255 },
+    .{ .r = 86, .g = 190, .b = 255, .a = 255 },
+    .{ .r = 255, .g = 206, .b = 92, .a = 255 },
+    .{ .r = 21, .g = 26, .b = 38, .a = 255 },
+};
 
 const SceneState = struct {
     commands: [max_commands]ui.Command = undefined,
@@ -64,11 +69,15 @@ const SceneState = struct {
         }) catch return error.AppFrameBuildFailed;
         const buffers = self.ir_storage.buffers();
         renderer_pipeline.packScene(buffers, atlas, scene.written()) catch return error.AppIrInvalid;
-
-        renderer_pipeline.packScene(buffers, &font_atlas, scene.written()) catch return error.AppIrInvalid;
         return buffers;
     }
 };
+
+pub export fn EfiMain(handle: uefi.Handle, system_table: *uefi.tables.SystemTable) callconv(.c) usize {
+    uefi.handle = handle;
+    uefi.system_table = system_table;
+    main();
+}
 
 pub fn main() noreturn {
     printLine("EdgeRun native renderer virtio-gpu smoke");
@@ -129,7 +138,7 @@ fn allocateNativePixels(boot_services: *uefi.tables.BootServices, width: u32, he
     const bytes = boot_services.allocatePages(.any, .loader_data, pages) catch return error.NativePixelAllocationFailed;
     const pixel_bytes = std.mem.sliceAsBytes(bytes)[0..byte_count];
     @memset(pixel_bytes, 0);
-    const pixels: [*]ui.Color = @ptrCast(pixel_bytes.ptr);
+    const pixels: [*]ui.Color = @ptrCast(@alignCast(pixel_bytes.ptr));
     return pixels[0..pixel_count];
 }
 
@@ -152,9 +161,7 @@ fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!voi
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
     writeDebugconLine("diag: app frame pack ok");
 
-    writeDebugconLine("diag: app image decode start");
-    const image_texture = app_images.cloudMeme() catch return error.AppResourceInvalid;
-    writeDebugconLine("diag: app image decode ok");
+    const image_texture = bootTexture();
 
     writeDebugconLine("diag: software render start");
     const surface = renderer_software.Framebuffer.init(width, height, pixels) catch return error.NativeRenderFailed;
@@ -163,6 +170,10 @@ fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!voi
     try renderDiagnosticBatch(surface, buffers, image_texture, .icons);
     _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
     writeDebugconLine("diag: software render ok");
+}
+
+fn bootTexture() renderer_software.RgbaTexture {
+    return .{ .width = 2, .height = 2, .pixels = &boot_texture_pixels };
 }
 
 const DiagnosticBatch = enum { rects, text, icons };

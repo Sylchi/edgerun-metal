@@ -38,11 +38,13 @@ extern er_vp8_parse_compressed_inter_frame_header
 extern er_vp8_read_key_macroblock_header
 extern er_vp8_read_reference_name
 extern er_vp8_read_inter_prediction
+extern er_vp8_read_inter_split_motion
 extern er_vp8_read_inter_macroblock_header
 extern er_vp8_luma_mode_intra4_mode
 extern er_vp8_memset
 extern er_vp8_read_reference_copy
 extern er_vp8_parse_inter_reference_header
+extern er_vp8_apply_inter_reference_header
 extern er_vp8_read_intra16_mode
 extern er_vp8_read_chroma_mode
 extern er_vp8_read_inter_intra16_mode
@@ -70,6 +72,8 @@ extern er_vp8_write_chroma_macroblock
 extern er_vp8_read_reference_luma_nearest
 extern er_vp8_read_reference_chroma_nearest
 extern er_vp8_read_reference_luma_subpixel
+extern er_vp8_read_reference_luma_split
+extern er_vp8_average_split_chroma_motion
 extern er_vp8_read_reference_chroma_subpixel
 extern er_vp8_subpixel_filter_value
 extern er_vp8_reference_horizontal_sample
@@ -134,6 +138,7 @@ extern er_vp8_read_motion_vector_component
 extern er_vp8_read_motion_vector
 extern er_vp8_same_motion_vector
 extern er_vp8_add_motion_vector
+extern er_vp8_read_sub_motion_vector
 extern er_vp8_sub_motion_context
 extern er_vp8_inter_mode_context_probability
 extern er_vp8_split_mv_partition
@@ -1675,8 +1680,52 @@ _start:
     cmp     byte [rel reference + VP8_REFERENCE_COPY_TO_ALTERNATE], VP8_REFERENCE_COPY_LAST
     jne     .fail_reference_copy_alternate
     inc     qword [rel passed]
-    jmp     .intra16_modes
+    jmp     .reference_apply
 .fail_reference_copy_alternate:
+    inc     qword [rel failed]
+
+.reference_apply:
+    mov     rdi, frame_y
+    mov     esi, 0x11
+    mov     edx, 16
+    call    er_vp8_memset
+    mov     rdi, frame_u
+    mov     esi, 0x22
+    mov     edx, 16
+    call    er_vp8_memset
+    mov     rdi, frame_v
+    mov     esi, 0x33
+    mov     edx, 16
+    call    er_vp8_memset
+    mov     rdi, plane
+    mov     esi, 0x44
+    mov     edx, 16
+    call    er_vp8_memset
+    mov     byte [rel reference + VP8_REFERENCE_REFRESH_GOLDEN], 1
+    mov     byte [rel reference + VP8_REFERENCE_REFRESH_ALTERNATE], 0
+    mov     byte [rel reference + VP8_REFERENCE_COPY_TO_GOLDEN], VP8_REFERENCE_COPY_NONE
+    mov     byte [rel reference + VP8_REFERENCE_COPY_TO_ALTERNATE], VP8_REFERENCE_COPY_LAST
+    mov     byte [rel reference + VP8_REFERENCE_REFRESH_LAST], 1
+    mov     rdi, reference
+    mov     rsi, frame_y
+    mov     rdx, frame_u
+    mov     rcx, frame_v
+    mov     r8, plane
+    mov     r9d, 16
+    call    er_vp8_apply_inter_reference_header
+    cmp     eax, 3
+    jne     .fail_reference_apply
+    test    edx, edx
+    jnz     .fail_reference_apply
+    cmp     byte [rel frame_v], 0x11
+    jne     .fail_reference_apply
+    cmp     byte [rel plane], 0x22
+    jne     .fail_reference_apply
+    cmp     byte [rel frame_u], 0x11
+    jne     .fail_reference_apply
+    inc     qword [rel passed]
+    jmp     .intra16_modes
+.fail_reference_apply:
     inc     qword [rel failed]
 
 .intra16_modes:
@@ -2313,6 +2362,73 @@ _start:
     jne     .fail_macroblock_geometry
     mov     al, [rel subpixel_taps + 1]
     cmp     byte [rel v_plane], al
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.clear_split_vectors:
+    cmp     ecx, VP8_Y_BLOCK_COUNT * VP8_MOTION_VECTOR_SIZE
+    jae     .fill_split_reference_rows
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + rcx], 0
+    inc     ecx
+    jmp     .clear_split_vectors
+.fill_split_reference_rows:
+    xor     r8d, r8d
+.fill_split_reference_row:
+    cmp     r8d, VP8_TEST_FRAME_HEIGHT
+    jae     .set_split_vectors
+    xor     ecx, ecx
+.fill_split_reference_col:
+    cmp     ecx, VP8_TEST_FRAME_WIDTH
+    jae     .next_split_reference_row
+    mov     eax, r8d
+    imul    eax, 10
+    add     eax, ecx
+    mov     edx, r8d
+    imul    edx, VP8_TEST_FRAME_WIDTH
+    add     edx, ecx
+    mov     byte [rel frame_y + rdx], al
+    inc     ecx
+    jmp     .fill_split_reference_col
+.next_split_reference_row:
+    inc     r8d
+    jmp     .fill_split_reference_row
+.set_split_vectors:
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 1 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], 4
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 4 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], 4
+    mov     rdi, plane
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE
+    call    er_vp8_memset
+    mov     edi, VP8_TEST_FRAME_WIDTH
+    mov     esi, VP8_TEST_FRAME_HEIGHT
+    xor     edx, edx
+    xor     ecx, ecx
+    lea     r8, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    mov     r9, frame_y
+    push    plane
+    call    er_vp8_read_reference_luma_split
+    add     rsp, 8
+    cmp     eax, VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel plane], 0
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel plane + 4], 5
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel plane + 4 * VP8_MACROBLOCK_SIZE], 50
+    jne     .fail_macroblock_geometry
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 2 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], -8
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 2 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], 12
+    lea     rdi, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    mov     rsi, motion_vector
+    call    er_vp8_average_split_chroma_motion
+    cmp     eax, VP8_MOTION_VECTOR_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], 0
+    jne     .fail_macroblock_geometry
+    cmp     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 1
     jne     .fail_macroblock_geometry
     mov     rdi, subpixel_taps
     mov     esi, VP8_SUBPIXEL_FILTER_PHASE_COUNT
@@ -4106,6 +4222,29 @@ _start:
     jne     .fail_motion_vector_helpers
     test    edx, edx
     jnz     .fail_motion_vector_helpers
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], 4
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], -8
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], 12
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 16
+    mov     rdi, bool_reader
+    mov     rsi, compressed_header
+    mov     rdx, motion_vector
+    mov     rcx, motion_vector_other
+    mov     r8, motion_vector_other
+    lea     r9, [rel macroblock_header + VP8_MACROBLOCK_HEADER_MOTION_VECTOR]
+    call    er_vp8_read_sub_motion_vector
+    cmp     eax, VP8_MOTION_VECTOR_SIZE
+    jne     .fail_motion_vector_helpers
+    test    edx, edx
+    jnz     .fail_motion_vector_helpers
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_ROW], 4
+    jne     .fail_motion_vector_helpers
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_COL], -8
+    jne     .fail_motion_vector_helpers
     inc     qword [rel passed]
     jmp     .sub_motion_context
 .fail_motion_vector_helpers:
@@ -4236,8 +4375,37 @@ _start:
     test    edx, edx
     jnz     .fail_read_split_mv_partition
     inc     qword [rel passed]
-    jmp     .done
+    jmp     .read_inter_split_motion
 .fail_read_split_mv_partition:
+    inc     qword [rel failed]
+
+.read_inter_split_motion:
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    lea     rdi, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    xor     esi, esi
+    mov     edx, VP8_Y_BLOCK_COUNT * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 0
+    mov     rdi, bool_reader
+    mov     rsi, compressed_header
+    mov     rdx, motion_vector
+    lea     rcx, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    call    er_vp8_read_inter_split_motion
+    cmp     eax, VP8_Y_BLOCK_COUNT
+    jne     .fail_read_inter_split_motion
+    test    edx, edx
+    jnz     .fail_read_inter_split_motion
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + VP8_MOTION_VECTOR_ROW], 0
+    jne     .fail_read_inter_split_motion
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 15 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], 0
+    jne     .fail_read_inter_split_motion
+    inc     qword [rel passed]
+    jmp     .done
+.fail_read_inter_split_motion:
     inc     qword [rel failed]
 
 .done:

@@ -2,7 +2,6 @@ const jpeg = @import("jpeg.zig");
 const jxl = @import("jxl.zig");
 const png = @import("png.zig");
 const tga = @import("tga.zig");
-const webp = @import("webp/root.zig");
 const common = @import("common.zig");
 const runtime_image = @import("runtime_image.zig");
 const ui = @import("../ui/core.zig");
@@ -24,14 +23,9 @@ pub const ImportFormat = enum {
     jxl,
     png,
     tga,
-    webp,
 };
 
 pub const JxlKind = jxl.Kind;
-pub const WebpAnimationHeader = webp.WebpAnimationHeader;
-pub const WebpAnimationFrameInfo = webp.WebpAnimationFrameInfo;
-pub const WebpAnimationFrame = webp.WebpAnimationFrame;
-pub const WebpAnimationCanvasDecoder = webp.WebpAnimationCanvasDecoder;
 
 pub fn detectFormat(bytes: []const u8) DecodeError!Format {
     _ = try runtime_image.decode(bytes);
@@ -77,7 +71,6 @@ pub fn importDetectFormat(bytes: []const u8) DecodeError!ImportFormat {
     if (jxl.isJxl(bytes)) return .jxl;
     if (png.isPng(bytes)) return .png;
     if (tga.isTga(bytes)) return .tga;
-    if (webp.isWebp(bytes)) return .webp;
     return error.UnsupportedImage;
 }
 
@@ -91,7 +84,6 @@ pub fn importHeader(bytes: []const u8) DecodeError!Header {
         .jxl => jxl.decodeHeader(bytes),
         .png => png.decodePngHeader(bytes),
         .tga => tga.decodeTgaHeader(bytes),
-        .webp => webp.decodeWebpHeader(bytes),
     };
 }
 
@@ -99,7 +91,6 @@ pub fn importScratchByteLen(bytes: []const u8, width: usize, height: usize) usiz
     return switch (importDetectFormat(bytes) catch @panic("image import scratch byte length format error")) {
         .jpeg, .jxl, .tga => 0,
         .png => png.pngScratchByteLen(bytes.len, width, height),
-        .webp => webp.webpScratchByteLen(bytes, width, height),
     };
 }
 
@@ -109,7 +100,6 @@ fn importDecodeWithScratch(bytes: []const u8, out: []ui.Color, scratch: []u8) De
         .jxl => jxl.decodeHeader(bytes),
         .png => png.decodePng(bytes, out, scratch),
         .tga => tga.decodeTga(bytes, out),
-        .webp => webp.decodeWebpWithScratch(bytes, out, scratch),
     };
 }
 
@@ -137,15 +127,6 @@ pub const runtimeImageRgbaCanonicalLenForTiling = runtime_image.rgbaCanonicalLen
 pub const encodeRuntimeRgba = runtime_image.encodeRgba;
 pub const encodeRuntimeRgbaTiled = runtime_image.encodeRgbaTiled;
 pub const decodeRuntimeRgbaObject = runtime_image.decodeRgbaInto;
-
-pub const decodeWebpAnimationHeader = webp.decodeWebpAnimationHeader;
-pub const decodeWebpAnimationFrame = webp.decodeWebpAnimationFrame;
-pub const decodeWebpAnimationFrameWithScratch = webp.decodeWebpAnimationFrameWithScratch;
-pub const decodeWebpAnimationCanvasFrame = webp.decodeWebpAnimationCanvasFrame;
-pub const decodeWebpAnimationCanvasFrameWithScratch = webp.decodeWebpAnimationCanvasFrameWithScratch;
-pub const webpAnimationFrameScratchByteLen = webp.webpAnimationFrameScratchByteLen;
-pub const webpAnimationCanvasScratchByteLen = webp.webpAnimationCanvasScratchByteLen;
-pub const webpAnimationDecoderScratchByteLen = webp.webpAnimationDecoderScratchByteLen;
 
 test "runtime decoder rejects foreign image bytes" {
     var pixels: [1]ui.Color = undefined;
@@ -212,6 +193,5 @@ test {
     _ = jxl;
     _ = png;
     _ = tga;
-    _ = webp;
     _ = runtime_image;
 }

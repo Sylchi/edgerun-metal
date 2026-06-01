@@ -1685,6 +1685,17 @@ cmd_app_ui_wasm() {
   -femit-bin=../${BUILD_DIR}/app/edgerun-ui-components.wasm)
 }
 
+cmd_immutable_kernel_gop_smoke_efi() {
+ mkdir -p "${BUILD_DIR}/app/immutable-kernel-gop-smoke"
+ (cd app && zig build-exe -OReleaseFast \
+  -target x86_64-uefi \
+  -fstrip \
+  --dep er_std \
+  -Mroot=src/immutable_kernel_gop_smoke_uefi.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin=../${BUILD_DIR}/app/immutable-kernel-gop-smoke/BOOTX64.EFI)
+}
+
 cmd_sdk_cli() {
  mkdir -p "${BUILD_DIR}/app"
  (cd app && zig build-exe -ODebug \
@@ -1765,6 +1776,24 @@ cmd_pi_usb_control() {
   -femit-bin="../${BUILD_DIR}/app/edgerun-pi-usb-control-host")
 }
 
+cmd_wayland_window() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/wayland_window_host.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-wayland-window")
+}
+
+cmd_drm_gbm_window() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/drm_gbm_host.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-drm-gbm-window")
+}
+
 cmd_ifstatus() {
  mkdir -p "${BUILD_DIR}/app"
  (cd app && zig build-exe -ODebug \
@@ -1801,6 +1830,8 @@ cmd_app() {
  cmd_ifstatus
  cmd_pi_usb_load
  cmd_pi_usb_control
+ cmd_wayland_window
+ cmd_drm_gbm_window
 }
 
 cmd_test() {
@@ -2423,6 +2454,7 @@ EdgeRun build targets:
   deps-audit         Check for undeclared external dependency manifests and blobs
   app                Run owned app build path without app/build.zig
   app-ui-wasm        Build UI WASM directly without app/build.zig
+  immutable-kernel-gop-smoke-efi Build UEFI native renderer GOP smoke without app/build.zig
   sdk-cli            Build and run SDK simulation without app/build.zig
   sdk-bench          Build and run SDK benchmark without app/build.zig
   project-intro-video Build and run project intro renderer without app/build.zig
@@ -2433,6 +2465,8 @@ EdgeRun build targets:
   ifstatus           Build interface status publisher without app/build.zig
   pi-usb-load        Build Pi USB boot host without app/build.zig
   pi-usb-control     Build Pi USB control host without app/build.zig
+  wayland-window     Build Wayland native window host without app/build.zig
+  drm-gbm-window     Build DRM/GBM native window host without app/build.zig
   tpm-real-check     Build real TPM checker without app/build.zig
   real-tpm           Build and run real TPM checker against /dev/tpmrm0
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
@@ -2487,6 +2521,7 @@ case "${1:-help}" in
 	deps-audit)     cmd_deps_audit ;;
 	app)            cmd_app ;;
 	app-ui-wasm)    cmd_app_ui_wasm ;;
+	immutable-kernel-gop-smoke-efi) cmd_immutable_kernel_gop_smoke_efi ;;
 	sdk-cli)        shift; cmd_sdk_cli "$@" ;;
 	sdk-bench)      cmd_sdk_bench ;;
 	project-intro-video) cmd_project_intro_video ;;
@@ -2497,6 +2532,8 @@ case "${1:-help}" in
 	ifstatus)       cmd_ifstatus ;;
 	pi-usb-load)    cmd_pi_usb_load ;;
 	pi-usb-control) cmd_pi_usb_control ;;
+	wayland-window) cmd_wayland_window ;;
+	drm-gbm-window) cmd_drm_gbm_window ;;
 	tpm-real-check) cmd_tpm_real_check_build ;;
 	real-tpm)       cmd_real_tpm ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;

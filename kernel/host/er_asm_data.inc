@@ -405,6 +405,8 @@ tok_rsdp_length_close: db "RSDP_LENGTH]"
 tok_rsdp_length_close_len equ $ - tok_rsdp_length_close
 tok_madt_lapic_addr_close: db "MADT_LAPIC_ADDR]"
 tok_madt_lapic_addr_close_len equ $ - tok_madt_lapic_addr_close
+tok_madt_entries: db "MADT_ENTRIES"
+tok_madt_entries_len equ $ - tok_madt_entries
 tok_madt_ioapic_addr_close: db "MADT_IOAPIC_ADDR]"
 tok_madt_ioapic_addr_close_len equ $ - tok_madt_ioapic_addr_close
 tok_madt_ioapic_gsi_base_close: db "MADT_IOAPIC_GSI_BASE]"

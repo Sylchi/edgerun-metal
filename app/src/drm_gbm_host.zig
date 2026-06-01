@@ -94,10 +94,9 @@ const SceneState = struct {
     }
 };
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
-    const args = try init.minimal.args.toSlice(allocator);
-    defer allocator.free(args);
+pub fn main() !void {}
+
+fn run(args: []const [:0]const u8) !void {
     const options = try parseOptions(args);
 
     const fd = try openDrm(options.device);
