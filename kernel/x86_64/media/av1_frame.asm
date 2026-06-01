@@ -14,8 +14,7 @@ extern er_av1_bits_bytes_written
     mov     rdi, rsp
     mov     esi, %1
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 %macro call_read_bit 0
@@ -26,8 +25,7 @@ extern er_av1_bits_bytes_written
     mov     rdi, rsp
     mov     edx, %1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 %macro write_bits 2
@@ -125,17 +123,14 @@ extern er_av1_bits_bytes_written
 
 %macro read_delta_q_to 1
     call_read_bit
-    test    eax, eax
-    jz      %%zero
+    er_check_zero eax, %%zero
     read_bits AV1_QUANT_DELTA_BITS
     mov     ecx, eax
-    test    ecx, ecx
-    jz      %%store
+    er_check_zero ecx, %%store
     mov     [rsp + AV1_BITS_SIZE], ecx
     call_read_bit
     mov     ecx, [rsp + AV1_BITS_SIZE]
-    test    eax, eax
-    jz      %%store
+    er_check_zero eax, %%store
     neg     ecx
 %%store:
     mov     [r13 + %1], ecx
@@ -147,8 +142,7 @@ extern er_av1_bits_bytes_written
 
 %macro write_delta_q_from 1
     mov     esi, [r13 + %1]
-    test    esi, esi
-    jnz     %%nonzero
+    er_check_nonzero esi, %%nonzero
     write_bits 0, 1
     jmp     %%done
 %%nonzero:
@@ -347,8 +341,7 @@ extern er_av1_bits_bytes_written
 
 %macro read_segment_feature 4
     call_read_bit
-    test    eax, eax
-    jz      %%disabled
+    er_check_zero eax, %%disabled
     mov     al, [r13 + AV1_FRAME_SEGMENT_FEATURE_MASKS + rbx]
     or      al, 1 << %1
     mov     [r13 + AV1_FRAME_SEGMENT_FEATURE_MASKS + rbx], al
@@ -365,8 +358,7 @@ extern er_av1_bits_bytes_written
     mov     [rsp + AV1_BITS_SIZE], ecx
     call_read_bit
     mov     ecx, [rsp + AV1_BITS_SIZE]
-    test    eax, eax
-    jz      %%store
+    er_check_zero eax, %%store
     neg     ecx
 %%store:
 %endif
@@ -384,8 +376,7 @@ extern er_av1_bits_bytes_written
 
 %macro read_loop_filter_delta_value 1
     call_read_bit
-    test    eax, eax
-    jz      %%zero
+    er_check_zero eax, %%zero
     read_bits AV1_LOOP_FILTER_DELTA_BITS
     cmp     eax, AV1_LOOP_FILTER_DELTA_MAX
     ja      .corrupt
@@ -393,8 +384,7 @@ extern er_av1_bits_bytes_written
     mov     [rsp + AV1_BITS_SIZE], ecx
     call_read_bit
     mov     ecx, [rsp + AV1_BITS_SIZE]
-    test    eax, eax
-    jz      %%store
+    er_check_zero eax, %%store
     neg     ecx
 %%store:
     mov     [r13 + %1 + rbx * 4], ecx
@@ -406,8 +396,7 @@ extern er_av1_bits_bytes_written
 
 %macro write_loop_filter_delta_value 1
     mov     esi, [r13 + %1 + rbx * 4]
-    test    esi, esi
-    jnz     %%nonzero
+    er_check_nonzero esi, %%nonzero
     write_bits 0, 1
     jmp     %%done
 %%nonzero:
@@ -437,8 +426,7 @@ extern er_av1_bits_bytes_written
     mov     [rsp + AV1_BITS_SIZE], ecx
     call_read_bit
     mov     ecx, [rsp + AV1_BITS_SIZE]
-    test    eax, eax
-    jz      %%store
+    er_check_zero eax, %%store
     neg     ecx
 %%store:
     mov     eax, ebx
@@ -523,10 +511,8 @@ SECTION .text
 er_fn er_av1_frame_decode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE + 8
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     byte [rdx + AV1_SEQ_REDUCED_STILL], 0
     jne     .unsupported
     mov     r12, rdx
@@ -536,13 +522,11 @@ er_fn er_av1_frame_decode
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     call_read_bit
     mov     [r13 + AV1_FRAME_SHOW_EXISTING_FRAME], al
-    test    eax, eax
-    jnz     .show_existing_frame
+    er_check_nonzero eax, .show_existing_frame
 
     read_bits AV1_FRAME_TYPE_BITS
     mov     [r13 + AV1_FRAME_TYPE], al
@@ -559,8 +543,7 @@ er_fn er_av1_frame_decode
 .key_frame:
     call_read_bit
     mov     [r13 + AV1_FRAME_SHOW_FRAME], al
-    test    eax, eax
-    jnz     .shown_frame
+    er_check_nonzero eax, .shown_frame
     call_read_bit
     mov     [r13 + AV1_FRAME_SHOWABLE_FRAME], al
     jmp     .keyframe_defaults
@@ -576,8 +559,7 @@ er_fn er_av1_frame_decode
 .inter_frame:
     call_read_bit
     mov     [r13 + AV1_FRAME_SHOW_FRAME], al
-    test    eax, eax
-    jnz     .intra_shown_frame
+    er_check_nonzero eax, .intra_shown_frame
     call_read_bit
     mov     [r13 + AV1_FRAME_SHOWABLE_FRAME], al
     jmp     .read_error_resilient
@@ -596,8 +578,7 @@ er_fn er_av1_frame_decode
     movzx   esi, byte [r12 + AV1_SEQ_ORDER_HINT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r13 + AV1_FRAME_ORDER_HINT], eax
     jmp     .frame_id
 .no_order_hint:
@@ -613,8 +594,7 @@ er_fn er_av1_frame_decode
     add     sil, [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r13 + AV1_FRAME_CURRENT_FRAME_ID], eax
 
 .primary_ref:
@@ -642,8 +622,7 @@ er_fn er_av1_frame_decode
 .store_screen_tools:
     mov     [r13 + AV1_FRAME_ALLOW_SCREEN_CONTENT_TOOLS], al
 
-    test    eax, eax
-    jz      .integer_mv_select_done
+    er_check_zero eax, .integer_mv_select_done
     movzx   eax, byte [r12 + AV1_SEQ_FORCE_INTEGER_MV]
     cmp     eax, AV1_SEQ_SELECT_INTEGER_MV
     jne     .store_integer_mv
@@ -690,16 +669,14 @@ er_fn er_av1_frame_decode
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_WIDTH], eax
 
     movzx   esi, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_HEIGHT], eax
 
@@ -709,8 +686,7 @@ er_fn er_av1_frame_decode
     cmp     byte [r12 + AV1_SEQ_ENABLE_SUPERRES], 1
     jne     .read_render_size
     call_read_bit
-    test    eax, eax
-    jz      .read_render_size
+    er_check_zero eax, .read_render_size
     read_bits AV1_SUPERRES_DENOM_BITS
     add     eax, AV1_SUPERRES_DENOM_MIN
     mov     [r13 + AV1_FRAME_SUPERRES_DENOM], eax
@@ -722,14 +698,12 @@ er_fn er_av1_frame_decode
     add     eax, ecx
     xor     edx, edx
     div     ebx
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [r13 + AV1_FRAME_WIDTH], eax
 
 .read_render_size:
     call_read_bit
-    test    eax, eax
-    jnz     .render_different
+    er_check_nonzero eax, .render_different
     mov     [r13 + AV1_FRAME_RENDER_WIDTH], r15d
     mov     eax, [r13 + AV1_FRAME_HEIGHT]
     mov     [r13 + AV1_FRAME_RENDER_HEIGHT], eax
@@ -739,15 +713,13 @@ er_fn er_av1_frame_decode
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_RENDER_WIDTH], eax
     movzx   esi, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_RENDER_HEIGHT], eax
 
@@ -787,8 +759,7 @@ er_fn er_av1_frame_decode
     mov     [r13 + AV1_FRAME_TILE_INFO_COUNT], eax
     movzx   ebx, byte [r13 + AV1_FRAME_TILE_INFO_COLS_LOG2]
     add     bl, [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2]
-    test    ebx, ebx
-    jz      .read_tile_size_bytes
+    er_check_zero ebx, .read_tile_size_bytes
     read_bits ebx
     mov     [r13 + AV1_FRAME_TILE_INFO_CONTEXT_UPDATE_ID], eax
 .read_tile_size_bytes:
@@ -823,8 +794,7 @@ er_fn er_av1_frame_decode
 .read_qmatrix:
     call_read_bit
     mov     [r13 + AV1_FRAME_USING_QMATRIX], al
-    test    eax, eax
-    jnz     .read_qmatrix_levels
+    er_check_nonzero eax, .read_qmatrix_levels
     mov     byte [r13 + AV1_FRAME_QM_Y], 0
     mov     byte [r13 + AV1_FRAME_QM_U], 0
     mov     byte [r13 + AV1_FRAME_QM_V], 0
@@ -853,8 +823,7 @@ er_fn er_av1_frame_decode
 .read_segmentation:
     call_read_bit
     mov     [r13 + AV1_FRAME_SEGMENTATION_ENABLED], al
-    test    eax, eax
-    jnz     .read_segmentation_enabled
+    er_check_nonzero eax, .read_segmentation_enabled
     zero_segmentation_state
     jmp     .read_delta_q_params
 .read_segmentation_enabled:
@@ -867,8 +836,7 @@ er_fn er_av1_frame_decode
 .read_segmentation_update_flags:
     call_read_bit
     mov     [r13 + AV1_FRAME_SEGMENTATION_UPDATE_MAP], al
-    test    eax, eax
-    jz      .read_segmentation_temporal_zero
+    er_check_zero eax, .read_segmentation_temporal_zero
     call_read_bit
     mov     [r13 + AV1_FRAME_SEGMENTATION_TEMPORAL_UPDATE], al
     jmp     .read_segmentation_update_data
@@ -877,8 +845,7 @@ er_fn er_av1_frame_decode
 .read_segmentation_update_data:
     call_read_bit
     mov     [r13 + AV1_FRAME_SEGMENTATION_UPDATE_DATA], al
-    test    eax, eax
-    jz      .read_segmentation_no_update_data
+    er_check_zero eax, .read_segmentation_no_update_data
 .read_segmentation_data:
     xor     ebx, ebx
 .read_segmentation_segment_loop:
@@ -917,8 +884,7 @@ er_fn er_av1_frame_decode
     je      .read_delta_zero
     call_read_bit
     mov     [r13 + AV1_FRAME_DELTA_Q_PRESENT], al
-    test    eax, eax
-    jz      .read_delta_q_res_zero
+    er_check_zero eax, .read_delta_q_res_zero
     read_bits AV1_DELTA_Q_RES_BITS
     cmp     eax, AV1_DELTA_Q_RES_MAX
     ja      .corrupt
@@ -930,8 +896,7 @@ er_fn er_av1_frame_decode
 .read_delta_lf_params:
     call_read_bit
     mov     [r13 + AV1_FRAME_DELTA_LF_PRESENT], al
-    test    eax, eax
-    jz      .read_delta_lf_zero_res
+    er_check_zero eax, .read_delta_lf_zero_res
     read_bits AV1_DELTA_LF_RES_BITS
     cmp     eax, AV1_DELTA_LF_RES_MAX
     ja      .corrupt
@@ -978,15 +943,13 @@ er_fn er_av1_frame_decode
     mov     [r13 + AV1_FRAME_LOOP_FILTER_SHARPNESS], al
     call_read_bit
     mov     [r13 + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED], al
-    test    eax, eax
-    jnz     .read_loop_filter_delta_update
+    er_check_nonzero eax, .read_loop_filter_delta_update
     zero_loop_filter_delta_state
     jmp     .read_cdef
 .read_loop_filter_delta_update:
     call_read_bit
     mov     [r13 + AV1_FRAME_LOOP_FILTER_DELTA_UPDATE], al
-    test    eax, eax
-    jz      .read_loop_filter_delta_zero
+    er_check_zero eax, .read_loop_filter_delta_zero
     xor     ebx, ebx
 .read_loop_filter_ref_delta_loop:
     cmp     ebx, AV1_LOOP_FILTER_REF_DELTA_COUNT
@@ -1135,8 +1098,7 @@ er_fn er_av1_frame_decode
 
 .read_transform_ref:
     call_read_bit
-    test    eax, eax
-    jz      .read_tx_largest
+    er_check_zero eax, .read_tx_largest
     mov     byte [r13 + AV1_FRAME_TX_MODE], AV1_TX_MODE_SELECT
     jmp     .read_reference_mode
 .read_tx_largest:
@@ -1162,11 +1124,9 @@ er_fn er_av1_frame_decode
     cmp     ebx, AV1_GLOBAL_MOTION_REF_COUNT
     jae     .read_motion_tools
     call_read_bit
-    test    eax, eax
-    jz      .read_global_motion_next
+    er_check_zero eax, .read_global_motion_next
     read_bits AV1_GLOBAL_MOTION_TYPE_BITS
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     cmp     eax, AV1_GLOBAL_MOTION_AFFINE
     ja      .corrupt
     mov     [r13 + AV1_FRAME_GLOBAL_MOTION_TYPES + rbx], al
@@ -1208,8 +1168,7 @@ er_fn er_av1_frame_decode
     cmp     byte [r12 + AV1_SEQ_ENABLE_DUAL_FILTER], 1
     jne     .read_interpolation_eighttap
     call_read_bit
-    test    eax, eax
-    jz      .read_interpolation_fixed
+    er_check_zero eax, .read_interpolation_fixed
     mov     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_SWITCHABLE
     jmp     .read_reduced_tx_set
 .read_interpolation_fixed:
@@ -1235,16 +1194,14 @@ er_fn er_av1_frame_decode
 .read_film_grain_apply:
     call_read_bit
     mov     [r13 + AV1_FRAME_FILM_GRAIN_APPLY], al
-    test    eax, eax
-    jz      .read_film_grain_zero
+    er_check_zero eax, .read_film_grain_zero
     read_bits AV1_FILM_GRAIN_SEED_BITS
     mov     [r13 + AV1_FRAME_FILM_GRAIN_SEED], eax
     cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_INTER
     jne     .read_film_grain_update_true
     call_read_bit
     mov     [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], al
-    test    eax, eax
-    jnz     .read_film_grain_points_y_count
+    er_check_nonzero eax, .read_film_grain_points_y_count
     read_bits AV1_FILM_GRAIN_REF_BITS
     mov     [r13 + AV1_FRAME_FILM_GRAIN_REF_IDX], al
     jmp     .finish_header
@@ -1380,8 +1337,7 @@ er_fn er_av1_frame_decode
     add     sil, [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r13 + AV1_FRAME_DISPLAY_FRAME_ID], eax
 .show_existing_defaults:
     mov     byte [r13 + AV1_FRAME_SHOW_FRAME], 1
@@ -1474,10 +1430,8 @@ er_fn er_av1_frame_decode
 er_fn er_av1_frame_encode
     er_push rbx, r12, r13, r14
     er_stack_alloc AV1_BITS_SIZE + 8
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     byte [rdx + AV1_SEQ_REDUCED_STILL], 0
     jne     .unsupported
     cmp     byte [rcx + AV1_FRAME_SHOW_EXISTING_FRAME], 1
@@ -1639,8 +1593,7 @@ er_fn er_av1_frame_encode
     cmp     byte [rdx + AV1_SEQ_ENABLE_SUPERRES], 1
     jne     .params_ok
     mov     eax, [rcx + AV1_FRAME_SUPERRES_DENOM]
-    test    eax, eax
-    jz      .params_ok
+    er_check_zero eax, .params_ok
     cmp     eax, AV1_SUPERRES_NUM
     je      .params_ok
     cmp     eax, AV1_SUPERRES_DENOM_MIN
@@ -1660,8 +1613,7 @@ er_fn er_av1_frame_encode
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     movzx   esi, byte [r13 + AV1_FRAME_SHOW_EXISTING_FRAME]
     write_one_from_esi
@@ -1675,8 +1627,7 @@ er_fn er_av1_frame_encode
     add     dl, [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .bytes_written
 
 .write_frame_type:
@@ -1702,8 +1653,7 @@ er_fn er_av1_frame_encode
     movzx   edx, byte [r12 + AV1_SEQ_ORDER_HINT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
 .write_frame_id:
     cmp     byte [r12 + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 1
@@ -1713,8 +1663,7 @@ er_fn er_av1_frame_encode
     add     dl, [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
 .write_frame_size_override:
     cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_KEY
@@ -1775,15 +1724,13 @@ er_fn er_av1_frame_encode
     movzx   edx, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [r13 + AV1_FRAME_HEIGHT]
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_superres:
     cmp     byte [r12 + AV1_SEQ_ENABLE_SUPERRES], 1
     jne     .write_render_size
@@ -1824,15 +1771,13 @@ er_fn er_av1_frame_encode
     movzx   edx, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [r13 + AV1_FRAME_RENDER_HEIGHT]
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
 .write_intrabc:
     cmp     byte [r13 + AV1_FRAME_ALLOW_SCREEN_CONTENT_TOOLS], 1
@@ -1858,14 +1803,12 @@ er_fn er_av1_frame_encode
     write_byte_field_bits AV1_FRAME_TILE_INFO_ROWS_LOG2, AV1_TILE_LOG2_BITS
     movzx   ebx, byte [r13 + AV1_FRAME_TILE_INFO_COLS_LOG2]
     add     bl, [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2]
-    test    ebx, ebx
-    jz      .write_tile_size_bytes
+    er_check_zero ebx, .write_tile_size_bytes
     mov     esi, [r13 + AV1_FRAME_TILE_INFO_CONTEXT_UPDATE_ID]
     mov     edx, ebx
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_tile_size_bytes:
     movzx   esi, byte [r13 + AV1_FRAME_TILE_INFO_TILE_SIZE_BYTES]
     dec     esi
@@ -1910,8 +1853,7 @@ er_fn er_av1_frame_encode
     movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_UPDATE_DATA]
     cmp     esi, 1
     ja      .invalid_param
-    test    esi, esi
-    jz      .write_segmentation_no_update_data
+    er_check_zero esi, .write_segmentation_no_update_data
     write_one_from_esi
 .write_segmentation_data:
     xor     ebx, ebx
@@ -2302,10 +2244,8 @@ er_fn er_av1_frame_encode
 er_fn er_av1_frame_decode_reduced_still
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     byte [rdx + AV1_SEQ_REDUCED_STILL], 1
     jne     .unsupported
     mov     r12, rdx
@@ -2315,8 +2255,7 @@ er_fn er_av1_frame_decode_reduced_still
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_KEY
     mov     byte [r13 + AV1_FRAME_SHOW_FRAME], 1
@@ -2365,22 +2304,19 @@ er_fn er_av1_frame_decode_reduced_still
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_WIDTH], eax
 
     movzx   esi, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_HEIGHT], eax
 
     read_bits 1
-    test    eax, eax
-    jnz     .render_different
+    er_check_nonzero eax, .render_different
     mov     eax, [r13 + AV1_FRAME_WIDTH]
     mov     [r13 + AV1_FRAME_RENDER_WIDTH], eax
     mov     eax, [r13 + AV1_FRAME_HEIGHT]
@@ -2391,15 +2327,13 @@ er_fn er_av1_frame_decode_reduced_still
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_RENDER_WIDTH], eax
     movzx   esi, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r13 + AV1_FRAME_RENDER_HEIGHT], eax
 
@@ -2439,12 +2373,9 @@ er_fn er_av1_frame_decode_reduced_still
 er_fn er_av1_frame_encode_reduced_still
     er_push rbx, r12, r13, r14
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
-    test    ecx, ecx
-    jz      .invalid_param
-    test    r8d, r8d
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero ecx, .invalid_param
+    er_check_zero r8d, .invalid_param
     cmp     byte [rdx + AV1_SEQ_REDUCED_STILL], 1
     jne     .unsupported
     mov     r12, rdx
@@ -2454,34 +2385,29 @@ er_fn er_av1_frame_encode_reduced_still
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, r13d
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, r14d
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     xor     esi, esi
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     xor     esi, esi
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     call    er_av1_bits_bytes_written
     jmp     .done

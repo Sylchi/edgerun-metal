@@ -9,8 +9,7 @@ SECTION .text
 ; er_av1_ivf_is(buf, len) -> eax=1 if DKIF, else 0
 ; rdi=buf, esi=len
 er_fn er_av1_ivf_is
-    test    rdi, rdi
-    jz      .no
+    er_check_zero rdi, .no
     cmp     esi, 4
     jb      .no
     cmp     dword [rdi], AV1_IVF_SIGNATURE
@@ -28,10 +27,8 @@ er_fn er_av1_ivf_is
 ;       timebase_num u32, frame_count u32.
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_av1_ivf_decode_header
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     esi, AV1_IVF_HEADER_SIZE
     jb      .no_data
     cmp     dword [rdi], AV1_IVF_SIGNATURE
@@ -43,11 +40,9 @@ er_fn er_av1_ivf_decode_header
     cmp     dword [rdi + AV1_IVF_FILE_CODEC], AV1_IVF_CODEC_AV01
     jne     .unsupported
     movzx   eax, word [rdi + AV1_IVF_FILE_WIDTH]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     movzx   ecx, word [rdi + AV1_IVF_FILE_HEIGHT]
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero ecx, .corrupt
     mov     [rdx + AV1_IVF_HDR_CODEC], dword AV1_IVF_CODEC_AV01
     mov     [rdx + AV1_IVF_HDR_WIDTH], ax
     mov     [rdx + AV1_IVF_HDR_HEIGHT], cx
@@ -82,10 +77,8 @@ er_fn er_av1_ivf_decode_header
 ; rdi=buf, esi=len, edx=cursor, rcx=frame_desc
 er_fn er_av1_ivf_read_frame
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13, rcx
     mov     ebx, edx
@@ -132,16 +125,14 @@ er_fn er_av1_ivf_read_frame
 er_fn er_av1_ivf_count_frames
     er_push rbx, r12, r13, r14
     er_stack_alloc AV1_IVF_SCAN_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + AV1_IVF_SCAN_HDR]
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, AV1_IVF_HEADER_SIZE
     xor     r14d, r14d
 .loop:
@@ -153,8 +144,7 @@ er_fn er_av1_ivf_count_frames
     mov     edx, ebx
     lea     rcx, [rsp + AV1_IVF_SCAN_FRAME]
     call    er_av1_ivf_read_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r14d, AV1_LEB128_U32_MAX
     je      .corrupt
     inc     r14d
@@ -182,20 +172,17 @@ er_fn er_av1_ivf_count_frames
 er_fn er_av1_ivf_validate_frame_count
     er_push rbx, r12, r13
     er_stack_alloc AV1_IVF_HDR_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     call    er_av1_ivf_count_frames
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, rsp
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     ebx, [rsp + AV1_IVF_HDR_FRAME_COUNT]
     jne     .corrupt
     mov     eax, ebx
@@ -219,16 +206,14 @@ er_fn er_av1_ivf_validate_frame_count
 er_fn er_av1_ivf_validate_timestamps
     er_push rbx, r12, r13, r14
     er_stack_alloc AV1_IVF_SCAN_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + AV1_IVF_SCAN_HDR]
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, AV1_IVF_HEADER_SIZE
     xor     r14d, r14d
     mov     qword [rsp + AV1_IVF_SCAN_PREV_TIMESTAMP], 0
@@ -241,10 +226,8 @@ er_fn er_av1_ivf_validate_timestamps
     mov     edx, ebx
     lea     rcx, [rsp + AV1_IVF_SCAN_FRAME]
     call    er_av1_ivf_read_frame
-    test    edx, edx
-    jnz     .done
-    test    r14d, r14d
-    jz      .first_frame
+    er_check_nonzero edx, .done
+    er_check_zero r14d, .first_frame
     mov     rcx, [rsp + AV1_IVF_SCAN_FRAME + AV1_IVF_FRAME_TIMESTAMP]
     cmp     rcx, [rsp + AV1_IVF_SCAN_PREV_TIMESTAMP]
     jbe     .corrupt
@@ -280,10 +263,8 @@ er_fn er_av1_ivf_validate_timestamps
 er_fn er_av1_ivf_seek_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_IVF_HDR_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
@@ -292,8 +273,7 @@ er_fn er_av1_ivf_seek_frame
     mov     esi, r13d
     mov     rdx, rsp
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r14d, [rsp + AV1_IVF_HDR_FRAME_COUNT]
     jae     .not_found
     mov     ebx, AV1_IVF_HEADER_SIZE
@@ -303,10 +283,8 @@ er_fn er_av1_ivf_seek_frame
     mov     edx, ebx
     mov     rcx, r15
     call    er_av1_ivf_read_frame
-    test    edx, edx
-    jnz     .done
-    test    r14d, r14d
-    jz      .ok
+    er_check_nonzero edx, .done
+    er_check_zero r14d, .ok
     dec     r14d
     mov     ebx, eax
     jmp     .loop
@@ -329,18 +307,14 @@ er_fn er_av1_ivf_seek_frame
 ; desc uses AV1_IVF_HDR_* fields. The codec is always AV01.
 ; rdi=out, esi=cap, rdx=desc
 er_fn er_av1_ivf_encode_header
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     esi, AV1_IVF_HEADER_SIZE
     jb      .no_space
     movzx   eax, word [rdx + AV1_IVF_HDR_WIDTH]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     movzx   ecx, word [rdx + AV1_IVF_HDR_HEIGHT]
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero ecx, .corrupt
     mov     dword [rdi], AV1_IVF_SIGNATURE
     mov     word [rdi + AV1_IVF_FILE_VERSION], 0
     mov     word [rdi + AV1_IVF_FILE_HEADER_LEN], AV1_IVF_HEADER_SIZE
@@ -375,10 +349,8 @@ er_fn er_av1_ivf_encode_header
 ; rdi=out, esi=cap, rdx=payload, ecx=payload_len, r8=timestamp
 er_fn er_av1_ivf_write_frame
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     eax, ecx
     add     eax, AV1_IVF_FRAME_HEADER_SIZE
     jc      .no_space
@@ -409,8 +381,7 @@ er_fn er_av1_ivf_write_frame
     er_ret
 
 copy_bytes:
-    test    ecx, ecx
-    jz      .done
+    er_check_zero ecx, .done
 .loop:
     mov     al, [rsi]
     mov     [rdi], al

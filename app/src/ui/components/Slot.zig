@@ -7,7 +7,7 @@ const component_union = @import("Component.zig");
 const interaction = @import("../interaction.zig");
 const layout_types = @import("../layouts/Types.zig");
 const object = @import("../../object.zig");
-const std = @import("std");
+const std = @import("er_std");
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../core.zig");
 

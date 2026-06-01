@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("build_std.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -7,18 +7,11 @@ pub fn build(b: *std.Build) void {
 
     const is_x86_64 = target.result.cpu.arch == .x86_64;
 
-    var math_obj: ?std.Build.LazyPath = null;
-    var runtime_obj: ?std.Build.LazyPath = null;
+    var asm_std_obj: ?std.Build.LazyPath = null;
     if (is_x86_64) {
         const host_asm = hostAssembler(b);
-        {
-            const cmd = b.addSystemCommand(&.{ host_asm, "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
-            math_obj = cmd.addOutputFileArg("math.o");
-        }
-        {
-            const cmd = b.addSystemCommand(&.{ host_asm, "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
-            runtime_obj = cmd.addOutputFileArg("runtime.o");
-        }
+        const cmd = b.addSystemCommand(&.{ host_asm, "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/std.asm", "-o" });
+        asm_std_obj = cmd.addOutputFileArg("asm_std.o");
     }
 
     const test_step = b.step("test", "Run Zig prototype tests");
@@ -131,7 +124,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(sdk_cli, math_obj, runtime_obj);
+    addBootstrapStd(b, sdk_cli, asm_std_obj);
 
     const run_sdk_cli = b.addRunArtifact(sdk_cli);
     if (b.args) |args| run_sdk_cli.addArgs(args);
@@ -147,7 +140,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(sdk_bench, math_obj, runtime_obj);
+    addBootstrapStd(b, sdk_bench, asm_std_obj);
 
     const run_sdk_bench = b.addRunArtifact(sdk_bench);
     const sdk_bench_step = b.step("sdk-bench", "Benchmark deterministic Edgerun SDK setup and simulation");
@@ -162,7 +155,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(media_video_dump, math_obj, runtime_obj);
+    addBootstrapStd(b, media_video_dump, asm_std_obj);
 
     const run_media_video_dump = b.addRunArtifact(media_video_dump);
     if (b.args) |args| run_media_video_dump.addArgs(args);
@@ -178,7 +171,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(project_intro_video, math_obj, runtime_obj);
+    addBootstrapStd(b, project_intro_video, asm_std_obj);
 
     const run_project_intro_video = b.addRunArtifact(project_intro_video);
     const project_intro_video_step = b.step("project-intro-video", "Render project intro video frames through the UI renderer");
@@ -238,7 +231,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(build_dashboard, math_obj, runtime_obj);
+    addBootstrapStd(b, build_dashboard, asm_std_obj);
 
     const run_build_dashboard = b.addRunArtifact(build_dashboard);
     const build_dashboard_step = b.step("build-dashboard", "Render the build dashboard PPM");
@@ -253,7 +246,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(chat_preview, math_obj, runtime_obj);
+    addBootstrapStd(b, chat_preview, asm_std_obj);
 
     const run_chat_preview = b.addRunArtifact(chat_preview);
     const chat_preview_step = b.step("chat-preview", "Render encrypted chat UI preview PPM");
@@ -268,7 +261,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(jc3248_frame, math_obj, runtime_obj);
+    addBootstrapStd(b, jc3248_frame, asm_std_obj);
 
     const run_jc3248_frame = b.addRunArtifact(jc3248_frame);
     const jc3248_frame_step = b.step("jc3248-frame", "Render JC3248W535 UI frame as raw RGB565");
@@ -290,7 +283,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(wayland_window, math_obj, runtime_obj);
+    addBootstrapStd(b, wayland_window, asm_std_obj);
 
     const run_wayland_window = b.addRunArtifact(wayland_window);
     if (b.args) |args| run_wayland_window.addArgs(args);
@@ -314,7 +307,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(drm_gbm_window, math_obj, runtime_obj);
+    addBootstrapStd(b, drm_gbm_window, asm_std_obj);
     const run_drm_gbm_window = b.addRunArtifact(drm_gbm_window);
     if (b.args) |args| run_drm_gbm_window.addArgs(args);
     const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
@@ -342,6 +335,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
+    addOwnedStd(b, ui_wasm);
     ui_wasm.entry = .disabled;
     ui_wasm.export_memory = true;
     ui_wasm.root_module.export_symbol_names = &.{
@@ -385,6 +379,7 @@ pub fn build(b: *std.Build) void {
             .strip = true,
         }),
     });
+    addOwnedStd(b, immutable_kernel_gop_smoke);
     const install_immutable_kernel_gop_smoke = b.addInstallArtifact(immutable_kernel_gop_smoke, .{
         .dest_dir = .{ .override = .{ .custom = "immutable-kernel-gop-smoke" } },
     });
@@ -400,7 +395,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(tpm_real_check, math_obj, runtime_obj);
+    addBootstrapStd(b, tpm_real_check, asm_std_obj);
 
     const run_tpm_real_check = b.addRunArtifact(tpm_real_check);
     const tpm_real_check_step = b.step("real-tpm", "Run TPM checks against /dev/tpmrm0");
@@ -415,7 +410,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(ifstatus, math_obj, runtime_obj);
+    addBootstrapStd(b, ifstatus, asm_std_obj);
 
     const run_ifstatus = b.addRunArtifact(ifstatus);
     if (b.args) |args| run_ifstatus.addArgs(args);
@@ -431,7 +426,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(pi_usb_boot_host, math_obj, runtime_obj);
+    addBootstrapStd(b, pi_usb_boot_host, asm_std_obj);
 
     const pi_usb_load = b.addRunArtifact(pi_usb_boot_host);
     if (b.args) |args| pi_usb_load.addArgs(args);
@@ -447,7 +442,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip_release,
         }),
     });
-    addBootstrapObjects(pi_usb_control_host, math_obj, runtime_obj);
+    addBootstrapStd(b, pi_usb_control_host, asm_std_obj);
 
     const pi_usb_control = b.addRunArtifact(pi_usb_control_host);
     if (b.args) |args| pi_usb_control.addArgs(args);
@@ -472,9 +467,15 @@ fn addNoStdProductionCheck(b: *std.Build) *std.Build.Step.Run {
     return b.addSystemCommand(&.{ "sh", "-c", script });
 }
 
-fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.LazyPath, runtime_obj: ?std.Build.LazyPath) void {
-    if (math_obj) |obj| compile.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| compile.root_module.addObjectFile(obj);
+fn addBootstrapStd(b: *std.Build, compile: *std.Build.Step.Compile, asm_std_obj: ?std.Build.LazyPath) void {
+    addOwnedStd(b, compile);
+    if (asm_std_obj) |obj| compile.root_module.addObjectFile(obj);
+}
+
+fn addOwnedStd(b: *std.Build, compile: *std.Build.Step.Compile) void {
+    compile.root_module.addImport("er_std", b.createModule(.{
+        .root_source_file = b.path("src/std.zig"),
+    }));
 }
 
 fn hostAssembler(b: *std.Build) []const u8 {
@@ -511,6 +512,7 @@ fn addZigTest(
             .optimize = optimize,
         }),
     });
+    addOwnedStd(b, tests);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step(options.step, options.description);

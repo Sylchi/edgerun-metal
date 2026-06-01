@@ -115,8 +115,7 @@ er_identity_material_len_valid:
     je      .len_ok
     jmp     .len_invalid
 .len_endpoint:
-    test    esi, esi
-    jz      .len_invalid
+    er_check_zero esi, .len_invalid
     cmp     esi, MATERIAL_MAX
     ja      .len_invalid
     jmp     .len_ok
@@ -136,8 +135,7 @@ er_identity_material_len_valid:
 ; ==================================================================
 er_fn er_identity_kind_valid
     movzx   eax, di
-    test    eax, eax
-    jz      .kv_fail
+    er_check_zero eax, .kv_fail
     cmp     eax, 9
     ja      .kv_fail
     mov     eax, 1
@@ -158,10 +156,7 @@ er_fn er_identity_kind_valid
 ; But rcx is also used for 4th arg. Let me use: rdi=kind, rsi=material, edx=len, rcx=out
 ; ==================================================================
 er_fn er_identity_source_prepare
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12d, edi           ; kind (u16)
     mov     r13, rsi            ; material ptr
@@ -172,15 +167,13 @@ er_fn er_identity_source_prepare
     mov     edi, r12d
     mov     esi, r14d
     call    er_identity_material_len_valid
-    test    eax, eax
-    jz      .sp_fail
+    er_check_zero eax, .sp_fail
 
     ; Check material nonzero
     mov     rdi, r13
     mov     esi, r14d
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .sp_fail
+    er_check_zero eax, .sp_fail
 
     ; Fill source.kind
     mov     [rbx + er_identity_source.kind], r12w
@@ -195,19 +188,13 @@ er_fn er_identity_source_prepare
     ; Set source.len
     mov     [rbx + er_identity_source.len], r14
 
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ok
     mov     eax, 1
     er_ret
 .sp_fail:
     xor     eax, eax
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -218,11 +205,7 @@ er_fn er_identity_source_prepare
 ; rdi=parent_id, rsi=delegate_id, rdx=scope_hash, rcx=out_source
 ; ==================================================================
 er_fn er_identity_source_prepare_delegation
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi            ; parent_id
     mov     r13, rsi            ; delegate_id
@@ -233,20 +216,17 @@ er_fn er_identity_source_prepare_delegation
     mov     rdi, r12
     mov     esi, ID_SIZE
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .spd_fail
+    er_check_zero eax, .spd_fail
 
     mov     rdi, r13
     mov     esi, ID_SIZE
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .spd_fail
+    er_check_zero eax, .spd_fail
 
     mov     rdi, r14
     mov     esi, HASH_SIZE
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .spd_fail
+    er_check_zero eax, .spd_fail
 
     ; Fill source.kind = DELEGATION
     mov     word [r15 + er_identity_source.kind], SOURCE_DELEGATION
@@ -275,21 +255,13 @@ er_fn er_identity_source_prepare_delegation
     ; Set source.len = 96
     mov     qword [r15 + er_identity_source.len], DELEGATION_MATERIAL_SIZE
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     mov     eax, 1
     er_ret
 .spd_fail:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -303,8 +275,7 @@ er_fn er_identity_source_valid
     movzx   edi, word [r12 + er_identity_source.kind]
     mov     esi, [r12 + er_identity_source.len]
     call    er_identity_material_len_valid
-    test    eax, eax
-    jz      .sv_fail
+    er_check_zero eax, .sv_fail
 
     lea     rdi, [r12 + er_identity_source.material]
     mov     esi, [r12 + er_identity_source.len]
@@ -324,9 +295,7 @@ er_fn er_identity_source_valid
 ; Computes: blake3("edgerun:zig:v1:identity-id" (26 bytes) ++ header(4) ++ material)
 ; ==================================================================
 er_fn er_identity_source_id
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; source
     mov     r13, rsi            ; out_id
@@ -374,9 +343,7 @@ er_fn er_identity_source_id
 
     add     rsp, 4096
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
@@ -386,17 +353,13 @@ er_fn er_identity_source_id
     lea     rdx, [r12 + er_identity_source.material]
     mov     ecx, ID_SIZE
     call    er_bytes_copy
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 .si_fail:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .id_domain: db "edgerun:zig:v1:identity-id"
@@ -408,11 +371,7 @@ er_fn er_identity_source_id
 ; rdi=kind, rsi=source, rdx=epoch, rcx=out_identity
 ; ==================================================================
 er_fn er_identity_init
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12w, di            ; kind
     mov     r13, rsi            ; source
@@ -422,27 +381,23 @@ er_fn er_identity_init
     ; Validate kind
     movzx   edi, r12w
     call    er_identity_kind_valid
-    test    eax, eax
-    jz      .ii_fail
+    er_check_zero eax, .ii_fail
 
     ; Validate source
     mov     rdi, r13
     call    er_identity_source_valid
-    test    eax, eax
-    jz      .ii_fail
+    er_check_zero eax, .ii_fail
 
     ; Validate epoch
     mov     rdi, r14
     call    er_stamp_valid
-    test    eax, eax
-    jz      .ii_fail
+    er_check_zero eax, .ii_fail
 
     ; Compute source.id
     mov     rdi, r13
     lea     rsi, [r15 + er_identity.id]
     call    er_identity_source_id
-    test    eax, eax
-    jz      .ii_fail
+    er_check_zero eax, .ii_fail
 
     ; Fill identity.kind
     mov     [r15 + er_identity.kind], r12w
@@ -459,21 +414,13 @@ er_fn er_identity_init
     mov     rdx, r13
     call    _id_memcpy
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     mov     eax, 1
     er_ret
 .ii_fail:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -481,34 +428,29 @@ er_fn er_identity_init
 ; rdi=identity
 ; ==================================================================
 er_fn er_identity_valid
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi
 
     ; epoch.valid()
     lea     rdi, [r12 + er_identity.epoch]
     call    er_stamp_valid
-    test    eax, eax
-    jz      .iv_fail
+    er_check_zero eax, .iv_fail
 
     ; kind.valid()
     movzx   edi, word [r12 + er_identity.kind]
     call    er_identity_kind_valid
-    test    eax, eax
-    jz      .iv_fail
+    er_check_zero eax, .iv_fail
 
     ; id.valid()
     lea     rdi, [r12 + er_identity.id]
     call    er_keeper_id_valid
-    test    eax, eax
-    jz      .iv_fail
+    er_check_zero eax, .iv_fail
 
     ; source.valid()
     lea     rdi, [r12 + er_identity.source]
     call    er_identity_source_valid
-    test    eax, eax
-    jz      .iv_fail
+    er_check_zero eax, .iv_fail
 
     ; id.eql(source.id())
     ; Compute source.id() on stack, compare
@@ -516,8 +458,7 @@ er_fn er_identity_valid
     lea     rdi, [r12 + er_identity.source]
     mov     rsi, rsp
     call    er_identity_source_id
-    test    eax, eax
-    jz      .iv_pop_fail
+    er_check_zero eax, .iv_pop_fail
 
     lea     rdi, [r12 + er_identity.id]
     mov     esi, ID_SIZE
@@ -525,11 +466,9 @@ er_fn er_identity_valid
     mov     ecx, ID_SIZE
     call    er_bytes_eql
     add     rsp, 32
-    test    eax, eax
-    jz      .iv_fail
+    er_check_zero eax, .iv_fail
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     mov     eax, 1
     er_ret
@@ -537,8 +476,7 @@ er_fn er_identity_valid
     add     rsp, 32
 .iv_fail:
     xor     eax, eax
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -546,9 +484,7 @@ er_fn er_identity_valid
 ; rdi=a, rsi=b
 ; ==================================================================
 er_fn er_identity_eql
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi
     mov     r13, rsi
@@ -556,12 +492,10 @@ er_fn er_identity_eql
     ; Both must be valid first
     mov     rdi, r12
     call    er_identity_valid
-    test    eax, eax
-    jz      .ie_false
+    er_check_zero eax, .ie_false
     mov     rdi, r13
     call    er_identity_valid
-    test    eax, eax
-    jz      .ie_false
+    er_check_zero eax, .ie_false
 
     ; kind comparison
     movzx   eax, word [r12 + er_identity.kind]
@@ -573,8 +507,7 @@ er_fn er_identity_eql
     lea     rdi, [r12 + er_identity.epoch]
     lea     rsi, [r13 + er_identity.epoch]
     call    er_stamp_order
-    test    eax, eax
-    jnz     .ie_false
+    er_check_nonzero eax, .ie_false
 
     ; source kind comparison
     movzx   eax, word [r12 + er_identity.source + er_identity_source.kind]
@@ -594,8 +527,7 @@ er_fn er_identity_eql
     lea     rdx, [r13 + er_identity.id]
     mov     ecx, ID_SIZE
     call    er_bytes_eql
-    test    eax, eax
-    jz      .ie_false
+    er_check_zero eax, .ie_false
 
     ; source active bytes eql
     lea     rdi, [r12 + er_identity.source + er_identity_source.material]
@@ -603,27 +535,21 @@ er_fn er_identity_eql
     lea     rdx, [r13 + er_identity.source + er_identity_source.material]
     mov     ecx, [r13 + er_identity.source + er_identity_source.len]
     call    er_bytes_eql
-    test    eax, eax
-    jz      .ie_false
+    er_check_zero eax, .ie_false
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 .ie_false:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
 ; Internal helper: _id_memcpy(rdi=dst, esi=len, rdx=src)
 _id_memcpy:
-    test    esi, esi
-    jz      .mdone
+    er_check_zero esi, .mdone
     xor     ecx, ecx
 .mloop:
     mov     al, [rdx + rcx]

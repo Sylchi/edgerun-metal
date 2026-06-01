@@ -57,8 +57,7 @@ AV1_COEFF_BULK_CUR                  equ AV1_COEFF_BULK_CAP + 4
 AV1_COEFF_BULK_STACK_SIZE           equ AV1_COEFF_BULK_CUR + 16
 
 %macro av1_check_edx 1
-    test    edx, edx
-    jnz     %1
+    er_check_nonzero edx, %1
 %endmacro
 
 %macro av1_call_check 2
@@ -120,8 +119,7 @@ SECTION .text
 ; Initializes the first supported intra block CDF slice from AV1 defaults.
 ; rdi=cdf workspace, size AV1_BLOCK_CDFS_SIZE.
 er_fn er_av1_block_cdfs_init
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     lea     rsi, [rel av1_block_default_cdfs]
     mov     ecx, AV1_BLOCK_CDFS_SIZE
     cld
@@ -139,12 +137,9 @@ er_fn er_av1_block_cdfs_init
 ; Reads partition, y_mode, skip, and tx_size symbols from an active entropy context.
 er_fn er_av1_block_decode_intra_symbols
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
@@ -173,12 +168,9 @@ er_fn er_av1_block_decode_intra_symbols
 er_fn er_av1_block_decode_coeffs_8x8
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
@@ -197,18 +189,15 @@ er_fn er_av1_block_decode_coeffs_8x8
     cmp     ebx, AV1_BLOCK_PIXELS_8X8
     jae     .ok
     av1_read_symbol_check AV1_BLOCK_CDFS_COEFF_NONZERO, AV1_BLOCK_COEFF_NONZERO_SYMBOLS, [rsp], .done
-    test    eax, eax
-    jz      .next_coeff
+    er_check_zero eax, .next_coeff
     av1_read_symbol_check AV1_BLOCK_CDFS_COEFF_LEVEL, AV1_BLOCK_COEFF_LEVEL_SYMBOLS, [rsp], .done
     inc     eax
     mov     [rsp + 8], eax
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [rsp + 8]
-    test    eax, eax
-    jz      .store_coeff
+    er_check_zero eax, .store_coeff
     neg     esi
 .store_coeff:
     mov     [r13 + rbx * 2], si
@@ -235,12 +224,9 @@ er_fn er_av1_block_decode_coeffs_8x8
 er_fn er_av1_block_encode_coeffs_8x8
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_SYMBOL_SIZE + 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     mov     [rsp + AV1_SYMBOL_SIZE], edx
@@ -272,15 +258,13 @@ er_fn er_av1_block_encode_coeffs_8x8
     mov     rsi, r13
     mov     edx, [rsp + AV1_SYMBOL_SIZE]
     call    er_av1_symbol_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .encode_loop:
     cmp     ebx, AV1_BLOCK_PIXELS_8X8
     jae     .finish
     movsx   eax, word [r12 + rbx * 2]
     mov     [rsp + AV1_SYMBOL_SIZE + 8], eax
-    test    eax, eax
-    jnz     .write_nonzero
+    er_check_nonzero eax, .write_nonzero
     av1_write_symbol_check AV1_BLOCK_CDFS_COEFF_NONZERO, AV1_BLOCK_COEFF_NONZERO_SYMBOLS, 0, .done
     jmp     .next_coeff
 .write_nonzero:
@@ -332,14 +316,10 @@ er_fn er_av1_block_encode_coeffs_8x8
 er_fn er_av1_tile_encode_coeff_entropy
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    esi, esi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero esi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     r14, r8
@@ -348,19 +328,16 @@ er_fn er_av1_tile_encode_coeff_entropy
     mov     [rsp + 4], r9d
     xor     ebx, ebx
 .loop:
-    test    r15d, r15d
-    jz      .ok
+    er_check_zero r15d, .ok
     mov     eax, [rsp]
-    test    eax, eax
-    jz      .no_space
+    er_check_zero eax, .no_space
     mov     rdi, r12
     mov     rsi, r13
     mov     edx, eax
     mov     rcx, r14
     mov     r8d, [rsp + 4]
     call    er_av1_block_encode_coeffs_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r13, rax
     add     r12, AV1_BLOCK_PIXELS_8X8 * 2
     add     ebx, eax
@@ -389,39 +366,30 @@ er_fn er_av1_tile_encode_coeff_entropy
 ; Reads signed 3-bit integer X/Y motion components and packs x in low 16, y high 16.
 er_fn er_av1_block_decode_mv
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     rdi, r12
     mov     esi, AV1_MV_COMPONENT_BITS
     call    er_av1_symbol_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
-    test    ebx, ebx
-    jz      .x_ready
+    er_check_zero ebx, .x_ready
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .x_ready
+    er_check_nonzero edx, .done
+    er_check_zero eax, .x_ready
     neg     ebx
 .x_ready:
     mov     rdi, r12
     mov     esi, AV1_MV_COMPONENT_BITS
     call    er_av1_symbol_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r13d, eax
-    test    r13d, r13d
-    jz      .pack
+    er_check_zero r13d, .pack
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .pack
+    er_check_nonzero edx, .done
+    er_check_zero eax, .pack
     neg     r13d
 .pack:
     movzx   eax, bx
@@ -454,10 +422,8 @@ er_fn er_av1_mv_scale_420
 ; rdi=i16 residual[64], rsi=i16 coeff levels[64], edx=quant step.
 er_fn er_av1_block_dequant_8x8
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     edx, AV1_QUANT_STEP_MAX
@@ -499,8 +465,7 @@ er_fn er_av1_block_dequant_8x8
 ; er_av1_block_zero_residual_8x8(dst) -> eax=64, rdx=error
 ; Clears a signed 8x8 residual block for skipped transform blocks.
 er_fn er_av1_block_zero_residual_8x8
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     xor     eax, eax
     mov     ecx, (AV1_BLOCK_PIXELS_8X8 * 2) / 8
     cld
@@ -518,10 +483,8 @@ er_fn er_av1_block_zero_residual_8x8
 er_fn er_av1_block_inverse_tx_8x8
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_TX_TYPE_MAX
     ja      .invalid_param
     mov     r12, rdi
@@ -580,8 +543,7 @@ er_fn er_av1_block_inverse_tx_8x8
     shl     eax, 3
     add     eax, [rsp + 8]
     movsx   eax, word [r13 + rax * 2]
-    test    eax, eax
-    jz      .dct_next_u
+    er_check_zero eax, .dct_next_u
     mov     ebx, [rsp + 8]
     shl     ebx, 3
     add     ebx, r15d
@@ -640,12 +602,9 @@ er_fn er_av1_block_inverse_tx_8x8
 ; Stores source - predictor for one 8x8 encoder block.
 er_fn er_av1_block_residual_sub_8x8
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     edx, AV1_BLOCK_DIM_8
     jb      .invalid_param
     cmp     r8d, AV1_BLOCK_DIM_8
@@ -695,10 +654,8 @@ er_fn er_av1_block_residual_sub_8x8
 er_fn er_av1_block_forward_tx_8x8
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_TX_TYPE_MAX
     ja      .invalid_param
     mov     r12, rdi
@@ -769,8 +726,7 @@ er_fn er_av1_block_forward_tx_8x8
     shl     eax, 3
     add     eax, [rsp + 8]
     movsx   eax, word [r13 + rax * 2]
-    test    eax, eax
-    jz      .dct_next_x
+    er_check_zero eax, .dct_next_x
     mov     ebx, r15d
     shl     ebx, 3
     add     ebx, [rsp + 8]
@@ -834,10 +790,8 @@ er_fn er_av1_block_forward_tx_8x8
 ; rdi=i16 quantized[64], rsi=i16 coeffs[64], edx=quant step.
 er_fn er_av1_block_quant_8x8
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     edx, AV1_QUANT_STEP_MAX
@@ -887,10 +841,8 @@ er_fn er_av1_block_quant_8x8
 er_fn er_av1_tile_encode_intra8x8_luma
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_TILE_WALK_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MAX
@@ -905,8 +857,7 @@ er_fn er_av1_tile_encode_intra8x8_luma
     mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
     mov     rdi, r12
     call    er_av1_image_validate_420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [r12 + AV1_IMAGE_WIDTH]
     cmp     eax, AV1_BLOCK_WALK_MIN_DIM
     jb      .invalid_param
@@ -923,8 +874,7 @@ er_fn er_av1_tile_encode_intra8x8_luma
     mov     [rsp + AV1_TILE_WALK_HEIGHT], eax
     shr     eax, 3
     mul     dword [rsp + AV1_TILE_WALK_PLANE_WIDTH]
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     shl     eax, 7
     jc      .corrupt
     cmp     r14d, eax
@@ -954,8 +904,7 @@ er_fn er_av1_tile_encode_intra8x8_luma
 .above_ready:
     mov     r8d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
     call    er_av1_block_predict_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     call    .source_block_ptr
     lea     rdi, [rsp + AV1_TILE_WALK_RESID]
     mov     rsi, rax
@@ -963,22 +912,19 @@ er_fn er_av1_tile_encode_intra8x8_luma
     lea     rcx, [rsp + AV1_TILE_WALK_PRED]
     mov     r8d, AV1_BLOCK_DIM_8
     call    er_av1_block_residual_sub_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     lea     rdi, [rsp + AV1_TILE_WALK_DEQUANT]
     lea     rsi, [rsp + AV1_TILE_WALK_RESID]
     mov     edx, AV1_TX_TYPE_DCT_DCT
     call    er_av1_block_forward_tx_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + AV1_TILE_WALK_COUNT]
     shl     eax, 7
     lea     rdi, [r13 + rax]
     lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT]
     mov     edx, [rsp + AV1_TILE_WALK_QSTEP]
     call    er_av1_block_quant_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     dword [rsp + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .col_loop
@@ -1059,10 +1005,8 @@ er_fn er_av1_tile_encode_intra8x8_luma
 er_fn er_av1_tile_encode_intra8x8_420
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_TILE_WALK_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MAX
@@ -1077,8 +1021,7 @@ er_fn er_av1_tile_encode_intra8x8_420
     mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
     mov     rdi, r12
     call    er_av1_image_validate_420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [r12 + AV1_IMAGE_WIDTH]
     test    eax, AV1_BLOCK_DIM_8 - 1
     jnz     .unsupported
@@ -1089,8 +1032,7 @@ er_fn er_av1_tile_encode_intra8x8_420
     jnz     .unsupported
     shr     eax, 3
     mul     ebx
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     mov     r15d, eax
     mov     eax, [r12 + AV1_IMAGE_WIDTH]
     shr     eax, 1
@@ -1108,8 +1050,7 @@ er_fn er_av1_tile_encode_intra8x8_420
     jnz     .unsupported
     shr     eax, 3
     mul     ebx
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     add     eax, eax
     jc      .corrupt
     add     eax, r15d
@@ -1125,8 +1066,7 @@ er_fn er_av1_tile_encode_intra8x8_420
     mov     ecx, [rsp + AV1_TILE_WALK_QSTEP]
     mov     r8d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
     call    er_av1_tile_encode_intra8x8_luma
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_TILE_WALK_COUNT], eax
     mov     rax, [r12 + AV1_IMAGE_U_PTR]
     mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
@@ -1137,13 +1077,11 @@ er_fn er_av1_tile_encode_intra8x8_420
     shr     eax, 1
     mov     [rsp + AV1_TILE_WALK_PLANE_HEIGHT], eax
     call    .encode_chroma_plane
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rax, [r12 + AV1_IMAGE_V_PTR]
     mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
     call    .encode_chroma_plane
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + AV1_TILE_WALK_COUNT]
     cmp     eax, [rsp + AV1_TILE_WALK_PLANE_LEN]
     jne     .corrupt
@@ -1184,8 +1122,7 @@ er_fn er_av1_tile_encode_intra8x8_420
     xor     ecx, ecx
     mov     r8d, AV1_PRED_MODE_DC
     call    er_av1_block_predict_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    er_check_nonzero edx, .chroma_ret
     mov     eax, ebx
     mul     dword [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
     add     eax, r15d
@@ -1196,22 +1133,19 @@ er_fn er_av1_tile_encode_intra8x8_420
     lea     rcx, [rsp + 8 + AV1_TILE_WALK_PRED]
     mov     r8d, AV1_BLOCK_DIM_8
     call    er_av1_block_residual_sub_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    er_check_nonzero edx, .chroma_ret
     lea     rdi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
     lea     rsi, [rsp + 8 + AV1_TILE_WALK_RESID]
     mov     edx, AV1_TX_TYPE_DCT_DCT
     call    er_av1_block_forward_tx_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    er_check_nonzero edx, .chroma_ret
     mov     eax, [rsp + 8 + AV1_TILE_WALK_COUNT]
     shl     eax, 7
     lea     rdi, [r13 + rax]
     lea     rsi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
     mov     edx, [rsp + 8 + AV1_TILE_WALK_QSTEP]
     call    er_av1_block_quant_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    er_check_nonzero edx, .chroma_ret
     inc     dword [rsp + 8 + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .chroma_col_loop
@@ -1228,12 +1162,9 @@ er_fn er_av1_tile_encode_intra8x8_420
 er_fn er_av1_tile_decode_intra8x8_luma
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_TILE_WALK_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     ecx, AV1_QUANT_STEP_MAX
@@ -1260,13 +1191,11 @@ er_fn er_av1_tile_decode_intra8x8_luma
     je      .invalid_param
     mov     eax, [rsp + AV1_TILE_WALK_WIDTH]
     mul     dword [rsp + AV1_TILE_WALK_HEIGHT]
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r13 + AV1_IMAGE_Y_LEN], eax
     jb      .corrupt
     call    .validate_chroma
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     xor     ebx, ebx
 .row_loop:
     cmp     ebx, [rsp + AV1_TILE_WALK_HEIGHT]
@@ -1283,8 +1212,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     mov     rdx, r14
     mov     ecx, [rsp + AV1_TILE_WALK_DISABLE_UPDATE]
     call    er_av1_block_decode_intra_symbols
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_PARTITION], 0
     jne     .unsupported
     cmp     byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_TX_SIZE], 0
@@ -1313,8 +1241,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
 .above_ready:
     movzx   r8d, byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_Y_MODE]
     call    er_av1_block_predict_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     call    .block_dst_ptr
     mov     rdi, rax
     mov     esi, [rsp + AV1_TILE_WALK_WIDTH]
@@ -1338,16 +1265,14 @@ er_fn er_av1_tile_decode_intra8x8_luma
     mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
     mov     dword [rsp + AV1_TILE_WALK_CHROMA_INDEX], 0
     call    .decode_chroma_plane
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rax, [r13 + AV1_IMAGE_V_PTR]
     mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
     mov     eax, [r13 + AV1_IMAGE_V_LEN]
     mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
     mov     dword [rsp + AV1_TILE_WALK_CHROMA_INDEX], 1
     call    .decode_chroma_plane
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .ok
 .ok:
     mov     eax, [rsp + AV1_TILE_WALK_COUNT]
@@ -1433,8 +1358,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     test    edx, AV1_BLOCK_DIM_8 - 1
     jnz     .chroma_unsupported
     mul     edx
-    test    edx, edx
-    jnz     .chroma_corrupt
+    er_check_nonzero edx, .chroma_corrupt
     cmp     [r13 + AV1_IMAGE_U_LEN], eax
     jb      .chroma_corrupt
     cmp     [r13 + AV1_IMAGE_V_LEN], eax
@@ -1469,8 +1393,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     xor     ecx, ecx
     mov     r8d, AV1_PRED_MODE_DC
     call    er_av1_block_predict_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    er_check_nonzero edx, .chroma_ret
     mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
     mul     dword [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
     add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
@@ -1494,14 +1417,10 @@ er_fn er_av1_tile_decode_intra8x8_luma
 er_fn er_av1_tile_decode_inter8x8_luma
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_TILE_WALK_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     r8d, AV1_QUANT_STEP_MIN
     jb      .invalid_param
     cmp     r8d, AV1_QUANT_STEP_MAX
@@ -1686,8 +1605,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
 ; Filters reconstructed 8-bit block boundaries for one 8x8-aligned plane.
 er_fn er_av1_loop_filter_plane_8x8
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_BLOCK_DIM_8
     jb      .invalid_param
     test    esi, AV1_BLOCK_DIM_8 - 1
@@ -1702,8 +1620,7 @@ er_fn er_av1_loop_filter_plane_8x8
     mov     r13d, esi
     mov     r14d, edx
     xor     r15d, r15d
-    test    ecx, ecx
-    jz      .ok
+    er_check_zero ecx, .ok
     mov     ebx, AV1_BLOCK_DIM_8
 .v_boundary_loop:
     cmp     ebx, r13d
@@ -1797,8 +1714,7 @@ er_fn er_av1_loop_filter_plane_8x8
 ; Applies the 8x8 boundary filter to Y, U, and V planes in a 4:2:0 image.
 er_fn er_av1_loop_filter_image_420
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_LOOP_FILTER_STRENGTH_MAX
     ja      .invalid_param
     mov     r12, rdi
@@ -1813,8 +1729,7 @@ er_fn er_av1_loop_filter_image_420
     je      .invalid_param
     mov     eax, r13d
     mul     r14d
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r12 + AV1_IMAGE_Y_LEN], eax
     jb      .corrupt
     mov     ebx, r13d
@@ -1823,8 +1738,7 @@ er_fn er_av1_loop_filter_image_420
     shr     r11d, 1
     mov     eax, ebx
     mul     r11d
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r12 + AV1_IMAGE_U_LEN], eax
     jb      .corrupt
     cmp     [r12 + AV1_IMAGE_V_LEN], eax
@@ -1834,8 +1748,7 @@ er_fn er_av1_loop_filter_image_420
     mov     edx, r14d
     mov     ecx, r15d
     call    er_av1_loop_filter_plane_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r13d, eax
     mov     ebx, [r12 + AV1_IMAGE_WIDTH]
     shr     ebx, 1
@@ -1846,16 +1759,14 @@ er_fn er_av1_loop_filter_image_420
     mov     edx, r14d
     mov     ecx, r15d
     call    er_av1_loop_filter_plane_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r13d, eax
     mov     rdi, [r12 + AV1_IMAGE_V_PTR]
     mov     esi, ebx
     mov     edx, r14d
     mov     ecx, r15d
     call    er_av1_loop_filter_plane_8x8
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, r13d
     er_ok
     jmp     .done
@@ -1873,8 +1784,7 @@ er_fn er_av1_loop_filter_image_420
 ; er_av1_refs_init(refs) -> eax=bytes cleared, rdx=error
 ; Clears the eight decoded-frame reference slots.
 er_fn er_av1_refs_init
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     xor     eax, eax
     mov     ecx, AV1_REF_STATE_SIZE
     cld
@@ -1891,19 +1801,16 @@ er_fn er_av1_refs_init
 ; Stores one validated 4:2:0 image descriptor in a reference slot.
 er_fn er_av1_refs_store_image
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_REF_COUNT
     jae     .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     ebx, esi
     mov     r13, rdx
     mov     rdi, r13
     call    er_av1_image_validate_420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     imul    eax, AV1_REF_SLOT_SIZE
     lea     rdi, [r12 + rax]
@@ -1927,19 +1834,16 @@ er_fn er_av1_refs_store_image
 ; Copies the current image descriptor to every reference slot selected by flags.
 er_fn er_av1_refs_refresh
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_FRAME_REFRESH_ALL
     ja      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     mov     rdi, r14
     call    er_av1_image_validate_420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     xor     ebx, ebx
     xor     r15d, r15d
 .slot_loop:
@@ -1978,14 +1882,12 @@ er_fn er_av1_refs_refresh
 ; Exposes one plane descriptor from a valid reference slot.
 er_fn er_av1_refs_get_plane
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_REF_COUNT
     jae     .invalid_param
     cmp     edx, AV1_PLANE_MAX
     ja      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     ebx, esi
     mov     r13d, edx
@@ -2051,8 +1953,7 @@ er_fn er_av1_refs_get_plane
 ; Validates an 8-bit 4:2:0 image descriptor used by decoded-frame references.
 er_fn er_av1_image_validate_420
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     cmp     qword [r12 + AV1_IMAGE_Y_PTR], 0
     je      .invalid_param
@@ -2072,8 +1973,7 @@ er_fn er_av1_image_validate_420
     jnz     .unsupported
     mov     eax, r13d
     mul     ebx
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r12 + AV1_IMAGE_Y_LEN], eax
     jb      .corrupt
     mov     r13d, eax
@@ -2082,8 +1982,7 @@ er_fn er_av1_image_validate_420
     mov     ebx, [r12 + AV1_IMAGE_HEIGHT]
     shr     ebx, 1
     mul     ebx
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r12 + AV1_IMAGE_U_LEN], eax
     jb      .corrupt
     cmp     [r12 + AV1_IMAGE_V_LEN], eax
@@ -2112,12 +2011,10 @@ er_fn er_av1_image_validate_420
 ; r9d packs signed integer mv_x in low 16 bits and mv_y in high 16 bits.
 er_fn er_av1_block_inter_predict_8x8
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_BLOCK_DIM_8
     jb      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     qword [rdx + AV1_PLANE_PTR], 0
     je      .invalid_param
     cmp     dword [rdx + AV1_PLANE_WIDTH], AV1_BLOCK_DIM_8
@@ -2132,8 +2029,7 @@ er_fn er_av1_block_inter_predict_8x8
     mov     r10d, [rdx + AV1_PLANE_LEN]
     mov     eax, r14d
     mul     r15d
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     r10d, eax
     jb      .corrupt
     movsx   eax, r9w
@@ -2187,8 +2083,7 @@ er_fn er_av1_block_inter_predict_8x8
 ; Produces an 8-bit 8x8 intra predictor for the supported intra modes.
 er_fn er_av1_block_predict_8x8
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_BLOCK_DIM_8
     jb      .invalid_param
     cmp     r8d, AV1_PRED_MODE_MAX_SUPPORTED
@@ -2207,8 +2102,7 @@ er_fn er_av1_block_predict_8x8
     je      .paeth
     jmp     .smooth
 .horizontal:
-    test    r14, r14
-    jz      .invalid_param
+    er_check_zero r14, .invalid_param
     xor     ebx, ebx
 .h_row:
     cmp     ebx, AV1_BLOCK_DIM_8
@@ -2225,8 +2119,7 @@ er_fn er_av1_block_predict_8x8
     inc     ebx
     jmp     .h_row
 .vertical:
-    test    r15, r15
-    jz      .invalid_param
+    er_check_zero r15, .invalid_param
     xor     ebx, ebx
 .v_row:
     cmp     ebx, AV1_BLOCK_DIM_8
@@ -2245,10 +2138,8 @@ er_fn er_av1_block_predict_8x8
     inc     ebx
     jmp     .v_row
 .paeth:
-    test    r14, r14
-    jz      .invalid_param
-    test    r15, r15
-    jz      .invalid_param
+    er_check_zero r14, .invalid_param
+    er_check_zero r15, .invalid_param
     xor     ebx, ebx
 .paeth_row:
     cmp     ebx, AV1_BLOCK_DIM_8
@@ -2290,10 +2181,8 @@ er_fn er_av1_block_predict_8x8
     inc     ebx
     jmp     .paeth_row
 .smooth:
-    test    r14, r14
-    jz      .invalid_param
-    test    r15, r15
-    jz      .invalid_param
+    er_check_zero r14, .invalid_param
+    er_check_zero r15, .invalid_param
     xor     ebx, ebx
 .smooth_row:
     cmp     ebx, AV1_BLOCK_DIM_8
@@ -2319,8 +2208,7 @@ er_fn er_av1_block_predict_8x8
 .dc:
     xor     eax, eax
     xor     ebx, ebx
-    test    r14, r14
-    jz      .dc_above
+    er_check_zero r14, .dc_above
 .dc_left:
     add     al, [r14 + rbx]
     adc     ah, 0
@@ -2329,8 +2217,7 @@ er_fn er_av1_block_predict_8x8
     jb      .dc_left
 .dc_above:
     xor     ebx, ebx
-    test    r15, r15
-    jz      .dc_divisor
+    er_check_zero r15, .dc_divisor
 .dc_above_loop:
     add     al, [r15 + rbx]
     adc     ah, 0
@@ -2338,10 +2225,8 @@ er_fn er_av1_block_predict_8x8
     cmp     ebx, AV1_BLOCK_DIM_8
     jb      .dc_above_loop
 .dc_divisor:
-    test    r14, r14
-    jz      .dc_above_only
-    test    r15, r15
-    jz      .dc_left_only
+    er_check_zero r14, .dc_above_only
+    er_check_zero r15, .dc_left_only
     add     eax, AV1_BLOCK_DIM_8
     shr     eax, 4
     jmp     .fill
@@ -2350,8 +2235,7 @@ er_fn er_av1_block_predict_8x8
     shr     eax, 3
     jmp     .fill
 .dc_above_only:
-    test    r15, r15
-    jz      .dc_none
+    er_check_zero r15, .dc_none
     add     eax, 4
     shr     eax, 3
     jmp     .fill
@@ -2388,12 +2272,9 @@ er_fn er_av1_block_predict_8x8
 ; Adds transformed residuals to the predictor.
 er_fn er_av1_block_reconstruct_add_8x8
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     esi, AV1_BLOCK_DIM_8
     jb      .invalid_param
     cmp     ecx, AV1_BLOCK_DIM_8

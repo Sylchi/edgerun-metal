@@ -62,9 +62,7 @@ SECTION .text
 ; ==================================================================
 global er_input_kbd_init
 er_fn er_input_kbd_init
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     ; Generate ephemeral identity (32 bytes)
     ; Xorshift32 seeded with RDTSC — not cryptographic, just sufficient
@@ -96,14 +94,11 @@ er_fn er_input_kbd_init
     ; Register ephemeral identity with route table
     lea     rdi, [rel ik_identity]
     call    er_local_route_register
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
 .done:
     mov     byte [rel ik_initialized], 1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ok
     er_ret
@@ -117,10 +112,7 @@ er_fn er_input_kbd_init
 ; ==================================================================
 global er_input_kbd_poll
 er_fn er_input_kbd_poll
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     cmp     byte [rel ik_initialized], 0
     jz      .done
@@ -131,8 +123,7 @@ er_fn er_input_kbd_poll
 
     ; Non-blocking scancode read
     call    er_i8042_read_scancode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     ebx, eax            ; bl = raw scancode
     mov     r12d, eax           ; preserve across calls
@@ -210,10 +201,7 @@ er_fn er_input_kbd_poll
     and     byte [rel ik_modifiers], ~DA_MOD_SHIFT
 
 .done:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     xor     eax, eax
     er_ret
 

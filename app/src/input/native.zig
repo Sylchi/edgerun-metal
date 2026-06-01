@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const math = @import("../math.zig");
 const app_agent = @import("../shell/agent.zig");
 const app_cursor = @import("../ui/cursor.zig");

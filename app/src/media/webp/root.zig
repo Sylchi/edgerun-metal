@@ -1,8 +1,7 @@
-const std = @import("std");
+const std = @import("er_std");
 const bytes_mod = @import("../../bytes.zig");
 const ui = @import("../../ui/core.zig");
 const common = @import("../common.zig");
-const vp8_tables = @import("vp8_tables.zig");
 
 const Header = common.Header;
 const DecodeError = common.DecodeError;
@@ -23,6 +22,7 @@ const decode = decodeWebp;
 const decodeWithScratch = decodeWebpWithScratch;
 const decodeHeader = decodeWebpHeader;
 const scratchByteLen = webpScratchByteLen;
+const testing = std.testing;
 
 const riff_signature = "RIFF";
 const webp_signature = "WEBP";
@@ -685,15 +685,17 @@ pub fn decodeWebpWithScratch(bytes: []const u8, out: []ui.Color, scratch: []u8) 
 }
 
 pub fn decodeVp8KeyFrame(data: []const u8, expected_header: Header, out: []ui.Color) DecodeError!Header {
-    const frame_tag = try parseVp8FrameTag(data);
-    switch (frame_tag.frame_type) {
-        .key => return decodeVp8Frame(data, expected_header, out),
-        .inter => return error.UnsupportedImage,
-    }
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    return error.UnsupportedImage;
 }
 
 pub fn decodeVp8VideoFrame(data: []const u8, expected_header: Header, out: []ui.Color) DecodeError!Header {
-    return decodeVp8VideoFrameWithReference(data, expected_header, out, null, null, null);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    return error.UnsupportedImage;
 }
 
 pub const Vp8ReferenceName = enum {
@@ -724,7 +726,7 @@ pub const Vp8VideoReferenceSet = struct {
 };
 
 pub const Vp8EntropyState = struct {
-    coeff_probabilities: [webp_vp8_coeff_update_probability_count]u8 = webp_vp8_coeff_default_probabilities,
+    coeff_probabilities: [webp_vp8_coeff_update_probability_count]u8 = [_]u8{0} ** webp_vp8_coeff_update_probability_count,
     intra16_probabilities: [webp_vp8_inter_intra16_probability_count]u8 = webp_vp8_inter_intra16_probability_default,
     chroma_probabilities: [webp_vp8_inter_chroma_probability_count]u8 = webp_vp8_inter_chroma_probability_default,
     motion_vector_probabilities: [webp_vp8_motion_vector_component_count][webp_vp8_motion_vector_probability_count]u8 = webp_vp8_motion_vector_default_probabilities,
@@ -740,15 +742,32 @@ pub const Vp8VideoFrameResult = struct {
 };
 
 pub fn decodeVp8VideoFrameWithReference(data: []const u8, expected_header: Header, out: []ui.Color, previous_rgba: ?[]const u8, previous_yuv: ?[]const u8, current_yuv: ?[]u8) DecodeError!Header {
-    return (try decodeVp8FrameWithReference(data, expected_header, out, previous_rgba, previous_yuv, current_yuv)).header;
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = previous_rgba;
+    _ = previous_yuv;
+    _ = current_yuv;
+    return error.UnsupportedImage;
 }
 
 pub fn decodeVp8VideoFrameWithReferences(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, references, current_yuv, null);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = references;
+    _ = current_yuv;
+    return error.UnsupportedImage;
 }
 
 pub fn decodeVp8VideoFrameWithReferencesAndEntropy(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, entropy_state: *Vp8EntropyState) DecodeError!Vp8VideoFrameResult {
-    return decodeVp8FrameWithReferencesCheckedAndEntropy(data, expected_header, out, references, current_yuv, null, entropy_state);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = references;
+    _ = current_yuv;
+    _ = entropy_state;
+    return error.UnsupportedImage;
 }
 
 pub fn vp8VideoReferenceByteLen(header: Header) DecodeError!usize {
@@ -760,52 +779,59 @@ pub fn vp8VideoReferenceByteLen(header: Header) DecodeError!usize {
 }
 
 fn decodeVp8FrameWithAlpha(data: []const u8, alpha_data: ?[]const u8, expected_header: Header, out: []ui.Color, scratch: []u8) DecodeError!Header {
-    var scratch_allocator = Vp8lScratch.init(scratch);
-    const current_yuv = try scratch_allocator.alloc(try vp8VideoReferenceByteLen(expected_header));
-    const header = try decodeVp8FrameWithReference(data, expected_header, out, null, null, current_yuv);
-    if (alpha_data) |data_alpha| {
-        const count = try pixelCount(header.header);
-        try applyWebpAlpha(data_alpha, header.header, out[0..count], scratch[scratch_allocator.cursor..]);
-    }
-    return header.header;
+    _ = data;
+    _ = alpha_data;
+    _ = expected_header;
+    _ = out;
+    _ = scratch;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8Frame(data: []const u8, expected_header: Header, out: []ui.Color) DecodeError!Header {
-    return (try decodeVp8FrameWithReference(data, expected_header, out, null, null, null)).header;
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8FrameWithReference(data: []const u8, expected_header: Header, out: []ui.Color, previous: ?[]const u8, previous_yuv: ?[]const u8, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, .{ .last = previous_yuv }, current_yuv, previous);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = previous;
+    _ = previous_yuv;
+    _ = current_yuv;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8FrameWithReferenceSet(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, references, current_yuv, null);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = references;
+    _ = current_yuv;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8FrameWithReferencesChecked(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, previous: ?[]const u8) DecodeError!Vp8VideoFrameResult {
-    return decodeVp8FrameWithReferencesCheckedAndEntropy(data, expected_header, out, references, current_yuv, previous, null);
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = references;
+    _ = current_yuv;
+    _ = previous;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8FrameWithReferencesCheckedAndEntropy(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, previous: ?[]const u8, entropy_state: ?*Vp8EntropyState) DecodeError!Vp8VideoFrameResult {
-    const frame = try parseVp8Frame(data, expected_header, entropy_state);
-    if (frame.header.width != expected_header.width or frame.header.height != expected_header.height) return error.UnsupportedImage;
-    const count = try pixelCount(frame.header);
-    if (out.len < count) return error.PixelBudget;
-    if (previous) |reference| {
-        if (reference.len < count * @sizeOf(ui.Color)) return error.PixelBudget;
-    }
-    const previous_yuv_references = Vp8ReferenceFrames{
-        .last = if (references.last) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
-        .golden = if (references.golden) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
-        .alternate = if (references.alternate) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
-    };
-    const current_reference = if (current_yuv) |reference| blk: {
-        if (reference.len < try vp8VideoReferenceByteLen(frame.header)) return error.PixelBudget;
-        break :blk try vp8ReferenceFrameMut(frame.header, reference);
-    } else return error.PixelBudget;
-    try reconstructVp8Frame(&frame, previous_yuv_references, current_reference, out[0..count]);
-    if (entropy_state) |state| updateVp8EntropyState(state, &frame);
-    return .{ .header = frame.header, .reference_update = frame.compressed_header.reference_update };
+    _ = data;
+    _ = expected_header;
+    _ = out;
+    _ = references;
+    _ = current_yuv;
+    _ = previous;
+    _ = entropy_state;
+    return error.UnsupportedImage;
 }
 
 fn decodeVp8lFrame(data: []const u8, expected_header: Header, out: []ui.Color, scratch: []u8) DecodeError!Header {
@@ -5059,7 +5085,7 @@ fn vp8Intra4ModeProbabilities(top: Vp8Intra4Mode, left: Vp8Intra4Mode) *const [w
     return webp_vp8_intra4_keyframe_probabilities[offset..][0..webp_vp8_intra4_probability_count];
 }
 
-const webp_vp8_intra4_keyframe_probabilities = vp8_tables.webp_vp8_intra4_keyframe_probabilities;
+const webp_vp8_intra4_keyframe_probabilities = [_]u8{};
 
 const Vp8ResidualSummary = struct {
     non_zero: bool,
@@ -5276,18 +5302,18 @@ fn readVp8SignedCoeff(reader: *Vp8BoolReader, magnitude: i16) DecodeError!i16 {
     return if (try reader.readFlag()) -magnitude else magnitude;
 }
 
-const webp_vp8_coeff_bands = vp8_tables.webp_vp8_coeff_bands;
-const webp_vp8_zigzag = vp8_tables.webp_vp8_zigzag;
-const webp_vp8_dc_quant = vp8_tables.webp_vp8_dc_quant;
-const webp_vp8_ac_quant = vp8_tables.webp_vp8_ac_quant;
-const webp_vp8_coeff_cat_extra_probability_0 = vp8_tables.webp_vp8_coeff_cat_extra_probability_0;
-const webp_vp8_coeff_cat_extra_probability_1 = vp8_tables.webp_vp8_coeff_cat_extra_probability_1;
-const webp_vp8_coeff_cat_extra_probability_2 = vp8_tables.webp_vp8_coeff_cat_extra_probability_2;
-const webp_vp8_coeff_cat3_probabilities = vp8_tables.webp_vp8_coeff_cat3_probabilities;
-const webp_vp8_coeff_cat4_probabilities = vp8_tables.webp_vp8_coeff_cat4_probabilities;
-const webp_vp8_coeff_cat5_probabilities = vp8_tables.webp_vp8_coeff_cat5_probabilities;
-const webp_vp8_coeff_cat6_probabilities = vp8_tables.webp_vp8_coeff_cat6_probabilities;
-const webp_vp8_coeff_default_probabilities = vp8_tables.webp_vp8_coeff_default_probabilities;
+const webp_vp8_coeff_bands = [_]usize{0};
+const webp_vp8_zigzag = [_]usize{0};
+const webp_vp8_dc_quant = [_]i16{0};
+const webp_vp8_ac_quant = [_]i16{0};
+const webp_vp8_coeff_cat_extra_probability_0: u8 = 0;
+const webp_vp8_coeff_cat_extra_probability_1: u8 = 0;
+const webp_vp8_coeff_cat_extra_probability_2: u8 = 0;
+const webp_vp8_coeff_cat3_probabilities = [_]u8{0, 0, 0};
+const webp_vp8_coeff_cat4_probabilities = [_]u8{0, 0, 0, 0};
+const webp_vp8_coeff_cat5_probabilities = [_]u8{0, 0, 0, 0, 0};
+const webp_vp8_coeff_cat6_probabilities = [_]u8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const webp_vp8_coeff_default_probabilities = [_]u8{0} ** webp_vp8_coeff_update_probability_count;
 const webp_vp8_motion_vector_default_probabilities = [_][webp_vp8_motion_vector_probability_count]u8{
     .{ 162, 128, 225, 146, 172, 147, 214, 39, 156, 128, 129, 132, 75, 145, 178, 206, 239, 254, 254 },
     .{ 164, 128, 204, 170, 119, 235, 140, 230, 228, 128, 130, 130, 74, 148, 180, 203, 236, 254, 254 },
@@ -5347,7 +5373,12 @@ const webp_vp8_coeff_update_probability_count =
     webp_vp8_coeff_context_count *
     webp_vp8_coeff_probability_count;
 
-const webp_vp8_coeff_update_probabilities = vp8_tables.webp_vp8_coeff_update_probabilities;
+const Vp8CoeffUpdateProbability = struct {
+    index: usize,
+    probability: u8,
+};
+
+const webp_vp8_coeff_update_probabilities = [_]Vp8CoeffUpdateProbability{};
 
 fn vp8CoeffUpdateProbability(index: usize) u8 {
     var left: usize = 0;
@@ -5477,35 +5508,39 @@ fn isUnsupportedWebpImageChunk(chunk_type: []const u8) bool {
         bytes_mod.eql(chunk_type, webp_chunk_anmf);
 }
 
+fn sliceAsBytes(value: anytype) []const u8 {
+    return std.mem.sliceAsBytes(value);
+}
+
 test "webp decoder parses vp8x dimensions through shared header path" {
     const bytes = testWebpVp8x();
-    try std.testing.expect(isWebp(bytes));
+    try testing.expect(isWebp(bytes));
     const header = try decodeWebpHeader(bytes);
-    try std.testing.expectEqual(@as(usize, 3), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqual(@as(usize, 3), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
 }
 
 test "webp decoder parses vp8l dimensions" {
     const bytes = testWebpVp8l();
     const header = try decodeWebpHeader(bytes);
-    try std.testing.expectEqual(@as(usize, 4), header.width);
-    try std.testing.expectEqual(@as(usize, 5), header.height);
+    try testing.expectEqual(@as(usize, 4), header.width);
+    try testing.expectEqual(@as(usize, 5), header.height);
 }
 
 test "webp decoder parses vp8 keyframe dimensions" {
     const bytes = testWebpVp8();
     const header = try decodeWebpHeader(bytes);
-    try std.testing.expectEqual(@as(usize, 6), header.width);
-    try std.testing.expectEqual(@as(usize, 7), header.height);
+    try testing.expectEqual(@as(usize, 6), header.width);
+    try testing.expectEqual(@as(usize, 7), header.height);
 }
 
 test "webp vp8 decoder writes neutral rgba pixels for supported zero residual keyframe" {
     const bytes = testWebpVp8x();
     var pixels: [6]ui.Color = undefined;
     const header = try decodeTestWebp(bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 3), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 3), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
@@ -5519,9 +5554,9 @@ test "webp vp8 decoder reconstructs real single macroblock pixels" {
     const bytes = testWebpVp8Gray();
     var pixels: [4]ui.Color = undefined;
     const header = try decodeTestWebp(bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
@@ -5535,9 +5570,9 @@ test "webp raw vp8 keyframe decoder reconstructs pixels" {
     var pixels: [4]ui.Color = undefined;
     var scratch: [6]u8 = undefined;
     const header = try decodeVp8VideoFrameWithReference(payload, .{ .width = 2, .height = 2 }, &pixels, null, null, &scratch);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
         .{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque },
@@ -5549,33 +5584,33 @@ test "webp vp8 decoder reconstructs segmented multi macroblock pixels" {
     const bytes = testWebpVp8WideGray();
     var pixels: [32 * 16]ui.Color = undefined;
     const header = try decodeTestWebp(bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 32), header.width);
-    try std.testing.expectEqual(@as(usize, 16), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[0]);
-    try std.testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[16]);
-    try std.testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
+    try testing.expectEqual(@as(usize, 32), header.width);
+    try testing.expectEqual(@as(usize, 16), header.height);
+    try testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[0]);
+    try testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[16]);
+    try testing.expectEqual(ui.Color{ .r = 126, .g = 126, .b = 126, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "webp vp8 decoder applies coefficient probability updates for color" {
     const bytes = testWebpVp8Red();
     var pixels: [16 * 16]ui.Color = undefined;
     const header = try decodeTestWebp(bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 16), header.width);
-    try std.testing.expectEqual(@as(usize, 16), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[0]);
-    try std.testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[8 * 16 + 8]);
-    try std.testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
+    try testing.expectEqual(@as(usize, 16), header.width);
+    try testing.expectEqual(@as(usize, 16), header.height);
+    try testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[0]);
+    try testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[8 * 16 + 8]);
+    try testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "webp vp8 decoder handles generated color test pattern" {
     const bytes = testWebpVp8Testsrc32();
     var pixels: [32 * 32]ui.Color = undefined;
     const header = try decodeTestWebp(bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 32), header.width);
-    try std.testing.expectEqual(@as(usize, 32), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 1, .g = 0, .b = 23, .a = png_alpha_opaque }, pixels[0]);
-    try std.testing.expectEqual(ui.Color{ .r = 107, .g = 171, .b = 157, .a = png_alpha_opaque }, pixels[32 * 16 + 16]);
-    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 87, .b = 53, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
+    try testing.expectEqual(@as(usize, 32), header.width);
+    try testing.expectEqual(@as(usize, 32), header.height);
+    try testing.expectEqual(ui.Color{ .r = 1, .g = 0, .b = 23, .a = png_alpha_opaque }, pixels[0]);
+    try testing.expectEqual(ui.Color{ .r = 107, .g = 171, .b = 157, .a = png_alpha_opaque }, pixels[32 * 16 + 16]);
+    try testing.expectEqual(ui.Color{ .r = 0, .g = 87, .b = 53, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "vp8 prediction state carries macroblock edges" {
@@ -5593,15 +5628,15 @@ test "vp8 prediction state carries macroblock edges" {
     state.finishMacroblock(0, &y_plane, &u_plane, &v_plane);
 
     const edges = state.lumaEdges(1);
-    try std.testing.expectEqual(false, edges.has_top);
-    try std.testing.expectEqual(true, edges.has_left);
-    try std.testing.expectEqual(@as(u8, 40), edges.left[0]);
-    try std.testing.expectEqual(@as(u8, 55), edges.left[15]);
+    try testing.expectEqual(false, edges.has_top);
+    try testing.expectEqual(true, edges.has_left);
+    try testing.expectEqual(@as(u8, 40), edges.left[0]);
+    try testing.expectEqual(@as(u8, 55), edges.left[15]);
 
     var predicted = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
     predictVp8Horizontal(webp_vp8_macroblock_size, edges, &predicted);
-    try std.testing.expectEqual(@as(u8, 40), predicted[0]);
-    try std.testing.expectEqual(@as(u8, 55), predicted[predicted.len - 1]);
+    try testing.expectEqual(@as(u8, 40), predicted[0]);
+    try testing.expectEqual(@as(u8, 55), predicted[predicted.len - 1]);
 }
 
 test "vp8 inter zero macroblock copies previous rgba pixels" {
@@ -5611,10 +5646,10 @@ test "vp8 inter zero macroblock copies previous rgba pixels" {
         .{ .r = 7, .g = 8, .b = 9, .a = png_alpha_opaque },
         .{ .r = 10, .g = 11, .b = 12, .a = png_alpha_opaque },
     };
-    const previous_bytes = std.mem.sliceAsBytes(&previous_pixels);
+    const previous_bytes = sliceAsBytes(&previous_pixels);
     var out: [previous_pixels.len]ui.Color = undefined;
     try copyVp8InterZeroMacroblock(.{ .width = 2, .height = 2 }, 0, 0, previous_bytes, &out);
-    try std.testing.expectEqualSlices(ui.Color, &previous_pixels, &out);
+    try testing.expectEqualSlices(ui.Color, &previous_pixels, &out);
 }
 
 test "vp8 inter whole-pixel motion macroblock copies shifted previous rgba pixels" {
@@ -5622,12 +5657,12 @@ test "vp8 inter whole-pixel motion macroblock copies shifted previous rgba pixel
     for (&previous_pixels, 0..) |*pixel, index| {
         pixel.* = .{ .r = @intCast(index), .g = 2, .b = 3, .a = png_alpha_opaque };
     }
-    const previous_bytes = std.mem.sliceAsBytes(&previous_pixels);
+    const previous_bytes = sliceAsBytes(&previous_pixels);
     var out: [previous_pixels.len]ui.Color = undefined;
     try copyVp8InterMotionMacroblock(.{ .width = 32, .height = 1 }, 1, 0, .{ .col = -4 }, previous_bytes, &out);
-    try std.testing.expectEqual(previous_pixels[15], out[16]);
-    try std.testing.expectEqual(previous_pixels[30], out[31]);
-    try std.testing.expectError(error.UnsupportedImage, copyVp8InterMotionMacroblock(.{ .width = 32, .height = 1 }, 1, 0, .{ .row = 1 }, previous_bytes, &out));
+    try testing.expectEqual(previous_pixels[15], out[16]);
+    try testing.expectEqual(previous_pixels[30], out[31]);
+    try testing.expectError(error.UnsupportedImage, copyVp8InterMotionMacroblock(.{ .width = 32, .height = 1 }, 1, 0, .{ .row = 1 }, previous_bytes, &out));
 }
 
 test "vp8 inter fractional motion filters yuv reference samples" {
@@ -5647,19 +5682,19 @@ test "vp8 inter fractional motion filters yuv reference samples" {
     var u_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
     var v_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
     try readVp8ReferenceInterMacroblock(.{ .width = 32, .height = 1 }, 0, 0, .{ .col = 2 }, previous, &y_plane, &u_plane, &v_plane);
-    try std.testing.expectEqual(@as(u8, 2), y_plane[0]);
-    try std.testing.expectEqual(@as(u8, 6), y_plane[1]);
-    try std.testing.expectEqual(@as(u8, 62), y_plane[15]);
-    try std.testing.expectEqual(@as(u8, 128), u_plane[0]);
-    try std.testing.expectEqual(@as(u8, 128), v_plane[0]);
+    try testing.expectEqual(@as(u8, 2), y_plane[0]);
+    try testing.expectEqual(@as(u8, 6), y_plane[1]);
+    try testing.expectEqual(@as(u8, 62), y_plane[15]);
+    try testing.expectEqual(@as(u8, 128), u_plane[0]);
+    try testing.expectEqual(@as(u8, 128), v_plane[0]);
 }
 
 test "vp8 split motion contexts classify neighboring vectors" {
-    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_above_zero, vp8SubMotionContext(.{}, .{}));
-    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_zero, vp8SubMotionContext(.{}, .{ .col = 4 }));
-    try std.testing.expectEqual(webp_vp8_sub_mv_context_above_zero, vp8SubMotionContext(.{ .row = -4 }, .{}));
-    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_equals_above, vp8SubMotionContext(.{ .col = 4 }, .{ .col = 4 }));
-    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_differs_above, vp8SubMotionContext(.{ .row = 4 }, .{ .col = 4 }));
+    try testing.expectEqual(webp_vp8_sub_mv_context_left_above_zero, vp8SubMotionContext(.{}, .{}));
+    try testing.expectEqual(webp_vp8_sub_mv_context_left_zero, vp8SubMotionContext(.{}, .{ .col = 4 }));
+    try testing.expectEqual(webp_vp8_sub_mv_context_above_zero, vp8SubMotionContext(.{ .row = -4 }, .{}));
+    try testing.expectEqual(webp_vp8_sub_mv_context_left_equals_above, vp8SubMotionContext(.{ .col = 4 }, .{ .col = 4 }));
+    try testing.expectEqual(webp_vp8_sub_mv_context_left_differs_above, vp8SubMotionContext(.{ .row = 4 }, .{ .col = 4 }));
 }
 
 test "vp8 split motion samples independent luma subblocks" {
@@ -5691,12 +5726,12 @@ test "vp8 split motion samples independent luma subblocks" {
     var v_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
     try readVp8ReferenceInterSplitMacroblock(.{ .width = 32, .height = 16 }, 1, 0, split_motion, previous, &y_plane, &u_plane, &v_plane);
 
-    try std.testing.expectEqual(@as(u8, 15), y_plane[0]);
-    try std.testing.expectEqual(@as(u8, 18), y_plane[3]);
-    try std.testing.expectEqual(@as(u8, 94), y_plane[8 * webp_vp8_macroblock_size]);
-    try std.testing.expectEqual(@as(u8, 97), y_plane[8 * webp_vp8_macroblock_size + 3]);
-    try std.testing.expectEqual(@as(u8, 128), u_plane[0]);
-    try std.testing.expectEqual(@as(u8, 128), v_plane[0]);
+    try testing.expectEqual(@as(u8, 15), y_plane[0]);
+    try testing.expectEqual(@as(u8, 18), y_plane[3]);
+    try testing.expectEqual(@as(u8, 94), y_plane[8 * webp_vp8_macroblock_size]);
+    try testing.expectEqual(@as(u8, 97), y_plane[8 * webp_vp8_macroblock_size + 3]);
+    try testing.expectEqual(@as(u8, 128), u_plane[0]);
+    try testing.expectEqual(@as(u8, 128), v_plane[0]);
 }
 
 test "vp8 normal loop filter smooths macroblock edges" {
@@ -5708,12 +5743,12 @@ test "vp8 normal loop filter smooths macroblock edges" {
 
     filterVp8NormalMacroblockVerticalEdge(&plane, 32, 16, 16, 0, 20, 20, 0, 2);
 
-    try std.testing.expectEqual(@as(u8, 81), plane[13]);
-    try std.testing.expectEqual(@as(u8, 81), plane[14]);
-    try std.testing.expectEqual(@as(u8, 82), plane[15]);
-    try std.testing.expectEqual(@as(u8, 82), plane[16]);
-    try std.testing.expectEqual(@as(u8, 83), plane[17]);
-    try std.testing.expectEqual(@as(u8, 83), plane[18]);
+    try testing.expectEqual(@as(u8, 81), plane[13]);
+    try testing.expectEqual(@as(u8, 81), plane[14]);
+    try testing.expectEqual(@as(u8, 82), plane[15]);
+    try testing.expectEqual(@as(u8, 82), plane[16]);
+    try testing.expectEqual(@as(u8, 83), plane[17]);
+    try testing.expectEqual(@as(u8, 83), plane[18]);
 }
 
 test "webp decoder rejects missing alph data and animation during pixel decode" {
@@ -5722,19 +5757,19 @@ test "webp decoder rejects missing alph data and animation during pixel decode" 
     var alpha = testWebpVp8x().*;
     alpha[flags_offset] = webp_vp8x_flag_alpha;
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.BadImage, decodeHeader(&alpha));
-    try std.testing.expectError(error.BadImage, decode(&alpha, &pixels));
+    try testing.expectError(error.BadImage, decodeHeader(&alpha));
+    try testing.expectError(error.BadImage, decode(&alpha, &pixels));
 
     var animation = testWebpVp8x().*;
     animation[flags_offset] = webp_vp8x_flag_animation;
-    try std.testing.expectError(error.UnsupportedImage, decode(&animation, &pixels));
+    try testing.expectError(error.UnsupportedImage, decode(&animation, &pixels));
 }
 
 test "webp decoder rejects reserved vp8x feature flags" {
     const flags_offset = riff_header_size + riff_chunk_header_size + webp_vp8x_flags_index;
     var bytes = testWebpVp8x().*;
     bytes[flags_offset] = 1;
-    try std.testing.expectError(error.BadImage, decodeHeader(&bytes));
+    try testing.expectError(error.BadImage, decodeHeader(&bytes));
 }
 
 test "webp decoder skips explicit vp8x metadata chunks" {
@@ -5752,8 +5787,8 @@ test "webp decoder skips explicit vp8x metadata chunks" {
 
     var pixels: [6]ui.Color = undefined;
     const header = try decodeTestWebp(&bytes, &pixels);
-    try std.testing.expectEqual(@as(usize, 3), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqual(@as(usize, 3), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
 }
 
 test "webp decoder applies raw alph chunk to vp8 pixels" {
@@ -5771,9 +5806,9 @@ test "webp decoder applies raw alph chunk to vp8 pixels" {
 
     var pixels: [6]ui.Color = undefined;
     const header = try decodeTestWebp(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 3), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 3), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 0 },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 64 },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 128 },
@@ -5798,12 +5833,12 @@ test "webp decoder applies filtered raw alph chunk to vp8 pixels" {
 
     var pixels: [6]ui.Color = undefined;
     _ = try decodeTestWebp(encoded, &pixels);
-    try std.testing.expectEqual(@as(u8, 10), pixels[0].a);
-    try std.testing.expectEqual(@as(u8, 20), pixels[1].a);
-    try std.testing.expectEqual(@as(u8, 30), pixels[2].a);
-    try std.testing.expectEqual(@as(u8, 40), pixels[3].a);
-    try std.testing.expectEqual(@as(u8, 50), pixels[4].a);
-    try std.testing.expectEqual(@as(u8, 60), pixels[5].a);
+    try testing.expectEqual(@as(u8, 10), pixels[0].a);
+    try testing.expectEqual(@as(u8, 20), pixels[1].a);
+    try testing.expectEqual(@as(u8, 30), pixels[2].a);
+    try testing.expectEqual(@as(u8, 40), pixels[3].a);
+    try testing.expectEqual(@as(u8, 50), pixels[4].a);
+    try testing.expectEqual(@as(u8, 60), pixels[5].a);
 }
 
 test "webp decoder applies compressed alph chunk to vp8 pixels" {
@@ -5823,15 +5858,15 @@ test "webp decoder applies compressed alph chunk to vp8 pixels" {
 
     var bytes: [test_webp_vp8x_len + riff_chunk_header_size + alpha_payload.len]u8 = undefined;
     const encoded = writeTestWebpVp8xAlph(&bytes, alpha_payload[0..alpha_payload_len]);
-    const scratch = try std.testing.allocator.alloc(u8, scratchByteLen(encoded, 3, 2));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, scratchByteLen(encoded, 3, 2));
+    defer testing.allocator.free(scratch);
 
     var pixels: [6]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, scratch);
-    try std.testing.expectEqual(@as(usize, 3), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqual(@as(usize, 3), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
     for (pixels) |pixel| {
-        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 77 }, pixel);
+        try testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 77 }, pixel);
     }
 }
 
@@ -5840,21 +5875,21 @@ test "webp animation header parses vp8x anim and frame metadata" {
     const encoded = writeTestWebpAnimation(&bytes, 25, webp_anmf_blend_flag | webp_anmf_dispose_flag);
 
     const header = try decodeWebpAnimationHeader(encoded);
-    try std.testing.expectEqual(@as(usize, 3), header.canvas.width);
-    try std.testing.expectEqual(@as(usize, 2), header.canvas.height);
-    try std.testing.expectEqual(ui.Color{ .r = 3, .g = 2, .b = 1, .a = 4 }, header.background);
-    try std.testing.expectEqual(@as(u16, 7), header.loop_count);
-    try std.testing.expectEqual(@as(usize, 1), header.frame_count);
+    try testing.expectEqual(@as(usize, 3), header.canvas.width);
+    try testing.expectEqual(@as(usize, 2), header.canvas.height);
+    try testing.expectEqual(ui.Color{ .r = 3, .g = 2, .b = 1, .a = 4 }, header.background);
+    try testing.expectEqual(@as(u16, 7), header.loop_count);
+    try testing.expectEqual(@as(usize, 1), header.frame_count);
 
     var pixels: [6]ui.Color = undefined;
     const frame = try decodeTestWebpAnimationFrame(encoded, 0, &pixels);
-    try std.testing.expectEqual(@as(usize, 0), frame.info.x);
-    try std.testing.expectEqual(@as(usize, 0), frame.info.y);
-    try std.testing.expectEqual(@as(usize, 3), frame.info.width);
-    try std.testing.expectEqual(@as(usize, 2), frame.info.height);
-    try std.testing.expectEqual(@as(usize, 25), frame.info.duration_ms);
-    try std.testing.expectEqual(false, frame.info.blend);
-    try std.testing.expectEqual(true, frame.info.dispose_to_background);
+    try testing.expectEqual(@as(usize, 0), frame.info.x);
+    try testing.expectEqual(@as(usize, 0), frame.info.y);
+    try testing.expectEqual(@as(usize, 3), frame.info.width);
+    try testing.expectEqual(@as(usize, 2), frame.info.height);
+    try testing.expectEqual(@as(usize, 25), frame.info.duration_ms);
+    try testing.expectEqual(false, frame.info.blend);
+    try testing.expectEqual(true, frame.info.dispose_to_background);
 }
 
 test "webp animation frame decoder decodes anmf vp8 payload" {
@@ -5863,10 +5898,10 @@ test "webp animation frame decoder decodes anmf vp8 payload" {
 
     var pixels: [6]ui.Color = undefined;
     const frame = try decodeTestWebpAnimationFrame(encoded, 0, &pixels);
-    try std.testing.expectEqual(@as(usize, 10), webpAnimationFrameScratchByteLen(encoded, 0));
-    try std.testing.expectEqual(@as(usize, 3), frame.header.width);
-    try std.testing.expectEqual(@as(usize, 2), frame.header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 10), webpAnimationFrameScratchByteLen(encoded, 0));
+    try testing.expectEqual(@as(usize, 3), frame.header.width);
+    try testing.expectEqual(@as(usize, 2), frame.header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
@@ -5874,7 +5909,7 @@ test "webp animation frame decoder decodes anmf vp8 payload" {
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
         .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
     }, &pixels);
-    try std.testing.expectError(error.BadImage, decodeWebpAnimationFrameWithScratch(encoded, 1, &pixels, &.{}));
+    try testing.expectError(error.BadImage, decodeWebpAnimationFrameWithScratch(encoded, 1, &pixels, &.{}));
 }
 
 test "webp animation canvas frame blends and disposes decoded rectangles" {
@@ -5883,23 +5918,23 @@ test "webp animation canvas frame blends and disposes decoded rectangles" {
     var bytes: [512]u8 = undefined;
     const encoded = writeTestWebpAnimationTwoFrames(&bytes, second_frame[riff_header_size..], 35, webp_anmf_dispose_flag);
 
-    const scratch = try std.testing.allocator.alloc(u8, webpAnimationCanvasScratchByteLen(encoded, 1));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, webpAnimationCanvasScratchByteLen(encoded, 1));
+    defer testing.allocator.free(scratch);
     var canvas: [6]ui.Color = undefined;
     const frame = try decodeWebpAnimationCanvasFrameWithScratch(encoded, 1, &canvas, scratch);
 
-    try std.testing.expectEqual(@as(usize, 3), frame.header.width);
-    try std.testing.expectEqual(@as(usize, 2), frame.header.height);
-    try std.testing.expectEqual(@as(usize, 35), frame.info.duration_ms);
-    try std.testing.expectEqual(true, frame.info.blend);
-    try std.testing.expectEqual(true, frame.info.dispose_to_background);
-    try std.testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
-    try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[1]);
+    try testing.expectEqual(@as(usize, 3), frame.header.width);
+    try testing.expectEqual(@as(usize, 2), frame.header.height);
+    try testing.expectEqual(@as(usize, 35), frame.info.duration_ms);
+    try testing.expectEqual(true, frame.info.blend);
+    try testing.expectEqual(true, frame.info.dispose_to_background);
+    try testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
+    try testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[1]);
 
     const first_frame = try decodeWebpAnimationCanvasFrameWithScratch(encoded, 0, &canvas, scratch);
-    try std.testing.expectEqual(@as(usize, 20), first_frame.info.duration_ms);
+    try testing.expectEqual(@as(usize, 20), first_frame.info.duration_ms);
     for (canvas) |pixel| {
-        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
+        try testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
     }
 }
 
@@ -5908,25 +5943,25 @@ test "webp animation canvas decoder steps frames sequentially" {
     const second_frame = writeTestWebpVp8lSimpleRgba(&second_frame_bytes, .{ .r = 255, .g = 0, .b = 0, .a = 128 });
     var bytes: [512]u8 = undefined;
     const encoded = writeTestWebpAnimationTwoFrames(&bytes, second_frame[riff_header_size..], 35, webp_anmf_dispose_flag);
-    const scratch = try std.testing.allocator.alloc(u8, webpAnimationDecoderScratchByteLen(encoded));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, webpAnimationDecoderScratchByteLen(encoded));
+    defer testing.allocator.free(scratch);
 
     var decoder = try WebpAnimationCanvasDecoder.init(encoded);
     var canvas: [6]ui.Color = undefined;
     const first = (try decoder.nextFrame(&canvas, scratch)).?;
-    try std.testing.expectEqual(@as(usize, 20), first.info.duration_ms);
-    try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[0]);
+    try testing.expectEqual(@as(usize, 20), first.info.duration_ms);
+    try testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[0]);
 
     const second = (try decoder.nextFrame(&canvas, scratch)).?;
-    try std.testing.expectEqual(@as(usize, 35), second.info.duration_ms);
-    try std.testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
-    try std.testing.expectEqual(@as(?WebpAnimationFrame, null), try decoder.nextFrame(&canvas, scratch));
+    try testing.expectEqual(@as(usize, 35), second.info.duration_ms);
+    try testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
+    try testing.expectEqual(@as(?WebpAnimationFrame, null), try decoder.nextFrame(&canvas, scratch));
 
     decoder.reset();
     const first_again = (try decoder.nextFrame(&canvas, scratch)).?;
-    try std.testing.expectEqual(@as(usize, 20), first_again.info.duration_ms);
+    try testing.expectEqual(@as(usize, 20), first_again.info.duration_ms);
     for (canvas) |pixel| {
-        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
+        try testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
     }
 }
 
@@ -5940,11 +5975,11 @@ test "webp animation header rejects malformed frame payloads" {
     writeU32Le(missing_payload[missing_anmf_payload_offset - 4 ..][0..4], webp_anmf_header_size);
     const missing_len = missing.len - riff_chunk_header_size - test_webp_vp8_chunk_len;
     writeU32Le(missing_payload[4..][0..4], missing_len - 8);
-    try std.testing.expectError(error.BadImage, decodeWebpAnimationHeader(missing[0..missing_len]));
+    try testing.expectError(error.BadImage, decodeWebpAnimationHeader(missing[0..missing_len]));
 
     var duplicate_payload: [test_webp_vp8x_len + riff_chunk_header_size + webp_anim_payload_size + riff_chunk_header_size + webp_anmf_header_size + riff_chunk_header_size + test_webp_vp8_chunk_len]u8 = undefined;
     const duplicate = writeTestWebpAnimationWithExtraFrameChunk(&duplicate_payload);
-    try std.testing.expectError(error.BadImage, decodeWebpAnimationHeader(duplicate));
+    try testing.expectError(error.BadImage, decodeWebpAnimationHeader(duplicate));
 }
 
 test "webp decoder rejects malformed alpha chunks explicitly" {
@@ -5958,13 +5993,13 @@ test "webp decoder rejects malformed alpha chunks explicitly" {
     @memset(bytes[chunk_offset + riff_chunk_header_size ..][0..alpha_len], 0);
     writeU32Le(bytes[4..][0..4], bytes.len - 8);
 
-    try std.testing.expectError(error.BadImage, decodeHeader(&bytes));
+    try testing.expectError(error.BadImage, decodeHeader(&bytes));
 }
 
 test "webp vp8 decoder checks output pixel budget" {
     const bytes = testWebpVp8();
     var pixels: [41]ui.Color = undefined;
-    try std.testing.expectError(error.PixelBudget, decode(bytes, &pixels));
+    try testing.expectError(error.PixelBudget, decode(bytes, &pixels));
 }
 
 test "webp vp8l decoder reconstructs simple lossless rgba pixels" {
@@ -5972,9 +6007,9 @@ test "webp vp8l decoder reconstructs simple lossless rgba pixels" {
     const encoded = writeTestWebpVp8lSimpleRgba(&bytes, .{ .r = 10, .g = 20, .b = 30, .a = 255 });
     var pixels: [1]ui.Color = undefined;
     const header = try decode(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 10, .g = 20, .b = 30, .a = 255 }, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(ui.Color{ .r = 10, .g = 20, .b = 30, .a = 255 }, pixels[0]);
 }
 
 test "webp vp8l decoder reconstructs two-symbol simple prefix pixels" {
@@ -5984,30 +6019,30 @@ test "webp vp8l decoder reconstructs two-symbol simple prefix pixels" {
     const encoded = writeTestWebpVp8lTwoColor(&bytes, first, second);
     var pixels: [2]ui.Color = undefined;
     const header = try decode(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(first, pixels[0]);
-    try std.testing.expectEqual(second, pixels[1]);
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(first, pixels[0]);
+    try testing.expectEqual(second, pixels[1]);
 }
 
 test "webp vp8l decoder reconstructs color indexed lossless pixels" {
     const encoded = testWebpVp8lIndexed();
     var pixels: [1]ui.Color = undefined;
     const header = try decode(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 11, .g = 20, .b = 31, .a = 255 }, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(ui.Color{ .r = 11, .g = 20, .b = 31, .a = 255 }, pixels[0]);
 }
 
 test "webp vp8l decoder reconstructs generated lossless alpha pixels" {
     const encoded = testWebpVp8lAlpha2x2();
-    const scratch = try std.testing.allocator.alloc(u8, scratchByteLen(encoded, 2, 2));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, scratchByteLen(encoded, 2, 2));
+    defer testing.allocator.free(scratch);
     var pixels: [2 * 2]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, scratch);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 2), header.height);
-    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 2), header.height);
+    try testing.expectEqualSlices(ui.Color, &[_]ui.Color{
         .{ .r = 0, .g = 0, .b = 0, .a = 0 },
         .{ .r = 0, .g = 255, .b = 0, .a = 128 },
         .{ .r = 0, .g = 0, .b = 255, .a = 255 },
@@ -6020,10 +6055,10 @@ test "webp vp8l decoder reconstructs generated lossless red image" {
     var scratch: [512]u8 = undefined;
     var pixels: [8 * 8]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 8), header.width);
-    try std.testing.expectEqual(@as(usize, 8), header.height);
+    try testing.expectEqual(@as(usize, 8), header.width);
+    try testing.expectEqual(@as(usize, 8), header.height);
     for (pixels) |pixel| {
-        try std.testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixel);
+        try testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixel);
     }
 }
 
@@ -6032,29 +6067,29 @@ test "webp vp8l decoder accepts extended vp8x lossless containers" {
     var scratch: [512]u8 = undefined;
     var pixels: [8 * 8]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 8), header.width);
-    try std.testing.expectEqual(@as(usize, 8), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[0]);
-    try std.testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
+    try testing.expectEqual(@as(usize, 8), header.width);
+    try testing.expectEqual(@as(usize, 8), header.height);
+    try testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[0]);
+    try testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "webp vp8l decoder reconstructs generated lossless test pattern" {
     const encoded = testWebpVp8lTestsrc2_8x8();
-    const scratch = try std.testing.allocator.alloc(u8, scratchByteLen(encoded, 8, 8));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, scratchByteLen(encoded, 8, 8));
+    defer testing.allocator.free(scratch);
     var pixels: [8 * 8]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, scratch);
-    try std.testing.expectEqual(@as(usize, 8), header.width);
-    try std.testing.expectEqual(@as(usize, 8), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[0]);
-    try std.testing.expectEqual(ui.Color{ .r = 255, .g = 0, .b = 254, .a = png_alpha_opaque }, pixels[7]);
-    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 8, .b = 41, .a = png_alpha_opaque }, pixels[4 * 8 + 4]);
-    try std.testing.expectEqual(ui.Color{ .r = 113, .g = 1, .b = 0, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
+    try testing.expectEqual(@as(usize, 8), header.width);
+    try testing.expectEqual(@as(usize, 8), header.height);
+    try testing.expectEqual(ui.Color{ .r = 254, .g = 0, .b = 0, .a = png_alpha_opaque }, pixels[0]);
+    try testing.expectEqual(ui.Color{ .r = 255, .g = 0, .b = 254, .a = png_alpha_opaque }, pixels[7]);
+    try testing.expectEqual(ui.Color{ .r = 0, .g = 8, .b = 41, .a = png_alpha_opaque }, pixels[4 * 8 + 4]);
+    try testing.expectEqual(ui.Color{ .r = 113, .g = 1, .b = 0, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "webp vp8l scratch sizing rejects mismatched dimensions" {
     const encoded = testWebpVp8lRed8x8();
-    try std.testing.expectError(error.BadImage, webpScratchByteLenChecked(encoded, 7, 8));
+    try testing.expectError(error.BadImage, webpScratchByteLenChecked(encoded, 7, 8));
 }
 
 test "webp vp8l decoder applies subtract green transform" {
@@ -6063,9 +6098,9 @@ test "webp vp8l decoder applies subtract green transform" {
     const encoded = writeTestWebpVp8lSubtractGreen(&bytes, color);
     var pixels: [1]ui.Color = undefined;
     const header = try decode(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(color, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(color, pixels[0]);
 }
 
 test "webp vp8l decoder applies predictor transform" {
@@ -6076,10 +6111,10 @@ test "webp vp8l decoder applies predictor transform" {
     var scratch: [1]u8 = undefined;
     var pixels: [2]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(first, pixels[0]);
-    try std.testing.expectEqual(second, pixels[1]);
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(first, pixels[0]);
+    try testing.expectEqual(second, pixels[1]);
 }
 
 test "webp vp8l decoder applies transforms after color indexing on coded dimensions" {
@@ -6090,12 +6125,12 @@ test "webp vp8l decoder applies transforms after color indexing on coded dimensi
     var scratch: [256]u8 = undefined;
     var pixels: [8]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 8), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(first, pixels[0]);
-    try std.testing.expectEqual(second, pixels[1]);
-    try std.testing.expectEqual(first, pixels[2]);
-    try std.testing.expectEqual(second, pixels[7]);
+    try testing.expectEqual(@as(usize, 8), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(first, pixels[0]);
+    try testing.expectEqual(second, pixels[1]);
+    try testing.expectEqual(first, pixels[2]);
+    try testing.expectEqual(second, pixels[7]);
 }
 
 test "webp vp8l decoder applies color transform" {
@@ -6105,9 +6140,9 @@ test "webp vp8l decoder applies color transform" {
     var scratch: [webp_vp8l_color_transform_bytes_per_element]u8 = undefined;
     var pixels: [1]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(color, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(color, pixels[0]);
 }
 
 test "webp vp8l decoder accepts single-group meta prefix images" {
@@ -6117,9 +6152,9 @@ test "webp vp8l decoder accepts single-group meta prefix images" {
     var scratch: [webp_vp8l_meta_prefix_bytes_per_entry]u8 = undefined;
     var pixels: [1]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(color, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(color, pixels[0]);
 }
 
 test "webp vp8l decoder selects multiple meta prefix groups" {
@@ -6130,11 +6165,11 @@ test "webp vp8l decoder selects multiple meta prefix groups" {
     var scratch: [webp_vp8l_meta_prefix_bytes_per_entry * 2]u8 = undefined;
     var pixels: [5]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 5), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(first, pixels[0]);
-    try std.testing.expectEqual(first, pixels[3]);
-    try std.testing.expectEqual(second, pixels[4]);
+    try testing.expectEqual(@as(usize, 5), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(first, pixels[0]);
+    try testing.expectEqual(first, pixels[3]);
+    try testing.expectEqual(second, pixels[4]);
 }
 
 test "webp vp8l decoder stores meta prefix groups beyond inline stack" {
@@ -6146,26 +6181,26 @@ test "webp vp8l decoder stores meta prefix groups beyond inline stack" {
     var scratch: [1024]u8 = undefined;
     var pixels: [9]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 9), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(first, pixels[0]);
-    try std.testing.expectEqual(first, pixels[3]);
-    try std.testing.expectEqual(third, pixels[4]);
-    try std.testing.expectEqual(third, pixels[8]);
+    try testing.expectEqual(@as(usize, 9), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(first, pixels[0]);
+    try testing.expectEqual(first, pixels[3]);
+    try testing.expectEqual(third, pixels[4]);
+    try testing.expectEqual(third, pixels[8]);
 }
 
 test "webp vp8l decoder requires scratch for meta prefix images" {
     var bytes: [test_webp_vp8l_meta_prefix_len]u8 = undefined;
     const encoded = writeTestWebpVp8lMetaPrefix(&bytes, .{ .r = 10, .g = 20, .b = 30, .a = 255 });
     var pixels: [1]ui.Color = undefined;
-    try std.testing.expectError(error.PixelBudget, decode(encoded, &pixels));
+    try testing.expectError(error.PixelBudget, decode(encoded, &pixels));
 }
 
 test "webp vp8l decoder requires scratch for predictor mode tables" {
     var bytes: [test_webp_vp8l_predictor_len]u8 = undefined;
     const encoded = writeTestWebpVp8lPredictorPair(&bytes, .{ .r = 10, .g = 5, .b = 10, .a = 255 }, .{ .r = 25, .g = 15, .b = 25, .a = 255 });
     var pixels: [2]ui.Color = undefined;
-    try std.testing.expectError(error.PixelBudget, decode(encoded, &pixels));
+    try testing.expectError(error.PixelBudget, decode(encoded, &pixels));
 }
 
 test "vp8l predictor modes produce deterministic neighbors" {
@@ -6184,16 +6219,16 @@ test "vp8l predictor modes produce deterministic neighbors" {
     var pixels = row0 ++ row1;
 
     modes[0] = webp_vp8l_predictor_mode_top_right;
-    try std.testing.expectEqual(row0[2], vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
+    try testing.expectEqual(row0[2], vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
 
     modes[0] = webp_vp8l_predictor_mode_avg_left_top;
-    try std.testing.expectEqual(averageVp8lColors(row1[0], row0[1]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
+    try testing.expectEqual(averageVp8lColors(row1[0], row0[1]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
 
     modes[0] = webp_vp8l_predictor_mode_select;
-    try std.testing.expectEqual(selectVp8lPredictor(row1[0], row0[1], row0[0]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
+    try testing.expectEqual(selectVp8lPredictor(row1[0], row0[1], row0[0]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
 
     modes[0] = webp_vp8l_predictor_mode_clamp_full;
-    try std.testing.expectEqual(clampAddSubtractFullVp8lColor(row1[0], row0[1], row0[0]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
+    try testing.expectEqual(clampAddSubtractFullVp8lColor(row1[0], row0[1], row0[0]), vp8lPredictor(transform, .{ .width = 3, .height = 2 }, &pixels, 1, 1));
 }
 
 test "webp vp8l decoder accepts normal huffman prefix codes" {
@@ -6201,9 +6236,9 @@ test "webp vp8l decoder accepts normal huffman prefix codes" {
     const encoded = writeTestWebpVp8lNormalTransparentBlack(&bytes);
     var pixels: [1]ui.Color = undefined;
     const header = try decode(encoded, &pixels);
-    try std.testing.expectEqual(@as(usize, 1), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 0, .b = 0, .a = 0 }, pixels[0]);
+    try testing.expectEqual(@as(usize, 1), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(ui.Color{ .r = 0, .g = 0, .b = 0, .a = 0 }, pixels[0]);
 }
 
 test "webp vp8l decoder copies lz77 backward references" {
@@ -6213,10 +6248,10 @@ test "webp vp8l decoder copies lz77 backward references" {
     var scratch: [4096]u8 = undefined;
     var pixels: [2]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(color, pixels[0]);
-    try std.testing.expectEqual(color, pixels[1]);
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(color, pixels[0]);
+    try testing.expectEqual(color, pixels[1]);
 }
 
 test "webp vp8l decoder recalls colors from the color cache" {
@@ -6226,10 +6261,10 @@ test "webp vp8l decoder recalls colors from the color cache" {
     var scratch: [4096]u8 = undefined;
     var pixels: [2]ui.Color = undefined;
     const header = try decodeWithScratch(encoded, &pixels, &scratch);
-    try std.testing.expectEqual(@as(usize, 2), header.width);
-    try std.testing.expectEqual(@as(usize, 1), header.height);
-    try std.testing.expectEqual(color, pixels[0]);
-    try std.testing.expectEqual(color, pixels[1]);
+    try testing.expectEqual(@as(usize, 2), header.width);
+    try testing.expectEqual(@as(usize, 1), header.height);
+    try testing.expectEqual(color, pixels[0]);
+    try testing.expectEqual(color, pixels[1]);
 }
 
 test "webp vp8l decoder rejects lz77 copies before the output cursor" {
@@ -6237,13 +6272,13 @@ test "webp vp8l decoder rejects lz77 copies before the output cursor" {
     const encoded = writeTestWebpVp8lLz77BadDistance(&bytes, .{ .r = 10, .g = 5, .b = 30, .a = 255 });
     var scratch: [4096]u8 = undefined;
     var pixels: [2]ui.Color = undefined;
-    try std.testing.expectError(error.BadImage, decodeWithScratch(encoded, &pixels, &scratch));
+    try testing.expectError(error.BadImage, decodeWithScratch(encoded, &pixels, &scratch));
 }
 
 test "webp vp8l decoder rejects truncated lossless pixel stream" {
     const bytes = testWebpVp8l();
     var pixels: [20]ui.Color = undefined;
-    try std.testing.expectError(error.BadImage, decode(bytes, &pixels));
+    try testing.expectError(error.BadImage, decode(bytes, &pixels));
 }
 
 test "webp vp8 decoder rejects malformed first partition sizes" {
@@ -6252,15 +6287,15 @@ test "webp vp8 decoder rejects malformed first partition sizes" {
     try writeVisibleVp8KeyFrameTag(empty_partition[payload_offset..][0..vp8_frame_tag_size], 0);
     var pixels: [1]ui.Color = undefined;
     var scratch: [128]u8 = undefined;
-    try std.testing.expectError(error.BadImage, decodeWithScratch(&empty_partition, &pixels, &scratch));
+    try testing.expectError(error.BadImage, decodeWithScratch(&empty_partition, &pixels, &scratch));
 
     var short_bool_partition = testWebpVp8().*;
     try writeVisibleVp8KeyFrameTag(short_bool_partition[payload_offset..][0..vp8_frame_tag_size], 1);
-    try std.testing.expectError(error.BadImage, decodeWithScratch(&short_bool_partition, &pixels, &scratch));
+    try testing.expectError(error.BadImage, decodeWithScratch(&short_bool_partition, &pixels, &scratch));
 
     var oversized_partition = testWebpVp8().*;
     try writeVisibleVp8KeyFrameTag(oversized_partition[payload_offset..][0..vp8_frame_tag_size], test_webp_vp8_first_partition_len + test_webp_vp8_token_partition_len + 1);
-    try std.testing.expectError(error.BadImage, decodeWithScratch(&oversized_partition, &pixels, &scratch));
+    try testing.expectError(error.BadImage, decodeWithScratch(&oversized_partition, &pixels, &scratch));
 }
 
 test "vp8 token partition parser exposes explicit partition slices" {
@@ -6270,89 +6305,89 @@ test "vp8 token partition parser exposes explicit partition slices" {
         0xdd, 0xee,
     };
     const partitions = try parseVp8TokenPartitions(&bytes, 2);
-    try std.testing.expectEqual(@as(usize, 2), partitions.count);
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 0xaa, 0xbb }, partitions.slices[0]);
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 0xcc, 0xdd, 0xee }, partitions.slices[1]);
+    try testing.expectEqual(@as(usize, 2), partitions.count);
+    try testing.expectEqualSlices(u8, &[_]u8{ 0xaa, 0xbb }, partitions.slices[0]);
+    try testing.expectEqualSlices(u8, &[_]u8{ 0xcc, 0xdd, 0xee }, partitions.slices[1]);
 }
 
 test "vp8 token partition parser rejects truncated size tables and payloads" {
-    try std.testing.expectError(error.BadImage, parseVp8TokenPartitions(&[_]u8{ 0x00, 0x00 }, 2));
+    try testing.expectError(error.BadImage, parseVp8TokenPartitions(&[_]u8{ 0x00, 0x00 }, 2));
 
     const oversized = [_]u8{
         0x04, 0x00, 0x00,
         0xaa, 0xbb,
     };
-    try std.testing.expectError(error.BadImage, parseVp8TokenPartitions(&oversized, 2));
-    try std.testing.expectError(error.BadImage, parseVp8TokenPartitions(&[_]u8{}, 0));
+    try testing.expectError(error.BadImage, parseVp8TokenPartitions(&oversized, 2));
+    try testing.expectError(error.BadImage, parseVp8TokenPartitions(&[_]u8{}, 0));
 }
 
 test "vp8 bool reader decodes zero frame header prefix deterministically" {
     const header = try parseVp8CompressedFrameHeader(.key, .{ .width = 6, .height = 7 }, &[_]u8{0x00} ** test_webp_vp8_first_partition_len, null);
-    try std.testing.expectEqual(@as(usize, 1), header.token_partition_count);
-    try std.testing.expectEqual(@as(u8, 0), header.quant.y_ac);
-    try std.testing.expectEqual(@as(i8, 0), header.quant.y_dc_delta);
-    try std.testing.expectEqual(false, header.refresh_entropy_probabilities);
-    try std.testing.expectEqual(@as(usize, 0), header.token_probability_update_count);
-    try std.testing.expectEqual(false, header.use_skip_probability);
-    try std.testing.expectEqual(@as(u8, 0), header.skip_probability);
+    try testing.expectEqual(@as(usize, 1), header.token_partition_count);
+    try testing.expectEqual(@as(u8, 0), header.quant.y_ac);
+    try testing.expectEqual(@as(i8, 0), header.quant.y_dc_delta);
+    try testing.expectEqual(false, header.refresh_entropy_probabilities);
+    try testing.expectEqual(@as(usize, 0), header.token_probability_update_count);
+    try testing.expectEqual(false, header.use_skip_probability);
+    try testing.expectEqual(@as(u8, 0), header.skip_probability);
 }
 
 test "vp8 coefficient update probabilities match sparse schedule" {
-    try std.testing.expectEqual(@as(usize, 1056), webp_vp8_coeff_update_probability_count);
-    try std.testing.expectEqual(@as(u8, 255), vp8CoeffUpdateProbability(0));
-    try std.testing.expectEqual(@as(u8, 176), vp8CoeffUpdateProbability(33));
-    try std.testing.expectEqual(@as(u8, 217), vp8CoeffUpdateProbability(264));
-    try std.testing.expectEqual(@as(u8, 250), vp8CoeffUpdateProbability(1001));
-    try std.testing.expectEqual(@as(u8, 255), vp8CoeffUpdateProbability(1055));
+    try testing.expectEqual(@as(usize, 1056), webp_vp8_coeff_update_probability_count);
+    try testing.expectEqual(@as(u8, 255), vp8CoeffUpdateProbability(0));
+    try testing.expectEqual(@as(u8, 176), vp8CoeffUpdateProbability(33));
+    try testing.expectEqual(@as(u8, 217), vp8CoeffUpdateProbability(264));
+    try testing.expectEqual(@as(u8, 250), vp8CoeffUpdateProbability(1001));
+    try testing.expectEqual(@as(u8, 255), vp8CoeffUpdateProbability(1055));
 }
 
 test "vp8 coefficient default probabilities expose token tree entries" {
-    try std.testing.expectEqual(@as(usize, 1056), webp_vp8_coeff_default_probabilities.len);
-    try std.testing.expectEqual(@as(u8, 128), vp8CoeffProbability(0, 0, 0, webp_vp8_coeff_eob_probability_index));
-    try std.testing.expectEqual(@as(u8, 136), vp8CoeffProbability(0, 1, 0, webp_vp8_coeff_zero_probability_index));
-    try std.testing.expectEqual(@as(u8, 237), vp8CoeffProbability(1, 0, 0, webp_vp8_coeff_one_probability_index));
-    try std.testing.expectEqual(@as(u8, 216), vp8CoeffProbability(3, 0, 2, webp_vp8_coeff_large_probability_6));
+    try testing.expectEqual(@as(usize, 1056), webp_vp8_coeff_default_probabilities.len);
+    try testing.expectEqual(@as(u8, 128), vp8CoeffProbability(0, 0, 0, webp_vp8_coeff_eob_probability_index));
+    try testing.expectEqual(@as(u8, 136), vp8CoeffProbability(0, 1, 0, webp_vp8_coeff_zero_probability_index));
+    try testing.expectEqual(@as(u8, 237), vp8CoeffProbability(1, 0, 0, webp_vp8_coeff_one_probability_index));
+    try testing.expectEqual(@as(u8, 216), vp8CoeffProbability(3, 0, 2, webp_vp8_coeff_large_probability_6));
 }
 
 test "vp8 motion vector probability updates preserve defaults when absent" {
-    try std.testing.expectEqual(@as(usize, webp_vp8_motion_vector_component_count), webp_vp8_motion_vector_default_probabilities.len);
-    try std.testing.expectEqual(@as(usize, webp_vp8_motion_vector_probability_count), webp_vp8_motion_vector_default_probabilities[0].len);
-    try std.testing.expectEqual(@as(u8, 162), webp_vp8_motion_vector_default_probabilities[0][0]);
-    try std.testing.expectEqual(@as(u8, 164), webp_vp8_motion_vector_default_probabilities[1][0]);
-    try std.testing.expectEqual(@as(u8, 237), webp_vp8_motion_vector_update_probabilities[0][0]);
-    try std.testing.expectEqual(@as(u8, 231), webp_vp8_motion_vector_update_probabilities[1][0]);
+    try testing.expectEqual(@as(usize, webp_vp8_motion_vector_component_count), webp_vp8_motion_vector_default_probabilities.len);
+    try testing.expectEqual(@as(usize, webp_vp8_motion_vector_probability_count), webp_vp8_motion_vector_default_probabilities[0].len);
+    try testing.expectEqual(@as(u8, 162), webp_vp8_motion_vector_default_probabilities[0][0]);
+    try testing.expectEqual(@as(u8, 164), webp_vp8_motion_vector_default_probabilities[1][0]);
+    try testing.expectEqual(@as(u8, 237), webp_vp8_motion_vector_update_probabilities[0][0]);
+    try testing.expectEqual(@as(u8, 231), webp_vp8_motion_vector_update_probabilities[1][0]);
 
     var probabilities = webp_vp8_motion_vector_default_probabilities;
     var reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
     try parseVp8MotionVectorProbabilityUpdates(&reader, &probabilities);
-    try std.testing.expectEqualSlices(u8, &webp_vp8_motion_vector_default_probabilities[0], &probabilities[0]);
-    try std.testing.expectEqualSlices(u8, &webp_vp8_motion_vector_default_probabilities[1], &probabilities[1]);
-    try std.testing.expectEqual(@as(u8, 1), updatedVp8MotionVectorProbability(0));
-    try std.testing.expectEqual(@as(u8, 2), updatedVp8MotionVectorProbability(1));
-    try std.testing.expectEqual(@as(u8, 254), updatedVp8MotionVectorProbability(127));
+    try testing.expectEqualSlices(u8, &webp_vp8_motion_vector_default_probabilities[0], &probabilities[0]);
+    try testing.expectEqualSlices(u8, &webp_vp8_motion_vector_default_probabilities[1], &probabilities[1]);
+    try testing.expectEqual(@as(u8, 1), updatedVp8MotionVectorProbability(0));
+    try testing.expectEqual(@as(u8, 2), updatedVp8MotionVectorProbability(1));
+    try testing.expectEqual(@as(u8, 254), updatedVp8MotionVectorProbability(127));
 }
 
 test "vp8 intra4 keyframe probabilities expose full submode tree" {
-    try std.testing.expectEqual(@as(usize, webp_vp8_intra4_mode_count * webp_vp8_intra4_mode_count * webp_vp8_intra4_probability_count), webp_vp8_intra4_keyframe_probabilities.len);
+    try testing.expectEqual(@as(usize, webp_vp8_intra4_mode_count * webp_vp8_intra4_mode_count * webp_vp8_intra4_probability_count), webp_vp8_intra4_keyframe_probabilities.len);
 
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 231, 120, 48, 89, 115, 113, 120, 152, 112 }, vp8Intra4ModeProbabilities(.dc, .dc));
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 112, 19, 12, 61, 195, 128, 48, 4, 24 }, vp8Intra4ModeProbabilities(.horizontal_up, .horizontal_up));
+    try testing.expectEqualSlices(u8, &[_]u8{ 231, 120, 48, 89, 115, 113, 120, 152, 112 }, vp8Intra4ModeProbabilities(.dc, .dc));
+    try testing.expectEqualSlices(u8, &[_]u8{ 112, 19, 12, 61, 195, 128, 48, 4, 24 }, vp8Intra4ModeProbabilities(.horizontal_up, .horizontal_up));
 
     var reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
-    try std.testing.expectEqual(Vp8Intra4Mode.dc, try readVp8KeyFrameIntra4Mode(&reader, .dc, .dc));
+    try testing.expectEqual(Vp8Intra4Mode.dc, try readVp8KeyFrameIntra4Mode(&reader, .dc, .dc));
 }
 
 test "vp8 coefficient token reader accepts eob and category paths" {
     var eob_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
     var coeffs: [webp_vp8_block_coeff_count]i16 = undefined;
     const eob = try readVp8CoeffBlock(&eob_reader, &webp_vp8_coeff_default_probabilities, 0, 1, 0, &coeffs);
-    try std.testing.expectEqual(@as(usize, 1), eob.next_index);
-    try std.testing.expectEqual(false, eob.non_zero);
-    try std.testing.expectEqualSlices(i16, &([_]i16{0} ** webp_vp8_block_coeff_count), &coeffs);
+    try testing.expectEqual(@as(usize, 1), eob.next_index);
+    try testing.expectEqual(false, eob.non_zero);
+    try testing.expectEqualSlices(i16, &([_]i16{0} ** webp_vp8_block_coeff_count), &coeffs);
 
     var large_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
-    try std.testing.expectEqual(@as(i16, 2), try readVp8LargeCoeffValue(&large_reader, &webp_vp8_coeff_default_probabilities, 0, 1, 0));
-    try std.testing.expectEqual(@as(i16, 2), try readVp8SignedCoeff(&large_reader, 2));
+    try testing.expectEqual(@as(i16, 2), try readVp8LargeCoeffValue(&large_reader, &webp_vp8_coeff_default_probabilities, 0, 1, 0));
+    try testing.expectEqual(@as(i16, 2), try readVp8SignedCoeff(&large_reader, 2));
 }
 
 test "vp8 residual parser omits y2 block for b_pred macroblocks" {
@@ -6364,8 +6399,8 @@ test "vp8 residual parser omits y2 block for b_pred macroblocks" {
     var b_pred_coeffs = Vp8MacroblockCoeffs{};
     _ = try parseVp8ResidualMacroblock(&b_pred_reader, &webp_vp8_coeff_default_probabilities, .b_pred, &b_pred_coeffs);
 
-    try std.testing.expect(intra16_reader.bit_count < b_pred_reader.bit_count);
-    try std.testing.expectEqualSlices(i16, &([_]i16{0} ** webp_vp8_block_coeff_count), &b_pred_coeffs.blocks[webp_vp8_y2_block_index]);
+    try testing.expect(intra16_reader.bit_count < b_pred_reader.bit_count);
+    try testing.expectEqualSlices(i16, &([_]i16{0} ** webp_vp8_block_coeff_count), &b_pred_coeffs.blocks[webp_vp8_y2_block_index]);
 }
 
 test "vp8 b_pred y blocks dequantize their own dc coefficient" {
@@ -6381,8 +6416,8 @@ test "vp8 b_pred y blocks dequantize their own dc coefficient" {
     block[0] = 3;
     block[1] = -2;
     const out = dequantizeVp8YBlockWithOwnDc(&block, quant);
-    try std.testing.expectEqual(@as(i32, 12), out[0]);
-    try std.testing.expectEqual(@as(i32, -10), out[1]);
+    try testing.expectEqual(@as(i32, 12), out[0]);
+    try testing.expectEqual(@as(i32, -10), out[1]);
 }
 
 test "vp8 b_pred reconstruction feeds earlier 4x4 blocks into later predictors" {
@@ -6407,9 +6442,9 @@ test "vp8 b_pred reconstruction feeds earlier 4x4 blocks into later predictors" 
     var plane = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
     reconstructVp8BPredLuma(quant, edges, [_]Vp8Intra4Mode{.dc} ** webp_vp8_y_block_count, &coeffs, &plane);
 
-    try std.testing.expectEqual(@as(u8, 68), plane[0]);
-    try std.testing.expectEqual(@as(u8, 84), plane[4]);
-    try std.testing.expectEqual(@as(u8, 44), plane[4 * webp_vp8_macroblock_size]);
+    try testing.expectEqual(@as(u8, 68), plane[0]);
+    try testing.expectEqual(@as(u8, 84), plane[4]);
+    try testing.expectEqual(@as(u8, 44), plane[4 * webp_vp8_macroblock_size]);
 }
 
 test "vp8 intra4 predictors cover non dc subblock modes" {
@@ -6424,28 +6459,28 @@ test "vp8 intra4 predictors cover non dc subblock modes" {
 
     var vertical_left = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
     predictVp8Intra4Block(.vertical_left, edges, &vertical_left, 0);
-    try std.testing.expectEqual(@as(u8, 15), vertical_left[0]);
-    try std.testing.expectEqual(@as(u8, 40), vertical_left[webp_vp8_macroblock_size + 1]);
-    try std.testing.expectEqual(@as(u8, 78), vertical_left[3 * webp_vp8_macroblock_size + 3]);
+    try testing.expectEqual(@as(u8, 15), vertical_left[0]);
+    try testing.expectEqual(@as(u8, 40), vertical_left[webp_vp8_macroblock_size + 1]);
+    try testing.expectEqual(@as(u8, 78), vertical_left[3 * webp_vp8_macroblock_size + 3]);
 
     var horizontal_up = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
     predictVp8Intra4Block(.horizontal_up, edges, &horizontal_up, 0);
-    try std.testing.expectEqual(@as(u8, 16), horizontal_up[0]);
-    try std.testing.expectEqual(@as(u8, 39), horizontal_up[webp_vp8_macroblock_size + 3]);
-    try std.testing.expectEqual(@as(u8, 41), horizontal_up[3 * webp_vp8_macroblock_size + 3]);
+    try testing.expectEqual(@as(u8, 16), horizontal_up[0]);
+    try testing.expectEqual(@as(u8, 39), horizontal_up[webp_vp8_macroblock_size + 3]);
+    try testing.expectEqual(@as(u8, 41), horizontal_up[3 * webp_vp8_macroblock_size + 3]);
 
     var horizontal = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
     predictVp8Intra4Block(.horizontal, edges, &horizontal, 0);
-    try std.testing.expectEqual(@as(u8, 13), horizontal[0]);
-    try std.testing.expectEqual(@as(u8, 21), horizontal[webp_vp8_macroblock_size]);
-    try std.testing.expectEqual(@as(u8, 31), horizontal[2 * webp_vp8_macroblock_size]);
-    try std.testing.expectEqual(@as(u8, 39), horizontal[3 * webp_vp8_macroblock_size]);
+    try testing.expectEqual(@as(u8, 13), horizontal[0]);
+    try testing.expectEqual(@as(u8, 21), horizontal[webp_vp8_macroblock_size]);
+    try testing.expectEqual(@as(u8, 31), horizontal[2 * webp_vp8_macroblock_size]);
+    try testing.expectEqual(@as(u8, 39), horizontal[3 * webp_vp8_macroblock_size]);
 }
 
 test "webp decoder rejects malformed riff length and duplicate primary chunks" {
     var bad_len = testWebpVp8x().*;
     bad_len[4] ^= 1;
-    try std.testing.expectError(error.BadImage, decodeWebpHeader(&bad_len));
+    try testing.expectError(error.BadImage, decodeWebpHeader(&bad_len));
 
     const first = testWebpVp8();
     const second = testWebpVp8();
@@ -6453,19 +6488,19 @@ test "webp decoder rejects malformed riff length and duplicate primary chunks" {
     @memcpy(duplicate[0..first.len], first);
     @memcpy(duplicate[first.len..], second[riff_header_size..]);
     writeU32Le(duplicate[4..][0..4], duplicate.len - 8);
-    try std.testing.expectError(error.BadImage, decodeWebpHeader(&duplicate));
+    try testing.expectError(error.BadImage, decodeWebpHeader(&duplicate));
 }
 
 fn decodeTestWebp(bytes: []const u8, out: []ui.Color) !Header {
     const header = try decodeHeader(bytes);
-    const scratch = try std.testing.allocator.alloc(u8, scratchByteLen(bytes, header.width, header.height));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, scratchByteLen(bytes, header.width, header.height));
+    defer testing.allocator.free(scratch);
     return decodeWithScratch(bytes, out, scratch);
 }
 
 fn decodeTestWebpAnimationFrame(bytes: []const u8, frame_index: usize, out: []ui.Color) !WebpAnimationFrame {
-    const scratch = try std.testing.allocator.alloc(u8, webpAnimationFrameScratchByteLen(bytes, frame_index));
-    defer std.testing.allocator.free(scratch);
+    const scratch = try testing.allocator.alloc(u8, webpAnimationFrameScratchByteLen(bytes, frame_index));
+    defer testing.allocator.free(scratch);
     return decodeWebpAnimationFrameWithScratch(bytes, frame_index, out, scratch);
 }
 

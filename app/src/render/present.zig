@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const renderer_ir = @import("ir.zig");
 
 pub const Error = renderer_ir.Error || error{

@@ -52,8 +52,7 @@ SECTION .text
 
 ; _sha3_absorb_rate(rdi=block[136])
 _sha3_absorb_rate:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     xor     edx, edx
 .absorb_byte:
     movzx   eax, byte [rdi + rdx]
@@ -69,17 +68,10 @@ _sha3_absorb_rate:
     inc     edx
     cmp     edx, SHA3_256_RATE
     jb      .absorb_byte
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 _keccak_f1600:
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     xor     r15d, r15d
 .round:
     ; Theta: C[x] = A[x,0] xor ... xor A[x,4].
@@ -198,29 +190,17 @@ _keccak_f1600:
     inc     r15d
     cmp     r15d, KECCAK_ROUNDS
     jb      .round
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 global er_sha3_256
 er_fn er_sha3_256
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
-    test    r14, r14
-    jz      .fail
-    test    r13, r13
-    jz      .clear_ok
-    test    r12, r12
-    jz      .fail
+    er_check_zero r14, .fail
+    er_check_zero r13, .clear_ok
+    er_check_zero r12, .fail
 
     ; Clear state.
 .clear_ok:
@@ -278,38 +258,24 @@ er_fn er_sha3_256
     jnz     .store_out
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 global er_shake256
 er_fn er_shake256
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
     mov     r15, rcx
-    test    r15, r15
-    jz      .shake_ok_empty
-    test    r14, r14
-    jz      .shake_fail
-    test    r13, r13
-    jz      .shake_clear
-    test    r12, r12
-    jz      .shake_fail
+    er_check_zero r15, .shake_ok_empty
+    er_check_zero r14, .shake_fail
+    er_check_zero r13, .shake_clear
+    er_check_zero r12, .shake_fail
 
 .shake_clear:
     xor     eax, eax
@@ -356,8 +322,7 @@ er_fn er_shake256
 .shake_squeeze_block:
     xor     edx, edx
 .shake_squeeze_byte:
-    test    r15, r15
-    jz      .shake_done
+    er_check_zero r15, .shake_done
     mov     eax, edx
     shr     eax, 3
     mov     rbx, [rel sha3_state + rax * 8]
@@ -377,26 +342,14 @@ er_fn er_shake256
 .shake_done:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .shake_ok_empty:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .shake_fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret

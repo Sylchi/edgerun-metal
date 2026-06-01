@@ -61,9 +61,7 @@ er_fn er_arp_init
 ;   rdx = error code on error
 ; ==================================================================
 er_fn er_arp_resolve
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12d, edi       ; ip
     mov     r13, rsi        ; mac_out
@@ -94,9 +92,7 @@ er_fn er_arp_resolve
     mov     [r13 + 4], ax
 
     mov     eax, 1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -127,26 +123,20 @@ er_fn er_arp_resolve
 .already_pending:
     ; Resolution in progress — caller must poll
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
 .timeout:
     mov     eax, -1
     er_err  ERROR_NET_UNREACHABLE
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .send_fail:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 ; ==================================================================
 
@@ -155,9 +145,7 @@ er_fn er_arp_resolve
 ; void er_arp_handle(const uint8_t *frame, uint32_t len)
 ; ==================================================================
 er_fn er_arp_handle
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi        ; frame (Ethernet header start)
     mov     r13d, esi       ; frame length
@@ -226,9 +214,7 @@ er_fn er_arp_handle
     mov     byte [arp_pending_retries], 0
 
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 ; ==================================================================
@@ -240,8 +226,7 @@ er_fn er_arp_handle
 ; Uses static request buffer, returns 0 on success, -1 on error
 ; ==================================================================
 _arp_send_request:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12d, edi       ; target IP
 
@@ -295,15 +280,13 @@ _arp_send_request:
     js      .fail
 
     xor     eax, eax
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -312,9 +295,7 @@ _arp_send_request:
 ; ==================================================================
 global er_arp_add_static
 er_arp_add_static:
-    push    rbx
-    push    rcx
-    push    rdx
+    er_push rbx, rcx, rdx
 
     xor     ecx, ecx
 .find_slot:
@@ -344,20 +325,14 @@ er_arp_add_static:
     mov     byte [arp_cache + eax + ARP_ENTRY_VALID], 1
 
 .done:
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rcx, rdx
 
 ; ==================================================================
 ; _arp_cache_update — update cache from current ARP packet sender
 ; Clobbers: none
 ; ==================================================================
 _arp_cache_update:
-    push    rax
-    push    rcx
-    push    rdi
-    push    rsi
+    er_push rax, rcx, rdi, rsi
 
     lea     rdi, [rbx + ARP_SPA]  ; sender IP
     lea     rsi, [rbx + ARP_SHA]  ; sender MAC
@@ -415,11 +390,7 @@ _arp_cache_update:
     mov     [rax + ARP_ENTRY_MAC + 4], r8w
     mov     byte [rax + ARP_ENTRY_VALID], 1
 
-    pop     rsi
-    pop     rdi
-    pop     rcx
-    pop     rax
-    ret
+    er_pop_ret rax, rcx, rdi, rsi
 
 ; ==================================================================
 ; _arp_build_reply — build ARP reply in static buffer

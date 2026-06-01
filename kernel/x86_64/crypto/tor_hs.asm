@@ -99,18 +99,11 @@ _tor_hs_store_u64_be:
 ; returns eax = 62, or -1.
 global er_tor_hs_build_onion_address
 er_fn er_tor_hs_build_onion_address
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     r12, rdi
     mov     r13, rsi
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
 
     lea     rdi, [rel tor_hs_crypto_buf]
     lea     rsi, [rel tor_hs_onion_checksum]
@@ -162,8 +155,7 @@ er_fn er_tor_hs_build_onion_address
     sub     ebp, 5
     jmp     .emit_loop
 .mask_acc:
-    test    ebp, ebp
-    jz      .next_byte
+    er_check_zero ebp, .next_byte
     mov     eax, 1
     mov     ecx, ebp
     shl     rax, cl
@@ -179,43 +171,25 @@ er_fn er_tor_hs_build_onion_address
     call    er_memcpy
     mov     eax, 62
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_b64_encode(out, cap, input, input_len)
 ; Standard base64 with '=' padding. Returns encoded length, or -1.
 global er_tor_hs_b64_encode
 er_fn er_tor_hs_b64_encode
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r14d, r14d
-    jz      .empty
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r14d, .empty
+    er_check_zero r13, .fail
     mov     eax, r14d
     add     eax, 2
     xor     edx, edx
@@ -259,8 +233,7 @@ er_fn er_tor_hs_b64_encode
     add     ebp, 4
     jmp     .loop
 .tail:
-    test    r14d, r14d
-    jz      .done
+    er_check_zero r14d, .done
     movzx   eax, byte [r13]
     shl     eax, 16
     cmp     r14d, 2
@@ -294,31 +267,16 @@ er_fn er_tor_hs_b64_encode
 .done:
     mov     eax, r15d
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .empty:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 _tor_hs_b64_value:
@@ -366,12 +324,7 @@ _tor_hs_b64_value:
 ; Returns decoded length, or -1.
 global er_tor_hs_b64_decode
 er_fn er_tor_hs_b64_decode
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     sub     rsp, 8
     mov     rbx, rdi
     mov     r12d, esi
@@ -379,15 +332,11 @@ er_fn er_tor_hs_b64_decode
     mov     r14d, ecx
     xor     r15d, r15d       ; output length
     xor     ebp, ebp         ; quartet length
-    test    rbx, rbx
-    jz      .fail
-    test    r14d, r14d
-    jz      .done
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r14d, .done
+    er_check_zero r13, .fail
 .scan:
-    test    r14d, r14d
-    jz      .finish
+    er_check_zero r14d, .finish
     movzx   eax, byte [r13]
     inc     r13
     dec     r14d
@@ -462,8 +411,7 @@ er_fn er_tor_hs_b64_decode
     jmp     .scan
 .padding_seen:
     ; Only whitespace may follow padding.
-    test    r14d, r14d
-    jz      .finish
+    er_check_zero r14d, .finish
     movzx   eax, byte [r13]
     inc     r13
     dec     r14d
@@ -473,48 +421,31 @@ er_fn er_tor_hs_b64_decode
     je      .padding_seen
     jmp     .fail
 .finish:
-    test    ebp, ebp
-    jnz     .fail
+    er_check_nonzero ebp, .fail
 .done:
     mov     eax, r15d
     er_ok
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_desc_armor_message(out, cap, blob, blob_len)
 ; Builds descriptor MESSAGE armor around standard base64.
 global er_tor_hs_desc_armor_message
 er_fn er_tor_hs_desc_armor_message
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r14d, r14d
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r14d, .fail
+    er_check_zero r13, .fail
     mov     eax, r14d
     add     eax, 2
     xor     edx, edx
@@ -547,36 +478,24 @@ er_fn er_tor_hs_desc_armor_message
     mov     eax, tor_hs_msg_begin_len + tor_hs_msg_end_len + 1
     add     eax, r12d
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_tor_hs_desc_unarmor_message(out, cap, armor, armor_len)
 ; Extracts and base64-decodes a single descriptor MESSAGE armor block.
 global er_tor_hs_desc_unarmor_message
 er_fn er_tor_hs_desc_unarmor_message
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r13, .fail
     mov     eax, tor_hs_msg_begin_len + tor_hs_msg_end_len + 1
     cmp     r14d, eax
     jb      .fail
@@ -584,8 +503,7 @@ er_fn er_tor_hs_desc_unarmor_message
     lea     rsi, [rel tor_hs_msg_begin]
     mov     edx, tor_hs_msg_begin_len
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     lea     r15, [r13 + tor_hs_msg_begin_len]
     mov     eax, r14d
     sub     eax, tor_hs_msg_end_len
@@ -593,12 +511,10 @@ er_fn er_tor_hs_desc_unarmor_message
     lea     rsi, [rel tor_hs_msg_end]
     mov     edx, tor_hs_msg_end_len
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     eax, r14d
     sub     eax, tor_hs_msg_begin_len + tor_hs_msg_end_len
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     cmp     byte [r13 + r14 - tor_hs_msg_end_len - 1], 10
     jne     .decode_ready
     dec     eax
@@ -608,39 +524,25 @@ er_fn er_tor_hs_desc_unarmor_message
     mov     rdx, r15
     mov     ecx, eax
     call    er_tor_hs_b64_decode
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_cert_armor_ed25519(out, cap, cert, cert_len)
 ; Builds Tor ED25519 CERT armor around a decoded certificate.
 global er_tor_hs_cert_armor_ed25519
 er_fn er_tor_hs_cert_armor_ed25519
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14d, r14d
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14d, .fail
     mov     eax, r14d
     add     eax, 2
     xor     edx, edx
@@ -675,39 +577,26 @@ er_fn er_tor_hs_cert_armor_ed25519
     mov     eax, tor_hs_edcert_begin_len + tor_hs_edcert_end_len + 3
     add     eax, r12d
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_tor_hs_mac_key32(out, key32, msg, msg_len)
 ; Descriptor MAC: SHA3_256(ENCAP(key32) || msg), where ENCAP is u64 length.
 global er_tor_hs_mac_key32
 er_fn er_tor_hs_mac_key32
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     r14d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r14d, r14d
-    jz      .msg_ready
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r14d, .msg_ready
+    er_check_zero r13, .fail
 .msg_ready:
     mov     eax, TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
     add     eax, r14d
@@ -721,8 +610,7 @@ er_fn er_tor_hs_mac_key32
     mov     rsi, r12
     mov     edx, TOR_HS_MAC_KEY_LEN
     call    er_memcpy
-    test    r14d, r14d
-    jz      .hash
+    er_check_zero r14d, .hash
     lea     rdi, [rel tor_hs_desc_mac_buf + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN]
     mov     rsi, r13
     mov     edx, r14d
@@ -734,17 +622,11 @@ er_fn er_tor_hs_mac_key32
     mov     rdx, rbx
     call    er_sha3_256
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_tor_hs_desc_encrypt(out, cap, secret_data, secret_len, subcred,
@@ -758,11 +640,7 @@ global er_tor_hs_desc_encrypt
 er_fn er_tor_hs_desc_encrypt
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 8
     mov     rbx, rdi        ; out
     mov     r12d, esi       ; cap
@@ -770,12 +648,9 @@ er_fn er_tor_hs_desc_encrypt
     mov     r14d, ecx       ; secret_len
     mov     r15, r8         ; subcred
     mov     [rsp], r9       ; revision_counter
-    test    rbx, rbx
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r13, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp + 16], 0
     je      .fail
     cmp     qword [rbp + 24], 0
@@ -850,22 +725,12 @@ er_fn er_tor_hs_desc_encrypt
     add     eax, TOR_HS_DESCRIPTOR_ENC_OVERHEAD
     er_ok
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_desc_decrypt(out_plain, cap, out_len, secret_data, secret_len,
@@ -876,11 +741,7 @@ global er_tor_hs_desc_decrypt
 er_fn er_tor_hs_desc_decrypt
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 24
     mov     rbx, rdi        ; out_plain
     mov     r12d, esi       ; cap
@@ -888,12 +749,9 @@ er_fn er_tor_hs_desc_decrypt
     mov     r14, rcx        ; secret_data
     mov     r15d, r8d       ; secret_len
     mov     [rsp], r9       ; subcred
-    test    rbx, rbx
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
     cmp     qword [rsp], 0
     je      .fail
     cmp     qword [rbp + 24], 0
@@ -962,8 +820,7 @@ er_fn er_tor_hs_desc_decrypt
     lea     rdi, [rel tor_hs_crypto_buf + 608]
     mov     edx, TOR_HS_DESCRIPTOR_MAC_LEN
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
 
     mov     rdi, rbx
     mov     rsi, [rbp + 40]
@@ -975,22 +832,12 @@ er_fn er_tor_hs_desc_decrypt
     xor     eax, eax
     er_ok
     add     rsp, 24
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 24
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_cert_build(out, cap, cert_type, expiration_hours,
@@ -1001,25 +848,17 @@ global er_tor_hs_cert_build
 er_fn er_tor_hs_cert_build
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
-    push    r9
+    er_push rbx, r12, r13, r14, r15, r9
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13d, edx
     mov     r14d, ecx
     mov     r15, r8
-    test    rbx, rbx
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp + 16], 0
     je      .fail
-    test    r13d, r13d
-    jz      .fail
+    er_check_zero r13d, .fail
     cmp     r13d, 255
     ja      .fail
     mov     eax, 104
@@ -1041,8 +880,7 @@ er_fn er_tor_hs_cert_build
     call    er_memcpy
 
     mov     rax, [rsp]
-    test    rax, rax
-    jz      .no_ext
+    er_check_zero rax, .no_ext
     mov     byte [rbx + 39], 1
     mov     byte [rbx + 40], 0
     mov     byte [rbx + 41], 32
@@ -1068,32 +906,20 @@ er_fn er_tor_hs_cert_build
 .done:
     er_ok
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_cert_get_certified_key(out32, cert, cert_len)
 ; Extracts CERTIFIED_KEY from a decoded Tor Ed25519 certificate.
 global er_tor_hs_cert_get_certified_key
 er_fn er_tor_hs_cert_get_certified_key
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
     cmp     edx, 104
     jb      .fail
     cmp     byte [rsi], 1
@@ -1112,17 +938,12 @@ er_fn er_tor_hs_cert_get_certified_key
 ; Extracts proposal-220 extension type 04, the signing Ed25519 public key.
 global er_tor_hs_cert_get_signing_key_ext
 er_fn er_tor_hs_cert_get_signing_key_ext
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
     cmp     r13d, 104
     jb      .fail
     cmp     byte [r12], 1
@@ -1130,8 +951,7 @@ er_fn er_tor_hs_cert_get_signing_key_ext
     movzx   r14d, byte [r12 + 39]
     mov     ecx, 40
 .loop:
-    test    r14d, r14d
-    jz      .fail
+    er_check_zero r14d, .fail
     mov     eax, ecx
     add     eax, 4
     cmp     eax, r13d
@@ -1155,10 +975,7 @@ er_fn er_tor_hs_cert_get_signing_key_ext
     call    er_memcpy
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .next:
     mov     ecx, edx
@@ -1166,10 +983,7 @@ er_fn er_tor_hs_cert_get_signing_key_ext
     jmp     .loop
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_tor_hs_desc_parse_intro(out_auth_key32, out_onion_key32, out_enc_key32,
@@ -1181,11 +995,7 @@ global er_tor_hs_desc_parse_intro
 er_fn er_tor_hs_desc_parse_intro
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi
     mov     r12, rsi
@@ -1193,14 +1003,10 @@ er_fn er_tor_hs_desc_parse_intro
     mov     r14, rcx
     mov     r15d, r8d
     mov     [rsp], r9
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
     cmp     qword [rsp], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -1213,8 +1019,7 @@ er_fn er_tor_hs_desc_parse_intro
     lea     rdx, [rel tor_hs_line_intro_point]
     mov     ecx, tor_hs_line_intro_point_len
     call    _tor_hs_find_line_value
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rdi, r14
     mov     esi, r15d
     mov     rcx, rdx
@@ -1230,8 +1035,7 @@ er_fn er_tor_hs_desc_parse_intro
     lea     rdx, [rel tor_hs_line_onion_key]
     mov     ecx, tor_hs_line_onion_key_len
     call    _tor_hs_find_line_value
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdi, [rel tor_hs_crypto_buf]
     mov     esi, TOR_HS_ONION_KEY_LEN_NTOR
     mov     rcx, rdx
@@ -1249,8 +1053,7 @@ er_fn er_tor_hs_desc_parse_intro
     lea     rdx, [rel tor_hs_line_enc_key]
     mov     ecx, tor_hs_line_enc_key_len
     call    _tor_hs_find_line_value
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdi, [rel tor_hs_crypto_buf]
     mov     esi, TOR_HS_ONION_KEY_LEN_NTOR
     mov     rcx, rdx
@@ -1268,8 +1071,7 @@ er_fn er_tor_hs_desc_parse_intro
     lea     rdx, [rel tor_hs_edcert_begin]
     mov     ecx, tor_hs_edcert_begin_len
     call    _tor_hs_find_marker
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     add     rax, tor_hs_edcert_begin_len
 .skip_cert_lf:
     cmp     byte [rax], 13
@@ -1290,8 +1092,7 @@ er_fn er_tor_hs_desc_parse_intro
     lea     rdx, [rel tor_hs_edcert_end]
     mov     ecx, tor_hs_edcert_end_len
     call    _tor_hs_find_marker
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rdx, [rsp + 8]
     mov     rcx, rax
     sub     rcx, rdx
@@ -1310,22 +1111,12 @@ er_fn er_tor_hs_desc_parse_intro
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_parse_linkspecs(out_legacy_id20, out_ipv4, out_port,
@@ -1337,11 +1128,7 @@ er_fn er_tor_hs_desc_parse_intro
 ; Stores IPv4 bytes in wire order and port as host-order u16.
 global er_tor_hs_parse_linkspecs
 er_fn er_tor_hs_parse_linkspecs
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi        ; out_legacy_id20
     mov     r12, rsi        ; out_ipv4
     mov     r13, rdx        ; out_port
@@ -1349,14 +1136,10 @@ er_fn er_tor_hs_parse_linkspecs
     mov     r15d, r8d       ; linkspecs_len
     xor     r9d, r9d        ; cursor
     xor     r10d, r10d      ; bit0=ipv4 bit1=legacy id
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
     test    r15d, r15d
     jle     .fail
 
@@ -1412,19 +1195,11 @@ er_fn er_tor_hs_parse_linkspecs
     jne     .fail
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_build_linkspecs(out, ipv4_wire, port, legacy_id20)
@@ -1434,10 +1209,8 @@ global er_tor_hs_build_linkspecs
 er_fn er_tor_hs_build_linkspecs
     push    rbx
     mov     rbx, rdi
-    test    rbx, rbx
-    jz      .fail
-    test    rcx, rcx
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero rcx, .fail
     cmp     edx, 65535
     ja      .fail
     mov     byte [rbx], 0
@@ -1470,11 +1243,7 @@ global er_tor_hs_desc_build_intro_plaintext
 er_fn er_tor_hs_desc_build_intro_plaintext
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi        ; out base/cursor
     mov     r12d, esi       ; cap
@@ -1483,16 +1252,13 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     mov     r15, r8         ; onion key
     mov     [rbp - 48], r9  ; auth cert armor
     mov     [rbp - 56], rbx ; out base
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     test    r12d, r12d
     jle     .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero r13, .fail
     test    r14d, r14d
     jle     .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     dword [rbp + 16], 0
@@ -1506,8 +1272,7 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_line_create2_formats]
     mov     ecx, tor_hs_line_create2_formats_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1515,8 +1280,7 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_line_intro_point]
     mov     ecx, tor_hs_line_intro_point_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     lea     rdi, [rel tor_hs_desc_mac_buf]
     mov     esi, TOR_HS_DESCRIPTOR_MAX_LEN
@@ -1530,16 +1294,14 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_desc_mac_buf]
     mov     ecx, eax
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1547,8 +1309,7 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_line_onion_key]
     mov     ecx, tor_hs_line_onion_key_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     lea     rdi, [rel tor_hs_desc_mac_buf]
     mov     esi, TOR_HS_DESCRIPTOR_MAX_LEN
@@ -1562,16 +1323,14 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_desc_mac_buf]
     mov     ecx, eax
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1579,16 +1338,14 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_line_auth_key]
     mov     ecx, tor_hs_line_auth_key_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     mov     rdx, [rbp - 48]
     mov     ecx, [rbp + 16]
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     cmp     byte [rbx - 1], 10
     je      .enc_line
@@ -1597,8 +1354,7 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
 .enc_line:
@@ -1607,8 +1363,7 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_line_enc_key]
     mov     ecx, tor_hs_line_enc_key_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     lea     rdi, [rel tor_hs_desc_mac_buf]
     mov     esi, TOR_HS_DESCRIPTOR_MAX_LEN
@@ -1622,35 +1377,23 @@ er_fn er_tor_hs_desc_build_intro_plaintext
     lea     rdx, [rel tor_hs_desc_mac_buf]
     mov     ecx, eax
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     sub     rax, [rbp - 56]
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_desc_build_v3(out, cap, blinded_key_b64, blinded_len,
@@ -1663,11 +1406,7 @@ global er_tor_hs_desc_build_v3
 er_fn er_tor_hs_desc_build_v3
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 32
     mov     rbx, rdi        ; cursor
     mov     r12d, esi       ; cap
@@ -1676,16 +1415,13 @@ er_fn er_tor_hs_desc_build_v3
     mov     r15, r8         ; signing cert armor
     mov     [rbp - 48], r9  ; signing cert len
     mov     [rbp - 56], rdi ; base
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     test    r12d, r12d
     jle     .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero r13, .fail
     test    r14d, r14d
     jle     .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r15, .fail
     cmp     dword [rbp - 48], 0
     jle     .fail
     cmp     qword [rbp + 32], 0
@@ -1701,8 +1437,7 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_hs_descriptor]
     mov     ecx, tor_hs_line_hs_descriptor_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1710,23 +1445,20 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_descriptor_lifetime]
     mov     ecx, tor_hs_line_descriptor_lifetime_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     mov     edx, [rbp + 24]
     call    _tor_hs_append_u32_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1734,16 +1466,14 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_descriptor_signing_key_cert]
     mov     ecx, tor_hs_line_descriptor_signing_key_cert_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     mov     rdx, r15
     mov     ecx, [rbp - 48]
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     cmp     byte [rbx - 1], 10
     je      .revision
@@ -1752,8 +1482,7 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
 .revision:
@@ -1762,23 +1491,20 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_revision_counter]
     mov     ecx, tor_hs_line_revision_counter_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     mov     edx, [rbp + 16]
     call    _tor_hs_append_u32_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     mov     rdi, rbx
@@ -1786,16 +1512,14 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_superencrypted]
     mov     ecx, tor_hs_line_superencrypted_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     mov     rdx, [rbp + 32]
     mov     ecx, [rbp + 40]
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     cmp     byte [rbx - 1], 10
     je      .signature
@@ -1804,8 +1528,7 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
 .signature:
@@ -1814,8 +1537,7 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_line_signature]
     mov     ecx, tor_hs_line_signature_len
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     lea     rdi, [rel tor_hs_desc_mac_buf]
     mov     esi, 128
@@ -1829,35 +1551,23 @@ er_fn er_tor_hs_desc_build_v3
     lea     rdx, [rel tor_hs_desc_mac_buf]
     mov     ecx, eax
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
     mov     rdi, rbx
     mov     rsi, r12
     lea     rdx, [rel tor_hs_nl]
     mov     ecx, 1
     call    _tor_hs_append_checked
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     sub     rax, [rbp - 56]
     er_ok
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_mac32_sha3(out, tag, tag_len, key32, msg, msg_len)
@@ -1865,28 +1575,18 @@ er_fn er_tor_hs_desc_build_v3
 ; for a fixed 32-byte MAC key.
 global er_tor_hs_mac32_sha3
 er_fn er_tor_hs_mac32_sha3
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
     mov     r14, rcx
     mov     r15, r8
     mov     ebp, r9d
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    ebp, ebp
-    jz      .msg_ok
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r14, .fail
+    er_check_zero ebp, .msg_ok
+    er_check_zero r15, .fail
 .msg_ok:
     mov     eax, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
     add     eax, r13d
@@ -1915,8 +1615,7 @@ er_fn er_tor_hs_mac32_sha3
     mov     edx, TOR_HS_MAC_KEY_LEN
     call    er_memcpy
 
-    test    ebp, ebp
-    jz      .hash
+    er_check_zero ebp, .hash
     mov     eax, r13d
     add     eax, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
     lea     rdi, [rel tor_hs_crypto_buf + rax]
@@ -1931,49 +1630,29 @@ er_fn er_tor_hs_mac32_sha3
     lea     rdi, [rel tor_hs_crypto_buf]
     mov     rdx, rbx
     call    er_sha3_256
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_kdf_sha3(out, out_len, tag, tag_len, msg, msg_len)
 ; Implements ntor-v3 KDF(s,t) = SHAKE256(ENCAP(t)|s).
 global er_tor_hs_kdf_sha3
 er_fn er_tor_hs_kdf_sha3
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     rbx, rdi
     mov     rbp, rsi
     mov     r12, rdx
     mov     r13d, ecx
     mov     r14, r8
     mov     r15d, r9d
-    test    rbp, rbp
-    jz      .ok_empty
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r15d, r15d
-    jz      .msg_ok
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbp, .ok_empty
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r15d, .msg_ok
+    er_check_zero r14, .fail
 .msg_ok:
     mov     eax, TOR_HS_ENCAP_LEN
     add     eax, r13d
@@ -1988,8 +1667,7 @@ er_fn er_tor_hs_kdf_sha3
     mov     rsi, r12
     mov     edx, r13d
     call    er_memcpy
-    test    r15d, r15d
-    jz      .shake
+    er_check_zero r15d, .shake
     mov     eax, r13d
     add     eax, TOR_HS_ENCAP_LEN
     lea     rdi, [rel tor_hs_crypto_buf + rax]
@@ -2008,31 +1686,19 @@ er_fn er_tor_hs_kdf_sha3
 .ok_empty:
     xor     eax, eax
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_build_establish_rendezvous(out, cookie)
 ; returns eax = body length, or -1.
 global er_tor_hs_build_establish_rendezvous
 er_fn er_tor_hs_build_establish_rendezvous
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
     mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
     call    er_memcpy
     mov     eax, TOR_HS_RENDEZVOUS_COOKIE_LEN
@@ -2054,25 +1720,19 @@ er_fn er_tor_hs_parse_rendezvous_established
 ; returns eax = body length, or -1.
 global er_tor_hs_build_rendezvous1
 er_fn er_tor_hs_build_rendezvous1
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rdx
     mov     r13d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero rsi, .fail
     cmp     r13d, TOR_HS_RELAY_DATA_MAX - TOR_HS_RENDEZVOUS_COOKIE_LEN
     ja      .fail
     mov     rdi, rbx
     mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
     call    er_memcpy
-    test    r13d, r13d
-    jz      .done
-    test    r12, r12
-    jz      .fail
+    er_check_zero r13d, .done
+    er_check_zero r12, .fail
     lea     rdi, [rbx + TOR_HS_RENDEZVOUS_COOKIE_LEN]
     mov     rsi, r12
     mov     edx, r13d
@@ -2080,36 +1740,27 @@ er_fn er_tor_hs_build_rendezvous1
 .done:
     lea     eax, [r13d + TOR_HS_RENDEZVOUS_COOKIE_LEN]
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; er_tor_hs_parse_rendezvous2(data, len, out_handshake, out_len)
 ; returns eax = 0 on success, -1 on malformed arguments.
 global er_tor_hs_parse_rendezvous2
 er_fn er_tor_hs_parse_rendezvous2
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdx
     mov     r12, rcx
     cmp     esi, TOR_HS_RELAY_DATA_MAX
     ja      .fail
-    test    r12, r12
-    jz      .fail
+    er_check_zero r12, .fail
     mov     [r12], esi
-    test    esi, esi
-    jz      .ok
-    test    rdi, rdi
-    jz      .fail
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero esi, .ok
+    er_check_zero rdi, .fail
+    er_check_zero rbx, .fail
     mov     rdx, rsi
     mov     rsi, rdi
     mov     rdi, rbx
@@ -2117,13 +1768,11 @@ er_fn er_tor_hs_parse_rendezvous2
 .ok:
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; er_tor_hs_parse_introduce_ack(data, len)
@@ -2132,8 +1781,7 @@ global er_tor_hs_parse_introduce_ack
 er_fn er_tor_hs_parse_introduce_ack
     cmp     esi, 3
     jb      .fail
-    test    rdi, rdi
-    jz      .fail
+    er_check_zero rdi, .fail
     movzx   eax, byte [rdi]
     shl     eax, 8
     movzx   ecx, byte [rdi + 1]
@@ -2149,16 +1797,12 @@ er_fn er_tor_hs_parse_introduce_ack
 ; returns eax = body length, or -1.
 global er_tor_hs_build_introduce1_prefix
 er_fn er_tor_hs_build_introduce1_prefix
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rdx
     mov     r13d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero rsi, .fail
     cmp     r13d, TOR_HS_INTRODUCE1_ENCRYPTED_FIELD_MAX
     ja      .fail
 
@@ -2175,25 +1819,19 @@ er_fn er_tor_hs_build_introduce1_prefix
     lea     rdi, [rbx + 55]
     mov     byte [rdi], 0
     inc     rdi
-    test    r13d, r13d
-    jz      .done
-    test    r12, r12
-    jz      .fail
+    er_check_zero r13d, .done
+    er_check_zero r12, .fail
     mov     rsi, r12
     mov     edx, r13d
     call    er_memcpy
 .done:
     lea     eax, [r13d + TOR_HS_INTRODUCE1_PREFIX_LEN]
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; er_tor_hs_build_introduce1_plaintext(out, cookie, onion_key, nspec, linkspecs, linkspecs_len)
@@ -2201,32 +1839,22 @@ er_fn er_tor_hs_build_introduce1_prefix
 ; returns eax = plaintext length, or -1.
 global er_tor_hs_build_introduce1_plaintext
 er_fn er_tor_hs_build_introduce1_plaintext
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     ebp, ecx
     mov     r14, r8
     mov     r15d, r9d
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
     cmp     ebp, 255
     ja      .fail
     cmp     r15d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX - TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
     ja      .fail
-    test    r15d, r15d
-    jz      .copy_cookie
-    test    r14, r14
-    jz      .fail
+    er_check_zero r15d, .copy_cookie
+    er_check_zero r14, .fail
 .copy_cookie:
     mov     rdi, rbx
     mov     rsi, r12
@@ -2241,8 +1869,7 @@ er_fn er_tor_hs_build_introduce1_plaintext
     mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
     call    er_memcpy
     mov     [rbx + 56], bpl
-    test    r15d, r15d
-    jz      .done
+    er_check_zero r15d, .done
     lea     rdi, [rbx + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
     mov     rsi, r14
     mov     edx, r15d
@@ -2250,21 +1877,11 @@ er_fn er_tor_hs_build_introduce1_plaintext
 .done:
     lea     eax, [r15d + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_build_introduce1_encrypted(out, client_pk, encrypted_data, encrypted_len, mac)
@@ -2272,34 +1889,24 @@ er_fn er_tor_hs_build_introduce1_plaintext
 ; returns eax = encrypted field length, or -1.
 global er_tor_hs_build_introduce1_encrypted
 er_fn er_tor_hs_build_introduce1_encrypted
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     r14d, ecx
     mov     r15, r8
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r15, .fail
     cmp     r14d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX
     ja      .fail
-    test    r14d, r14d
-    jz      .copy_client_pk
-    test    r13, r13
-    jz      .fail
+    er_check_zero r14d, .copy_client_pk
+    er_check_zero r13, .fail
 .copy_client_pk:
     mov     rsi, r12
     mov     edx, TOR_HS_CLIENT_PK_LEN
     call    er_memcpy
-    test    r14d, r14d
-    jz      .copy_mac
+    er_check_zero r14d, .copy_mac
     lea     rdi, [rbx + TOR_HS_CLIENT_PK_LEN]
     mov     rsi, r13
     mov     edx, r14d
@@ -2311,19 +1918,11 @@ er_fn er_tor_hs_build_introduce1_encrypted
     call    er_memcpy
     lea     eax, [r14d + TOR_HS_CLIENT_PK_LEN + TOR_HS_INTRODUCE1_MAC_LEN]
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_parse_introduce_plaintext(out_cookie20, out_onion_key32,
@@ -2335,25 +1934,17 @@ global er_tor_hs_parse_introduce_plaintext
 er_fn er_tor_hs_parse_introduce_plaintext
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     r14d, ecx
     mov     r15, r8
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp + 16], 0
     je      .fail
     cmp     dword [rbp + 24], TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
@@ -2379,15 +1970,13 @@ er_fn er_tor_hs_parse_introduce_plaintext
     call    er_memcpy
     mov     r9, [rbp - 48]
     movzx   eax, byte [r9 + 56]
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     eax, [rbp + 24]
     sub     eax, TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
     cmp     eax, r14d
     ja      .fail
     mov     [r15], eax
-    test    eax, eax
-    jz      .ok
+    er_check_zero eax, .ok
     mov     rdi, r13
     mov     r9, [rbp - 48]
     lea     rsi, [r9 + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
@@ -2397,22 +1986,12 @@ er_fn er_tor_hs_parse_introduce_plaintext
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_extract_introduce_encrypted(out_ptr, out_len, body, body_len)
@@ -2420,12 +1999,9 @@ er_fn er_tor_hs_parse_introduce_plaintext
 ; stripped encrypted field. Returns eax=0 on success.
 global er_tor_hs_extract_introduce_encrypted
 er_fn er_tor_hs_extract_introduce_encrypted
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    test    rdx, rdx
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
+    er_check_zero rdx, .fail
     cmp     ecx, TOR_HS_CLIENT_PK_LEN + TOR_HS_INTRODUCE1_MAC_LEN
     jb      .fail
     cmp     ecx, TOR_HS_INTRODUCE1_PREFIX_LEN
@@ -2463,30 +2039,19 @@ er_fn er_tor_hs_extract_introduce_encrypted
 ; and caller-owned client keypair x/X.
 global er_tor_hs_derive_intro_keys
 er_fn er_tor_hs_derive_intro_keys
-    push    rbp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbp, rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     r14, rcx
     mov     r15, r8
     mov     rbp, r9
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
-    test    rbp, rbp
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
+    er_check_zero rbp, .fail
 
     lea     rdi, [rel tor_hs_crypto_buf]
     mov     rsi, r14
@@ -2539,21 +2104,11 @@ er_fn er_tor_hs_derive_intro_keys
     mov     ecx, TOR_HS_INTRO_KEY_MATERIAL_LEN
     call    er_shake256
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_derive_intro_keys_service(out64, auth_key, onion_priv, onion_pub,
@@ -2563,30 +2118,19 @@ er_fn er_tor_hs_derive_intro_keys
 ; service-owned onion private key b and the client public key X.
 global er_tor_hs_derive_intro_keys_service
 er_fn er_tor_hs_derive_intro_keys_service
-    push    rbp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbp, rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
     mov     r14, rcx
     mov     r15, r8
     mov     rbp, r9
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
-    test    rbp, rbp
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
+    er_check_zero rbp, .fail
 
     lea     rdi, [rel tor_hs_crypto_buf]
     mov     rsi, r13
@@ -2639,21 +2183,11 @@ er_fn er_tor_hs_derive_intro_keys_service
     mov     ecx, TOR_HS_INTRO_KEY_MATERIAL_LEN
     call    er_shake256
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_open_introduce2(out_plain, out_len, auth_key, onion_priv,
@@ -2667,11 +2201,7 @@ global er_tor_hs_open_introduce2
 er_fn er_tor_hs_open_introduce2
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi        ; out_plain
     mov     r12, rsi        ; out_len
@@ -2686,16 +2216,11 @@ er_fn er_tor_hs_open_introduce2
     jb      .fail
     cmp     eax, TOR_HS_INTRODUCE1_MAX_LEN
     ja      .fail
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rsp], 0
     je      .fail
     cmp     qword [rsp + 8], 0
@@ -2746,12 +2271,10 @@ er_fn er_tor_hs_open_introduce2
     lea     rdi, [rel tor_hs_crypto_buf + 320]
     mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
 
     mov     edx, [r12]
-    test    edx, edx
-    jz      .ok
+    er_check_zero edx, .ok
     mov     rdi, rbx
     mov     rsi, [rsp + 8]
     add     rsi, TOR_HS_CLIENT_PK_LEN
@@ -2764,36 +2287,21 @@ er_fn er_tor_hs_open_introduce2
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 _tor_hs_mem_eq:
-    push    rcx
-    push    rsi
-    push    rdi
+    er_push rcx, rsi, rdi
     mov     rcx, rdx
     repz    cmpsb
     setz    al
     movzx   eax, al
-    pop     rdi
-    pop     rsi
-    pop     rcx
-    ret
+    er_pop_ret rcx, rsi, rdi
 
 ; _tor_hs_append_checked(cursor, end, src, len) -> rax=new cursor or 0.
 _tor_hs_append_checked:
@@ -2813,22 +2321,14 @@ _tor_hs_append_checked:
 
 ; _tor_hs_find_marker(text, len, marker, marker_len) -> rax=ptr or 0
 _tor_hs_find_marker:
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     mov     r15d, ecx
-    test    r12, r12
-    jz      .nf
-    test    r14, r14
-    jz      .nf
-    test    r15d, r15d
-    jz      .nf
+    er_check_zero r12, .nf
+    er_check_zero r14, .nf
+    er_check_zero r15d, .nf
     cmp     r13d, r15d
     jb      .nf
     xor     ebx, ebx
@@ -2841,38 +2341,20 @@ _tor_hs_find_marker:
     mov     rsi, r14
     mov     edx, r15d
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jnz     .found
+    er_check_nonzero eax, .found
     inc     ebx
     jmp     .loop
 .found:
     lea     rax, [r12 + rbx]
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 .nf:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 ; _tor_hs_find_line_value(text, len, prefix, prefix_len)
 ; returns rax=value ptr, edx=value len; rax=0 on not found.
 _tor_hs_find_line_value:
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -2892,8 +2374,7 @@ _tor_hs_find_line_value:
 .line_ready:
     mov     r11d, ebp
     sub     r11d, ebx
-    test    r11d, r11d
-    jz      .next
+    er_check_zero r11d, .next
     cmp     byte [r12 + rbp - 1], 13
     jne     .check_prefix
     dec     r11d
@@ -2904,47 +2385,28 @@ _tor_hs_find_line_value:
     mov     rsi, r14
     mov     edx, r15d
     call    _tor_hs_mem_eq
-    test    eax, eax
-    jz      .next
+    er_check_zero eax, .next
     lea     rax, [r12 + rbx]
     add     rax, r15
     mov     edx, r11d
     sub     edx, r15d
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 .next:
     lea     ebx, [rbp + 1]
     jmp     .line_loop
 .nf:
     xor     eax, eax
     xor     edx, edx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 _tor_hs_append_u16_dec:
-    push    rbx
-    push    rcx
-    push    rdx
+    er_push rbx, rcx, rdx
     mov     r8, rdi
     movzx   eax, si
-    test    eax, eax
-    jnz     .digits
+    er_check_nonzero eax, .digits
     mov     byte [r8], '0'
     lea     rax, [r8 + 1]
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rcx, rdx
 .digits:
     sub     rsp, 8
     xor     ecx, ecx
@@ -2955,35 +2417,27 @@ _tor_hs_append_u16_dec:
     add     dl, '0'
     mov     [rsp + rcx], dl
     inc     ecx
-    test    eax, eax
-    jnz     .div_loop
+    er_check_nonzero eax, .div_loop
 .copy_loop:
     dec     ecx
     mov     al, [rsp + rcx]
     mov     [r8], al
     inc     r8
-    test    ecx, ecx
-    jnz     .copy_loop
+    er_check_nonzero ecx, .copy_loop
     mov     rax, r8
     add     rsp, 8
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rcx, rdx
 
 ; _tor_hs_append_u32_checked(cursor, end, value) -> rax=new cursor or 0.
 _tor_hs_append_u32_checked:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     sub     rsp, 16
     mov     r12, rdi        ; cursor
     mov     r13, rsi        ; end
     mov     eax, edx
     xor     ecx, ecx
     mov     ebx, 10
-    test    eax, eax
-    jnz     .digits
+    er_check_nonzero eax, .digits
     lea     rdx, [r12 + 1]
     cmp     rdx, r13
     ja      .fail
@@ -2996,8 +2450,7 @@ _tor_hs_append_u32_checked:
     add     dl, '0'
     mov     [rsp + rcx], dl
     inc     ecx
-    test    eax, eax
-    jnz     .digits
+    er_check_nonzero eax, .digits
     lea     rdx, [r12 + rcx]
     cmp     rdx, r13
     ja      .fail
@@ -3006,18 +2459,14 @@ _tor_hs_append_u32_checked:
     mov     al, [rsp + rcx]
     mov     [r12], al
     inc     r12
-    test    ecx, ecx
-    jnz     .copy_loop
+    er_check_nonzero ecx, .copy_loop
     mov     rax, r12
     jmp     .done
 .fail:
     xor     eax, eax
 .done:
     add     rsp, 16
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; er_tor_hs_build_introduce1_ntor_encrypted(out, auth_key, onion_key, client_priv,
 ;                                           client_pub, subcred, plaintext, plaintext_len)
@@ -3026,20 +2475,14 @@ global er_tor_hs_build_introduce1_ntor_encrypted
 er_fn er_tor_hs_build_introduce1_ntor_encrypted
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi        ; out
     mov     r12, rsi        ; auth_key
     mov     r13, r8         ; client_pub
     mov     r14, [rbp + 16] ; plaintext
     mov     r15d, [rbp + 24] ; plaintext_len
-    test    rbx, rbx
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r14, .fail
     cmp     r15d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX
     ja      .fail
     lea     rdi, [rel tor_hs_crypto_buf + 512]
@@ -3087,21 +2530,11 @@ er_fn er_tor_hs_build_introduce1_ntor_encrypted
     js      .fail
     lea     eax, [r15d + TOR_HS_CLIENT_PK_LEN + TOR_HS_INTRODUCE1_MAC_LEN]
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_build_establish_intro_v3(out, auth_key, handshake_auth, sig, sig_len)
@@ -3111,26 +2544,18 @@ er_fn er_tor_hs_build_introduce1_ntor_encrypted
 ; returns eax = body length, or -1.
 global er_tor_hs_build_establish_intro_v3
 er_fn er_tor_hs_build_establish_intro_v3
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rdx
     mov     r13, rcx
     mov     r14d, r8d
-    test    rbx, rbx
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    test    r12, r12
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero rsi, .fail
+    er_check_zero r12, .fail
     cmp     r14d, TOR_HS_RELAY_DATA_MAX - TOR_HS_ESTABLISH_INTRO_BASE_LEN
     ja      .fail
-    test    r14d, r14d
-    jz      .sig_ready
-    test    r13, r13
-    jz      .fail
+    er_check_zero r14d, .sig_ready
+    er_check_zero r13, .fail
 .sig_ready:
     mov     byte [rbx], TOR_HS_AUTH_KEY_TYPE_ED25519
     mov     byte [rbx + 1], 0
@@ -3147,8 +2572,7 @@ er_fn er_tor_hs_build_establish_intro_v3
     shr     eax, 8
     mov     [rbx + 68], al
     mov     [rbx + 69], r14b
-    test    r14d, r14d
-    jz      .done
+    er_check_zero r14d, .done
     lea     rdi, [rbx + TOR_HS_ESTABLISH_INTRO_BASE_LEN]
     mov     rsi, r13
     mov     edx, r14d
@@ -3156,27 +2580,19 @@ er_fn er_tor_hs_build_establish_intro_v3
 .done:
     lea     eax, [r14d + TOR_HS_ESTABLISH_INTRO_BASE_LEN]
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_tor_hs_parse_intro_established(data, len)
 ; Accepts the modern body with N_EXTENSIONS=0 or the legacy empty body.
 global er_tor_hs_parse_intro_established
 er_fn er_tor_hs_parse_intro_established
-    test    esi, esi
-    jz      .ok
-    test    rdi, rdi
-    jz      .fail
+    er_check_zero esi, .ok
+    er_check_zero rdi, .fail
     cmp     byte [rdi], 0
     jne     .fail
 .ok:
@@ -3191,8 +2607,7 @@ er_fn er_tor_hs_parse_intro_established
 ; Sends ESTABLISH_RENDEZVOUS and waits for RENDEZVOUS_ESTABLISHED.
 global er_tor_hs_establish_rendezvous
 er_fn er_tor_hs_establish_rendezvous
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     ebx, edi
     mov     r12, rsi
     lea     rdi, [rel tor_hs_msg]
@@ -3225,21 +2640,18 @@ er_fn er_tor_hs_establish_rendezvous
     js      .fail
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; er_tor_hs_establish_intro(circ_id, auth_key, handshake_auth, sig, sig_len)
 ; Sends ESTABLISH_INTRO and waits for INTRO_ESTABLISHED.
 global er_tor_hs_establish_intro
 er_fn er_tor_hs_establish_intro
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     ebx, edi
     mov     r12, rsi
     lea     rdi, [rel tor_hs_msg]
@@ -3272,13 +2684,11 @@ er_fn er_tor_hs_establish_intro
     js      .fail
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; er_tor_hs_send_introduce1(circ_id, auth_key, encrypted, encrypted_len)
@@ -3352,16 +2762,12 @@ er_fn er_tor_hs_send_rendezvous1
 ; handshake info to caller storage. Returns eax=0, or -1 on protocol failure.
 global er_tor_hs_wait_rendezvous2
 er_fn er_tor_hs_wait_rendezvous2
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     ebx, edi
     mov     r12, rsi
     mov     r13, rdx
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
     mov     edi, ebx
     lea     rsi, [rel tor_hs_tmp_stream]
     lea     rdx, [rel tor_hs_tmp_cmd]
@@ -3381,15 +2787,11 @@ er_fn er_tor_hs_wait_rendezvous2
     js      .fail
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; er_tor_hs_service_wait_introduce2(circ_id, out_plain, out_len,
@@ -3400,11 +2802,7 @@ global er_tor_hs_service_wait_introduce2
 er_fn er_tor_hs_service_wait_introduce2
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     ebx, edi
     mov     r12, rsi
@@ -3412,14 +2810,10 @@ er_fn er_tor_hs_service_wait_introduce2
     mov     r14, rcx
     mov     r15, r8
     mov     [rbp - 48], r9
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -3462,22 +2856,12 @@ er_fn er_tor_hs_service_wait_introduce2
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_client_connect(intro_circ, rend_circ, cookie, auth_key, onion_key,
@@ -3493,11 +2877,7 @@ global er_tor_hs_client_connect
 er_fn er_tor_hs_client_connect
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 24
     mov     ebx, edi        ; intro_circ
     mov     r12d, esi       ; rend_circ
@@ -3506,12 +2886,9 @@ er_fn er_tor_hs_client_connect
     mov     r15, r8         ; onion_key
     mov     [rsp], r9       ; client_priv
 
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rsp], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -3604,22 +2981,12 @@ er_fn er_tor_hs_client_connect
     xor     eax, eax
     er_ok
     add     rsp, 24
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 24
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_client_connect_from_desc(intro_circ, rend_circ, cookie,
@@ -3632,11 +2999,7 @@ global er_tor_hs_client_connect_from_desc
 er_fn er_tor_hs_client_connect_from_desc
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     ebx, edi        ; intro_circ
     mov     r12d, esi       ; rend_circ
@@ -3645,12 +3008,9 @@ er_fn er_tor_hs_client_connect_from_desc
     mov     r15, r8         ; client_pub
     mov     [rbp - 48], r9  ; subcred
 
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -3704,22 +3064,12 @@ er_fn er_tor_hs_client_connect_from_desc
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_client_introduce_from_desc(intro_circ, rend_circ, cookie,
@@ -3733,11 +3083,7 @@ global er_tor_hs_client_introduce_from_desc
 er_fn er_tor_hs_client_introduce_from_desc
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     ebx, edi
     mov     r12d, esi
@@ -3745,12 +3091,9 @@ er_fn er_tor_hs_client_introduce_from_desc
     mov     r14, rcx
     mov     r15, r8
     mov     [rbp - 48], r9
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -3850,22 +3193,12 @@ er_fn er_tor_hs_client_introduce_from_desc
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_open_client_stream(circ_id, stream_id, host, host_len, port)
@@ -3874,11 +3207,7 @@ er_fn er_tor_hs_client_introduce_from_desc
 ; same stream. The caller owns stream-id allocation.
 global er_tor_hs_open_client_stream
 er_fn er_tor_hs_open_client_stream
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     ebx, edi
     mov     r12w, si
     mov     r13, rdx
@@ -3886,10 +3215,8 @@ er_fn er_tor_hs_open_client_stream
     mov     r15w, r8w
     test    r12w, r12w
     jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14d, r14d
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14d, .fail
     mov     eax, r14d
     add     eax, 7          ; ':' + max 5 decimal port digits + NUL
     cmp     eax, TOR_HS_RELAY_DATA_MAX
@@ -3933,17 +3260,9 @@ er_fn er_tor_hs_open_client_stream
     jne     .fail
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret

@@ -8,8 +8,7 @@
 ; ==================================================================
 er_fn er_is_power_of_two_u64
     mov     rax, rdi
-    test    rax, rax
-    jz      .not_pow2
+    er_check_zero rax, .not_pow2
     lea     rcx, [rax - 1]
     test    rax, rcx
     jnz     .not_pow2
@@ -28,8 +27,7 @@ er_fn er_align_down_u64
     mov     rax, rdi
     ; Check alignment is power of two
     mov     rcx, rsi
-    test    rcx, rcx
-    jz      .align_down_done
+    er_check_zero rcx, .align_down_done
     lea     rdx, [rcx - 1]
     test    rcx, rdx
     jnz     .align_down_done
@@ -46,8 +44,7 @@ er_fn er_align_down_u64
 er_fn er_align_up_u64
     mov     rax, rdi
     mov     rcx, rsi
-    test    rcx, rcx
-    jz      .align_up_done
+    er_check_zero rcx, .align_up_done
     lea     rdx, [rcx - 1]
     test    rcx, rdx
     jnz     .align_up_done
@@ -109,10 +106,8 @@ er_fn er_clamp_u64
 ; uint64_t er_div_ceil_u64(uint64_t dividend, uint64_t divisor)
 ; ==================================================================
 er_fn er_div_ceil_u64
-    test    rsi, rsi
-    jz      .div_ceil_zero
-    test    rdi, rdi
-    jz      .div_ceil_zero
+    er_check_zero rsi, .div_ceil_zero
+    er_check_zero rdi, .div_ceil_zero
     mov     rax, rdi
     dec     rax
     xor     edx, edx
@@ -129,8 +124,7 @@ er_fn er_div_ceil_u64
 ; uint64_t er_log2_u64(uint64_t value)
 ; ==================================================================
 er_fn er_log2_u64
-    test    rdi, rdi
-    jz      .log2_zero
+    er_check_zero rdi, .log2_zero
     bsr     rax, rdi
     er_ret
 .log2_zero:
@@ -145,8 +139,7 @@ er_fn er_log2_u64
 ; uint64_t er_round_up_pow2_u64(uint64_t value)
 ; ==================================================================
 er_fn er_round_up_pow2_u64
-    test    rdi, rdi
-    jz      .pow2_zero
+    er_check_zero rdi, .pow2_zero
     ; Check for overflow: values > 2^63 can't be represented as next power of two
     ; Use mov+ cmp since cmp r64, imm64 is not encodable
     mov     rax, 0x8000000000000000
@@ -358,10 +351,8 @@ er_fn er_clamp_i64
 ; uint32_t er_div_ceil_u32(uint32_t dividend, uint32_t divisor)
 ; ==================================================================
 er_fn er_div_ceil_u32
-    test    esi, esi
-    jz      .div_ceil32_zero
-    test    edi, edi
-    jz      .div_ceil32_zero
+    er_check_zero esi, .div_ceil32_zero
+    er_check_zero edi, .div_ceil32_zero
     mov     eax, edi
     dec     eax
     xor     edx, edx

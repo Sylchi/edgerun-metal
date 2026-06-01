@@ -539,7 +539,7 @@ fn byteFromFloat(value: f32) ?u8 {
 
 
 test "iterator decodes linear gradient paint op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_paint_linear_gradient,
         @floatFromInt(@intFromEnum(GradientCoordinateSpace.user_space)),
@@ -590,7 +590,7 @@ test "iterator decodes linear gradient paint op" {
 }
 
 test "iterator decodes radial gradient paint op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_paint_radial_gradient,
         @floatFromInt(@intFromEnum(GradientCoordinateSpace.object_bounding_box)),
@@ -640,7 +640,7 @@ test "iterator decodes radial gradient paint op" {
 }
 
 test "iterator decodes current color alpha paint op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_paint_current_color_alpha,
         128.0,
@@ -652,7 +652,7 @@ test "iterator decodes current color alpha paint op" {
 }
 
 test "iterator decodes stroke width op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_stroke_width,
         1.5 / 24.0,
@@ -664,7 +664,7 @@ test "iterator decodes stroke width op" {
 }
 
 test "iterator decodes stroke cap op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_stroke_cap,
         @floatFromInt(@intFromEnum(StrokeCap.square)),
@@ -676,7 +676,7 @@ test "iterator decodes stroke cap op" {
 }
 
 test "iterator decodes stroke join op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_stroke_join,
         @floatFromInt(@intFromEnum(StrokeJoin.bevel)),
@@ -688,7 +688,7 @@ test "iterator decodes stroke join op" {
 }
 
 test "iterator decodes stroke miter limit op" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_stroke_miter_limit,
         2.5,
@@ -700,7 +700,7 @@ test "iterator decodes stroke miter limit op" {
 }
 
 test "iterator decodes clip path control ops" {
-    const std = @import("std");
+    const std = @import("er_std");
     const values = [_]f32{
         op_begin_clip_path,
         op_end_clip_path,

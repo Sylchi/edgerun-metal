@@ -75,12 +75,7 @@ SECTION .text
 
 ; rdi=ctx, rsi=block128
 er_fn _sha512_compress
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     sub     rsp, 80 * 8 + 8
 
     mov     [rsp + 80 * 8], rdi
@@ -208,20 +203,11 @@ er_fn _sha512_compress
     add     [rdi + SHA512_CTX_H + 56], r15
 
     add     rsp, 80 * 8 + 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 er_fn er_sha512_init
-    test    rdi, rdi
-    jz      .err
-    push    rdi
-    push    rsi
-    push    rcx
+    er_check_zero rdi, .err
+    er_push rdi, rsi, rcx
     lea     rsi, [rel H512]
     mov     ecx, 8
 .copy_h:
@@ -235,35 +221,23 @@ er_fn er_sha512_init
     xor     eax, eax
     mov     ecx, 128 / 8
     rep     stosq
-    pop     rcx
-    pop     rsi
-    pop     rax
-    ret
+    er_pop_ret rax, rsi, rcx
 .err:
     xor     eax, eax
     ret
 
 er_fn er_sha512_update
-    test    rdi, rdi
-    jz      .err
-    test    rdx, rdx
-    jz      .done_empty
-    test    rsi, rsi
-    jz      .err
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_check_zero rdi, .err
+    er_check_zero rdx, .done_empty
+    er_check_zero rsi, .err
+    er_push rbx, rbp, r12, r13, r14, r15
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
     add     [r12 + SHA512_CTX_COUNT], r14
 
     mov     r15d, [r12 + SHA512_CTX_BUFLEN]
-    test    r15d, r15d
-    jz      .full_blocks
+    er_check_zero r15d, .full_blocks
     mov     ebp, 128
     sub     ebp, r15d
     cmp     r14, rbp
@@ -293,8 +267,7 @@ er_fn er_sha512_update
     jnz     .full_loop
 
 .partial_copy:
-    test    r14, r14
-    jz      .done
+    er_check_zero r14, .done
     mov     [r12 + SHA512_CTX_BUFLEN], r14d
     lea     rdi, [r12 + SHA512_CTX_BUF]
     mov     rsi, r13
@@ -311,13 +284,7 @@ er_fn er_sha512_update
 
 .done:
     mov     rax, r12
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 .done_empty:
     mov     rax, rdi
     ret
@@ -326,14 +293,9 @@ er_fn er_sha512_update
     ret
 
 er_fn er_sha512_final
-    test    rdi, rdi
-    jz      .err
-    test    rsi, rsi
-    jz      .err
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_check_zero rdi, .err
+    er_check_zero rsi, .err
+    er_push rbx, r12, r13, r14
     mov     r12, rdi
     mov     r13, rsi
 
@@ -390,37 +352,29 @@ er_fn er_sha512_final
     jb      .out_loop
 
     mov     rax, r13
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 .err:
     xor     eax, eax
     ret
 
 er_fn er_sha512
-    test    rdx, rdx
-    jz      .err
+    er_check_zero rdx, .err
     sub     rsp, SHA512_CTX_SIZE + 8
     mov     [rsp + SHA512_CTX_SIZE], rdx
     mov     r8, rdi
     mov     r9, rsi
     lea     rdi, [rsp]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdi, [rsp]
     mov     rsi, r8
     mov     rdx, r9
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdi, [rsp]
     mov     rsi, [rsp + SHA512_CTX_SIZE]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rax, [rsp + SHA512_CTX_SIZE]
     add     rsp, SHA512_CTX_SIZE + 8
     ret

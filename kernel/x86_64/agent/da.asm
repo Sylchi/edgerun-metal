@@ -194,8 +194,7 @@ SECTION .text
 ; er_da_init
 ; ==================================================================
 er_fn er_da_init
-    push    rbx
-    push    r12
+    er_push rbx, r12
     sub     rsp, 32
 
     mov     rax, [rel fb_addr]
@@ -210,13 +209,11 @@ er_fn er_da_init
     mov     esi, DA_LABEL_LEN
     mov     rdx, rsp
     call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .init_skip_route
+    er_check_zero rax, .init_skip_route
 
     mov     rdi, rsp
     call    er_local_route_register
-    test    edx, edx
-    jnz     .init_skip_route
+    er_check_nonzero edx, .init_skip_route
 
     mov     r12d, eax
     mov     edi, r12d
@@ -235,8 +232,7 @@ er_fn er_da_init
     mov     byte [rel da_initialized], 1
 
     add     rsp, 32
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     er_ok
     er_ret
@@ -246,9 +242,7 @@ er_fn er_da_init
 ; rdi = cell_ptr, rsi = sender_slot_id
 ; ==================================================================
 _da_handler:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi            ; cell_ptr
     mov     r13d, esi           ; sender_slot_id
 
@@ -257,8 +251,7 @@ _da_handler:
     mov     rcx, [rel da_msg_dispatch_count]
 
 .dispatch_loop:
-    test    rcx, rcx
-    jz      .unknown
+    er_check_zero rcx, .unknown
     cmp     bl, byte [rax]
     je      .dispatch_hit
     add     rax, 8
@@ -276,9 +269,7 @@ _da_handler:
     er_ok
 
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; Dispatcher wrappers (uniform signature: rdi=cell_ptr, rsi=sender_slot_id)
@@ -316,8 +307,7 @@ _da_dispatch_focus:
 ; returns eax = slot_index, edx = ERROR_LOCAL_NOT_FOUND if none
 ; ==================================================================
 _da_find_surface_by_hash:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     xor     ebx, ebx
 .loop:
@@ -329,22 +319,17 @@ _da_find_surface_by_hash:
     mov     rsi, r12
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jz      .found
+    er_check_zero eax, .found
     inc     ebx
     jmp     .loop
 .found:
     mov     eax, ebx
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .not_found:
     xor     eax, eax
     er_err  ERROR_LOCAL_NOT_FOUND
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; _da_surface_ptr_by_slot
@@ -409,9 +394,7 @@ _da_focus_assign_slot:
 ; Cell payload: [type:1][layer:1][flags:1][rect_count:2][hash:32][rect_data...]
 ; ==================================================================
 _da_register_surface:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13d, esi
 
@@ -422,8 +405,7 @@ _da_register_surface:
     ; Check if this hash already has a surface
     mov     rdi, rsi
     call    _da_find_surface_by_hash
-    test    edx, edx
-    jz      .update_existing
+    er_check_zero edx, .update_existing
 
     ; Find free slot or allocate new
     mov     ebx, [rel da_surface_count]
@@ -483,9 +465,7 @@ _da_register_surface:
 .no_autofocus:
 
     inc     dword [rel da_surface_count]
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ok
     ret
@@ -501,17 +481,13 @@ _da_register_surface:
     mov     al, [r12 + LOCAL_CELL_PAYLOAD + 2]
     mov     [rbx + DA_SURFACE_FLAGS], al
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ok
     ret
 
 .fail:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     mov     eax, -1
     er_err  ERROR_LOCAL_FULL
     ret
@@ -521,15 +497,11 @@ _da_register_surface:
 ; rdi = cell_ptr
 ; ==================================================================
 _da_unregister_surface:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 5]
     call    _da_find_surface_by_hash
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     r13d, eax                          ; removed slot
     mov     r14d, [rel da_surface_count]
@@ -604,10 +576,7 @@ _da_unregister_surface:
     dec     dword [rel da_surface_count]
 
 .done:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     xor     eax, eax
     er_ok
     ret
@@ -619,19 +588,14 @@ _da_unregister_surface:
 ;   See DA_UPDATE_PAYLOAD_* constants in da_constants.inc.
 ; ==================================================================
 _da_update_surface:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     r12, rdi                 ; cell_ptr
     mov     r13d, esi                ; sender_slot_id (unused)
 
     ; Find surface by identity hash.
     lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_HASH_OFF]
     call    _da_find_surface_by_hash
-    test    edx, edx
-    jnz     .us_return              ; not found — return error
+    er_check_nonzero edx, .us_return
 
     mov     r14d, eax               ; r14d = slot_index
     mov     eax, r14d
@@ -657,8 +621,7 @@ _da_update_surface:
     jz      .us_check_icons          ; no rect changes
 
     movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF]
-    test    ecx, ecx
-    jz      .us_check_icons          ; no rects to copy
+    er_check_zero ecx, .us_check_icons
 
     da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, DA_RECT_BYTES, DA_UPDATE_PAYLOAD_DATA_OFF
 
@@ -679,8 +642,7 @@ _da_update_surface:
     jz      .us_done
 
     movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF]
-    test    ecx, ecx
-    jz      .us_done
+    er_check_zero ecx, .us_done
 
     mov     r8d, [r15 + DA_SURFACE_ICON_LEN]
     mov     edx, DA_SURFACE_POOL_ICONS
@@ -724,21 +686,13 @@ _da_update_surface:
     mov     qword [r15 + DA_SURFACE_ICON_CAP], DA_SURFACE_POOL_ICONS
 
 .us_done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     xor     eax, eax
     er_ok
     ret
 
 .us_return:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     xor     eax, eax
     er_err  ERROR_LOCAL_NOT_FOUND
     ret
@@ -751,8 +705,7 @@ _da_store_export_name:
     push    rbx
     mov     rbx, rdi
     mov     [rel da_app_export_len], sil
-    test    rsi, rsi
-    jz      .done
+    er_check_zero rsi, .done
     cmp     rsi, 64
     ja      .done
     push    rdx
@@ -799,14 +752,12 @@ _da_prepare_wasm_runtime:
     push    rbx
     mov     rbx, rdi
     mov     rdx, [rbx + DA_APP_MEM_PTR]
-    test    rdx, rdx
-    jz      .missing
+    er_check_zero rdx, .missing
     mov     rcx, [rbx + DA_APP_MEM_LEN]
     cmp     rcx, DA_APP_MEMORY_BYTES
     jb      .missing
     mov     r8, [rbx + DA_APP_TICKS_PTR]
-    test    r8, r8
-    jz      .missing
+    er_check_zero r8, .missing
 
     lea     rax, [rel da_wasm_runtime]
     mov     [rax + RUNTIME_MEMORY_PTR_OFF], rdx
@@ -859,8 +810,7 @@ _da_publish_app_hash:
 ;         edx=ERROR_LOCAL_NOT_FOUND if not found
 ; ==================================================================
 _da_find_app_by_hash:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     xor     ebx, ebx
 .loop:
@@ -872,22 +822,17 @@ _da_find_app_by_hash:
     mov     rsi, r12
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jz      .found
+    er_check_zero eax, .found
     inc     ebx
     jmp     .loop
 .found:
     mov     eax, ebx
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .not_found:
     xor     eax, eax
     er_err  ERROR_LOCAL_NOT_FOUND
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; _da_launch_common — shared launch core
@@ -899,11 +844,7 @@ _da_find_app_by_hash:
 ; Returns: rdx = error code (0 on success)
 ; ==================================================================
 _da_launch_common:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 48
 
     mov     r12, rdi
@@ -917,14 +858,12 @@ _da_launch_common:
     mov     rsi, r13
     lea     rdx, [rsp]
     call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .hash_fail
+    er_check_zero rax, .hash_fail
 
     ; Single-instance policy: existing hash reuses same app slot.
     lea     rdi, [rsp]
     call    _da_find_app_by_hash
-    test    edx, edx
-    jnz     .new_entry
+    er_check_nonzero edx, .new_entry
 
     ; Existing hash found.
     imul    eax, DA_APP_SIZE
@@ -938,8 +877,7 @@ _da_launch_common:
     ; Already running: launch means focus existing surface if it exists.
     lea     rdi, [rsp]
     call    _da_find_surface_by_hash
-    test    edx, edx
-    jnz     .already_running
+    er_check_nonzero edx, .already_running
     mov     ebx, eax
     call    _da_focus_clear_all_flags
     mov     edi, ebx
@@ -971,8 +909,7 @@ _da_launch_common:
     mov     esi, ebx
     call    _da_app_allocation_bind
     mov     r9, [rsp + 32]
-    test    edx, edx
-    jnz     .alloc_fail
+    er_check_nonzero edx, .alloc_fail
     inc     dword [rel da_app_count]
 
 .reuse_entry:
@@ -991,8 +928,7 @@ _da_launch_common:
     mov     rdi, r9
     call    _da_prepare_wasm_runtime
     mov     r9, [rsp + 32]
-    test    edx, edx
-    jnz     .alloc_fail
+    er_check_nonzero edx, .alloc_fail
     mov     rbx, rax
 
     mov     rdi, r14
@@ -1009,8 +945,7 @@ _da_launch_common:
     mov     rdx, r13
     call    er_fn_load
     mov     r9, [rsp + 32]
-    test    edx, edx
-    jnz     .load_fail
+    er_check_nonzero edx, .load_fail
 
     mov     byte [rel da_app_loaded], 1
     er_ok
@@ -1034,12 +969,7 @@ _da_launch_common:
 
 .done:
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _da_launch_app — launch a WASM app from cell payload
@@ -1047,8 +977,7 @@ _da_launch_common:
 ; Cell payload: [type:1][wasm_len:4][export_len:1][export_name...][wasm_bytes...]
 ; ==================================================================
 _da_launch_app:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     ebx, esi
 
@@ -1060,9 +989,7 @@ _da_launch_app:
     mov     r8d, ebx                                 ; app_slot=sender_slot
     call    _da_launch_common
 
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; _da_app_exit — mark an app as exited by app hash
@@ -1070,15 +997,12 @@ _da_launch_app:
 ; Cell payload: [type=11][hash:32]
 ; ==================================================================
 _da_app_exit:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     lea     r12, [rdi + LOCAL_CELL_PAYLOAD + 1]
     mov     rdi, r12
     call    _da_find_app_by_hash
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     imul    eax, DA_APP_SIZE
     lea     r13, [rel da_app_registry + rax]
@@ -1089,8 +1013,7 @@ _da_app_exit:
     mov     rsi, r12
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jnz     .check_loaded
+    er_check_nonzero eax, .check_loaded
     call    _da_focus_clear_state
 
 .check_loaded:
@@ -1099,14 +1022,11 @@ _da_app_exit:
     mov     rsi, r12
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jnz     .done
+    er_check_nonzero eax, .done
     mov     byte [rel da_app_loaded], 0
 
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ok
     ret
@@ -1117,17 +1037,14 @@ _da_app_exit:
 ; Cell payload: [type=4][hash:32]
 ; ==================================================================
 _da_focus_surface:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi
 
     ; Find surface by hash at payload[1..32]
     lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 1]
     call    _da_find_surface_by_hash
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     r13d, eax               ; new focus slot
 
@@ -1136,9 +1053,7 @@ _da_focus_surface:
     call    _da_focus_assign_slot
 
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ok
     ret
@@ -1208,21 +1123,17 @@ er_fn er_da_composite
 
     ; Skip if no framebuffer
     mov     rax, [rel da_fb_addr]
-    test    rax, rax
-    jz      .dc_done
+    er_check_zero rax, .dc_done
     mov     eax, [rel da_fb_width]
-    test    eax, eax
-    jz      .dc_done
+    er_check_zero eax, .dc_done
     mov     eax, [rel da_fb_height]
-    test    eax, eax
-    jz      .dc_done
+    er_check_zero eax, .dc_done
 
     mov     qword [rel da_composite_rect_len], 0
     mov     qword [rel da_composite_icon_len], 0
 
     mov     r15d, [rel da_surface_count]
-    test    r15d, r15d
-    jz      .dc_render
+    er_check_zero r15d, .dc_render
 
     xor     r12d, r12d           ; layer index
 .dc_layer_loop:
@@ -1249,11 +1160,9 @@ er_fn er_da_composite
 
     ; Append rects — use volatile regs only
     mov     rsi, [rbx + DA_SURFACE_RECT_PTR]
-    test    rsi, rsi
-    jz      .dc_icons
+    er_check_zero rsi, .dc_icons
     mov     rcx, [rbx + DA_SURFACE_RECT_LEN]
-    test    rcx, rcx
-    jz      .dc_icons
+    er_check_zero rcx, .dc_icons
 
     mov     rax, [rel da_composite_rect_len]
     imul    eax, 60
@@ -1270,11 +1179,9 @@ er_fn er_da_composite
 
 .dc_icons:
     mov     rsi, [rbx + DA_SURFACE_ICON_PTR]
-    test    rsi, rsi
-    jz      .dc_next_surf
+    er_check_zero rsi, .dc_next_surf
     mov     rcx, [rbx + DA_SURFACE_ICON_LEN]
-    test    rcx, rcx
-    jz      .dc_next_surf
+    er_check_zero rcx, .dc_next_surf
 
     mov     rax, [rel da_composite_icon_len]
     imul    eax, 36
@@ -1313,11 +1220,7 @@ er_fn er_da_composite
     call    sw_fb_render_ir_icons
 
 .dc_done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     xor     eax, eax
     er_ok
     er_ret

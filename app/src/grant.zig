@@ -273,8 +273,6 @@ pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity,
 }
 
 test "spawn receipt deterministically records delegated resources" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
@@ -285,33 +283,31 @@ test "spawn receipt deterministically records delegated resources" {
     const allocated_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, device.id).?;
     const memory_only_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 0, 0, 4, 0, 0, [_]u8{0} ** preimage.hash_size, .{ .bytes = [_]u8{0} ** identity.id_size }).?;
 
-    try testing.expect(receipt.valid());
-    try testing.expect(bytes.nonzero(&receipt.id().?));
-    try testing.expectEqual(@as(u64, 16), receipt.memory.amount);
-    try testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
-    try testing.expectEqual(@as(u64, 0), receipt.route_handles.amount);
-    try testing.expectEqual(@as(u64, 0), receipt.device_handles.amount);
-    try testing.expect(allocated_receipt.valid());
-    try testing.expectEqual(@as(u64, 1), allocated_receipt.route_handles.amount);
-    try testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
-    try testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
-    try testing.expect(allocated_receipt.device_handle.eql(device.id));
-    try testing.expect(allocated_receipt.permitsRoute(route_handle));
-    try testing.expect(allocated_receipt.permitsDevice(device.id));
-    try testing.expect(!receipt.permitsRoute(route_handle));
-    try testing.expect(!receipt.permitsDevice(device.id));
-    try testing.expect(memory_only_receipt.valid());
-    try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_bytes.amount);
-    try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_slots.amount);
-    try testing.expect(!memory_only_receipt.permitsRoute(route_handle));
-    try testing.expect(!memory_only_receipt.permitsDevice(device.id));
-    try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
-    try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
+    if (!receipt.valid()) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&receipt.id().?)) return error.TestExpectedTrue;
+    if (receipt.memory.amount != 16) return error.TestExpectedEqual;
+    if (receipt.execution_ticks.resource != .execution_ticks) return error.TestExpectedEqual;
+    if (receipt.route_handles.amount != 0) return error.TestExpectedEqual;
+    if (receipt.device_handles.amount != 0) return error.TestExpectedEqual;
+    if (!allocated_receipt.valid()) return error.TestExpectedTrue;
+    if (allocated_receipt.route_handles.amount != 1) return error.TestExpectedEqual;
+    if (allocated_receipt.device_handles.amount != 1) return error.TestExpectedEqual;
+    if (!bytes.eql(&route_handle, &allocated_receipt.route_handle)) return error.TestExpectedTrue;
+    if (!allocated_receipt.device_handle.eql(device.id)) return error.TestExpectedTrue;
+    if (!allocated_receipt.permitsRoute(route_handle)) return error.TestExpectedTrue;
+    if (!allocated_receipt.permitsDevice(device.id)) return error.TestExpectedTrue;
+    if (receipt.permitsRoute(route_handle)) return error.TestExpectedFalse;
+    if (receipt.permitsDevice(device.id)) return error.TestExpectedFalse;
+    if (!memory_only_receipt.valid()) return error.TestExpectedTrue;
+    if (memory_only_receipt.storage_bytes.amount != 0) return error.TestExpectedEqual;
+    if (memory_only_receipt.storage_slots.amount != 0) return error.TestExpectedEqual;
+    if (memory_only_receipt.permitsRoute(route_handle)) return error.TestExpectedFalse;
+    if (memory_only_receipt.permitsDevice(device.id)) return error.TestExpectedFalse;
+    if (spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) != null) return error.TestExpectedNull;
+    if (spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) != null) return error.TestExpectedNull;
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;
@@ -321,11 +317,11 @@ test "memory view receipt binds owner reader slice and byte range" {
     const authorization = preimage.hash("edgerun:zig:v1:test-memory-grant", "allocator approved");
     const receipt = memoryViewReceipt(owner, allocator, reader, slice, authorization, epoch, 8, 32).?;
 
-    try testing.expect(receipt.valid());
-    try testing.expect(bytes.nonzero(&receipt.id().?));
-    try testing.expect(receipt.allocator.eql(allocator.id));
-    try testing.expect(bytes.eql(&receipt.authorization, &authorization));
-    try testing.expectEqual(Resource.read_only_memory, receipt.memory.resource);
-    try testing.expectEqual(@as(u64, 32), receipt.memory.amount);
-    try testing.expectEqual(@as(u64, 8), receipt.offset);
+    if (!receipt.valid()) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&receipt.id().?)) return error.TestExpectedTrue;
+    if (!receipt.allocator.eql(allocator.id)) return error.TestExpectedTrue;
+    if (!bytes.eql(&receipt.authorization, &authorization)) return error.TestExpectedTrue;
+    if (receipt.memory.resource != .read_only_memory) return error.TestExpectedEqual;
+    if (receipt.memory.amount != 32) return error.TestExpectedEqual;
+    if (receipt.offset != 8) return error.TestExpectedEqual;
 }

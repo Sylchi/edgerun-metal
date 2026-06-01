@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const renderer_gpu = @import("backends/gpu.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");

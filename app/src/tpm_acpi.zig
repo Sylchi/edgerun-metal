@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const acpi = @import("acpi.zig");
 const bytes_mod = @import("bytes.zig");
 const tpm = @import("tpm.zig");

@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("src/std.zig");
 const fb = @import("src/font_builtin.zig");
 const fv = @import("src/font_vector.zig");
 

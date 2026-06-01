@@ -42,11 +42,7 @@ SECTION .text
 ; Returns eax=1 on success, 0 on error (overflow).
 ; ==================================================================
 er_fn er_preimage_hash
-    push    r12
-    push    r13
-    push    r14
-    push    r15
-    push    rbx
+    er_push r12, r13, r14, r15, rbx
 
     mov     r12, rdi            ; domain
     mov     r13d, esi           ; domain_len
@@ -78,22 +74,14 @@ er_fn er_preimage_hash
     call    er_blake3_hash_bytes
 
     add     rsp, PREIMAGE_BUFFER_SIZE
-    pop     rbx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
+    er_pop  r12, r13, r14, r15, rbx
     er_ok
     mov     eax, 1
     er_ret
 
 .overflow:
     xor     eax, eax
-    pop     rbx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
+    er_pop  r12, r13, r14, r15, rbx
     er_ok
     er_ret
 
@@ -117,9 +105,7 @@ er_fn er_preimage_raw_hash
 ; rdi=state (er_preimage_state), rsi=domain, edx=domain_len
 ; ==================================================================
 er_fn er_preimage_builder_init
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; state
     mov     r13, rsi            ; domain
@@ -134,9 +120,7 @@ er_fn er_preimage_builder_init
     mov     rdx, r13
     call    er_preimage_memcpy
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -147,9 +131,7 @@ er_fn er_preimage_builder_init
 ; Returns eax=1 on success, 0 if buffer would overflow.
 ; ==================================================================
 er_fn er_preimage_builder_update
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; state
     mov     r13, rsi            ; data
@@ -171,18 +153,14 @@ er_fn er_preimage_builder_update
     ; Update pos
     add     [r12 + er_preimage_state.pos], ebx
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 
 .update_overflow:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -192,8 +170,7 @@ er_fn er_preimage_builder_update
 ; Returns eax=1.
 ; ==================================================================
 er_fn er_preimage_builder_final
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi            ; state
     mov     rbx, rsi            ; out
@@ -203,8 +180,7 @@ er_fn er_preimage_builder_final
     mov     rdx, rbx
     call    er_blake3_hash_bytes
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     mov     eax, 1
     er_ret
@@ -258,9 +234,7 @@ er_fn er_preimage_builder_write_u64
 ; Returns eax=1 on success, 0 on failure. rdx=0 on success.
 ; ==================================================================
 er_fn er_preimage_encode_epoch
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; stamp
     mov     r13, rsi            ; out
@@ -270,8 +244,7 @@ er_fn er_preimage_encode_epoch
     jb      .ee_fail
 
     call    er_stamp_valid
-    test    eax, eax
-    jz      .ee_fail
+    er_check_zero eax, .ee_fail
 
     ; Copy keeper (32 bytes) — from stamp to out
     mov     rdi, r13            ; dst = out
@@ -303,16 +276,12 @@ er_fn er_preimage_encode_epoch
     mov     rsi, [r12 + 56]
     call    er_store64
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 .ee_fail:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     er_ret
 
@@ -323,9 +292,7 @@ er_fn er_preimage_encode_epoch
 ; Returns eax=1 on success, 0 if in too short or stamp invalid. rdx=0.
 ; ==================================================================
 er_fn er_preimage_decode_epoch
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; in
     mov     ebx, esi            ; in_len
@@ -371,20 +338,15 @@ er_fn er_preimage_decode_epoch
     ; Validate stamp
     mov     rdi, r13
     call    er_stamp_valid
-    test    eax, eax
-    jz      .de_fail
+    er_check_zero eax, .de_fail
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 .de_fail:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; Internal helper: load 8 bytes from memory (rdi=src, esi=len) → rax
@@ -399,9 +361,7 @@ er_load64_from:
 ; rdi=writer, rsi=buf, rdx=len
 ; ==================================================================
 er_fn er_preimage_writer_init
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; writer
     mov     r13, rsi            ; buf
@@ -416,9 +376,7 @@ er_fn er_preimage_writer_init
     mov     esi, ebx
     call    er_bytes_zero
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -458,10 +416,7 @@ er_fn er_preimage_writer_reserve
 ; Returns eax=1 on success, 0 if not enough space.
 ; ==================================================================
 er_fn er_preimage_writer_raw
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi            ; writer
     mov     r13, rsi            ; data
@@ -470,8 +425,7 @@ er_fn er_preimage_writer_raw
     ; Check reserve
     mov     rsi, r14
     call    er_preimage_writer_reserve
-    test    eax, eax
-    jz      .wr_raw_fail
+    er_check_zero eax, .wr_raw_fail
 
     ; Copy data to buf[pos..pos+len]
     mov     rdi, [r12 + er_preimage_writer.buf]
@@ -483,19 +437,13 @@ er_fn er_preimage_writer_raw
     ; Advance pos
     add     [r12 + er_preimage_writer.pos], r14
 
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ok
     mov     eax, 1
     er_ret
 .wr_raw_fail:
     xor     eax, eax
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -564,23 +512,19 @@ er_fn er_preimage_writer_hash
 ; rdi=writer, rsi=stamp
 ; ==================================================================
 er_fn er_preimage_writer_epoch
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi            ; writer
     mov     r13, rsi            ; stamp
 
     call    er_stamp_valid
-    test    eax, eax
-    jz      .we_fail
+    er_check_zero eax, .we_fail
 
     ; Check reserve(64)
     mov     rdi, r12
     mov     rsi, EPOCH_SIZE
     call    er_preimage_writer_reserve
-    test    eax, eax
-    jz      .we_fail
+    er_check_zero eax, .we_fail
 
     ; Encode epoch into buf[pos..pos+64]
     mov     rdi, r13            ; stamp
@@ -588,23 +532,18 @@ er_fn er_preimage_writer_epoch
     add     rsi, [r12 + er_preimage_writer.pos]
     mov     edx, EPOCH_SIZE
     call    er_preimage_encode_epoch
-    test    eax, eax
-    jz      .we_fail
+    er_check_zero eax, .we_fail
 
     ; Advance pos
     add     qword [r12 + er_preimage_writer.pos], EPOCH_SIZE
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     mov     eax, 1
     er_ret
 .we_fail:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -613,8 +552,7 @@ er_fn er_preimage_writer_epoch
 ; ==================================================================
 global er_preimage_memcpy
 er_preimage_memcpy:
-    test    esi, esi
-    jz      .mdone
+    er_check_zero esi, .mdone
     xor     ecx, ecx
 .mloop:
     mov     al, [rdx + rcx]

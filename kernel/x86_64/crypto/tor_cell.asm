@@ -137,8 +137,7 @@ _tor_hop_ptr:
 ; Returns the current terminal hop slot for relay digest accounting.
 _tor_endpoint_hop_ptr:
     mov     esi, [rdi + TOR_CIRC_N_HOPS]
-    test    esi, esi
-    jz      .bad
+    er_check_zero esi, .bad
     dec     esi
     jmp     _tor_hop_ptr
 .bad:
@@ -216,8 +215,7 @@ _tor_cell_recv:
     ret
 
 _tor_recv_versions_cell:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     rbx, rdi
     mov     edi, [tor_conn_id]
@@ -251,19 +249,14 @@ _tor_recv_versions_cell:
 
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 _tor_recv_var_cell:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     rbx, rdi
     mov     edi, [tor_conn_id]
@@ -293,19 +286,14 @@ _tor_recv_var_cell:
 
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 _tor_recv_netinfo_skip_vpadding:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
 .next_cell:
     mov     edi, [tor_conn_id]
@@ -337,8 +325,7 @@ _tor_recv_netinfo_skip_vpadding:
     shl     r12d, 8
     movzx   eax, byte [rbx + TOR_VAR_LEN + 1]
     or      r12d, eax
-    test    r12d, r12d
-    jz      .next_cell
+    er_check_zero r12d, .next_cell
     mov     edi, [tor_conn_id]
     lea     rsi, [rbx + TOR_VAR_PAYLOAD]
     lea     rdx, [tor_recv_len]
@@ -362,15 +349,11 @@ _tor_recv_netinfo_skip_vpadding:
     jne     .fail
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 SECTION .data
 global tor_recv_len
@@ -408,8 +391,7 @@ _tor_parse_versions:
     xor     eax, eax         ; highest supported common version
 
 .check_ver:
-    test    ecx, ecx
-    jz      .done_check
+    er_check_zero ecx, .done_check
     movzx   r8d, byte [rsi]
     shl     r8d, 8
     movzx   r9d, byte [rsi + 1]
@@ -435,8 +417,7 @@ _tor_parse_versions:
     jmp     .check_ver
 
 .done_check:
-    test    eax, eax
-    jnz     .done
+    er_check_nonzero eax, .done
     mov     eax, -1
 .done:
     pop     rbx
@@ -468,11 +449,7 @@ _tor_build_netinfo_cell:
     ret
 
 _tor_validate_certs_cell:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 32
     mov     qword [rsp], 0
     mov     qword [rsp + 8], 0
@@ -488,12 +465,10 @@ _tor_validate_certs_cell:
     cmp     r12d, 1
     jb      .bad
     movzx   r13d, byte [rbx + TOR_VAR_PAYLOAD]
-    test    r13d, r13d
-    jz      .bad
+    er_check_zero r13d, .bad
     mov     r11d, 1
 .cert_loop:
-    test    r13d, r13d
-    jz      .cert_done
+    er_check_zero r13d, .cert_done
     mov     eax, r12d
     sub     eax, r11d
     cmp     eax, 3
@@ -526,21 +501,11 @@ _tor_validate_certs_cell:
 .cert_done:
     xor     eax, eax
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .bad:
     mov     eax, -1
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 _tor_validate_auth_challenge_cell:
     push    rbx
@@ -571,9 +536,7 @@ _tor_validate_auth_challenge_cell:
     ret
 
 _tor_validate_netinfo_cell:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     cmp     byte [rbx + TOR_CELL_CMD], TOR_CELL_NETINFO
     jne     .bad
@@ -603,8 +566,7 @@ _tor_validate_netinfo_cell:
     movzx   r13d, byte [rbx + r12]
     inc     r12d
 .addr_loop:
-    test    r13d, r13d
-    jz      .ok
+    er_check_zero r13d, .ok
     mov     eax, TOR_CELL_LEN
     sub     eax, r12d
     cmp     eax, 2
@@ -630,23 +592,13 @@ _tor_validate_netinfo_cell:
     jmp     .addr_loop
 .ok:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 .bad:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 er_fn er_tor_link_handshake
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; guard_ip (network order)
     mov     r13w, si        ; guard_port (host order)
@@ -666,8 +618,7 @@ er_fn er_tor_link_handshake
     ; Print return value hex on first failure
     cmp     ebx, 3
     jne     .skip_dbg
-    push    rax
-    push    rdx
+    er_push rax, rdx
     mov     edi, 0x3f8
     mov     esi, 'e'
     call    er_serial_putchar
@@ -679,8 +630,7 @@ er_fn er_tor_link_handshake
     mov     edi, 0x3f8
     mov     esi, ':'
     call    er_serial_putchar
-    pop     rdx
-    pop     rax
+    er_pop  rax, rdx
     mov     edi, 0x3f8
     mov     esi, eax
     call    er_serial_puthex32
@@ -830,22 +780,14 @@ er_fn er_tor_link_handshake
 
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .connect_fail:
     mov     dword [tor_conn_id], -1
     mov     eax, -1
     er_err  ERROR_TOR_LINK_FAILED
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .send_fail:
@@ -854,17 +796,11 @@ er_fn er_tor_link_handshake
     mov     dword [tor_link_established], 0
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 _tor_send_create2:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12d, edi       ; circ_id
     mov     r13, rsi        ; handshake_data
@@ -905,24 +841,16 @@ _tor_send_create2:
     mov     edx, TOR_CELL_LEN
     call    er_tls_send
 
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 _tor_recv_created2:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12d, edi       ; circ_id
     mov     r13, rsi        ; reply buffer
     mov     r14, rdx        ; reply_len ptr
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
 
     ; Read cell from TCP
     mov     edi, [tor_conn_id]
@@ -966,27 +894,17 @@ _tor_recv_created2:
 
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 _tor_build_extend2:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; cell
     mov     r13d, esi       ; circ_id
@@ -1043,16 +961,10 @@ _tor_build_extend2:
     mov     edx, 84
     call    er_memcpy
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 _tor_parse_extended2:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi        ; relay_body
     mov     ebx, esi        ; body_len
@@ -1086,33 +998,24 @@ _tor_parse_extended2:
     call    er_memcpy
 
     xor     eax, eax
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 .bad:
     mov     eax, -1
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; er_tor_build_extend2_body(out, node_id20, ipv4, port, handshake84)
 ; Builds a RELAY_EXTEND2 payload with IPv4 and legacy-id link specifiers.
 ; Returns eax=119.
 global er_tor_build_extend2_body
 er_fn er_tor_build_extend2_body
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, r8
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
     cmp     ecx, 65535
     ja      .fail
 
@@ -1142,26 +1045,18 @@ er_fn er_tor_build_extend2_body
 
     mov     eax, 119
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; er_tor_circuit_extend(circ_id, node_id20, onion_key32, ipv4, port)
 ; Extends an open circuit by one ntor hop using RELAY_EXTEND2.
 global er_tor_circuit_extend
 er_fn er_tor_circuit_extend
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     r12d, edi       ; circ_id
     mov     r13, rsi        ; node_id
     mov     r14, rdx        ; onion_key
@@ -1169,23 +1064,19 @@ er_fn er_tor_circuit_extend
     sub     rsp, 256
     mov     [rsp + 236], r8d ; port
 
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
     cmp     dword [rsp + 236], 65535
     ja      .fail
 
     mov     edi, r12d
     call    _tor_circ_ptr
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     [rsp + 224], rax
     cmp     dword [rax + TOR_CIRC_STATE], TOR_CIRC_OPEN
     jne     .fail
     mov     eax, [rax + TOR_CIRC_N_HOPS]
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     cmp     eax, TOR_CIRC_MAX_HOPS
     jae     .fail
     mov     [rsp + 232], eax
@@ -1239,8 +1130,7 @@ er_fn er_tor_circuit_extend
     mov     rdi, [rsp + 224]
     mov     esi, [rsp + 232]
     call    _tor_hop_ptr
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     rbx, rax
 
     lea     rax, [rbx + TOR_CIRC_HOP_BWD_IV]
@@ -1269,29 +1159,17 @@ er_fn er_tor_circuit_extend
     xor     eax, eax
     er_ok
     add     rsp, 256
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     add     rsp, 256
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 global er_tor_relay_crypt
 er_tor_relay_crypt:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r14, rdi         ; save original cell pointer
     mov     r12d, esi        ; circ_id
@@ -1300,31 +1178,26 @@ er_tor_relay_crypt:
     ; Get circuit pointer
     mov     edi, r12d
     call    _tor_circ_ptr
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
 
     mov     rbx, rax         ; circuit entry
-    test    r13d, r13d
-    jnz     .backward_loop
+    er_check_nonzero r13d, .backward_loop
 
     ; Outgoing relay cells are onion-encrypted from endpoint back to guard.
     mov     r15d, [rbx + TOR_CIRC_N_HOPS]
-    test    r15d, r15d
-    jz      .bad
+    er_check_zero r15d, .bad
     dec     r15d
 .forward_loop:
     mov     rdi, rbx
     mov     esi, r15d
     call    _tor_hop_ptr
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
     lea     rcx, [rax + TOR_CIRC_HOP_FWD_KEY]
     lea     r8,  [rax + TOR_CIRC_HOP_FWD_IV]
     call    .crypt_payload
     test    eax, eax
     js      .bad
-    test    r15d, r15d
-    jz      .done
+    er_check_zero r15d, .done
     dec     r15d
     jmp     .forward_loop
 
@@ -1339,8 +1212,7 @@ er_tor_relay_crypt:
     mov     rdi, rbx
     mov     esi, r15d
     call    _tor_hop_ptr
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
     lea     rcx, [rax + TOR_CIRC_HOP_BWD_KEY]
     lea     r8,  [rax + TOR_CIRC_HOP_BWD_IV]
     call    .crypt_payload
@@ -1360,28 +1232,14 @@ er_tor_relay_crypt:
 .done:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .bad:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 er_fn er_tor_circuit_create
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out_circ_id ptr
     mov     r13, rsi        ; node_id (20)
@@ -1462,8 +1320,7 @@ er_fn er_tor_circuit_create
     mov     rdi, rbx
     xor     esi, esi
     call    _tor_hop_ptr
-    test    rax, rax
-    jz      .build_fail
+    er_check_zero rax, .build_fail
     mov     r15, rax
     lea     rdi, [r15 + TOR_CIRC_HOP_FWD_KEY]
     lea     rsi, [rbx + TOR_CIRC_FORWARD_KEY]
@@ -1497,21 +1354,13 @@ er_fn er_tor_circuit_create
     add     rsp, 256
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .full:
     mov     eax, -1
     er_err  ERROR_BUSY
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .build_fail:
@@ -1519,11 +1368,7 @@ er_fn er_tor_circuit_create
     add     rsp, 256
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 global er_tor_send_relay_early
@@ -1534,11 +1379,7 @@ er_fn er_tor_send_relay_early
 er_fn er_tor_send_relay
     mov     r9d, TOR_CELL_RELAY
 _tor_send_relay_cmd:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 8
     mov     [rsp], r9b
 
@@ -1550,10 +1391,8 @@ _tor_send_relay_cmd:
 
     cmp     ebx, TOR_HS_RELAY_DATA_MAX
     ja      .bad_relay_body
-    test    ebx, ebx
-    jz      .relay_body_ok
-    test    r15, r15
-    jz      .bad_relay_body
+    er_check_zero ebx, .relay_body_ok
+    er_check_zero r15, .bad_relay_body
 .relay_body_ok:
 
     ; Build relay cell in tor_tx_cell
@@ -1594,12 +1433,10 @@ _tor_send_relay_cmd:
     ; Get circuit pointer
     mov     edi, r12d
     call    _tor_circ_ptr
-    test    rax, rax
-    jz      .digest_fail
+    er_check_zero rax, .digest_fail
     mov     rdi, rax
     call    _tor_endpoint_hop_ptr
-    test    rax, rax
-    jz      .digest_fail
+    er_check_zero rax, .digest_fail
 
     ; Build input at tor_digest_buf: forward_digest[32] || cell_payload[509]
     ; Cell payload = bytes 5..513 of tor_tx_cell (509 bytes including relay header)
@@ -1618,8 +1455,7 @@ _tor_send_relay_cmd:
     mov     esi, 541                 ; input length
     lea     rdx, [tor_digest_buf + 541] ; output (32 bytes)
     call    er_tor_sha256
-    test    eax, eax
-    jz      .digest_fail
+    er_check_zero eax, .digest_fail
 
     ; Write first 4 bytes of new digest into cell's digest field
     mov     eax, [tor_digest_buf + 541]
@@ -1628,12 +1464,10 @@ _tor_send_relay_cmd:
     ; Update circuit's forward_digest with new full digest
     mov     edi, r12d
     call    _tor_circ_ptr
-    test    rax, rax
-    jz      .digest_fail
+    er_check_zero rax, .digest_fail
     mov     rdi, rax
     call    _tor_endpoint_hop_ptr
-    test    rax, rax
-    jz      .digest_fail
+    er_check_zero rax, .digest_fail
     lea     rdi, [rax + TOR_CIRC_HOP_FWD_DIGEST]
     lea     rsi, [tor_digest_buf + 541]
     mov     edx, 32
@@ -1659,64 +1493,41 @@ _tor_send_relay_cmd:
     xor     eax, eax
     er_ok
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .send_fail:
     mov     eax, -1
     er_err  ERROR_IO
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .digest_fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_relay_body:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 er_fn er_tor_recv_relay
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; circ_id
     mov     r13, rsi        ; out_stream_id
     mov     r14, rdx        ; out_cmd
     mov     r15, rcx        ; out_data
     mov     rbx, r8         ; out_data_len
-    test    r13, r13
-    jz      .bad_arg
-    test    r14, r14
-    jz      .bad_arg
-    test    rbx, rbx
-    jz      .bad_arg
+    er_check_zero r13, .bad_arg
+    er_check_zero r14, .bad_arg
+    er_check_zero rbx, .bad_arg
 
     ; Read cell from TCP
     mov     edi, [tor_conn_id]
@@ -1760,12 +1571,10 @@ er_fn er_tor_recv_relay
     ; Get circuit pointer
     mov     edi, r12d
     call    _tor_circ_ptr
-    test    rax, rax
-    jz      .digest_fail_saved
+    er_check_zero rax, .digest_fail_saved
     mov     rdi, rax
     call    _tor_endpoint_hop_ptr
-    test    rax, rax
-    jz      .digest_fail_saved
+    er_check_zero rax, .digest_fail_saved
 
     push    rax                          ; save endpoint hop ptr
 
@@ -1785,8 +1594,7 @@ er_fn er_tor_recv_relay
     mov     esi, 541
     lea     rdx, [tor_digest_buf + 541]
     call    er_tor_sha256
-    test    eax, eax
-    jz      .digest_fail_both
+    er_check_zero eax, .digest_fail_both
 
     ; Compare first 4 bytes with saved digest.
     mov     eax, [tor_digest_buf + 541]
@@ -1836,8 +1644,7 @@ er_fn er_tor_recv_relay
     cmp     ecx, 0
     je      .done
 
-    test    r15, r15
-    jz      .bad_arg
+    er_check_zero r15, .bad_arg
     mov     rdi, r15        ; out_data
     lea     rsi, [tor_rx_cell + 16]  ; relay data
     mov     edx, ecx
@@ -1846,56 +1653,35 @@ er_fn er_tor_recv_relay
 .done:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_arg:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .proto_fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .fail:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 er_fn er_tor_open_stream
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; circ_id
     mov     r13d, esi       ; dst_ip
     mov     r14w, dx        ; dst_port
     mov     rbx, rcx        ; out_stream_id
-    test    rbx, rbx
-    jz      .bad_arg
+    er_check_zero rbx, .bad_arg
 
     ; Allocate stream ID
     movzx   eax, word [tor_stream_next_id]
@@ -1966,8 +1752,7 @@ er_fn er_tor_open_stream
 
     movzx   edi, r15w
     call    _tor_stream_ptr
-    test    rax, rax
-    jz      .state_failed
+    er_check_zero rax, .state_failed
     mov     dword [rax + TOR_STREAM_STATE], TOR_STREAM_CONNECTING
     mov     [rax + TOR_STREAM_CIRC_ID], r12d
     mov     [rax + TOR_STREAM_ID], r15w
@@ -1978,41 +1763,25 @@ er_fn er_tor_open_stream
     er_ok
 
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .full:
     mov     eax, -1
     er_err  ERROR_BUSY
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_arg:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .send_failed:
     dec     word [tor_stream_next_id]
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .state_failed:
@@ -2020,11 +1789,7 @@ er_fn er_tor_open_stream
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2034,8 +1799,7 @@ er_fn er_tor_open_stream
 ; ==================================================================
 global er_tor_open_dir_stream
 er_fn er_tor_open_dir_stream
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12d, edi       ; circ_id
     mov     rbx, rsi        ; out_stream_id ptr
@@ -2055,21 +1819,18 @@ er_fn er_tor_open_dir_stream
     xor     r8d, r8d
     call    er_tor_send_relay
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .full:
     mov     eax, -1
     er_err  ERROR_BUSY
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; Helper to push a decimal number as string
 _tor_push_dec:
-    push    rbx
-    push    rdx
+    er_push rbx, rdx
     xor     ecx, ecx
     mov     ebx, 10
 .div_loop:
@@ -2078,8 +1839,7 @@ _tor_push_dec:
     add     edx, '0'
     push    rdx
     inc     ecx
-    test    eax, eax
-    jnz     .div_loop
+    er_check_nonzero eax, .div_loop
 
 .write_loop:
     pop     rax
@@ -2088,6 +1848,4 @@ _tor_push_dec:
     dec     ecx
     jnz     .write_loop
 
-    pop     rdx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rdx

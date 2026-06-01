@@ -149,8 +149,7 @@ er_fn jit_emit_load_global
 ; cl = register (0-15), eax = offset in JitGlobals
 ; -----------------------------------------------------------------+
 er_fn jit_emit_load_global_to_reg
-    push    rax
-    push    rcx
+    er_push rax, rcx
     ; Determine REX
     mov     ch, 0            ; R=0 (reg in ModRM.reg)
     test    cl, 8
@@ -171,8 +170,7 @@ er_fn jit_emit_load_global_to_reg
     mov     edi, 2           ; mod=10
     call    jit_build_modrm
     call    jit_emit_modrm
-    pop     rcx
-    pop     rax
+    er_pop  rax, rcx
     call    jit_emit_dword   ; displacement
     ret
 
@@ -181,8 +179,7 @@ er_fn jit_emit_load_global_to_reg
 ; cl = register (0-15), eax = offset in JitGlobals
 ; -----------------------------------------------------------------+
 er_fn jit_emit_store_global_from_reg
-    push    rax
-    push    rcx
+    er_push rax, rcx
     mov     ch, 0
     test    cl, 8
     jz      .sgt_no_r
@@ -201,8 +198,7 @@ er_fn jit_emit_store_global_from_reg
     mov     edi, 2           ; mod=10
     call    jit_build_modrm
     call    jit_emit_modrm
-    pop     rcx
-    pop     rax
+    er_pop  rax, rcx
     call    jit_emit_dword
     ret
 
@@ -218,8 +214,7 @@ er_fn jit_emit_mov_reg_imm64
     mov     r8b, 0
     mov     r9b, 0
     pop     rax              ; original rax (imm64)
-    push    rax
-    push    rcx
+    er_push rax, rcx
     pop     rcx              ; original cl back
     test    cl, 8
     jz      .mri_no_b
@@ -738,8 +733,7 @@ er_fn jit_emit_pop_reg
 ; cl = register, eax = displacement
 ; -----------------------------------------------------------------+
 er_fn jit_emit_store_spill
-    push    rax
-    push    rcx
+    er_push rax, rcx
     ; Determine REX
     mov     ch, 0
     test    cl, 8
@@ -763,8 +757,7 @@ er_fn jit_emit_store_spill
     ; SIB: scale=0, index=4 (none), base=4 (rsp)
     mov     al, 0x24
     call    jit_emit_sib
-    pop     rcx
-    pop     rax
+    er_pop  rax, rcx
     call    jit_emit_dword   ; displacement
     ret
 
@@ -773,8 +766,7 @@ er_fn jit_emit_store_spill
 ; cl = register, eax = displacement
 ; -----------------------------------------------------------------+
 er_fn jit_emit_load_spill
-    push    rax
-    push    rcx
+    er_push rax, rcx
     mov     ch, 0
     test    cl, 8
     jz      .ls_no_r
@@ -795,8 +787,7 @@ er_fn jit_emit_load_spill
     call    jit_emit_modrm
     mov     al, 0x24
     call    jit_emit_sib
-    pop     rcx
-    pop     rax
+    er_pop  rax, rcx
     call    jit_emit_dword
     ret
 
@@ -817,15 +808,13 @@ er_fn jit_emit_jmp_rel32
 ; cl = condition code, eax = relative displacement
 ; -----------------------------------------------------------------+
 er_fn jit_emit_jcc_rel32
-    push    rax
-    push    rcx
+    er_push rax, rcx
     mov     al, 0x0F         ; two-byte opcode prefix
     call    jit_emit_byte
     mov     al, 0x80         ; jcc base + condition
     or      al, cl
     call    jit_emit_byte
-    pop     rcx
-    pop     rax
+    er_pop  rax, rcx
     call    jit_emit_dword
     ret
 

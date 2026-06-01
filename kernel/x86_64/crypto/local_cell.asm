@@ -51,9 +51,7 @@ er_local_ring_init:
 ; Returns: edx = 0 on success, ERROR_LOCAL_FULL if ring is full
 ; ==================================================================
 er_local_ring_write:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     rbx, rdi        ; ring
     mov     r12, rsi        ; cell
@@ -84,18 +82,12 @@ er_local_ring_write:
 
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 .full:
     mov     eax, -1
     er_err  ERROR_LOCAL_FULL
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; _local_ring_read — read a cell from the ring buffer (non-blocking)
@@ -104,9 +96,7 @@ er_local_ring_write:
 ; Returns: edx = 0 on success, ERROR_LOCAL_EMPTY if ring is empty
 ; ==================================================================
 er_local_ring_read:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     rbx, rdi        ; ring
     mov     r12, rsi        ; out cell
@@ -137,18 +127,12 @@ er_local_ring_read:
 
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 .empty:
     mov     eax, -1
     er_err  ERROR_LOCAL_EMPTY
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; _local_ring_available — return number of cells available to read

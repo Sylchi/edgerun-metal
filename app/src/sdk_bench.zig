@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const linux = std.os.linux;
 const sdk = @import("sdk.zig");
 const store = @import("store.zig");

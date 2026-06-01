@@ -55,11 +55,7 @@ ntor_tpm_rng: resb 32
 ntor_work_buf: resb 1024
 
 _tor_ntor_kdf:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; key_seed
     mov     r13, rsi        ; verify
@@ -73,8 +69,7 @@ _tor_ntor_kdf:
     mov     ecx, 14         ; msg_len
     mov     r8, r12         ; out = key_seed
     call    er_tor_hmac_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; verify = HMAC-SHA256(secret_input, "tor-ntor-kdf-2")
     mov     rdi, r14        ; key = secret_input
@@ -83,32 +78,17 @@ _tor_ntor_kdf:
     mov     ecx, 14         ; msg_len
     mov     r8, r13         ; out = verify
     call    er_tor_hmac_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     mov     eax, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .err:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 _tor_ntor_auth:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; auth
     mov     r13, rsi        ; verify
@@ -160,30 +140,17 @@ _tor_ntor_auth:
     mov     ecx, 14                 ; msg_len
     mov     r8, r12                 ; out = auth
     call    er_tor_hmac_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .err:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 er_fn er_tor_ntor_keygen
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi        ; priv
     mov     r13, rsi        ; pub
@@ -192,23 +159,20 @@ er_fn er_tor_ntor_keygen
     mov     rdi, ntor_tpm_cmd
     mov     esi, 32
     call    er_tpm_get_random
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
 
     mov     esi, 12             ; TPM_CMD_GET_RANDOM_LEN
     mov     rdx, ntor_tpm_rsp
     mov     ecx, 64
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
 
     mov     rdi, ntor_tpm_rsp
     mov     esi, eax
     mov     rdx, ntor_tpm_rng
     mov     ecx, 32
     call    er_tpm_parse_get_random
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
 
     ; Copy to private key output, clamp
     mov     rdi, r12
@@ -232,25 +196,17 @@ er_fn er_tor_ntor_keygen
 
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .fail:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 er_fn er_tor_ntor_client_handshake
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; handshake_out
     mov     r13, rsi        ; handshake_len ptr
@@ -283,8 +239,7 @@ er_fn er_tor_ntor_client_handshake
     mov     esi, 32
     mov     rdx, ntor_work_buf ; temp output
     call    er_tor_sha256
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
 
     mov     rdi, r12
     add     rdi, 20
@@ -304,29 +259,17 @@ er_fn er_tor_ntor_client_handshake
 
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .fail:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 er_fn er_tor_ntor_client_process
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     ; rdi = handshake_reply[64] (Y || AUTH)
     ; rsi = node_id[20], rdx = onion_key[32]
@@ -406,8 +349,7 @@ er_fn er_tor_ntor_client_process
     mov     ecx, 14
     mov     r8, ntor_work_buf + 256  ; out = key_seed
     call    er_tor_hmac_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; ============================================================
     ; Step 4: verify = HMAC-SHA256(secret_input, "tor-ntor-kdf-2")
@@ -419,8 +361,7 @@ er_fn er_tor_ntor_client_process
     mov     ecx, 14
     mov     r8, ntor_work_buf + 288  ; out = verify
     call    er_tor_hmac_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; ============================================================
     ; Step 5: Compute expected server AUTH
@@ -445,8 +386,7 @@ er_fn er_tor_ntor_client_process
     lea     rsi, [r12 + 32]         ; server_AUTH
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jnz     .auth_fail
+    er_check_nonzero eax, .auth_fail
 
     ; ============================================================
     ; Step 7: Derive forward_key, backward_key from key_seed
@@ -462,8 +402,7 @@ er_fn er_tor_ntor_client_process
     mov     esi, 33
     mov     rdx, ntor_work_buf + 352  ; K0 output
     call    er_tor_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; forward_key = K0[0..15]
     mov     rdi, r9                  ; forward_key
@@ -487,8 +426,7 @@ er_fn er_tor_ntor_client_process
     mov     esi, 33
     mov     rdx, ntor_work_buf + 352  ; K1 output (reuse buffer)
     call    er_tor_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; forward_iv = K1[0..15]
     mov     rdi, r11                 ; forward_iv (from stack)
@@ -504,29 +442,17 @@ er_fn er_tor_ntor_client_process
 
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .auth_fail:
     mov     eax, -1
     er_err  ERROR_AUTH
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .err:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret

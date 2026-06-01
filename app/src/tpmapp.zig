@@ -401,8 +401,6 @@ fn admitForTest(app: *App, authorization: intent.Receipt, actor: identity.Identi
 }
 
 test "tpm app seals only for authorized caller-bound policy" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -413,33 +411,33 @@ test "tpm app seals only for authorized caller-bound policy" {
     const policy = seal.Policy.machineAppUser(ids.device, ids.chat, ids.user);
 
     const sealed = try tpm.sealFor(ids.chat, ids.user, policy, authorization, "message");
-    try testing.expect(sealed.valid());
-    try testing.expectEqual(@as(usize, 1), tpm.eventCount());
-    try testing.expectEqual(EventKind.seal, tpm.eventAt(0).?.kind);
-    try testing.expect(tpm.eventAt(0).?.caller.eql(authority.Principal.app(ids.chat).?));
-    try testing.expectError(error.Unauthorized, tpm.sealFor(ids.other, ids.user, policy, authorization, "message"));
+    if (!sealed.valid()) return error.TestExpectedTrue;
+    if (tpm.eventCount() != 1) return error.TestExpectedEqual;
+    if (tpm.eventAt(0).?.kind != .seal) return error.TestExpectedEqual;
+    if (!tpm.eventAt(0).?.caller.eql(authority.Principal.app(ids.chat).?)) return error.TestExpectedTrue;
+    if (tpm.sealFor(ids.other, ids.user, policy, authorization, "message")) |_| return error.TestExpectedError else |err| {
+        if (err != error.Unauthorized) return err;
+    }
 
     const claimed_policy = seal.Policy.machineAppUser(ids.device, ids.other, ids.user);
     const second_authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal bad policy").?).?;
     try admitForTest(&tpm, second_authorization, ids.chat);
-    try testing.expectError(error.BadPolicy, tpm.sealFor(ids.chat, ids.user, claimed_policy, second_authorization, "message"));
+    if (tpm.sealFor(ids.chat, ids.user, claimed_policy, second_authorization, "message")) |_| return error.TestExpectedError else |err| {
+        if (err != error.BadPolicy) return err;
+    }
 }
 
 test "tpm app identity must be tpm backed" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
     var events: [1]Event = undefined;
     const app_identity = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ordinary app is not tpm")).?, epoch).?;
 
-    try testing.expectEqual(@as(?App, null), App.init(app_identity, ids.device, clock.Clock.init(keeper, .{}).?, &events));
+    if (App.init(app_identity, ids.device, clock.Clock.init(keeper, .{}).?, &events) != null) return error.TestExpectedNull;
 }
 
 test "tpm app refuses signatures without caller intent" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -448,19 +446,23 @@ test "tpm app refuses signatures without caller intent" {
     const wrong_authorization = intent.admit(ids.user, ids.device, ids.other, ids.tpm, .sign_data, .attests_state, tpm.clock.now, intent.requestId("wrong signer").?).?;
     const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .sign_data, .attests_state, tpm.clock.now, intent.requestId("sign app state").?).?;
 
-    try testing.expectError(error.Unauthorized, tpm.signFor(ids.chat, wrong_authorization, "state root"));
-    try testing.expectError(error.Unauthorized, tpm.signFor(ids.chat, authorization, "state root"));
-    try testing.expectError(error.Unauthorized, tpm.admitAuthorization(authorization, tpm.admissionCapability(authorization, ids.other).?));
+    if (tpm.signFor(ids.chat, wrong_authorization, "state root")) |_| return error.TestExpectedError else |err| {
+        if (err != error.Unauthorized) return err;
+    }
+    if (tpm.signFor(ids.chat, authorization, "state root")) |_| return error.TestExpectedError else |err| {
+        if (err != error.Unauthorized) return err;
+    }
+    if (tpm.admitAuthorization(authorization, tpm.admissionCapability(authorization, ids.other).?)) return error.TestExpectedError else |err| {
+        if (err != error.Unauthorized) return err;
+    }
     try admitForTest(&tpm, authorization, ids.chat);
     const signature = try tpm.signFor(ids.chat, authorization, "state root");
-    try testing.expect(signature.valid());
-    try testing.expect(signature.signer.eql(authority.Principal.tpm(ids.tpm).?));
-    try testing.expectEqual(@as(usize, 1), tpm.eventCount());
+    if (!signature.valid()) return error.TestExpectedTrue;
+    if (!signature.signer.eql(authority.Principal.tpm(ids.tpm).?)) return error.TestExpectedTrue;
+    if (tpm.eventCount() != 1) return error.TestExpectedEqual;
 }
 
 test "tpm app exposes authorized rng to apps" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -472,12 +474,16 @@ test "tpm app exposes authorized rng to apps" {
 
     var key: [32]u8 = undefined;
     const random = try tpm.randomFor(ids.chat, authorization, "message-key", &key);
-    try testing.expect(random.valid());
-    try testing.expect(random.caller.eql(authority.Principal.app(ids.chat).?));
-    try testing.expect(bytes.nonzero(&key));
-    try testing.expectEqual(EventKind.random, tpm.eventAt(0).?.kind);
+    if (!random.valid()) return error.TestExpectedTrue;
+    if (!random.caller.eql(authority.Principal.app(ids.chat).?)) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&key)) return error.TestExpectedTrue;
+    if (tpm.eventAt(0).?.kind != .random) return error.TestExpectedEqual;
 
     var rejected: [16]u8 = undefined;
-    try testing.expectError(error.Unauthorized, tpm.randomFor(ids.chat, wrong_authorization, "message-key", &rejected));
-    try testing.expectError(error.BadRequest, tpm.randomFor(ids.chat, authorization, "", &rejected));
+    if (tpm.randomFor(ids.chat, wrong_authorization, "message-key", &rejected)) |_| return error.TestExpectedError else |err| {
+        if (err != error.Unauthorized) return err;
+    }
+    if (tpm.randomFor(ids.chat, authorization, "", &rejected)) |_| return error.TestExpectedError else |err| {
+        if (err != error.BadRequest) return err;
+    }
 }

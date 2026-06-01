@@ -2377,6 +2377,29 @@ er_fn match_math_int_ops
     call    token_eq
     test    eax, eax
     jz      .test
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .and_edx
+    pop     r11
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0x25
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u32
+    jmp     .yes
+.and_edx:
+    pop     r14
     lea     rdi, [rel tok_edx]
     mov     esi, tok_edx_len
     push    r14
@@ -2590,6 +2613,30 @@ er_fn match_math_int_ops
     call    token_eq
     test    eax, eax
     jz      .no
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .shr_rax
+    pop     r11
+    mov     r8d, 0
+    mov     r9d, 0xe8
+    jmp     .shr_imm
+.shr_rax:
+    pop     r14
+    lea     rdi, [rel tok_rax]
+    mov     esi, tok_rax_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .shr_edx
+    pop     r11
+    mov     r8d, 1
+    mov     r9d, 0xe8
+    jmp     .shr_imm
+.shr_edx:
+    pop     r14
     lea     rdi, [rel tok_edx]
     mov     esi, tok_edx_len
     push    r14
@@ -2598,6 +2645,7 @@ er_fn match_math_int_ops
     jz      .shr_rdx
     pop     r11
     mov     r8d, 0
+    mov     r9d, 0xea
     jmp     .shr_imm
 .shr_rdx:
     pop     r14
@@ -2607,6 +2655,7 @@ er_fn match_math_int_ops
     test    eax, eax
     jz      .bad
     mov     r8d, 1
+    mov     r9d, 0xea
 .shr_imm:
     call    expect_comma
     test    eax, eax
@@ -2624,7 +2673,7 @@ er_fn match_math_int_ops
 .shr32_emit:
     mov     edi, 0xc1
     call    append_text_byte
-    mov     edi, 0xea
+    mov     edi, r9d
     call    append_text_byte
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte

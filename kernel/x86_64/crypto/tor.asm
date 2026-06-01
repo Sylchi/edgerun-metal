@@ -144,10 +144,8 @@ SECTION .text
 ; rdi=buf, esi=len. returns eax=1 when any byte is non-zero, else 0.
 ; ==================================================================
 _tor_bytes_any_nonzero:
-    test    rdi, rdi
-    jz      .none
-    test    esi, esi
-    jz      .none
+    er_check_zero rdi, .none
+    er_check_zero esi, .none
     xor     ecx, ecx
 .scan:
     cmp     ecx, esi
@@ -176,13 +174,11 @@ _tor_guard_material_ready:
     lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
     mov     esi, 20
     call    _tor_bytes_any_nonzero
-    test    eax, eax
-    jz      .no
+    er_check_zero eax, .no
     lea     rdi, [tor_guard_onion_key]
     mov     esi, 32
     call    _tor_bytes_any_nonzero
-    test    eax, eax
-    jz      .no
+    er_check_zero eax, .no
     mov     eax, 1
     ret
 .no:
@@ -195,22 +191,15 @@ _tor_guard_material_ready:
 ; ==================================================================
 global er_tor_hs_signing_sign
 er_fn er_tor_hs_signing_sign
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
     mov     r14, rcx
-    test    rbx, rbx
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r13d, r13d
-    jz      .msg_ready
-    test    r12, r12
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r14, .fail
+    er_check_zero r13d, .msg_ready
+    er_check_zero r12, .fail
 .msg_ready:
     cmp     r13d, TOR_SIGNING_MAX_MSG
     ja      .fail
@@ -219,23 +208,16 @@ er_fn er_tor_hs_signing_sign
     mov     edx, r13d
     mov     rcx, r14
     call    er_ed25519_sign
-    test    eax, eax
-    jnz     .fail
+    er_check_nonzero eax, .fail
 
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -245,11 +227,7 @@ er_fn er_tor_hs_signing_sign
 ; ==================================================================
 global er_tor_hs_signing_blind_sign
 er_fn er_tor_hs_signing_blind_sign
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi
     mov     r12, rsi
@@ -257,16 +235,11 @@ er_fn er_tor_hs_signing_blind_sign
     mov     r14d, ecx
     mov     r15, r8
     mov     [rsp], r9
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r15, r15
-    jz      .fail
-    test    r14d, r14d
-    jz      .msg_ready
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r15, .fail
+    er_check_zero r14d, .msg_ready
+    er_check_zero r13, .fail
 .msg_ready:
     cmp     r14d, TOR_SIGNING_MAX_MSG
     ja      .fail
@@ -277,28 +250,19 @@ er_fn er_tor_hs_signing_blind_sign
     mov     r8, r15
     mov     r9, [rsp]
     call    er_ed25519_blind_sign
-    test    eax, eax
-    jnz     .fail
+    er_check_nonzero eax, .fail
 
 .done:
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -311,11 +275,7 @@ global er_tor_hs_build_descriptor_signing_cert_armor
 er_fn er_tor_hs_build_descriptor_signing_cert_armor
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi
     mov     r12, rsi
@@ -323,14 +283,10 @@ er_fn er_tor_hs_build_descriptor_signing_cert_armor
     mov     r14d, ecx
     mov     r15, r8
     mov     [rsp], r9
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r15, .fail
     cmp     dword [rsp], 0
     jle     .fail
 
@@ -379,29 +335,18 @@ er_fn er_tor_hs_build_descriptor_signing_cert_armor
     js      .fail
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; _tor_find_signature_line(buf, len) -> rax=offset or -1
 _tor_find_signature_line:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12d, esi
     xor     eax, eax
@@ -425,9 +370,7 @@ _tor_find_signature_line:
 .not_found:
     mov     eax, -1
 .done:
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; er_tor_hs_service_publish_signed_v3_descriptor
@@ -441,11 +384,7 @@ global er_tor_hs_service_publish_signed_v3_descriptor
 er_fn er_tor_hs_service_publish_signed_v3_descriptor
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 32
     mov     rbx, rdi
     mov     r12d, esi
@@ -453,16 +392,12 @@ er_fn er_tor_hs_service_publish_signed_v3_descriptor
     mov     r14, rcx
     mov     r15, r8
     mov     [rbp - 48], r9
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     test    r12d, r12d
     jle     .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 32], 0
@@ -576,23 +511,13 @@ er_fn er_tor_hs_service_publish_signed_v3_descriptor
     xor     eax, eax
     er_ok
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -686,12 +611,10 @@ er_fn er_tor_set_role
 ; ==================================================================
 global er_tor_set_role_caps
 er_fn er_tor_set_role_caps
-    test    edi, edi
-    jz      .bad_caps
+    er_check_zero edi, .bad_caps
     mov     eax, edi
     and     eax, ~TOR_CAP_KNOWN_MASK
-    test    eax, eax
-    jnz     .bad_caps
+    er_check_nonzero eax, .bad_caps
     mov     [tor_state + TOR_STATE_ROLE], dword -1
     mov     [tor_state + TOR_STATE_ROLE_CAPS], edi
     xor     eax, eax
@@ -709,35 +632,27 @@ er_fn er_tor_set_role_caps
 ; ==================================================================
 global er_tor_set_guard_material
 er_fn er_tor_set_guard_material
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     ebx, edi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14, rcx
     mov     dword [tor_guard_material_ready], 0
-    test    ebx, ebx
-    jz      .bad_material
+    er_check_zero ebx, .bad_material
     test    r12w, r12w
     jz      .bad_material
     cmp     r12d, 65535
     ja      .bad_material
-    test    r13, r13
-    jz      .bad_material
-    test    r14, r14
-    jz      .bad_material
+    er_check_zero r13, .bad_material
+    er_check_zero r14, .bad_material
     mov     rdi, r13
     mov     esi, 20
     call    _tor_bytes_any_nonzero
-    test    eax, eax
-    jz      .bad_material
+    er_check_zero eax, .bad_material
     mov     rdi, r14
     mov     esi, 32
     call    _tor_bytes_any_nonzero
-    test    eax, eax
-    jz      .bad_material
+    er_check_zero eax, .bad_material
 
     mov     [tor_state + TOR_STATE_GUARD_IP], ebx
     mov     [tor_state + TOR_STATE_GUARD_PORT], r12w
@@ -756,18 +671,12 @@ er_fn er_tor_set_guard_material
     mov     dword [tor_guard_material_ready], 1
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .bad_material:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -845,10 +754,7 @@ er_fn er_tor_open_directory_channel
 ; ==================================================================
 global er_tor_directory_fetch_consensus
 er_fn er_tor_directory_fetch_consensus
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     call    er_tor_open_directory_channel
     test    eax, eax
@@ -926,8 +832,7 @@ er_fn er_tor_directory_fetch_consensus
     lea     rdi, [tor_dir_resp_buf]
     mov     esi, r12d
     call    er_http_find_body
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     mov     r14, rax
 
     lea     rax, [tor_dir_resp_buf + r12]
@@ -950,19 +855,13 @@ er_fn er_tor_directory_fetch_consensus
 
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -1013,11 +912,7 @@ _tor_b64_val:
 ; returns eax=0 success, -1 failure
 ; ==================================================================
 _tor_decode_b64_20:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13d, esi
@@ -1099,20 +994,10 @@ _tor_decode_b64_20:
 
 .ok:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _tor_decode_b64_32 — decode base64 token to 32 bytes
@@ -1120,11 +1005,7 @@ _tor_decode_b64_20:
 ; returns eax=0 success, -1 failure
 ; ==================================================================
 _tor_decode_b64_32:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13d, esi
@@ -1205,20 +1086,10 @@ _tor_decode_b64_32:
 
 .ok:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _tor_hex_encode_20_upper — encode 20 bytes as 40 hex uppercase
@@ -1264,12 +1135,7 @@ _tor_parse_descriptor_ntor_key:
     lea     rdi, [tor_guard_onion_key]
 
 _tor_parse_descriptor_ntor_key_to:
-    push    rbp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbp, rbx, r12, r13, r14, r15
     mov     rbp, rdi
 
     lea     r12, [tor_dir_body_buf]
@@ -1287,8 +1153,7 @@ _tor_parse_descriptor_ntor_key_to:
     lea     rsi, [rel str_tor_ntor_key_prefix]
     mov     edx, str_tor_ntor_key_prefix_len
     call    er_memcmp
-    test    eax, eax
-    jz      .found
+    er_check_zero eax, .found
 .next_line:
     cmp     r14d, r13d
     jae     .fail
@@ -1322,23 +1187,11 @@ _tor_parse_descriptor_ntor_key_to:
     test    eax, eax
     js      .fail
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_tor_directory_fetch_guard_descriptor — fetch selected relay descriptor
@@ -1346,8 +1199,7 @@ _tor_parse_descriptor_ntor_key_to:
 ; ==================================================================
 global er_tor_directory_fetch_guard_descriptor
 er_fn er_tor_directory_fetch_guard_descriptor
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     ; Force fresh BEGIN_DIR stream for this fetch
     mov     dword [tor_dir_stream_open], 0
@@ -1436,8 +1288,7 @@ er_fn er_tor_directory_fetch_guard_descriptor
     lea     rdi, [tor_dir_resp_buf]
     mov     esi, r12d
     call    er_http_find_body
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdx, [tor_dir_resp_buf + r12]
     sub     rdx, rax
     test    edx, edx
@@ -1452,14 +1303,12 @@ er_fn er_tor_directory_fetch_guard_descriptor
     mov     dword [tor_guard_material_ready], 1
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -1470,17 +1319,11 @@ er_fn er_tor_directory_fetch_guard_descriptor
 ; ==================================================================
 global er_tor_directory_fetch_relay_descriptor
 er_fn er_tor_directory_fetch_relay_descriptor
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     r13, rdi
     mov     r15, rsi
-    test    r13, r13
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r15, .fail
 
     mov     dword [tor_dir_stream_open], 0
 
@@ -1567,8 +1410,7 @@ er_fn er_tor_directory_fetch_relay_descriptor
     lea     rdi, [tor_dir_resp_buf]
     mov     esi, r12d
     call    er_http_find_body
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdx, [tor_dir_resp_buf + r12]
     sub     rdx, rax
     test    edx, edx
@@ -1583,20 +1425,12 @@ er_fn er_tor_directory_fetch_relay_descriptor
     js      .fail
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1607,16 +1441,12 @@ er_fn er_tor_directory_fetch_relay_descriptor
 ; ==================================================================
 global er_tor_hs_build_intro_circuit_from_desc
 er_fn er_tor_hs_build_intro_circuit_from_desc
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
     test    r13d, r13d
     jle     .fail
     cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
@@ -1671,16 +1501,12 @@ er_fn er_tor_hs_build_intro_circuit_from_desc
     mov     [rbx], eax
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -1695,11 +1521,7 @@ global er_tor_hs_client_connect_live_from_desc
 er_fn er_tor_hs_client_connect_live_from_desc
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi        ; desc
     mov     r12d, esi       ; desc_len
@@ -1707,16 +1529,12 @@ er_fn er_tor_hs_client_connect_live_from_desc
     mov     r14, rcx        ; client_priv
     mov     r15, r8         ; client_pub
     mov     [rbp - 48], r9  ; subcred
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     test    r12d, r12d
     jle     .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -1775,23 +1593,13 @@ er_fn er_tor_hs_client_connect_live_from_desc
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1806,11 +1614,7 @@ global er_tor_hs_open_stream_live_from_desc
 er_fn er_tor_hs_open_stream_live_from_desc
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi
     mov     r12d, esi
@@ -1846,8 +1650,7 @@ er_fn er_tor_hs_open_stream_live_from_desc
     js      .fail
 
     movzx   esi, word [tor_hs_live_stream_next_id]
-    test    esi, esi
-    jnz     .stream_id_ok
+    er_check_nonzero esi, .stream_id_ok
     mov     esi, 1
 .stream_id_ok:
     inc     word [tor_hs_live_stream_next_id]
@@ -1861,23 +1664,13 @@ er_fn er_tor_hs_open_stream_live_from_desc
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_STREAM_FAIL
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1898,11 +1691,7 @@ global er_tor_hs_self_connect_stream_live_from_desc
 er_fn er_tor_hs_self_connect_stream_live_from_desc
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     ebx, edi        ; service intro circuit
     mov     r12, rsi        ; descriptor plaintext
@@ -1911,16 +1700,12 @@ er_fn er_tor_hs_self_connect_stream_live_from_desc
     mov     r15, r8         ; client private key
     mov     [rbp - 48], r9  ; client public key
 
-    test    ebx, ebx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
+    er_check_zero ebx, .fail
+    er_check_zero r12, .fail
     test    r13d, r13d
     jle     .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     qword [rbp + 16], 0
@@ -2013,8 +1798,7 @@ er_fn er_tor_hs_self_connect_stream_live_from_desc
     js      .fail
 
     movzx   esi, word [tor_hs_live_stream_next_id]
-    test    esi, esi
-    jnz     .stream_id_ok
+    er_check_nonzero esi, .stream_id_ok
     mov     esi, 1
 .stream_id_ok:
     inc     word [tor_hs_live_stream_next_id]
@@ -2035,23 +1819,13 @@ er_fn er_tor_hs_self_connect_stream_live_from_desc
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2066,11 +1840,7 @@ global er_tor_hs_service_establish_intro
 er_fn er_tor_hs_service_establish_intro
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 16
     mov     rbx, rdi        ; out_circ_id
     mov     r12, rsi        ; intro relay identity
@@ -2078,12 +1848,9 @@ er_fn er_tor_hs_service_establish_intro
     mov     r14d, ecx       ; intro relay ip
     mov     r15d, r8d       ; intro relay port
     mov     [rbp - 48], r9  ; auth_key
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
     cmp     r15d, 65535
     ja      .fail
     cmp     qword [rbp - 48], 0
@@ -2125,23 +1892,13 @@ er_fn er_tor_hs_service_establish_intro
     xor     eax, eax
     er_ok
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
     add     rsp, 16
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2156,11 +1913,7 @@ global er_tor_hs_service_accept_intro_and_rendezvous
 er_fn er_tor_hs_service_accept_intro_and_rendezvous
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 48
     mov     ebx, edi        ; intro circuit
     mov     r12, rsi        ; auth key
@@ -2168,14 +1921,10 @@ er_fn er_tor_hs_service_accept_intro_and_rendezvous
     mov     r14, rcx        ; service onion pub
     mov     r15, r8         ; subcredential
     mov     [rbp - 48], r9  ; service RENDEZVOUS1 handshake
-    test    r12, r12
-    jz      .fail
-    test    r13, r13
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r12, .fail
+    er_check_zero r13, .fail
+    er_check_zero r14, .fail
+    er_check_zero r15, .fail
     cmp     qword [rbp - 48], 0
     je      .fail
     cmp     dword [rbp + 16], TOR_HS_RELAY_DATA_MAX - TOR_HS_RENDEZVOUS_COOKIE_LEN
@@ -2258,23 +2007,13 @@ er_fn er_tor_hs_service_accept_intro_and_rendezvous
     xor     eax, eax
     er_ok
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2290,11 +2029,7 @@ global er_tor_hs_service_publish_v3_descriptor
 er_fn er_tor_hs_service_publish_v3_descriptor
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 48
     mov     rbx, rdi
     mov     r12d, esi
@@ -2302,12 +2037,10 @@ er_fn er_tor_hs_service_publish_v3_descriptor
     mov     r14d, ecx
     mov     r15d, r8d
     mov     [rbp - 48], r9
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     test    r12d, r12d
     jle     .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero r13, .fail
     test    r14d, r14d
     jle     .fail
     cmp     qword [rbp + 16], 0
@@ -2354,23 +2087,13 @@ er_fn er_tor_hs_service_publish_v3_descriptor
     xor     eax, eax
     er_ok
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2379,19 +2102,13 @@ er_fn er_tor_hs_service_publish_v3_descriptor
 ; returns rax = next output cursor
 ; ==================================================================
 _tor_append_u32_dec:
-    push    rbx
-    push    rcx
-    push    rdx
+    er_push rbx, rcx, rdx
     mov     r8, rdi
     mov     eax, esi
-    test    eax, eax
-    jnz     .digits
+    er_check_nonzero eax, .digits
     mov     byte [r8], '0'
     lea     rax, [r8 + 1]
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rcx, rdx
 .digits:
     sub     rsp, 16
     xor     ecx, ecx
@@ -2402,21 +2119,16 @@ _tor_append_u32_dec:
     add     dl, '0'
     mov     [rsp + rcx], dl
     inc     ecx
-    test    eax, eax
-    jnz     .div_loop
+    er_check_nonzero eax, .div_loop
 .copy_loop:
     dec     ecx
     mov     al, [rsp + rcx]
     mov     [r8], al
     inc     r8
-    test    ecx, ecx
-    jnz     .copy_loop
+    er_check_nonzero ecx, .copy_loop
     mov     rax, r8
     add     rsp, 16
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rcx, rdx
 
 ; ==================================================================
 ; er_tor_hsdir_build_publish_header(out, cap, descriptor_len)
@@ -2425,12 +2137,10 @@ _tor_append_u32_dec:
 ; ==================================================================
 global er_tor_hsdir_build_publish_header
 er_fn er_tor_hsdir_build_publish_header
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12d, edx
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     cmp     r12d, TOR_HS_DESCRIPTOR_MAX_LEN
     ja      .fail
     mov     eax, str_tor_hs_publish_prefix_len + str_tor_hs_publish_suffix_len + 5
@@ -2452,13 +2162,11 @@ er_fn er_tor_hsdir_build_publish_header
     lea     rax, [r12 + str_tor_hs_publish_suffix_len]
     sub     rax, rbx
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -2468,18 +2176,13 @@ er_fn er_tor_hsdir_build_publish_header
 ; ==================================================================
 global er_tor_hsdir_build_fetch_request
 er_fn er_tor_hsdir_build_fetch_request
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rdx
     mov     r13d, ecx
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r13d, r13d
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r13d, .fail
     cmp     r13d, 96
     ja      .fail
     mov     eax, str_tor_hs_fetch_prefix_len + str_tor_hs_fetch_suffix_len
@@ -2502,15 +2205,11 @@ er_fn er_tor_hsdir_build_fetch_request
     mov     eax, str_tor_hs_fetch_prefix_len + str_tor_hs_fetch_suffix_len
     add     eax, r13d
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -2518,8 +2217,7 @@ er_fn er_tor_hsdir_build_fetch_request
 ; returns eax = HTTP status, or -1 on protocol error.
 ; ==================================================================
 _tor_hsdir_recv_http:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     xor     r12d, r12d
     mov     dword [tor_dir_resp_len], 0
     mov     ebx, 2048
@@ -2568,14 +2266,10 @@ _tor_hsdir_recv_http:
     lea     rdi, [tor_dir_resp_buf]
     mov     esi, r12d
     call    er_http_parse_status
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; er_tor_hsdir_publish_descriptor(descriptor, descriptor_len)
@@ -2584,15 +2278,11 @@ _tor_hsdir_recv_http:
 ; ==================================================================
 global er_tor_hsdir_publish_descriptor
 er_fn er_tor_hsdir_publish_descriptor
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12d, esi
-    test    rbx, rbx
-    jz      .fail
-    test    r12d, r12d
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12d, .fail
     cmp     r12d, TOR_HS_DESCRIPTOR_MAX_LEN
     ja      .fail
 
@@ -2644,16 +2334,12 @@ er_fn er_tor_hsdir_publish_descriptor
     ja      .fail
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -2662,20 +2348,14 @@ er_fn er_tor_hsdir_publish_descriptor
 ; ==================================================================
 global er_tor_hsdir_fetch_descriptor
 er_fn er_tor_hsdir_fetch_descriptor
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
     mov     r14d, ecx
     mov     r15, r8
-    test    r13, r13
-    jz      .fail
-    test    r15, r15
-    jz      .fail
+    er_check_zero r13, .fail
+    er_check_zero r15, .fail
 
     mov     dword [tor_dir_stream_open], 0
     call    er_tor_open_directory_channel
@@ -2704,8 +2384,7 @@ er_fn er_tor_hsdir_fetch_descriptor
     lea     rdi, [tor_dir_resp_buf]
     mov     esi, [tor_dir_resp_len]
     call    er_http_find_body
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
     lea     rdx, [tor_dir_resp_buf]
     mov     ecx, [tor_dir_resp_len]
     add     rdx, rcx
@@ -2718,20 +2397,12 @@ er_fn er_tor_hsdir_fetch_descriptor
     call    er_memcpy
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -2768,9 +2439,7 @@ _tor_parse_u16_dec:
 ; returns eax=ip dword (bytes in memory are wire order), or -1
 ; ==================================================================
 _tor_parse_ipv4_token:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     xor     eax, eax
     xor     ebx, ebx          ; octet idx
     xor     r12d, r12d        ; cursor
@@ -2812,17 +2481,11 @@ _tor_parse_ipv4_token:
     mov     edx, r13d
     shl     edx, 24
     or      eax, edx
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 .bad:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; _tor_parse_consensus_first_relay — parse first "r " line relay info
@@ -2830,11 +2493,7 @@ _tor_parse_ipv4_token:
 ; returns eax=0 success, -1 failure
 ; ==================================================================
 _tor_parse_consensus_first_relay:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     lea     r12, [tor_dir_body_buf]
     mov     r13d, [tor_dir_body_len]
@@ -2886,8 +2545,7 @@ _tor_parse_consensus_first_relay:
     je      .tok_line_end
     cmp     al, ' '
     je      .tok_sep
-    test    ecx, ecx
-    jnz     .tok_cont
+    er_check_nonzero ecx, .tok_cont
     mov     edx, r9d
     xor     r8d, r8d
     mov     ecx, 1
@@ -2897,8 +2555,7 @@ _tor_parse_consensus_first_relay:
     jmp     .tok_loop
 
 .tok_sep:
-    test    ecx, ecx
-    jz      .tok_skip_space
+    er_check_zero ecx, .tok_skip_space
     ; finalize token at [r15+rdx], len r8d
     cmp     ebx, 1
     je      .tok_identity
@@ -3013,8 +2670,7 @@ _tor_parse_consensus_first_relay:
     lea     rsi, [rel str_flag_guard]
     mov     edx, 5
     call    er_memcmp
-    test    eax, eax
-    jnz     .flags_chk_run
+    er_check_nonzero eax, .flags_chk_run
     or      r11d, 1
 .flags_chk_run:
     cmp     r9d, 7
@@ -3023,8 +2679,7 @@ _tor_parse_consensus_first_relay:
     lea     rsi, [rel str_flag_running]
     mov     edx, 7
     call    er_memcmp
-    test    eax, eax
-    jnz     .flags_chk_valid
+    er_check_nonzero eax, .flags_chk_valid
     or      r11d, 2
 .flags_chk_valid:
     cmp     r9d, 5
@@ -3033,20 +2688,14 @@ _tor_parse_consensus_first_relay:
     lea     rsi, [rel str_flag_valid]
     mov     edx, 5
     call    er_memcmp
-    test    eax, eax
-    jnz     .flags_tok_seek
+    er_check_nonzero eax, .flags_tok_seek
     or      r11d, 4
     jmp     .flags_tok_seek
 .flags_done:
     cmp     r11d, 7
     jne     .flags_skip_line
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .flags_skip_line:
     ; Continue searching from current probe position
@@ -3055,12 +2704,7 @@ _tor_parse_consensus_first_relay:
 
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _tor_print_status — print status message
@@ -3110,8 +2754,7 @@ _tor_print_ip:
     ret
 
 .print_byte:
-    push    rbx
-    push    rdx
+    er_push rbx, rdx
     xor     ecx, ecx
     mov     ebx, 10
 .div_loop:
@@ -3120,8 +2763,7 @@ _tor_print_ip:
     add     edx, '0'
     push    rdx
     inc     ecx
-    test    eax, eax
-    jnz     .div_loop
+    er_check_nonzero eax, .div_loop
 .write_loop:
     pop     rax
     push    rcx
@@ -3131,9 +2773,7 @@ _tor_print_ip:
     pop     rcx
     dec     ecx
     jnz     .write_loop
-    pop     rdx
-    pop     rbx
-    ret
+    er_pop_ret rbx, rdx
 
 ; ==================================================================
 ; er_tor_init — initialize and bootstrap configured Tor role
@@ -3147,10 +2787,7 @@ _tor_print_ip:
 ; Returns: eax = 0 on success, -1 on failure
 ; ==================================================================
 er_fn er_tor_init
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     lea     rdi, [rel str_tor_init]
     call    _tor_print_status
@@ -3168,8 +2805,7 @@ er_fn er_tor_init
     mov     word [tor_dir_stream_id], 0
     mov     word [tor_hs_live_stream_next_id], 1
     call    _tor_guard_material_ready
-    test    eax, eax
-    jz      .circ_fail
+    er_check_zero eax, .circ_fail
 
     ; === Phase 1: Connect to guard relay ===
     lea     rdi, [rel str_tor_connect]
@@ -3235,10 +2871,7 @@ er_fn er_tor_init
 
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .link_fail:
@@ -3246,10 +2879,7 @@ er_fn er_tor_init
     call    _tor_print_status
     mov     eax, -1
     er_err  ERROR_TOR_LINK_FAILED
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .circ_fail:
@@ -3257,10 +2887,7 @@ er_fn er_tor_init
     call    _tor_print_status
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .dir_fail:
@@ -3268,10 +2895,7 @@ er_fn er_tor_init
     call    _tor_print_status
     mov     eax, -1
     er_err  ERROR_TOR_PROTOCOL_ERR
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -3281,8 +2905,7 @@ er_fn er_tor_init
 ; Opens a stream to a test destination and sends HTTP GET.
 ; ==================================================================
 er_fn er_tor_test_fetch
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     ; Check if Tor is initialized
     cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
@@ -3321,22 +2944,19 @@ er_fn er_tor_test_fetch
 
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .stream_fail:
     mov     eax, -1
     er_err  ERROR_TOR_STREAM_FAIL
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .not_ready:
     mov     eax, -1
     er_err  ERROR_TOR_LINK_FAILED
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 SECTION .rodata
@@ -3372,11 +2992,7 @@ SECTION .text
 ; Checks for incoming relay cells and dispatches to streams.
 ; ==================================================================
 er_fn er_tor_poll
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     ; Check if link is established
     cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
@@ -3397,8 +3013,7 @@ er_fn er_tor_poll
     ; Parse received cell
     mov     r12d, [tor_rx_cell]        ; circ_id (4 bytes, v4+)
     movzx   r13d, byte [tor_rx_cell + 4] ; cmd
-    test    r12d, r12d
-    jz      .dispatch_tor_cell
+    er_check_zero r12d, .dispatch_tor_cell
 
     cmp     r13b, LOCAL_CELL_DATA
     je      .handle_local_cell
@@ -3468,11 +3083,7 @@ er_fn er_tor_poll
     jmp     .done
 
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 

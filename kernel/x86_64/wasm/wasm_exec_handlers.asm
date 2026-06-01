@@ -7,8 +7,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     ; Update reader offset (LEB consumed bytes in rsi - body_ptr)
     push    rsi
     sub     rsi, [exec_code_body_ptr]
@@ -22,8 +21,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i64
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -37,8 +35,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     ; Update reader
     push    rsi
     sub     rsi, [exec_code_body_ptr]
@@ -57,8 +54,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -76,8 +72,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -95,8 +90,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -116,8 +110,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -188,8 +181,7 @@
 .op_end:
     ; End of block/function
     mov     rax, [exec_control_len]
-    test    rax, rax
-    jz      .function_return
+    er_check_zero rax, .function_return
     ; Pop control frame
     dec     rax
     mov     [exec_control_len], rax
@@ -221,8 +213,7 @@
     jc      .corrupt_error
     call    exec_stack_pop   ; condition
     jc      .underflow_error
-    test    eax, eax
-    jnz     .if_taken
+    er_check_nonzero eax, .if_taken
     ; Skip to else or end
     ; Need to balance block/loop/if/else/end
     ; Simplified: scan forward counting nested blocks
@@ -250,13 +241,11 @@
     jc      .corrupt_error
     jmp     .skip_if_loop
 .skip_if_else:
-    test    r15d, r15d
-    jz      .if_else_found
+    er_check_zero r15d, .if_else_found
     dec     r15d
     jmp     .skip_if_loop
 .skip_if_end:
-    test    r15d, r15d
-    jz      .if_end_found
+    er_check_zero r15d, .if_end_found
     dec     r15d
     jmp     .skip_if_loop
 .if_else_found:
@@ -280,8 +269,7 @@
 .op_else:
     ; Check control stack top is if_then
     mov     rax, [exec_control_len]
-    test    rax, rax
-    jz      .corrupt_error
+    er_check_zero rax, .corrupt_error
     ; The then arm already ran, so pop the if frame and skip the else arm.
     dec     rax
     mov     [exec_control_len], rax
@@ -306,8 +294,7 @@
     jc      .corrupt_error
     jmp     .skip_else_loop
 .skip_else_end:
-    test    r15d, r15d
-    jz      .dispatch_next
+    er_check_zero r15d, .dispatch_next
     dec     r15d
     jmp     .skip_else_loop
 
@@ -316,8 +303,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -325,16 +311,14 @@
     ; Branch to control
     mov     rdi, rax        ; depth
     call    exec_branch_to_control
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     jmp     .dispatch_next
 
 .op_br_if:
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -343,12 +327,10 @@
     call    exec_stack_pop  ; condition
     jc      .underflow_error
     pop     rcx
-    test    eax, eax
-    jz      .dispatch_next
+    er_check_zero eax, .dispatch_next
     mov     rdi, rcx
     call    exec_branch_to_control
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     jmp     .dispatch_next
 
 .op_call:
@@ -356,8 +338,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -367,8 +348,7 @@
     ; Get param count and result count from function type
     mov     rdi, r15
     call    er_wasm_type_index_for_function
-    test    rdx, rdx
-    jnz     .error_return
+    er_check_nonzero rdx, .error_return
     imul    rax, FUNC_TYPE_SIZE
     mov     r14, [types_buf + rax + FUNC_TYPE_PARAM_COUNT_OFF]   ; param_count
     mov     r13, [types_buf + rax + FUNC_TYPE_RESULT_COUNT_OFF]  ; result_count
@@ -380,8 +360,7 @@
     sub     rsp, 64                 ; buffer for up to 8 * 8 = 64 bytes
     lea     rbx, [rsp]
 .pop_args:
-    test    r12, r12
-    jz      .args_popped
+    er_check_zero r12, .args_popped
     dec     r12
     call    exec_stack_pop
     jc      .underflow_error
@@ -395,8 +374,7 @@
     mov     rdx, r14                ; args count
     call    er_fn_exec
     add     rsp, 64                 ; reclaim buffer
-    test    rdx, rdx
-    jnz     .error_return
+    er_check_nonzero rdx, .error_return
 
     ; Push return value(s) onto eval stack
     mov     rcx, r13                ; result_count
@@ -415,16 +393,13 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32    ; type_index
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rax
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32    ; table_index
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -448,8 +423,7 @@
     sub     rsp, 64                 ; buffer for up to 8 * 8 = 64 bytes
     lea     r11, [rsp]
 .pop_args_indirect:
-    test    rbx, rbx
-    jz      .args_popped_indirect
+    er_check_zero rbx, .args_popped_indirect
     dec     rbx
     call    exec_stack_pop
     jc      .underflow_error
@@ -463,8 +437,7 @@
     mov     rdx, r12                ; args count
     call    er_fn_exec
     add     rsp, 64                 ; reclaim buffer
-    test    rdx, rdx
-    jnz     .error_return
+    er_check_nonzero rdx, .error_return
 
     ; Push return value(s) onto eval stack
     mov     rcx, r13                ; result_count
@@ -484,8 +457,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     mov     r15d, eax       ; target_count
     call    exec_stack_pop
     jc      .underflow_error
@@ -497,8 +469,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -512,8 +483,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -521,8 +491,7 @@
 .br_table_branch:
     mov     rdi, rax        ; branch depth
     call    exec_branch_to_control
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     jmp     .dispatch_next
 
 ; ==================================================================
@@ -550,8 +519,7 @@
     mov     ecx, eax
     call    exec_stack_pop
     jc      .underflow_error
-    test    ecx, ecx
-    jz      .arithmetic_trap
+    er_check_zero ecx, .arithmetic_trap
     cmp     eax, 0x80000000
     jne     .div_s_ok
     cmp     ecx, -1
@@ -572,8 +540,7 @@
     mov     ecx, eax
     call    exec_stack_pop
     jc      .underflow_error
-    test    ecx, ecx
-    jz      .arithmetic_trap
+    er_check_zero ecx, .arithmetic_trap
     er_ok
     div     ecx
     call    exec_stack_push
@@ -586,8 +553,7 @@
     mov     ecx, eax
     call    exec_stack_pop
     jc      .underflow_error
-    test    ecx, ecx
-    jz      .arithmetic_trap
+    er_check_zero ecx, .arithmetic_trap
     mov     r8d, eax        ; save dividend
     ; If dividend was INT_MIN and divisor was -1, remainder = 0
     cmp     r8d, 0x80000000
@@ -611,8 +577,7 @@
     mov     ecx, eax
     call    exec_stack_pop
     jc      .underflow_error
-    test    ecx, ecx
-    jz      .arithmetic_trap
+    er_check_zero ecx, .arithmetic_trap
     er_ok
     div     ecx
     mov     eax, edx
@@ -731,8 +696,7 @@
     mov     rcx, rax
     call    exec_stack_pop
     jc      .underflow_error
-    test    rcx, rcx
-    jz      .arithmetic_trap
+    er_check_zero rcx, .arithmetic_trap
     mov     rdx, rax
     mov     rax, 0x8000000000000000
     cmp     rdx, rax
@@ -756,8 +720,7 @@
     mov     rcx, rax
     call    exec_stack_pop
     jc      .underflow_error
-    test    rcx, rcx
-    jz      .arithmetic_trap
+    er_check_zero rcx, .arithmetic_trap
     xor     rdx, rdx
     div     rcx
     call    exec_stack_push
@@ -770,8 +733,7 @@
     mov     rcx, rax
     call    exec_stack_pop
     jc      .underflow_error
-    test    rcx, rcx
-    jz      .arithmetic_trap
+    er_check_zero rcx, .arithmetic_trap
     mov     r8, rax
     cqo
     idiv    rcx
@@ -793,8 +755,7 @@
     mov     rcx, rax
     call    exec_stack_pop
     jc      .underflow_error
-    test    rcx, rcx
-    jz      .arithmetic_trap
+    er_check_zero rcx, .arithmetic_trap
     xor     rdx, rdx
     div     rcx
     mov     rax, rdx
@@ -1009,8 +970,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -1271,16 +1231,14 @@
     jc      .memory_grow_requires_grant
 
     mov     rax, [memory_max_pages]
-    test    rax, rax
-    jz      .memory_grow_check_bytes
+    er_check_zero rax, .memory_grow_check_bytes
     cmp     r13, rax
     ja      .memory_grow_requires_grant
 
 .memory_grow_check_bytes:
     mov     rdi, r13
     call    er_wasm_pages_to_bytes
-    test    rdx, rdx
-    jnz     .memory_grow_requires_grant
+    er_check_nonzero rdx, .memory_grow_requires_grant
     mov     r12, rax         ; requested bytes
 
     cmp     r12, [runtime_memory_len]
@@ -1303,10 +1261,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -1324,10 +1280,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2350,8 +2304,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2613,8 +2566,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rax             ; segment index
     push    rsi
     sub     rsi, [exec_code_body_ptr]
@@ -2623,10 +2575,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2687,8 +2637,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2715,10 +2664,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2726,10 +2673,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2773,10 +2718,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2815,8 +2758,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     mov     r15, rax            ; element segment index
     push    rsi
     sub     rsi, [exec_code_body_ptr]
@@ -2825,10 +2767,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2875,8 +2815,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
+    er_check_nonzero rdx, .corrupt_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2894,10 +2833,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2905,10 +2842,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2932,8 +2867,7 @@
     jc      .memory_trap
     cmp     rax, [table_min]
     ja      .memory_trap
-    test    r14, r14
-    jz      .dispatch_next
+    er_check_zero r14, .dispatch_next
     cmp     r12, r13
     ja      .table_copy_backward
 .table_copy_forward:
@@ -2960,10 +2894,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -2981,8 +2913,7 @@
     cmp     rax, MAX_TABLE_ENTRIES
     ja      .table_grow_fail
     mov     rcx, [table_max]
-    test    rcx, rcx
-    jz      .table_grow_allowed
+    er_check_zero rcx, .table_grow_allowed
     cmp     rax, rcx
     ja      .table_grow_fail
 .table_grow_allowed:
@@ -3009,10 +2940,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3026,10 +2955,8 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_error
-    test    eax, eax
-    jnz     .memory_trap
+    er_check_nonzero rdx, .corrupt_error
+    er_check_nonzero eax, .memory_trap
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3049,8 +2976,7 @@
     cmp     rax, [table_min]
     ja      .memory_trap
 .table_fill_loop:
-    test    r14, r14
-    jz      .dispatch_next
+    er_check_zero r14, .dispatch_next
     mov     [table_entries + r12 * 8], r13
     inc     r12
     dec     r14
@@ -3114,8 +3040,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3126,8 +3051,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3138,8 +3062,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i64
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3160,11 +3083,9 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32    ; type_index
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     call    er_wasm_read_leb_u32    ; table_index
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3176,8 +3097,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3185,8 +3105,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3198,17 +3117,14 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     mov     r15d, eax      ; target count
 .skip_br_table_loop:
-    test    r15d, r15d
-    jz      .skip_br_table_default
+    er_check_zero r15d, .skip_br_table_default
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3219,8 +3135,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -3231,8 +3146,7 @@
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .skip_error
+    er_check_nonzero rdx, .skip_error
     cmp     eax, 1
     jne     .skip_error
     cmp     byte [rsi], 0x7f
@@ -3254,8 +3168,7 @@
 .function_return:
     ; Collect results from stack based on result count
     mov     rcx, [exec_result_count]
-    test    rcx, rcx
-    jz      .return_done
+    er_check_zero rcx, .return_done
     mov     r15, rcx
     ; Pop results in reverse order
 .return_collect:

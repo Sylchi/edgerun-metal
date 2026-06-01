@@ -4,9 +4,11 @@
 
 %include "x86_64/macros.inc"
 
+%ifndef ER_RT_STD_UNIFIED
 extern er_bytes_nonzero
 extern er_bytes_eql
 extern er_bytes_order
+%endif
 
 %define KEEPER_ID_SIZE     32
 
@@ -62,9 +64,7 @@ er_fn er_stamp_same_keeper
 ; ==================================================================
 ; er_stamp_order(a, b) → -1, 0, or 1
 er_fn er_stamp_order
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
 
@@ -73,8 +73,7 @@ er_fn er_stamp_order
     lea     rdx, [r13 + er_stamp.keeper]
     mov     ecx, KEEPER_ID_SIZE
     call    er_bytes_order
-    test    eax, eax
-    jnz     .ord_done
+    er_check_nonzero eax, .ord_done
 
     mov     rax, [r12 + er_stamp.era]
     mov     rdx, [r13 + er_stamp.era]
@@ -97,29 +96,21 @@ er_fn er_stamp_order
     jb      .ord_less
     ja      .ord_greater
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 .ord_less:
     mov     rax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 .ord_greater:
     mov     eax, 1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 .ord_done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -127,8 +118,7 @@ er_fn er_stamp_order
 ; Shared: er_is_power_of_two(rdi=value) → eax=1 if power of 2
 ; ==================================================================
 er_fn er_is_power_of_two
-    test    rdi, rdi
-    jz      .np2
+    er_check_zero rdi, .np2
     mov     rax, rdi
     dec     rax
     test    rdi, rax
@@ -146,16 +136,13 @@ er_fn er_limits_valid
     mov     r12, rdi
     mov     rdi, [r12 + er_limits.ticks_per_slot]
     call    er_is_power_of_two
-    test    eax, eax
-    jz      .lim_invalid
+    er_check_zero eax, .lim_invalid
     mov     rdi, [r12 + er_limits.slots_per_epoch]
     call    er_is_power_of_two
-    test    eax, eax
-    jz      .lim_invalid
+    er_check_zero eax, .lim_invalid
     mov     rdi, [r12 + er_limits.epochs_per_era]
     call    er_is_power_of_two
-    test    eax, eax
-    jz      .lim_invalid
+    er_check_zero eax, .lim_invalid
     mov     eax, 1
     pop     r12
     er_ok
@@ -170,8 +157,7 @@ er_fn er_limits_valid
 ; er_shift_for_power_of_two(value) → shift or -1
 er_fn er_shift_for_power_of_two
     call    er_is_power_of_two
-    test    eax, eax
-    jz      .nps
+    er_check_zero eax, .nps
     bsf     rax, rdi
     er_ok
     er_ret
@@ -183,21 +169,17 @@ er_fn er_shift_for_power_of_two
 ; ==================================================================
 ; er_clock_init(keeper, limits, out_clock) → bool
 er_fn er_clock_init
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     mov     rbx, rdx
 
     mov     rdi, r12
     call    er_keeper_id_valid
-    test    eax, eax
-    jz      .init_fail
+    er_check_zero eax, .init_fail
     mov     rdi, r13
     call    er_limits_valid
-    test    eax, eax
-    jz      .init_fail
+    er_check_zero eax, .init_fail
 
     lea     rdi, [rbx + er_clock.now + er_stamp.keeper]
     mov     rsi, r12
@@ -216,16 +198,12 @@ er_fn er_clock_init
     mov     [rbx + er_clock.limits + er_limits.epochs_per_era], rax
 
     mov     eax, 1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 .init_fail:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -235,21 +213,15 @@ er_fn er_clock_init
 ; Returns eax = BOUNDARY flags, 0 on error (rdx=1).
 ; ==================================================================
 er_fn er_clock_advance_with
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi            ; stride
 
     lea     rdi, [r12 + er_clock.limits]
     call    er_limits_valid
-    test    eax, eax
-    jz      .fail
-    test    r13, r13
-    jz      .fail
+    er_check_zero eax, .fail
+    er_check_zero r13, .fail
 
     ; ── TICK level ──────────────────────────────────────────────
     mov     rax, [r12 + er_clock.now + er_stamp.tick]
@@ -270,8 +242,7 @@ er_fn er_clock_advance_with
     and     r14, rax
     mov     [r12 + er_clock.now + er_stamp.tick], r14
 
-    test    r8, r8
-    jz      .done_no_boundary
+    er_check_zero r8, .done_no_boundary
 
     ; ── SLOT level ──────────────────────────────────────────────
     mov     rax, [r12 + er_clock.now + er_stamp.slot]
@@ -293,8 +264,7 @@ er_fn er_clock_advance_with
     mov     [r12 + er_clock.now + er_stamp.slot], r14
 
     mov     ebx, BOUNDARY_SLOT
-    test    r9, r9
-    jz      .done
+    er_check_zero r9, .done
 
     ; ── EPOCH level ─────────────────────────────────────────────
     mov     rax, [r12 + er_clock.now + er_stamp.epoch]
@@ -316,8 +286,7 @@ er_fn er_clock_advance_with
     mov     [r12 + er_clock.now + er_stamp.epoch], r14
 
     or      ebx, BOUNDARY_EPOCH
-    test    r10, r10
-    jz      .done
+    er_check_zero r10, .done
 
     ; ── ERA level ───────────────────────────────────────────────
     add     qword [r12 + er_clock.now + er_stamp.era], r10
@@ -325,40 +294,24 @@ er_fn er_clock_advance_with
 
     or      ebx, BOUNDARY_ERA
     mov     eax, ebx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 
 .done:
     mov     eax, ebx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 
 .done_no_boundary:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 
 .fail:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_err  1
     er_ret

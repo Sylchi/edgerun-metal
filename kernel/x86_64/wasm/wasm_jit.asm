@@ -358,12 +358,7 @@ er_wasm_jit_init:
 ; Returns: rax = code_ptr (0 = not compiled), rdx = error
 ; =================================================================+
 er_wasm_jit_compile:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi            ; function_index
 
@@ -409,8 +404,7 @@ er_wasm_jit_compile:
     ; --- get function type to know result count ---
     mov     rdi, r12
     call    er_wasm_type_index_for_function
-    test    rdx, rdx
-    jnz     .type_error
+    er_check_nonzero rdx, .type_error
     mov     r10, rax
     imul    r10, FUNC_TYPE_SIZE
     mov     rax, [rel types_buf + r10 + FUNC_TYPE_RESULT_COUNT_OFF]
@@ -469,15 +463,12 @@ er_wasm_jit_compile:
     je      .unsupported_template
 
     mov     qword [rel jit_template_error], 0
-    push    r13
-    push    r14
+    er_push r13, r14
     call    rax
-    pop     r14
-    pop     r13
+    er_pop  r13, r14
 
     mov     rdx, [rel jit_template_error]
-    test    rdx, rdx
-    jnz     .compile_error
+    er_check_nonzero rdx, .compile_error
 
     inc     r13
     jmp     .compile_loop
@@ -592,13 +583,9 @@ er_wasm_jit_compile:
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
-    push    r11
-    push    r10
-    push    rbx
+    er_push r11, r10, rbx
     call    .emit_store_current_rax_to_tee_local
-    pop     rbx
-    pop     r10
-    pop     r11
+    er_pop  r11, r10, rbx
     call    jit_emit_mov_ecx_eax
     mov     eax, r11d
     call    jit_emit_shr_ecx_imm8
@@ -667,11 +654,9 @@ er_wasm_jit_compile:
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
-    push    r11
-    push    r10
+    er_push r11, r10
     call    .emit_store_current_rax_to_tee_local
-    pop     r10
-    pop     r11
+    er_pop  r11, r10
     call    jit_emit_mov_ecx_eax
     mov     eax, r11d
     call    jit_emit_shl_eax_imm8
@@ -729,11 +714,9 @@ er_wasm_jit_compile:
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
-    push    r10
-    push    r11
+    er_push r10, r11
     call    .emit_store_current_rax_to_tee_local
-    pop     r11
-    pop     r10
+    er_pop  r10, r11
     call    jit_emit_mov_ecx_eax
     mov     eax, r10d
     call    jit_emit_and_ecx_imm32
@@ -991,15 +974,12 @@ er_wasm_jit_compile:
     je      .unsupported_template
 
     mov     qword [rel jit_template_error], 0
-    push    r13
-    push    r14
+    er_push r13, r14
     call    rax
-    pop     r14
-    pop     r13
+    er_pop  r13, r14
 
     mov     rdx, [rel jit_template_error]
-    test    rdx, rdx
-    jnz     .compile_error
+    er_check_nonzero rdx, .compile_error
 
     inc     r13
     jmp     .compile_loop
@@ -1057,8 +1037,7 @@ er_wasm_jit_compile:
     dec     rdx               ; depth of the if label
     ; Patch jz if non-zero
     mov     rcx, [rel jit_state.label_if_jz + rdx * 8]
-    test    rcx, rcx
-    jz      .else_skip_jz
+    er_check_zero rcx, .else_skip_jz
     mov     rax, [rel jit_state.code_ptr]
     sub     rax, rcx
     sub     rax, 4
@@ -1082,8 +1061,7 @@ er_wasm_jit_compile:
 
 .handle_end:
     mov     rdx, [rel jit_state.label_depth]
-    test    rdx, rdx
-    jz      .end_done        ; function-level end — no label handling needed
+    er_check_zero rdx, .end_done
     dec     qword [rel jit_state.label_depth]
     dec     rdx
     ; Check label kind
@@ -1095,8 +1073,7 @@ er_wasm_jit_compile:
     cmp     byte [rel jit_state.label_kinds + rdx], JIT_LABEL_IF
     jne     .end_done
     mov     rcx, [rel jit_state.label_if_jz + rdx * 8]
-    test    rcx, rcx
-    jz      .end_done
+    er_check_zero rcx, .end_done
     mov     rax, [rel jit_state.code_ptr]
     sub     rax, rcx
     sub     rax, 4
@@ -1275,13 +1252,7 @@ er_wasm_jit_compile:
     jmp     .out
 
 .out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Execute a JIT-compiled WASM function
@@ -1291,12 +1262,7 @@ er_wasm_jit_compile:
 ; Returns: rax = result value, rdx = error code
 ; =================================================================+
 er_wasm_jit_exec:
-    er_frame_push
-    push    r15
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_frame_push_regs r15, rbx, r12, r13, r14
 
     mov     r12, rdi            ; function_index
     mov     r13, rsi            ; args ptr
@@ -1310,14 +1276,12 @@ er_wasm_jit_exec:
 
     ; Check if compiled
     mov     rax, [rel jit_table + r12 * 8]
-    test    rax, rax
-    jnz     .exec_compiled
+    er_check_nonzero rax, .exec_compiled
 
     ; Not compiled — try to compile
     mov     rdi, r12
     call    er_wasm_jit_compile
-    test    rdx, rdx
-    jnz     .exec_error         ; compilation failed
+    er_check_nonzero rdx, .exec_error
 
 .exec_compiled:
     mov     rbx, rax            ; code_ptr
@@ -1334,8 +1298,7 @@ er_wasm_jit_exec:
     ; Get function type for param_count
     mov     rdi, r12
     call    er_wasm_type_index_for_function
-    test    rdx, rdx
-    jnz     .exec_error
+    er_check_nonzero rdx, .exec_error
 
     mov     r10, rax
     imul    r10, FUNC_TYPE_SIZE
@@ -1391,8 +1354,7 @@ er_wasm_jit_exec:
     xor     r13d, r13d           ; save error code
 
     ; Restore previous frame only when this call interrupted an active frame.
-    test    r14, r14
-    jz      .exec_clear_top_frame
+    er_check_zero r14, .exec_clear_top_frame
     call    exec_restore_frame_state
     jmp     .exec_return_ok
 
@@ -1415,13 +1377,7 @@ er_wasm_jit_exec:
     er_err  ERROR_UNSUPPORTED
 
 .exec_done:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     r15
-    pop     rbp
-    ret
+    er_pop_ret rbp, r15, rbx, r12, r13, r14
 
 ; ==================================================================
 ; Helper: patch all normal fixups for a given label depth
@@ -1430,8 +1386,7 @@ er_wasm_jit_exec:
 ; =================================================================+
 er_fn jit_patch_fixups_for_label
     mov     rcx, [rel jit_state.fixup_count]
-    test    rcx, rcx
-    jz      .pff_done
+    er_check_zero rcx, .pff_done
 .pff_loop:
     dec     rcx
     cmp     [rel jit_state.fixup_label + rcx * 8], rdx
@@ -1451,7 +1406,6 @@ er_fn jit_patch_fixups_for_label
     mov     [rel jit_state.fixup_offset + rcx * 8], rdi
     dec     qword [rel jit_state.fixup_count]
 .pff_next:
-    test    rcx, rcx
-    jnz     .pff_loop
+    er_check_nonzero rcx, .pff_loop
 .pff_done:
     ret

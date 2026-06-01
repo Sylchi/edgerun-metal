@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const renderer_ir = @import("render/ir.zig");
 const ui = @import("ui/core.zig");
 const virtio = @import("virtio.zig");

@@ -20,12 +20,7 @@ SECTION .text
 ; r8  = color (packed u32 0xAABBGGRR on LE)
 ; ==================================================================
 er_fn sw_fb_fill
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi               ; width
     mov     r13, rsi               ; height
@@ -105,13 +100,7 @@ er_fn sw_fb_fill
     ja      .row_loop_fill
 
 .early_ret_fill:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; void sw_fb_blend_pixel(usize width, usize height, u32 *pixels,
@@ -123,9 +112,7 @@ er_fn sw_fb_fill
 ; Uses (x * 257 + 257) >> 16 in place of div 255.
 ; ==================================================================
 er_fn sw_fb_blend_pixel
-    er_frame_push
-    push    rbx
-    push    r12
+    er_frame_push_regs rbx, r12
 
     mov     r12, rdx               ; save pixels ptr
 
@@ -211,7 +198,4 @@ er_fn sw_fb_blend_pixel
     mov     eax, [rsp - 8]
     mov     [r12 + rbx*4], eax
 
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12

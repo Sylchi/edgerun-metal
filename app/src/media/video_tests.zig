@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const ui = @import("../ui/core.zig");
 const video_module = @import("video.zig");
 const ivf_container = @import("video_ivf.zig");

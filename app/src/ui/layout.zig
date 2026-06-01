@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const geometry = @import("geometry.zig");
 const layout_types = @import("layouts/Types.zig");
 const spacing = @import("theme.zig");

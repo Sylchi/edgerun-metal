@@ -12,8 +12,7 @@ SECTION .text
 
 ; er_webp_is(buf, len) -> eax=1 if RIFF WEBP, else 0
 er_fn er_webp_is
-    test    rdi, rdi
-    jz      .no
+    er_check_zero rdi, .no
     cmp     esi, WEBP_RIFF_HEADER_SIZE
     jb      .no
     cmp     dword [rdi], WEBP_RIFF_SIGNATURE
@@ -30,8 +29,7 @@ er_fn er_webp_is
 
 ; er_webp_validate_riff_len(buf, len) -> eax=len, rdx=error
 er_fn er_webp_validate_riff_len
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, WEBP_RIFF_HEADER_SIZE
     jb      .no_data
     cmp     dword [rdi], WEBP_RIFF_SIGNATURE
@@ -69,10 +67,8 @@ er_fn er_webp_validate_riff_len
 ; desc: type u32, data_offset u32, data_len u32, next_cursor u32
 er_fn er_webp_read_chunk
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13, rcx
     mov     ebx, edx
@@ -121,10 +117,8 @@ er_fn er_webp_read_chunk
 
 ; er_webp_parse_vp8x(data, len, desc) -> eax=WEBP_HDR_SIZE, rdx=error
 er_fn er_webp_parse_vp8x
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     esi, WEBP_VP8X_PAYLOAD_SIZE
     jne     .corrupt
     movzx   eax, byte [rdi + WEBP_VP8X_FLAGS_INDEX]
@@ -157,10 +151,8 @@ er_fn er_webp_parse_vp8x
 
 ; er_webp_parse_vp8l_header(data, len, desc) -> eax=WEBP_HDR_SIZE, rdx=error
 er_fn er_webp_parse_vp8l_header
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     esi, WEBP_VP8L_HEADER_SIZE
     jb      .corrupt
     cmp     byte [rdi], WEBP_VP8L_SIGNATURE
@@ -200,8 +192,7 @@ er_fn er_webp_parse_vp8l_header
 
 ; er_webp_vp8l_bits_read(state, count) -> eax=value, rdx=error
 er_fn er_webp_vp8l_bits_read
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, 24
     ja      .corrupt
     mov     r8d, [rdi + WEBP_VP8L_BITS_LEN]
@@ -250,44 +241,36 @@ er_fn er_webp_vp8l_bits_read
 ; er_webp_vp8l_read_simple_code(state, symbol_count, desc) -> eax=kind, rdx=error
 er_fn er_webp_vp8l_read_simple_code
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     ebx, esi
     mov     r13, rdx
     mov     esi, 1
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, 1
     jne     .unsupported
     mov     rdi, r12
     mov     esi, 1
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r9d, eax
     mov     rdi, r12
     mov     esi, 1
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, WEBP_VP8L_SIMPLE_CODE_SHORT_BITS
-    test    eax, eax
-    jz      .read_symbol0
+    er_check_zero eax, .read_symbol0
     add     esi, WEBP_VP8L_SIMPLE_CODE_SELECTOR_BITS
 .read_symbol0:
     mov     rdi, r12
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, ebx
     jae     .corrupt
     mov     [r13 + WEBP_VP8L_CODE_LOW], eax
-    test    r9d, r9d
-    jnz     .read_symbol1
+    er_check_nonzero r9d, .read_symbol1
     mov     dword [r13 + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_ONE
     mov     dword [r13 + WEBP_VP8L_CODE_HIGH], 0
     mov     eax, WEBP_VP8L_CODE_ONE
@@ -297,8 +280,7 @@ er_fn er_webp_vp8l_read_simple_code
     mov     rdi, r12
     mov     esi, WEBP_VP8L_SIMPLE_CODE_SYMBOL_BITS
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, ebx
     jae     .corrupt
     mov     ecx, [r13 + WEBP_VP8L_CODE_LOW]
@@ -330,10 +312,8 @@ er_fn er_webp_vp8l_read_simple_code
 ; er_webp_vp8l_read_code_symbol(state, desc) -> eax=symbol, rdx=error
 er_fn er_webp_vp8l_read_code_symbol
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     r12, rdi
     mov     rbx, rsi
     cmp     dword [rbx + WEBP_VP8L_CODE_KIND], WEBP_VP8L_CODE_ONE
@@ -342,10 +322,8 @@ er_fn er_webp_vp8l_read_code_symbol
     jne     .corrupt
     mov     esi, 1
     call    er_webp_vp8l_bits_read
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .low
+    er_check_nonzero edx, .done
+    er_check_zero eax, .low
     mov     eax, [rbx + WEBP_VP8L_CODE_HIGH]
     er_ok
     jmp     .done
@@ -372,10 +350,8 @@ er_fn er_webp_vp8l_read_code_symbol
 er_fn er_webp_parse_header
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc WEBP_PARSE_STACK_TOTAL
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -383,13 +359,11 @@ er_fn er_webp_parse_header
     xor     esi, esi
     mov     edx, WEBP_HDR_SIZE
     call    er_webp_memset
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
     mov     rdi, r12
     mov     esi, r13d
     call    er_webp_validate_riff_len
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
     mov     ebx, WEBP_RIFF_HEADER_SIZE
     xor     r15d, r15d
 .loop:
@@ -400,8 +374,7 @@ er_fn er_webp_parse_header
     mov     edx, ebx
     lea     rcx, [rsp + WEBP_PARSE_STACK_CHUNK]
     call    er_webp_read_chunk
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
     mov     ebx, eax
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_TYPE]
     cmp     eax, WEBP_CHUNK_VP8X
@@ -423,12 +396,10 @@ er_fn er_webp_parse_header
     cmp     eax, WEBP_CHUNK_ANMF
     je      .unsupported
     call    er_webp_chunk_is_critical
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     jmp     .loop
 .chunk_vp8x:
-    test    r15d, r15d
-    jnz     .corrupt
+    er_check_nonzero r15d, .corrupt
     cmp     dword [r14 + WEBP_HDR_WIDTH], 0
     jne     .corrupt
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
@@ -436,8 +407,7 @@ er_fn er_webp_parse_header
     mov     esi, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_LEN]
     mov     rdx, r14
     call    er_webp_parse_vp8x
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
     mov     dword [r14 + WEBP_HDR_PRIMARY_TYPE], WEBP_CHUNK_VP8X
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
     mov     [r14 + WEBP_HDR_PRIMARY_OFFSET], eax
@@ -445,8 +415,7 @@ er_fn er_webp_parse_header
     mov     [r14 + WEBP_HDR_PRIMARY_LEN], eax
     jmp     .loop
 .chunk_vp8l:
-    test    r15d, r15d
-    jnz     .corrupt
+    er_check_nonzero r15d, .corrupt
     cmp     dword [r14 + WEBP_HDR_WIDTH], 0
     jne     .have_vp8l_header
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
@@ -454,8 +423,7 @@ er_fn er_webp_parse_header
     mov     esi, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_LEN]
     mov     rdx, r14
     call    er_webp_parse_vp8l_header
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
 .have_vp8l_header:
     mov     dword [r14 + WEBP_HDR_PRIMARY_TYPE], WEBP_CHUNK_VP8L
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
@@ -465,15 +433,13 @@ er_fn er_webp_parse_header
     mov     r15d, 1
     jmp     .loop
 .chunk_vp8:
-    test    r15d, r15d
-    jnz     .corrupt
+    er_check_nonzero r15d, .corrupt
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_LEN]
     lea     rdx, [rsp + WEBP_PARSE_STACK_VP8_HEADER]
     call    er_vp8_parse_key_frame_header
-    test    edx, edx
-    jnz     .done_parse
+    er_check_nonzero edx, .done_parse
     cmp     dword [r14 + WEBP_HDR_WIDTH], 0
     jne     .have_vp8_header
     movzx   eax, word [rsp + WEBP_PARSE_STACK_VP8_HEADER + VP8_KEY_HEADER_WIDTH]
@@ -491,8 +457,7 @@ er_fn er_webp_parse_header
 .chunk_alph:
     cmp     dword [r14 + WEBP_HDR_ALPHA_LEN], 0
     jne     .corrupt
-    test    r15d, r15d
-    jnz     .corrupt
+    er_check_nonzero r15d, .corrupt
     cmp     dword [r14 + WEBP_HDR_WIDTH], 0
     je      .corrupt
     mov     eax, [rsp + WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_DATA_OFFSET]
@@ -501,8 +466,7 @@ er_fn er_webp_parse_header
     mov     [r14 + WEBP_HDR_ALPHA_LEN], eax
     jmp     .loop
 .finish:
-    test    r15d, r15d
-    jz      .corrupt
+    er_check_zero r15d, .corrupt
     cmp     dword [r14 + WEBP_HDR_WIDTH], 0
     je      .corrupt
     cmp     dword [r14 + WEBP_HDR_ALPHA_LEN], 0
@@ -543,12 +507,9 @@ er_fn er_webp_parse_header
 er_fn er_webp_decode_vp8_key_frame
     er_push rbx, r12, r13
     er_stack_alloc WEBP_DECODE_STACK_TOTAL
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     [rsp + WEBP_DECODE_STACK_YUV], rdx
@@ -557,8 +518,7 @@ er_fn er_webp_decode_vp8_key_frame
     mov     [rsp + WEBP_DECODE_STACK_OUT_CAP], r9
     lea     rdx, [rsp + WEBP_DECODE_STACK_HEADER]
     call    er_webp_parse_header
-    test    edx, edx
-    jnz     .done_decode
+    er_check_nonzero edx, .done_decode
     cmp     dword [rsp + WEBP_DECODE_STACK_HEADER + WEBP_HDR_PRIMARY_TYPE], WEBP_CHUNK_VP8
     jne     .unsupported
     mov     eax, [rsp + WEBP_DECODE_STACK_HEADER + WEBP_HDR_PRIMARY_OFFSET]
@@ -569,8 +529,7 @@ er_fn er_webp_decode_vp8_key_frame
     mov     r8, [rsp + WEBP_DECODE_STACK_OUT]
     mov     r9, [rsp + WEBP_DECODE_STACK_OUT_CAP]
     call    er_vp8_decode_key_frame
-    test    edx, edx
-    jnz     .done_decode
+    er_check_nonzero edx, .done_decode
     cmp     dword [rsp + WEBP_DECODE_STACK_HEADER + WEBP_HDR_ALPHA_LEN], 0
     je      .done_decode
     mov     [rsp + WEBP_DECODE_STACK_PIXEL_COUNT], rax
@@ -582,8 +541,7 @@ er_fn er_webp_decode_vp8_key_frame
     mov     r8, [rsp + WEBP_DECODE_STACK_OUT]
     mov     r9, [rsp + WEBP_DECODE_STACK_PIXEL_COUNT]
     call    er_webp_apply_alpha_values
-    test    edx, edx
-    jnz     .done_decode
+    er_check_nonzero edx, .done_decode
     mov     rax, [rsp + WEBP_DECODE_STACK_PIXEL_COUNT]
     jmp     .done_decode
 .invalid_param:
@@ -603,14 +561,10 @@ er_fn er_webp_decode_vp8_key_frame
 ; Supports raw ALPH payloads. Compressed ALPH is VP8L-backed and remains explicit.
 er_fn er_webp_apply_alpha_values
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
-    test    edx, edx
-    jz      .corrupt
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8, .invalid_param
+    er_check_zero edx, .corrupt
+    er_check_zero ecx, .corrupt
     cmp     esi, WEBP_ALPH_HEADER_SIZE
     jb      .corrupt
     mov     r12, rdi
@@ -664,19 +618,15 @@ er_fn er_webp_apply_alpha_values
     je      .predict_vertical
     jmp     .predict_gradient
 .predict_horizontal:
-    test    r11d, r11d
-    jnz     .left_predictor
-    test    r10d, r10d
-    jz      .zero_predictor
+    er_check_nonzero r11d, .left_predictor
+    er_check_zero r10d, .zero_predictor
     mov     edx, ecx
     sub     edx, r13d
     movzx   edx, byte [r15 + rdx * 4 + 3]
     jmp     .add_predictor
 .predict_vertical:
-    test    r10d, r10d
-    jnz     .top_predictor
-    test    r11d, r11d
-    jz      .zero_predictor
+    er_check_nonzero r10d, .top_predictor
+    er_check_zero r11d, .zero_predictor
 .left_predictor:
     mov     edx, ecx
     dec     edx
@@ -688,10 +638,8 @@ er_fn er_webp_apply_alpha_values
     movzx   edx, byte [r15 + rdx * 4 + 3]
     jmp     .add_predictor
 .predict_gradient:
-    test    r11d, r11d
-    jz      .gradient_first_col
-    test    r10d, r10d
-    jz      .left_predictor
+    er_check_zero r11d, .gradient_first_col
+    er_check_zero r10d, .left_predictor
     mov     edx, ecx
     dec     edx
     movzx   edx, byte [r15 + rdx * 4 + 3]
@@ -716,8 +664,7 @@ er_fn er_webp_apply_alpha_values
     mov     edx, 255
     jmp     .add_predictor
 .gradient_first_col:
-    test    r10d, r10d
-    jz      .zero_predictor
+    er_check_zero r10d, .zero_predictor
     jmp     .top_predictor
 .zero_predictor:
     xor     edx, edx
@@ -753,8 +700,7 @@ er_fn er_webp_apply_alpha_values
 
 ; er_webp_memset(dst, value, len) -> eax=1, rdx=error
 er_fn er_webp_memset
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     ecx, edx
     mov     eax, esi
     rep     stosb

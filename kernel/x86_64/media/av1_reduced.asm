@@ -44,12 +44,9 @@ SECTION .text
 er_fn er_av1_stream_decode_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_STREAM_DEC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -67,8 +64,7 @@ er_fn er_av1_stream_decode_frame
     sub     esi, ebx
     lea     rdx, [rsp + AV1_STREAM_DEC_OBU]
     call    er_av1_obu_decode_unit
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_STREAM_DEC_OBU_TOTAL], eax
     movzx   eax, byte [rsp + AV1_STREAM_DEC_OBU + AV1_OBU_DESC_TYPE]
     cmp     eax, AV1_OBU_TYPE_TEMPORAL_DELIMITER
@@ -98,8 +94,7 @@ er_fn er_av1_stream_decode_frame
     mov     esi, [rsp + AV1_STREAM_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     lea     rdx, [r14 + AV1_STREAM_SEQ]
     call    er_av1_sequence_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [r14 + AV1_STREAM_SEQ + AV1_SEQ_REDUCED_STILL], 0
     jne     .unsupported
     mov     byte [r14 + AV1_STREAM_SEEN_SEQUENCE], 1
@@ -117,8 +112,7 @@ er_fn er_av1_stream_decode_frame
     lea     rdx, [r14 + AV1_STREAM_SEQ]
     lea     rcx, [r14 + AV1_STREAM_FRAME]
     call    er_av1_frame_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_STREAM_SEEN_FRAME], 1
     jmp     .next
 
@@ -134,8 +128,7 @@ er_fn er_av1_stream_decode_frame
     lea     rdx, [r14 + AV1_STREAM_SEQ]
     lea     rcx, [r14 + AV1_STREAM_FRAME]
     call    er_av1_frame_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_STREAM_SEEN_FRAME], 1
     cmp     dword [r14 + AV1_STREAM_FRAME + AV1_FRAME_TILE_LEN], 0
     je      .next
@@ -152,8 +145,7 @@ er_fn er_av1_stream_decode_frame
     mov     r8, r15
     mov     r9d, [rsp + AV1_STREAM_DEC_ENTRY_CAP]
     call    er_av1_tile_group_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_STREAM_SEEN_TILE], 1
     jmp     .next
 
@@ -174,8 +166,7 @@ er_fn er_av1_stream_decode_frame
     mov     r8, r15
     mov     r9d, [rsp + AV1_STREAM_DEC_ENTRY_CAP]
     call    er_av1_tile_group_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_STREAM_SEEN_TILE], 1
     jmp     .next
 
@@ -186,8 +177,7 @@ er_fn er_av1_stream_decode_frame
     mov     esi, [rsp + AV1_STREAM_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     lea     rdx, [rsp + AV1_STREAM_DEC_META]
     call    er_av1_metadata_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .next
 
 .padding:
@@ -196,8 +186,7 @@ er_fn er_av1_stream_decode_frame
     add     rdi, rax
     mov     esi, [rsp + AV1_STREAM_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     call    er_av1_padding_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .next
 
 .next:
@@ -236,14 +225,10 @@ er_fn er_av1_stream_decode_frame
 er_fn er_av1_stream_encode_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_STREAM_ENC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     byte [rdx + AV1_SEQ_REDUCED_STILL], 0
     jne     .unsupported
     mov     r12, rdi
@@ -258,8 +243,7 @@ er_fn er_av1_stream_encode_frame
     mov     esi, AV1_STREAM_PAYLOAD_SIZE
     mov     rdx, r14
     call    er_av1_sequence_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_STREAM_ENC_PAYLOAD_LEN], eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -269,8 +253,7 @@ er_fn er_av1_stream_encode_frame
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_STREAM_ENC_PAYLOAD_LEN]
@@ -288,8 +271,7 @@ er_fn er_av1_stream_encode_frame
     mov     rdx, r14
     mov     rcx, r15
     call    er_av1_frame_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_STREAM_ENC_PAYLOAD_LEN], eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -299,8 +281,7 @@ er_fn er_av1_stream_encode_frame
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_STREAM_ENC_PAYLOAD_LEN]
@@ -320,8 +301,7 @@ er_fn er_av1_stream_encode_frame
     xor     eax, eax
     mov     [rdi + AV1_TILE_GROUP_START], eax
     mov     eax, [rsp + AV1_STREAM_ENC_ENTRY_COUNT]
-    test    eax, eax
-    jz      .invalid_param
+    er_check_zero eax, .invalid_param
     dec     eax
     mov     [rdi + AV1_TILE_GROUP_END], eax
     mov     eax, [rsp + AV1_STREAM_ENC_ENTRY_COUNT]
@@ -355,8 +335,7 @@ er_fn er_av1_stream_encode_frame
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -366,8 +345,7 @@ er_fn er_av1_stream_encode_frame
     mov     r8, [rsp + AV1_STREAM_ENC_ENTRIES]
     mov     r9d, [rsp + AV1_STREAM_ENC_ENTRY_COUNT]
     call    er_av1_tile_group_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     er_ok
@@ -398,10 +376,8 @@ er_fn er_av1_stream_encode_frame
 er_fn er_av1_reduced_still_decode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_DEC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -419,8 +395,7 @@ er_fn er_av1_reduced_still_decode
     sub     esi, ebx
     lea     rdx, [rsp + AV1_REDUCED_DEC_OBU]
     call    er_av1_obu_decode_unit
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r15d, eax
     movzx   eax, byte [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_TYPE]
     cmp     eax, AV1_OBU_TYPE_TEMPORAL_DELIMITER
@@ -452,16 +427,14 @@ er_fn er_av1_reduced_still_decode
     jne     .duplicate_sequence
     lea     rdx, [r14 + AV1_REDUCED_SEQ]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_REDUCED_SEEN_SEQUENCE], 1
     jmp     .next
 
 .duplicate_sequence:
     lea     rdx, [rsp + AV1_REDUCED_DEC_SEQ]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   eax, byte [rsp + AV1_REDUCED_DEC_SEQ + AV1_SEQ_PROFILE]
     cmp     al, [r14 + AV1_REDUCED_SEQ + AV1_SEQ_PROFILE]
     jne     .corrupt
@@ -516,8 +489,7 @@ er_fn er_av1_reduced_still_decode
     mov     esi, [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     lea     rdx, [rsp + AV1_REDUCED_DEC_TILE]
     call    er_av1_metadata_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .next
 
 .padding:
@@ -526,8 +498,7 @@ er_fn er_av1_reduced_still_decode
     add     rdi, rax
     mov     esi, [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     call    er_av1_padding_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .next
 
 .frame:
@@ -545,8 +516,7 @@ er_fn er_av1_reduced_still_decode
     lea     rdx, [r14 + AV1_REDUCED_SEQ]
     lea     rcx, [r14 + AV1_REDUCED_FRAME]
     call    er_av1_frame_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     byte [r14 + AV1_REDUCED_SEEN_FRAME], 1
     mov     ecx, [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_PAYLOAD_OFFSET]
     add     ecx, [r14 + AV1_REDUCED_FRAME + AV1_FRAME_TILE_OFFSET]
@@ -554,8 +524,7 @@ er_fn er_av1_reduced_still_decode
     mov     [r14 + AV1_REDUCED_TILE_OFFSET], ecx
     mov     ecx, [r14 + AV1_REDUCED_FRAME + AV1_FRAME_TILE_LEN]
     mov     [r14 + AV1_REDUCED_TILE_LEN], ecx
-    test    ecx, ecx
-    jz      .next
+    er_check_zero ecx, .next
     mov     byte [r14 + AV1_REDUCED_SEEN_TILE], 1
     jmp     .next
 
@@ -569,8 +538,7 @@ er_fn er_av1_reduced_still_decode
     lea     rdx, [r14 + AV1_REDUCED_SEQ]
     lea     rcx, [rsp + AV1_REDUCED_DEC_FRAME]
     call    er_av1_frame_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + AV1_REDUCED_DEC_FRAME + AV1_FRAME_WIDTH]
     cmp     eax, [r14 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
     jne     .corrupt
@@ -602,15 +570,13 @@ er_fn er_av1_reduced_still_decode
     mov     esi, [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_PAYLOAD_LEN]
     lea     rdx, [rsp + AV1_REDUCED_DEC_TILE]
     call    er_av1_tile_group_decode_single
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, [rsp + AV1_REDUCED_DEC_OBU + AV1_OBU_DESC_PAYLOAD_OFFSET]
     add     ecx, ebx
     add     ecx, [rsp + AV1_REDUCED_DEC_TILE + AV1_TILE_GROUP_DATA_OFFSET]
     mov     [r14 + AV1_REDUCED_TILE_OFFSET], ecx
     mov     ecx, [rsp + AV1_REDUCED_DEC_TILE + AV1_TILE_GROUP_DATA_LEN]
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero ecx, .corrupt
     mov     [r14 + AV1_REDUCED_TILE_LEN], ecx
     mov     byte [r14 + AV1_REDUCED_SEEN_TILE], 1
 
@@ -652,16 +618,13 @@ er_fn er_av1_reduced_still_decode
 er_fn er_av1_reduced_still_decode_auto
     er_push rbx, r12, r13, r14
     er_stack_alloc AV1_IVF_HDR_SIZE + AV1_IVF_FRAME_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     call    er_av1_ivf_is
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, 1
     je      .ivf
     mov     rdi, r12
@@ -674,33 +637,28 @@ er_fn er_av1_reduced_still_decode_auto
     mov     esi, r13d
     mov     rdx, rsp
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_ivf_validate_frame_count
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_ivf_validate_timestamps
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     edx, AV1_IVF_HEADER_SIZE
     lea     rcx, [rsp + AV1_IVF_HDR_SIZE]
     call    er_av1_ivf_read_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [rsp + AV1_IVF_HDR_SIZE + AV1_IVF_FRAME_PAYLOAD_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + AV1_IVF_HDR_SIZE + AV1_IVF_FRAME_PAYLOAD_LEN]
     mov     rdx, r14
     call    er_av1_reduced_still_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   ecx, word [rsp + AV1_IVF_HDR_WIDTH]
     cmp     [r14 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH], ecx
     jne     .corrupt
@@ -732,10 +690,8 @@ er_fn er_av1_reduced_still_decode_auto
 er_fn er_av1_reduced_still_decode_ivf_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_IVF_FRAME_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
@@ -743,34 +699,29 @@ er_fn er_av1_reduced_still_decode_ivf_frame
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_ivf_validate_frame_count
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_ivf_validate_timestamps
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + AV1_REDUCED_IVF_FRAME_HDR]
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     edx, r14d
     lea     rcx, [rsp + AV1_REDUCED_IVF_FRAME_DESC]
     call    er_av1_ivf_seek_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [rsp + AV1_REDUCED_IVF_FRAME_DESC + AV1_IVF_FRAME_PAYLOAD_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + AV1_REDUCED_IVF_FRAME_DESC + AV1_IVF_FRAME_PAYLOAD_LEN]
     mov     rdx, r15
     call    er_av1_reduced_still_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   ecx, word [rsp + AV1_REDUCED_IVF_FRAME_HDR + AV1_IVF_HDR_WIDTH]
     cmp     [r15 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH], ecx
     jne     .corrupt
@@ -800,12 +751,9 @@ er_fn er_av1_reduced_still_decode_ivf_frame
 ; Returns eax=next IVF cursor after the selected frame.
 er_fn er_av1_reduced_still_decode_ivf_frame_raw420
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -816,8 +764,7 @@ er_fn er_av1_reduced_still_decode_ivf_frame_raw420
     mov     edx, ebx
     mov     rcx, r15
     call    er_av1_reduced_still_decode_ivf_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [r15 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
     cmp     [r14 + AV1_IMAGE_WIDTH], eax
@@ -827,8 +774,7 @@ er_fn er_av1_reduced_still_decode_ivf_frame_raw420
     jne     .corrupt
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r15 + AV1_REDUCED_TILE_LEN]
     jne     .corrupt
     mov     eax, [r15 + AV1_REDUCED_TILE_OFFSET]
@@ -836,8 +782,7 @@ er_fn er_av1_reduced_still_decode_ivf_frame_raw420
     mov     esi, [r15 + AV1_REDUCED_TILE_LEN]
     mov     rdx, r14
     call    er_av1_tile_raw420_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -860,10 +805,8 @@ er_fn er_av1_reduced_still_decode_ivf_frame_raw420
 er_fn er_av1_reduced_still_decode_raw_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_RAW_SEEK_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
@@ -880,8 +823,7 @@ er_fn er_av1_reduced_still_decode_raw_frame
     sub     esi, ebx
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEEK_OBU]
     call    er_av1_obu_decode_unit
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, eax
     movzx   eax, byte [rsp + AV1_REDUCED_RAW_SEEK_OBU + AV1_OBU_DESC_TYPE]
     cmp     eax, AV1_OBU_TYPE_TEMPORAL_DELIMITER
@@ -920,8 +862,7 @@ er_fn er_av1_reduced_still_decode_raw_frame
     lea     rdi, [r12 + rax]
     mov     rdx, r15
     call    er_av1_reduced_still_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, [rsp + AV1_REDUCED_RAW_SEEK_SEG_START]
     add     [r15 + AV1_REDUCED_TILE_OFFSET], ecx
     mov     eax, ebx
@@ -949,19 +890,15 @@ er_fn er_av1_reduced_still_decode_raw_frame
 ; Returns eax=next raw cursor after the selected frame.
 er_fn er_av1_reduced_still_decode_raw_frame_raw420
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13, rcx
     mov     r14, r8
     mov     rcx, r14
     call    er_av1_reduced_still_decode_raw_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [r14 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
     cmp     [r13 + AV1_IMAGE_WIDTH], eax
@@ -971,8 +908,7 @@ er_fn er_av1_reduced_still_decode_raw_frame_raw420
     jne     .corrupt
     mov     rdi, r13
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r14 + AV1_REDUCED_TILE_LEN]
     jne     .corrupt
     mov     eax, [r14 + AV1_REDUCED_TILE_OFFSET]
@@ -980,8 +916,7 @@ er_fn er_av1_reduced_still_decode_raw_frame_raw420
     mov     esi, [r14 + AV1_REDUCED_TILE_LEN]
     mov     rdx, r13
     call    er_av1_tile_raw420_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -1002,20 +937,17 @@ er_fn er_av1_reduced_still_decode_raw_frame_raw420
 er_fn er_av1_reduced_still_info_raw420
     er_push rbx, r12
     er_stack_alloc AV1_REDUCED_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     mov     rdx, rsp
     call    er_av1_reduced_still_decode_auto
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, rsp
     mov     rsi, r12
     mov     edx, ebx
     call    fill_info_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -1033,20 +965,17 @@ er_fn er_av1_reduced_still_info_raw420
 er_fn er_av1_reduced_still_info_raw_frame_raw420
     er_push rbx, r12
     er_stack_alloc AV1_REDUCED_SIZE
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rcx
     mov     rcx, rsp
     call    er_av1_reduced_still_decode_raw_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, rsp
     mov     rsi, r12
     mov     edx, ebx
     call    fill_info_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -1064,20 +993,17 @@ er_fn er_av1_reduced_still_info_raw_frame_raw420
 er_fn er_av1_reduced_still_info_ivf_frame_raw420
     er_push rbx, r12
     er_stack_alloc AV1_REDUCED_SIZE
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rcx
     mov     rcx, rsp
     call    er_av1_reduced_still_decode_ivf_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, rsp
     mov     rsi, r12
     mov     edx, ebx
     call    fill_info_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -1095,10 +1021,8 @@ er_fn er_av1_reduced_still_info_ivf_frame_raw420
 er_fn er_av1_reduced_still_encode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_ENC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, r8
@@ -1108,8 +1032,7 @@ er_fn er_av1_reduced_still_encode
     lea     rdi, [rsp + AV1_REDUCED_ENC_PAYLOAD]
     mov     esi, 16
     call    er_av1_sequence_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_ENC_SEQ_LEN], eax
 
     lea     rdi, [r12 + rbx]
@@ -1120,8 +1043,7 @@ er_fn er_av1_reduced_still_encode
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_REDUCED_ENC_SEQ_LEN]
@@ -1138,8 +1060,7 @@ er_fn er_av1_reduced_still_encode
     mov     esi, [rsp + AV1_REDUCED_ENC_SEQ_LEN]
     lea     rdx, [rsp + AV1_REDUCED_ENC_SEQ_DESC]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     lea     rdi, [rsp + AV1_REDUCED_ENC_PAYLOAD]
     mov     esi, 16
@@ -1147,8 +1068,7 @@ er_fn er_av1_reduced_still_encode
     mov     ecx, [rsp + AV1_REDUCED_ENC_SEQ_DESC + AV1_SEQ_MAX_WIDTH]
     mov     r8d, [rsp + AV1_REDUCED_ENC_SEQ_DESC + AV1_SEQ_MAX_HEIGHT]
     call    er_av1_frame_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_ENC_FRAME_LEN], eax
 
     lea     rdi, [r12 + rbx]
@@ -1160,8 +1080,7 @@ er_fn er_av1_reduced_still_encode
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_REDUCED_ENC_FRAME_LEN]
@@ -1181,8 +1100,7 @@ er_fn er_av1_reduced_still_encode
     mov     rdx, r14
     mov     ecx, r15d
     call    er_av1_tile_group_encode_single
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     er_ok
@@ -1206,10 +1124,8 @@ er_fn er_av1_reduced_still_encode
 er_fn er_av1_reduced_still_encode_split
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_ENC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, r8
@@ -1219,8 +1135,7 @@ er_fn er_av1_reduced_still_encode_split
     lea     rdi, [rsp + AV1_REDUCED_ENC_PAYLOAD]
     mov     esi, 16
     call    er_av1_sequence_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_ENC_SEQ_LEN], eax
 
     lea     rdi, [r12 + rbx]
@@ -1231,8 +1146,7 @@ er_fn er_av1_reduced_still_encode_split
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_REDUCED_ENC_SEQ_LEN]
@@ -1249,8 +1163,7 @@ er_fn er_av1_reduced_still_encode_split
     mov     esi, [rsp + AV1_REDUCED_ENC_SEQ_LEN]
     lea     rdx, [rsp + AV1_REDUCED_ENC_SEQ_DESC]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     lea     rdi, [rsp + AV1_REDUCED_ENC_PAYLOAD]
     mov     esi, 16
@@ -1258,8 +1171,7 @@ er_fn er_av1_reduced_still_encode_split
     mov     ecx, [rsp + AV1_REDUCED_ENC_SEQ_DESC + AV1_SEQ_MAX_WIDTH]
     mov     r8d, [rsp + AV1_REDUCED_ENC_SEQ_DESC + AV1_SEQ_MAX_HEIGHT]
     call    er_av1_frame_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_ENC_FRAME_LEN], eax
 
     lea     rdi, [r12 + rbx]
@@ -1270,8 +1182,7 @@ er_fn er_av1_reduced_still_encode_split
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     add     eax, [rsp + AV1_REDUCED_ENC_FRAME_LEN]
@@ -1292,8 +1203,7 @@ er_fn er_av1_reduced_still_encode_split
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -1301,8 +1211,7 @@ er_fn er_av1_reduced_still_encode_split
     mov     rdx, r14
     mov     ecx, r15d
     call    er_av1_tile_group_encode_single
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     mov     eax, ebx
     er_ok
@@ -1326,14 +1235,10 @@ er_fn er_av1_reduced_still_encode_split
 er_fn er_av1_reduced_still_encode_ivf
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_IVF_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
-    test    edx, edx
-    jz      .invalid_param
-    test    ecx, ecx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8, .invalid_param
+    er_check_zero edx, .invalid_param
+    er_check_zero ecx, .invalid_param
     cmp     edx, AV1_IVF_DIMENSION_MAX
     ja      .corrupt
     cmp     ecx, AV1_IVF_DIMENSION_MAX
@@ -1360,8 +1265,7 @@ er_fn er_av1_reduced_still_encode_ivf
     mov     esi, r13d
     lea     rdx, [rsp + AV1_REDUCED_IVF_DESC]
     call    er_av1_ivf_encode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     lea     rdi, [r12 + AV1_IVF_HEADER_SIZE + AV1_IVF_FRAME_HEADER_SIZE]
     mov     esi, r13d
@@ -1371,8 +1275,7 @@ er_fn er_av1_reduced_still_encode_ivf
     mov     r8, r14
     mov     r9d, r15d
     call    er_av1_reduced_still_encode_split
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_IVF_PAYLOAD_LEN], eax
 
     lea     rdi, [r12 + AV1_IVF_HEADER_SIZE]
@@ -1382,8 +1285,7 @@ er_fn er_av1_reduced_still_encode_ivf
     mov     ecx, [rsp + AV1_REDUCED_IVF_PAYLOAD_LEN]
     mov     r8d, AV1_IVF_FIRST_TIMESTAMP
     call    er_av1_ivf_write_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, AV1_IVF_HEADER_SIZE
     er_ok
     jmp     .done
@@ -1409,10 +1311,8 @@ er_fn er_av1_reduced_still_encode_ivf
 er_fn er_av1_reduced_still_encode_raw420
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_RAW_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1430,8 +1330,7 @@ er_fn er_av1_reduced_still_encode_raw420
 
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_TILE_LEN], eax
     xor     r15d, r15d
 
@@ -1441,8 +1340,7 @@ er_fn er_av1_reduced_still_encode_raw420
     mov     edx, [r14 + AV1_IMAGE_WIDTH]
     mov     ecx, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_sequence_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_SEQ_LEN], eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
@@ -1452,8 +1350,7 @@ er_fn er_av1_reduced_still_encode_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
@@ -1470,8 +1367,7 @@ er_fn er_av1_reduced_still_encode_raw420
     mov     esi, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     lea     rdi, [rsp + AV1_REDUCED_RAW_PAYLOAD]
     mov     esi, 16
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
@@ -1479,8 +1375,7 @@ er_fn er_av1_reduced_still_encode_raw420
     mov     ecx, [r14 + AV1_IMAGE_WIDTH]
     mov     r8d, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_frame_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_FRAME_LEN], eax
 
     lea     rdi, [r12 + r15]
@@ -1491,8 +1386,7 @@ er_fn er_av1_reduced_still_encode_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_FRAME_LEN]
@@ -1513,16 +1407,14 @@ er_fn er_av1_reduced_still_encode_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
     sub     esi, r15d
     mov     rdx, [rsp + AV1_REDUCED_RAW_IMAGE_PTR]
     call    er_av1_tile_raw420_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     er_ok
@@ -1545,10 +1437,8 @@ er_fn er_av1_reduced_still_encode_raw420
 er_fn er_av1_reduced_still_encode_raw420_redundant
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_RAW_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1565,8 +1455,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     je      .invalid_param
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_TILE_LEN], eax
     xor     r15d, r15d
 
@@ -1576,8 +1465,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     mov     edx, [r14 + AV1_IMAGE_WIDTH]
     mov     ecx, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_sequence_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_SEQ_LEN], eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
@@ -1587,8 +1475,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
@@ -1605,8 +1492,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     mov     esi, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     lea     rdi, [rsp + AV1_REDUCED_RAW_PAYLOAD]
     mov     esi, 16
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
@@ -1614,8 +1500,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     mov     ecx, [r14 + AV1_IMAGE_WIDTH]
     mov     r8d, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_frame_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_FRAME_LEN], eax
 
     lea     rdi, [r12 + r15]
@@ -1626,8 +1511,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_FRAME_LEN]
@@ -1648,8 +1532,7 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_FRAME_LEN]
@@ -1670,16 +1553,14 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
     sub     esi, r15d
     mov     rdx, [rsp + AV1_REDUCED_RAW_IMAGE_PTR]
     call    er_av1_tile_raw420_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     er_ok
@@ -1701,30 +1582,25 @@ er_fn er_av1_reduced_still_encode_raw420_redundant
 ; rdi=out, esi=cap, rdx=image_desc. Returns eax=bytes_written, rdx=error.
 er_fn er_av1_reduced_still_encode_raw420_delimited
 	er_push rbx, r12, r13, r14
-	test    rdi, rdi
-	jz      .invalid_param
-	test    rdx, rdx
-	jz      .invalid_param
+	er_check_zero rdi, .invalid_param
+	er_check_zero rdx, .invalid_param
 	mov     r12, rdi
 	mov     r13d, esi
 	mov     r14, rdx
 	mov     rdi, r14
 	call    er_av1_tile_raw420_validate
-	test    edx, edx
-	jnz     .done
+	er_check_nonzero edx, .done
 	mov     rdi, r12
 	mov     esi, r13d
 	call    er_av1_obu_encode_temporal_delimiter
-	test    edx, edx
-	jnz     .done
+	er_check_nonzero edx, .done
 	mov     ebx, eax
 	lea     rdi, [r12 + rbx]
 	mov     esi, r13d
 	sub     esi, ebx
 	mov     rdx, r14
 	call    er_av1_reduced_still_encode_raw420
-	test    edx, edx
-	jnz     .done
+	er_check_nonzero edx, .done
 	add     eax, ebx
 	er_ok
 	jmp     .done
@@ -1742,14 +1618,10 @@ er_fn er_av1_reduced_still_encode_raw420_delimited
 er_fn er_av1_reduced_still_encode_raw420_with_metadata
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r9d, r9d
-    jz      .metadata_checked
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r9d, .metadata_checked
+    er_check_zero r8, .invalid_param
 .metadata_checked:
     mov     r12, rdi
     mov     r13d, esi
@@ -1759,13 +1631,11 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata
     mov     [rsp + 8], r8
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_obu_encode_temporal_delimiter
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -1774,8 +1644,7 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata
     mov     rcx, [rsp + 8]
     mov     r8d, [rsp + 4]
     call    er_av1_obu_encode_metadata
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     jc      .corrupt
     lea     rdi, [r12 + rbx]
@@ -1783,8 +1652,7 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata
     sub     esi, ebx
     mov     rdx, r14
     call    er_av1_reduced_still_encode_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, ebx
     er_ok
     jmp     .done
@@ -1807,14 +1675,10 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata
 er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 24
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r9d, r9d
-    jz      .metadata_checked
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r9d, .metadata_checked
+    er_check_zero r8, .invalid_param
 .metadata_checked:
     mov     r12, rdi
     mov     r13d, esi
@@ -1825,13 +1689,11 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
     mov     [rsp + 16], r10d
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     call    er_av1_obu_encode_temporal_delimiter
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -1840,8 +1702,7 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
     mov     rcx, [rsp + 8]
     mov     r8d, [rsp + 4]
     call    er_av1_obu_encode_metadata
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     jc      .corrupt
     lea     rdi, [r12 + rbx]
@@ -1849,8 +1710,7 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
     sub     esi, ebx
     mov     edx, [rsp + 16]
     call    er_av1_obu_encode_padding
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
     jc      .corrupt
     lea     rdi, [r12 + rbx]
@@ -1858,8 +1718,7 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
     sub     esi, ebx
     mov     rdx, r14
     call    er_av1_reduced_still_encode_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, ebx
     er_ok
     jmp     .done
@@ -1880,10 +1739,8 @@ er_fn er_av1_reduced_still_encode_raw420_with_metadata_padding
 ; rdi=buf, esi=cap, edx=cursor, rcx=image_desc. Returns eax=next_cursor.
 er_fn er_av1_reduced_still_append_raw420
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -1895,8 +1752,7 @@ er_fn er_av1_reduced_still_append_raw420
     sub     esi, ebx
     mov     rdx, r14
     call    er_av1_reduced_still_encode_raw420_delimited
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, ebx
     jc      .corrupt
     er_ok
@@ -1918,10 +1774,8 @@ er_fn er_av1_reduced_still_append_raw420
 er_fn er_av1_reduced_still_encode_ivf_raw420
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_RAW_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1949,8 +1803,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     mov     r14, [rsp + AV1_REDUCED_RAW_IMAGE_PTR]
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_TILE_LEN], eax
 
     mov     dword [rsp + AV1_REDUCED_RAW_IVF_DESC + AV1_IVF_HDR_CODEC], AV1_IVF_CODEC_AV01
@@ -1966,8 +1819,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     mov     esi, r13d
     lea     rdx, [rsp + AV1_REDUCED_RAW_IVF_DESC]
     call    er_av1_ivf_encode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r15d, AV1_IVF_HEADER_SIZE + AV1_IVF_FRAME_HEADER_SIZE
 
     lea     rdi, [rsp + AV1_REDUCED_RAW_PAYLOAD]
@@ -1976,8 +1828,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     mov     edx, [r14 + AV1_IMAGE_WIDTH]
     mov     ecx, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_sequence_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_SEQ_LEN], eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
@@ -1987,8 +1838,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
@@ -2005,8 +1855,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     mov     esi, [rsp + AV1_REDUCED_RAW_SEQ_LEN]
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
     call    er_av1_sequence_decode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     lea     rdi, [rsp + AV1_REDUCED_RAW_PAYLOAD]
     mov     esi, 16
     lea     rdx, [rsp + AV1_REDUCED_RAW_SEQ_DESC]
@@ -2014,8 +1863,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     mov     ecx, [r14 + AV1_IMAGE_WIDTH]
     mov     r8d, [r14 + AV1_IMAGE_HEIGHT]
     call    er_av1_frame_encode_reduced_still
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + AV1_REDUCED_RAW_FRAME_LEN], eax
 
     lea     rdi, [r12 + r15]
@@ -2026,8 +1874,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     mov     eax, r15d
     add     eax, [rsp + AV1_REDUCED_RAW_FRAME_LEN]
@@ -2048,16 +1895,14 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
     lea     rdi, [r12 + r15]
     mov     esi, r13d
     sub     esi, r15d
     mov     rdx, [rsp + AV1_REDUCED_RAW_IMAGE_PTR]
     call    er_av1_tile_raw420_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     r15d, eax
 
     lea     rdi, [r12 + AV1_IVF_HEADER_SIZE]
@@ -2068,8 +1913,7 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
     sub     ecx, AV1_IVF_HEADER_SIZE + AV1_IVF_FRAME_HEADER_SIZE
     mov     r8d, AV1_IVF_FIRST_TIMESTAMP
     call    er_av1_ivf_write_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, AV1_IVF_HEADER_SIZE
     er_ok
     jmp     .done
@@ -2096,16 +1940,11 @@ er_fn er_av1_reduced_still_encode_ivf_raw420
 er_fn er_av1_reduced_still_begin_ivf_raw420
     er_push rbx, r12
     er_stack_alloc AV1_REDUCED_APPEND_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    edx, edx
-    jz      .invalid_param
-    test    ecx, ecx
-    jz      .invalid_param
-    test    r8d, r8d
-    jz      .invalid_param
-    test    r9d, r9d
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero edx, .invalid_param
+    er_check_zero ecx, .invalid_param
+    er_check_zero r8d, .invalid_param
+    er_check_zero r9d, .invalid_param
     cmp     edx, AV1_IVF_DIMENSION_MAX
     ja      .corrupt
     cmp     ecx, AV1_IVF_DIMENSION_MAX
@@ -2122,8 +1961,7 @@ er_fn er_av1_reduced_still_begin_ivf_raw420
     mov     esi, ebx
     lea     rdx, [rsp + AV1_REDUCED_APPEND_IVF_DESC]
     call    er_av1_ivf_encode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, AV1_IVF_HEADER_SIZE
     er_ok
     jmp     .done
@@ -2146,10 +1984,8 @@ er_fn er_av1_reduced_still_begin_ivf_raw420
 er_fn er_av1_reduced_still_append_ivf_raw420
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_REDUCED_APPEND_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -2163,18 +1999,15 @@ er_fn er_av1_reduced_still_append_ivf_raw420
     mov     esi, r13d
     lea     rdx, [rsp + AV1_REDUCED_APPEND_IVF_DESC]
     call    er_av1_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, ebx
     call    er_av1_ivf_validate_frame_count
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, ebx
     call    er_av1_ivf_validate_timestamps
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     dword [rsp + AV1_REDUCED_APPEND_IVF_DESC + AV1_IVF_HDR_FRAME_COUNT], 0
     je      .check_dimensions
     mov     rdi, r12
@@ -2183,8 +2016,7 @@ er_fn er_av1_reduced_still_append_ivf_raw420
     dec     edx
     lea     rcx, [rsp + AV1_REDUCED_APPEND_FRAME_DESC]
     call    er_av1_ivf_seek_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r15, [rsp + AV1_REDUCED_APPEND_FRAME_DESC + AV1_IVF_FRAME_TIMESTAMP]
     jbe     .corrupt
 .check_dimensions:
@@ -2196,8 +2028,7 @@ er_fn er_av1_reduced_still_append_ivf_raw420
     jne     .corrupt
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, r13d
     sub     eax, ebx
     cmp     eax, AV1_IVF_FRAME_HEADER_SIZE
@@ -2208,8 +2039,7 @@ er_fn er_av1_reduced_still_append_ivf_raw420
     sub     esi, AV1_IVF_FRAME_HEADER_SIZE
     mov     rdx, r14
     call    er_av1_reduced_still_encode_raw420
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r13d
@@ -2217,8 +2047,7 @@ er_fn er_av1_reduced_still_append_ivf_raw420
     lea     rdx, [r12 + rbx + AV1_IVF_FRAME_HEADER_SIZE]
     mov     r8, r15
     call    er_av1_ivf_write_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, ebx
     jc      .corrupt
     mov     ecx, [r12 + AV1_IVF_FILE_FRAME_COUNT]
@@ -2250,8 +2079,7 @@ er_fn er_av1_reduced_still_append_ivf_raw420
 er_fn er_av1_reduced_still_count_raw_frames
     er_push rbx, r12, r13
     er_stack_alloc AV1_REDUCED_RAW_COUNT_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     xor     ebx, ebx
@@ -2261,8 +2089,7 @@ er_fn er_av1_reduced_still_count_raw_frames
     mov     edx, ebx
     lea     rcx, [rsp + AV1_REDUCED_RAW_COUNT_DESC]
     call    er_av1_reduced_still_decode_raw_frame
-    test    edx, edx
-    jz      .next
+    er_check_zero edx, .next
     cmp     edx, ERROR_NO_DATA
     jne     .done
     mov     eax, ebx
@@ -2290,17 +2117,14 @@ er_fn er_av1_reduced_still_count_raw_frames
 ; rdi=stream, esi=len, rdx=reduced_desc. Returns eax=bytes_consumed.
 er_fn er_av1_reduced_still_validate_raw420
     er_push rbx, r12
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     call    er_av1_reduced_still_decode_auto
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, r12
     call    validate_reduced_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2317,17 +2141,14 @@ er_fn er_av1_reduced_still_validate_raw420
 ; rdi=stream, esi=len, edx=frame_index, rcx=reduced_desc. Returns eax=next raw cursor.
 er_fn er_av1_reduced_still_validate_raw_frame_raw420
     er_push rbx, r12
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rcx
     call    er_av1_reduced_still_decode_raw_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, r12
     call    validate_reduced_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2344,17 +2165,14 @@ er_fn er_av1_reduced_still_validate_raw_frame_raw420
 ; rdi=stream, esi=len, edx=frame_index, rcx=reduced_desc. Returns eax=next IVF cursor.
 er_fn er_av1_reduced_still_validate_ivf_frame_raw420
     er_push rbx, r12
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rcx
     call    er_av1_reduced_still_decode_ivf_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, r12
     call    validate_reduced_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2371,19 +2189,15 @@ er_fn er_av1_reduced_still_validate_ivf_frame_raw420
 ; rdi=stream, esi=len, rdx=image_desc, rcx=reduced_desc. Returns eax=bytes_consumed.
 er_fn er_av1_reduced_still_decode_raw420
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     r14, rcx
     mov     rdx, r14
     call    er_av1_reduced_still_decode_auto
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [r14 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
     cmp     [r13 + AV1_IMAGE_WIDTH], eax
@@ -2393,8 +2207,7 @@ er_fn er_av1_reduced_still_decode_raw420
     jne     .corrupt
     mov     rdi, r13
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r14 + AV1_REDUCED_TILE_LEN]
     jne     .corrupt
     mov     eax, [r14 + AV1_REDUCED_TILE_OFFSET]
@@ -2402,8 +2215,7 @@ er_fn er_av1_reduced_still_decode_raw420
     mov     esi, [r14 + AV1_REDUCED_TILE_LEN]
     mov     rdx, r13
     call    er_av1_tile_raw420_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2419,8 +2231,7 @@ er_fn er_av1_reduced_still_decode_raw420
     er_ret
 
 copy_bytes:
-    test    ecx, ecx
-    jz      .done
+    er_check_zero ecx, .done
 .loop:
     mov     al, [rsi]
     mov     [rdi], al
@@ -2452,10 +2263,8 @@ fill_tile_info_from_frame:
 
 fill_info_raw420:
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     mov     ebx, edx
@@ -2466,8 +2275,7 @@ fill_info_raw420:
     mov     [r13 + AV1_INFO_HEIGHT], eax
     mov     esi, eax
     call    er_av1_tile_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r12 + AV1_REDUCED_TILE_LEN]
     jne     .corrupt
     mov     [r13 + AV1_INFO_RAW420_LEN], eax
@@ -2491,8 +2299,7 @@ fill_info_raw420:
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
-    er_pop  rbx, r12, r13
-    ret
+    er_pop_ret rbx, r12, r13
 
 validate_reduced_raw420_size:
     er_push rbx
@@ -2500,8 +2307,7 @@ validate_reduced_raw420_size:
     mov     edi, [rbx + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
     mov     esi, [rbx + AV1_REDUCED_FRAME + AV1_FRAME_HEIGHT]
     call    er_av1_tile_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [rbx + AV1_REDUCED_TILE_LEN]
     jne     .corrupt
     er_ok
@@ -2510,5 +2316,4 @@ validate_reduced_raw420_size:
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
-    er_pop  rbx
-    ret
+    er_pop_ret rbx

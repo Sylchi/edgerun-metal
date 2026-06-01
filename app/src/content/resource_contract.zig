@@ -329,36 +329,33 @@ fn testSignature() tpm_verifier.Signature {
 }
 
 test "resource contract installs once and answers exclusive ownership by tick" {
-    const testing = @import("std").testing;
     var slots: [1]Contract = undefined;
     var schedule = Schedule.init(&slots);
     const contract = Contract.init(chunk("contract-a"), chunk("app-a"), chunk("mem-bank-a"), .memory, 10, 20, Bounds.init(0, 4096), Pattern.exclusive());
 
     try schedule.install(contract);
 
-    try testing.expect(schedule.ownerAt(chunk("mem-bank-a"), 9) == null);
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("mem-bank-a"), 10).?.body());
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("mem-bank-a"), 19).?.body());
-    try testing.expect(schedule.ownerAt(chunk("mem-bank-a"), 20) == null);
+    if (schedule.ownerAt(chunk("mem-bank-a"), 9) != null) return error.TestExpectedNull;
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("mem-bank-a"), 10).?.body())) return error.TestExpectedEqual;
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("mem-bank-a"), 19).?.body())) return error.TestExpectedEqual;
+    if (schedule.ownerAt(chunk("mem-bank-a"), 20) != null) return error.TestExpectedNull;
 }
 
 test "resource contract supports periodic cpu ownership without signatures per tick" {
-    const testing = @import("std").testing;
     var slots: [1]Contract = undefined;
     var schedule = Schedule.init(&slots);
     const contract = Contract.init(chunk("contract-cpu"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 100, 120, Bounds.init(0, 1), Pattern.periodic(2, 5));
 
     try schedule.install(contract);
 
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 100).?.body());
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 101).?.body());
-    try testing.expect(schedule.ownerAt(chunk("cpu-slot-0"), 102) == null);
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 105).?.body());
-    try testing.expect(schedule.ownerAt(chunk("cpu-slot-0"), 120) == null);
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 100).?.body())) return error.TestExpectedEqual;
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 101).?.body())) return error.TestExpectedEqual;
+    if (schedule.ownerAt(chunk("cpu-slot-0"), 102) != null) return error.TestExpectedNull;
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("cpu-slot-0"), 105).?.body())) return error.TestExpectedEqual;
+    if (schedule.ownerAt(chunk("cpu-slot-0"), 120) != null) return error.TestExpectedNull;
 }
 
 test "resource contract verifies signature before installing schedule" {
-    const testing = @import("std").testing;
     const contract = Contract.init(chunk("contract-gpu"), chunk("app-a"), chunk("gpu-queue-0"), .gpu, 1, 10, Bounds.init(0, 8), Pattern.exclusive());
     var canonical: [160]u8 = undefined;
     const expected = try encode(contract, &canonical);
@@ -370,14 +367,13 @@ test "resource contract verifies signature before installing schedule" {
 
     const digest = try schedule.installVerified(RecordingExecutor, verifier, contract, testSignature(), &scratch);
 
-    try testing.expectEqual(test_digest, digest);
-    try testing.expectEqual(@as(usize, 1), schedule.len);
-    try testing.expectEqualStrings("app-a", schedule.ownerAt(chunk("gpu-queue-0"), 1).?.body());
-    try testing.expectEqual(RecordingExecutor.State.flushed, executor.state);
+    if (!bytes.eql(&test_digest, &digest)) return error.TestExpectedEqual;
+    if (schedule.len != 1) return error.TestExpectedEqual;
+    if (!bytes.eql("app-a", schedule.ownerAt(chunk("gpu-queue-0"), 1).?.body())) return error.TestExpectedEqual;
+    if (executor.state != .flushed) return error.TestExpectedEqual;
 }
 
 test "resource contract leaves schedule unchanged when signature fails" {
-    const testing = @import("std").testing;
     const contract = Contract.init(chunk("contract-gpu"), chunk("app-a"), chunk("gpu-queue-0"), .gpu, 1, 10, Bounds.init(0, 8), Pattern.exclusive());
     var canonical: [160]u8 = undefined;
     const expected = try encode(contract, &canonical);
@@ -390,14 +386,15 @@ test "resource contract leaves schedule unchanged when signature fails" {
     var schedule = Schedule.init(&slots);
     var scratch: [160]u8 = undefined;
 
-    try testing.expectError(error.VerifyFailed, schedule.installVerified(RecordingExecutor, verifier, contract, testSignature(), &scratch));
-    try testing.expectEqual(@as(usize, 0), schedule.len);
-    try testing.expect(schedule.ownerAt(chunk("gpu-queue-0"), 1) == null);
-    try testing.expectEqual(RecordingExecutor.State.flushed, executor.state);
+    if (schedule.installVerified(RecordingExecutor, verifier, contract, testSignature(), &scratch)) |_| return error.TestExpectedError else |err| {
+        if (err != error.VerifyFailed) return err;
+    }
+    if (schedule.len != 0) return error.TestExpectedEqual;
+    if (schedule.ownerAt(chunk("gpu-queue-0"), 1) != null) return error.TestExpectedNull;
+    if (executor.state != .flushed) return error.TestExpectedEqual;
 }
 
 test "resource contract can require boot inventory fit before install" {
-    const testing = @import("std").testing;
     const inventory_mod = @import("resource_inventory.zig");
     var resources: [1]inventory_mod.Resource = undefined;
     var inventory = inventory_mod.Inventory.init(&resources);
@@ -409,22 +406,28 @@ test "resource contract can require boot inventory fit before install" {
     const out_of_bounds = Contract.init(chunk("contract-b"), chunk("app-a"), chunk("memory-bank-0"), .memory, 1, 10, Bounds.init(3072, 2048), Pattern.exclusive());
 
     try schedule.installChecked(inventory, contract);
-    try testing.expectEqual(@as(usize, 1), schedule.len);
-    try testing.expectError(error.OutOfBounds, schedule.installChecked(inventory, out_of_bounds));
+    if (schedule.len != 1) return error.TestExpectedEqual;
+    if (schedule.installChecked(inventory, out_of_bounds)) return error.TestExpectedError else |err| {
+        if (err != error.OutOfBounds) return err;
+    }
 }
 
 test "resource contract rejects malformed schedules" {
-    const testing = @import("std").testing;
     var slots: [1]Contract = undefined;
     var schedule = Schedule.init(&slots);
 
-    try testing.expectError(error.BadArgument, schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 10, Bounds.init(0, 1), Pattern.periodic(1, 2))));
-    try testing.expectError(error.BadArgument, schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 20, Bounds.init(0, 1), Pattern.periodic(3, 2))));
-    try testing.expectError(error.BadArgument, schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 20, Bounds.init(0, 0), Pattern.exclusive())));
+    if (schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 10, Bounds.init(0, 1), Pattern.periodic(1, 2)))) return error.TestExpectedError else |err| {
+        if (err != error.BadArgument) return err;
+    }
+    if (schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 20, Bounds.init(0, 1), Pattern.periodic(3, 2)))) return error.TestExpectedError else |err| {
+        if (err != error.BadArgument) return err;
+    }
+    if (schedule.install(Contract.init(chunk("bad"), chunk("app-a"), chunk("cpu-slot-0"), .cpu, 10, 20, Bounds.init(0, 0), Pattern.exclusive()))) return error.TestExpectedError else |err| {
+        if (err != error.BadArgument) return err;
+    }
 }
 
 test "resource contract rejects overlapping ownership on the same resource" {
-    const testing = @import("std").testing;
     var contracts: [2]Contract = undefined;
     var schedule = Schedule.init(&contracts);
     const first = Contract.init(chunk("first-contract"), chunk("app-a"), chunk("memory-bank-0"), .memory, 10, 20, Bounds.init(0, 64), Pattern.exclusive());
@@ -432,6 +435,8 @@ test "resource contract rejects overlapping ownership on the same resource" {
     const adjacent = Contract.init(chunk("adjacent-contract"), chunk("app-b"), chunk("memory-bank-0"), .memory, 15, 25, Bounds.init(64, 64), Pattern.exclusive());
 
     try schedule.install(first);
-    try testing.expectError(error.Conflict, schedule.install(overlap));
+    if (schedule.install(overlap)) return error.TestExpectedError else |err| {
+        if (err != error.Conflict) return err;
+    }
     try schedule.install(adjacent);
 }

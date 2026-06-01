@@ -28,9 +28,7 @@ SECTION .text
 ; ============================================================
 global module_load
 module_load:
-    er_frame_push
-    push    rbx
-    push    r12
+    er_frame_push_regs rbx, r12
 
     mov     r12, [module_desc_count]
     cmp     r12, MAX_MODULES
@@ -47,17 +45,11 @@ module_load:
     mov     rax, r12
     er_ok
 
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12
 
 .full:
     er_err  ERROR_NO_MEMORY
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12
 
 ; ============================================================
 ; module_run_export(rdi=module_id, rsi=runtime, rdx=name, rcx=name_len)
@@ -92,21 +84,11 @@ module_run_export:
     call    er_fn_run
 
     ; rax = result, rdx = error
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 .bad:
     er_err  ERROR_BAD_ARGUMENT
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 ; ============================================================
 ; module_find_by_name(rdi=name_ptr, rsi=name_len)
@@ -114,9 +96,7 @@ module_run_export:
 ; ============================================================
 global module_find_by_name
 module_find_by_name:
-    er_frame_push
-    push    r12
-    push    r13
+    er_frame_push_regs r12, r13
 
     mov     r12, rdi                    ; target name ptr
     mov     r13, rsi                    ; target name len
@@ -149,10 +129,7 @@ module_find_by_name:
 .found:
     mov     rax, r11
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13
 
 .next:
     inc     r11
@@ -161,10 +138,7 @@ module_find_by_name:
 .nf:
     er_err  ERROR_MISSING_IMPORT
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13
 
 ; ============================================================
 ; module_count()

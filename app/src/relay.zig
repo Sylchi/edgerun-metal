@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const authority = @import("authority.zig");
 const bounded = @import("bounded.zig");
 const bytes = @import("bytes.zig");

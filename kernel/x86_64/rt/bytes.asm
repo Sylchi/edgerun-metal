@@ -4,9 +4,11 @@
 
 %include "x86_64/macros.inc"
 
+%ifndef ER_RT_STD_UNIFIED
 extern er_memset
 extern er_memcpy
 extern er_memcmp
+%endif
 
 SECTION .text
 
@@ -16,8 +18,7 @@ SECTION .text
 ; Returns eax=1 if any byte != 0, 0 if all zero. rdx=0.
 ; ==================================================================
 er_fn er_bytes_nonzero
-    test    esi, esi
-    jz      .all_zero
+    er_check_zero esi, .all_zero
     cld
     mov     ecx, esi
     mov     r8, rcx
@@ -47,14 +48,12 @@ er_fn er_bytes_nonzero
 er_fn er_bytes_eql
     cmp     esi, ecx
     jne     .not_eql
-    test    esi, esi
-    jz      .eql
+    er_check_zero esi, .eql
     mov     r8d, esi
     mov     rsi, rdx
     mov     edx, r8d
     call    er_memcmp
-    test    eax, eax
-    jnz     .not_eql
+    er_check_nonzero eax, .not_eql
 .eql:
     mov     eax, 1
     er_ok
@@ -78,8 +77,7 @@ er_fn er_bytes_order
     mov     ebx, ecx
 .min_set:
     xor     eax, eax
-    test    ebx, ebx
-    jz      .check_len
+    er_check_zero ebx, .check_len
 .loop:
     mov     r9b, [rdi + rax]
     mov     r8b, [rdx + rax]
@@ -115,8 +113,7 @@ er_fn er_bytes_order
 ; Zero out memory. No return value.
 ; ==================================================================
 er_fn er_bytes_zero
-    test    esi, esi
-    jz      .zero_done
+    er_check_zero esi, .zero_done
     mov     edx, esi
     xor     esi, esi
     call    er_memset
@@ -264,8 +261,7 @@ _load_be 64
 er_fn er_bytes_copy
     cmp     ecx, esi
     ja      .copy_fail
-    test    ecx, ecx
-    jz      .copy_ok
+    er_check_zero ecx, .copy_ok
     mov     rsi, rdx
     mov     edx, ecx
     call    er_memcpy
@@ -286,8 +282,7 @@ er_fn er_bytes_copy
 er_fn er_starts_with
     cmp     ecx, esi
     ja      .sw_false
-    test    ecx, ecx
-    jz      .sw_true         ; empty needle always matches
+    er_check_zero ecx, .sw_true
     push    rcx
     xor     eax, eax
 .sw_loop:
@@ -317,8 +312,7 @@ er_fn er_starts_with
 er_fn er_ends_with
     cmp     ecx, esi
     ja      .ew_false
-    test    ecx, ecx
-    jz      .ew_true
+    er_check_zero ecx, .ew_true
     mov     eax, esi
     sub     eax, ecx         ; offset = hay_len - needle_len
     add     rdi, rax         ; haystack now points to the end-start
@@ -351,12 +345,8 @@ er_fn er_ends_with
 er_fn er_index_of
     cmp     ecx, esi
     ja      .io_not_found
-    test    ecx, ecx
-    jz      .io_found_0
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_check_zero ecx, .io_found_0
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi            ; haystack
     mov     r13d, esi           ; hay_len
@@ -380,10 +370,7 @@ er_fn er_index_of
     jb      .io_inner
     ; Found at r9d
     mov     eax, r9d
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ok
     er_ret
 .io_next:
@@ -395,10 +382,7 @@ er_fn er_index_of
     er_ok
     er_ret
 .io_not_found2:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
 .io_not_found:
     mov     eax, -1
     er_ok

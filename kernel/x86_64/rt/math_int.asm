@@ -30,8 +30,7 @@ er_fn er_abs_i64
 ; ==================================================================
 er_fn er_clz32
     mov     eax, edi
-    test    eax, eax
-    jz      .clz32_zero
+    er_check_zero eax, .clz32_zero
     bsr     ecx, eax        ; bit scan reverse → position of highest set bit
     mov     eax, 31
     sub     eax, ecx        ; clz = 31 - bsr
@@ -47,8 +46,7 @@ er_fn er_clz32
 ; ==================================================================
 er_fn er_clz64
     mov     rax, rdi
-    test    rax, rax
-    jz      .clz64_zero
+    er_check_zero rax, .clz64_zero
     bsr     rcx, rax
     mov     eax, 63
     sub     eax, ecx
@@ -64,8 +62,7 @@ er_fn er_clz64
 ; ==================================================================
 er_fn er_ctz32
     mov     eax, edi
-    test    eax, eax
-    jz      .ctz32_zero
+    er_check_zero eax, .ctz32_zero
     bsf     ecx, eax        ; bit scan forward → position of lowest set bit
     mov     eax, ecx
     er_ret
@@ -80,8 +77,7 @@ er_fn er_ctz32
 ; ==================================================================
 er_fn er_ctz64
     mov     rax, rdi
-    test    rax, rax
-    jz      .ctz64_zero
+    er_check_zero rax, .ctz64_zero
     bsf     rcx, rax
     mov     eax, ecx
     er_ret
@@ -196,8 +192,7 @@ er_fn er_smulhi
 ; Returns 0 on division by zero
 ; ==================================================================
 er_fn er_div_u32
-    test    esi, esi
-    jz      .div_u32_zero
+    er_check_zero esi, .div_u32_zero
     mov     eax, edi
     xor     edx, edx
     div     esi             ; eax = quotient, edx = remainder
@@ -212,8 +207,7 @@ er_fn er_div_u32
 ; Returns 0 on division by zero
 ; ==================================================================
 er_fn er_mod_u32
-    test    esi, esi
-    jz      .mod_u32_zero
+    er_check_zero esi, .mod_u32_zero
     mov     eax, edi
     xor     edx, edx
     div     esi             ; eax = quotient, edx = remainder
@@ -229,8 +223,7 @@ er_fn er_mod_u32
 ; Returns 0 on division by zero
 ; ==================================================================
 er_fn er_div_u64
-    test    rsi, rsi
-    jz      .div_u64_zero
+    er_check_zero rsi, .div_u64_zero
     mov     rax, rdi
     xor     rdx, rdx
     div     rsi
@@ -245,8 +238,7 @@ er_fn er_div_u64
 ; Returns 0 on division by zero
 ; ==================================================================
 er_fn er_mod_u64
-    test    rsi, rsi
-    jz      .mod_u64_zero
+    er_check_zero rsi, .mod_u64_zero
     mov     rax, rdi
     xor     rdx, rdx
     div     rsi
@@ -265,8 +257,7 @@ er_fn er_mod_u64
 ; div clobbers edx, so we save pointers in r8/r9
 ; ==================================================================
 er_fn er_divmod_u32
-    test    esi, esi
-    jz      .dm32_zero
+    er_check_zero esi, .dm32_zero
     mov     r8, rdx         ; save quot_out pointer
     mov     r9, rcx         ; save rem_out pointer
     mov     eax, edi
@@ -288,8 +279,7 @@ er_fn er_divmod_u32
 ; div clobbers rdx, so save pointers first
 ; ==================================================================
 er_fn er_divmod_u64
-    test    rsi, rsi
-    jz      .dm64_zero
+    er_check_zero rsi, .dm64_zero
     mov     r8, rdx         ; save quot_out
     mov     r9, rcx         ; save rem_out
     mov     rax, rdi
@@ -311,8 +301,7 @@ er_fn er_divmod_u64
 ; Division by zero writes 0 to both outputs
 ; ==================================================================
 er_fn er_divmod_i32
-    test    esi, esi
-    jz      .dm32s_zero
+    er_check_zero esi, .dm32s_zero
     mov     r8, rdx         ; save quot_out
     mov     r9, rcx         ; save rem_out
     mov     eax, edi

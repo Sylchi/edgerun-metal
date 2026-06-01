@@ -42,10 +42,7 @@ SECTION .text
 ; void er_net_init(uint32_t ip, uint32_t mask, uint32_t gw, mac[6])
 ; ==================================================================
 er_fn er_net_init
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push r12, r13, r14, r15
 
     mov     r12d, edi
     mov     r13d, esi
@@ -75,10 +72,7 @@ er_fn er_net_init
 
     call    er_tcp_init
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
+    er_pop  r12, r13, r14, r15
     er_ok
     er_ret
 ; ==================================================================
@@ -162,14 +156,12 @@ er_fn er_net_receive
 ; void er_net_poll(void)
 ; ==================================================================
 er_fn er_net_poll
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     lea     rdi, [net_rx_buf]
     lea     rsi, [net_rx_len]
     call    er_net_receive
-    test    eax, eax
-    jz      .done
+    er_check_zero eax, .done
 
     mov     rbx, net_rx_buf
     mov     r12d, [net_rx_len]
@@ -196,8 +188,7 @@ er_fn er_net_poll
     call    er_ip_handle
 
 .done:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 ; ==================================================================

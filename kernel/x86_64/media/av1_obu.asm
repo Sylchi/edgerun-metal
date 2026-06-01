@@ -56,12 +56,9 @@ er_fn er_av1_metadata_type_valid
 ; rdi=buf, esi=len, rdx=value_out(qword)
 er_fn er_av1_leb128_decode
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdi
     mov     r13, rdx
     xor     r14, r14
@@ -114,8 +111,7 @@ er_fn er_av1_leb128_decode
 ; rdi=out, esi=cap, rdx=value(u32)
 er_fn er_av1_leb128_encode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     rax, AV1_LEB128_U32_MAX
     cmp     rdx, rax
     ja      .invalid_param
@@ -128,14 +124,12 @@ er_fn er_av1_leb128_encode
     mov     eax, ebx
     and     eax, AV1_LEB128_PAYLOAD_MASK
     shr     rbx, AV1_LEB128_BITS_PER_BYTE
-    test    rbx, rbx
-    jz      .last
+    er_check_zero rbx, .last
     or      eax, AV1_LEB128_CONTINUE_MASK
 .last:
     mov     [r12 + rcx], al
     inc     ecx
-    test    rbx, rbx
-    jnz     .loop
+    er_check_nonzero rbx, .loop
     mov     eax, ecx
     er_ok
     jmp     .done
@@ -154,12 +148,9 @@ er_fn er_av1_leb128_encode
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_av1_obu_decode_header
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdx
     mov     r13, rdi
     movzx   ebx, byte [r13]
@@ -173,8 +164,7 @@ er_fn er_av1_obu_decode_header
     shr     eax, AV1_OBU_HEADER_TYPE_SHIFT
     mov     edi, eax
     call    er_av1_obu_type_valid
-    test    eax, eax
-    jz      .unsupported
+    er_check_zero eax, .unsupported
     mov     eax, edi
     mov     [r12 + AV1_OBU_DESC_TYPE], al
 
@@ -189,8 +179,7 @@ er_fn er_av1_obu_decode_header
     mov     [r12 + AV1_OBU_DESC_EXTENSION], al
     mov     byte [r12 + AV1_OBU_DESC_TEMPORAL_ID], 0
     mov     byte [r12 + AV1_OBU_DESC_SPATIAL_ID], 0
-    test    eax, eax
-    jnz     .decode_extension
+    er_check_nonzero eax, .decode_extension
 
     mov     byte [r12 + AV1_OBU_DESC_HEADER_LEN], AV1_OBU_HEADER_BASE_LEN
     mov     byte [r12 + AV1_OBU_DESC_SIZE_FIELD_LEN], 0
@@ -243,16 +232,13 @@ er_fn er_av1_obu_decode_header
 er_fn er_av1_obu_decode_unit
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     r14d, esi
     call    er_av1_obu_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     cmp     byte [r13 + AV1_OBU_DESC_HAS_SIZE], 0
     jne     .with_size
@@ -274,8 +260,7 @@ er_fn er_av1_obu_decode_unit
     sub     esi, ebx
     mov     rdx, rsp
     call    er_av1_leb128_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r15d, eax
     mov     byte [r13 + AV1_OBU_DESC_SIZE_FIELD_LEN], al
     mov     rax, [rsp]
@@ -313,10 +298,8 @@ er_fn er_av1_obu_decode_unit
 er_fn er_av1_obu_scan_units
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 32
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r15, rdx
@@ -336,10 +319,8 @@ er_fn er_av1_obu_scan_units
     sub     esi, ebx
     mov     rdx, rsp
     call    er_av1_obu_decode_unit
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     add     ebx, eax
     jc      .corrupt
     movzx   eax, byte [rsp + AV1_OBU_DESC_TYPE]
@@ -371,10 +352,8 @@ er_fn er_av1_obu_scan_units
 er_fn er_av1_obu_route_sample
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 32
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -387,8 +366,7 @@ er_fn er_av1_obu_route_sample
     mov     esi, r13d
     mov     rdx, r14
     call    er_av1_obu_scan_units
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r15d, eax
     xor     ebx, ebx
 .loop:
@@ -400,10 +378,8 @@ er_fn er_av1_obu_route_sample
     sub     esi, ebx
     mov     rdx, rsp
     call    er_av1_obu_decode_unit
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     movzx   eax, byte [rsp + AV1_OBU_DESC_TYPE]
     av1_route_first_payload AV1_OBU_TYPE_SEQUENCE_HEADER, AV1_OBU_ROUTE_SEQUENCE_OFFSET, AV1_OBU_ROUTE_SEQUENCE_LEN
     av1_route_first_payload AV1_OBU_TYPE_FRAME_HEADER, AV1_OBU_ROUTE_FRAME_HEADER_OFFSET, AV1_OBU_ROUTE_FRAME_HEADER_LEN
@@ -444,27 +420,22 @@ er_fn er_av1_obu_count_units
 er_fn er_av1_metadata_decode
     er_push rbx, r12, r13, r14
     er_stack_alloc 8
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     mov     rdx, rsp
     call    er_av1_leb128_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rax, [rsp]
     cmp     rax, AV1_METADATA_TYPE_MAX
     ja      .unsupported
     mov     edi, eax
     call    er_av1_metadata_type_valid
-    test    eax, eax
-    jz      .unsupported
+    er_check_zero eax, .unsupported
     mov     eax, [rsp]
     mov     [r14 + AV1_METADATA_DESC_TYPE], eax
     mov     [r14 + AV1_METADATA_DESC_PAYLOAD_OFFSET], ebx
@@ -515,10 +486,8 @@ er_fn er_av1_metadata_decode
 ; Validates a padding payload. All padding bytes must be zero.
 ; rdi=payload, esi=len. Returns eax=bytes_consumed, rdx=error.
 er_fn er_av1_padding_decode
-    test    esi, esi
-    jz      .ok
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero esi, .ok
+    er_check_zero rdi, .invalid_param
     xor     ecx, ecx
 .loop:
     cmp     byte [rdi + rcx], AV1_PADDING_BYTE
@@ -544,23 +513,20 @@ er_fn er_av1_padding_decode
 ; rdi=out, esi=cap, edx=type, ecx=payload_len, r8d=temporal_id, r9d=spatial_id
 er_fn er_av1_obu_encode_prefix
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, ecx
     mov     r14d, esi
     mov     ecx, 1
     call    er_av1_obu_encode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     lea     rdi, [r12 + rbx]
     mov     esi, r14d
     sub     esi, ebx
     mov     edx, r13d
     call    er_av1_leb128_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, ebx
     er_ok
     jmp     .done
@@ -587,8 +553,7 @@ er_fn er_av1_obu_encode_temporal_delimiter
 ; rdi=out, esi=cap, edx=padding_len
 er_fn er_av1_obu_encode_padding
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -597,8 +562,7 @@ er_fn er_av1_obu_encode_padding
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r11d, eax
     add     eax, ebx
     jc      .no_space
@@ -628,12 +592,9 @@ er_fn er_av1_obu_encode_padding
 er_fn er_av1_obu_encode_metadata
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 16
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8d, r8d
-    jz      .payload_checked
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8d, .payload_checked
+    er_check_zero rcx, .invalid_param
 .payload_checked:
     mov     r12, rdi
     mov     r13d, esi
@@ -642,8 +603,7 @@ er_fn er_av1_obu_encode_metadata
     mov     [rsp + 8], edx
     mov     edi, edx
     call    er_av1_metadata_type_valid
-    test    eax, eax
-    jz      .unsupported
+    er_check_zero eax, .unsupported
     mov     edx, [rsp + 8]
     cmp     edx, AV1_METADATA_TYPE_HDR_CLL
     je      .check_hdr_cll
@@ -662,8 +622,7 @@ er_fn er_av1_obu_encode_metadata
     mov     esi, 8
     mov     edx, [rsp + 8]
     call    er_av1_leb128_encode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     ecx, ebx
     add     ecx, r15d
@@ -674,8 +633,7 @@ er_fn er_av1_obu_encode_metadata
     xor     r8d, r8d
     xor     r9d, r9d
     call    er_av1_obu_encode_prefix
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r11d, eax
     mov     eax, r11d
     add     eax, ebx
@@ -723,14 +681,12 @@ er_fn er_av1_obu_encode_metadata
 ; rdi=out, esi=cap, edx=type, ecx=has_size, r8d=temporal_id, r9d=spatial_id
 er_fn er_av1_obu_encode_header
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, edx
     mov     edi, edx
     call    er_av1_obu_type_valid
-    test    eax, eax
-    jz      .unsupported
+    er_check_zero eax, .unsupported
     cmp     r8d, AV1_ID_MAX
     ja      .invalid_param
     cmp     r9d, AV1_ID_MAX
@@ -749,17 +705,14 @@ er_fn er_av1_obu_encode_header
 
     mov     eax, r13d
     shl     eax, AV1_OBU_HEADER_TYPE_SHIFT
-    test    ebx, ebx
-    jz      .size_flag
+    er_check_zero ebx, .size_flag
     or      eax, AV1_OBU_HEADER_EXTENSION_MASK
 .size_flag:
-    test    ecx, ecx
-    jz      .store_base
+    er_check_zero ecx, .store_base
     or      eax, AV1_OBU_HEADER_HAS_SIZE_MASK
 .store_base:
     mov     [r12], al
-    test    ebx, ebx
-    jz      .base_done
+    er_check_zero ebx, .base_done
     mov     eax, r8d
     shl     eax, AV1_OBU_EXTENSION_TEMPORAL_SHIFT
     mov     edx, r9d
@@ -791,8 +744,7 @@ er_fn er_av1_obu_encode_header
     er_ret
 
 copy_bytes:
-    test    ecx, ecx
-    jz      .done
+    er_check_zero ecx, .done
 .loop:
     mov     al, [rsi]
     mov     [rdi], al
@@ -804,8 +756,7 @@ copy_bytes:
     ret
 
 zero_bytes:
-    test    ecx, ecx
-    jz      .done
+    er_check_zero ecx, .done
 .loop:
     mov     byte [rdi], AV1_PADDING_BYTE
     inc     rdi

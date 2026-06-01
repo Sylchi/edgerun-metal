@@ -149,7 +149,9 @@ pub const webpAnimationDecoderScratchByteLen = webp.webpAnimationDecoderScratchB
 
 test "runtime decoder rejects foreign image bytes" {
     var pixels: [1]ui.Color = undefined;
-    try @import("std").testing.expectError(error.UnsupportedImage, decode("not-an-erimg-file-byte-stream-here-no-magic", &pixels));
+    if (decode("not-an-erimg-file-byte-stream-here-no-magic", &pixels)) return error.TestExpectedError else |err| {
+        if (err != error.UnsupportedImage) return err;
+    }
 }
 
 test "runtime decoder accepts canonical ERIMG only" {
@@ -157,27 +159,29 @@ test "runtime decoder accepts canonical ERIMG only" {
     var canonical: [runtime_image.header_size + @sizeOf(ui.Color)]u8 = undefined;
     const encoded = try runtime_image.encodeRgba(1, 1, &pixels, &canonical);
 
-    try @import("std").testing.expectEqual(Format.erimg, try detectFormat(encoded));
+    if (try detectFormat(encoded) != .erimg) return error.TestExpectedEqual;
     var decoded_pixels: [1]ui.Color = undefined;
     const header = try decode(encoded, &decoded_pixels);
-    try @import("std").testing.expectEqual(@as(usize, 1), header.width);
-    try @import("std").testing.expectEqualSlices(ui.Color, &pixels, &decoded_pixels);
+    if (header.width != 1) return error.TestExpectedEqual;
+    if (!equalSlices(ui.Color, &pixels, &decoded_pixels)) return error.TestExpectedEqual;
 }
 
 test "import path requires foreign image bytes and preserves existing runtime bytes separately" {
     const pixels = [_]ui.Color{.{ .r = 3, .g = 4, .b = 5, .a = 6 }};
     var canonical: [runtime_image.header_size + @sizeOf(ui.Color)]u8 = undefined;
     const encoded = try runtime_image.encodeRgba(1, 1, &pixels, &canonical);
-    try @import("std").testing.expectError(error.UnsupportedImage, importDetectFormat(encoded));
+    if (importDetectFormat(encoded)) return error.TestExpectedError else |err| {
+        if (err != error.UnsupportedImage) return err;
+    }
 }
 
 test "import path detects jpeg xl codestream and container" {
     const codestream = [_]u8{ 0xff, 0x0a, 0x00, 0x01 };
     const container = jxl.container_signature ++ [_]u8{ 0x00, 0x00, 0x00, 0x00 };
-    try @import("std").testing.expectEqual(ImportFormat.jxl, try importDetectFormat(&codestream));
-    try @import("std").testing.expectEqual(JxlKind.codestream, try importJxlKind(&codestream));
-    try @import("std").testing.expectEqual(ImportFormat.jxl, try importDetectFormat(&container));
-    try @import("std").testing.expectEqual(JxlKind.container, try importJxlKind(&container));
+    if (try importDetectFormat(&codestream) != .jxl) return error.TestExpectedEqual;
+    if (try importJxlKind(&codestream) != .codestream) return error.TestExpectedEqual;
+    if (try importDetectFormat(&container) != .jxl) return error.TestExpectedEqual;
+    if (try importJxlKind(&container) != .container) return error.TestExpectedEqual;
 }
 
 test "runtime decoder accepts tiled ERIMG" {
@@ -191,8 +195,16 @@ test "runtime decoder accepts tiled ERIMG" {
     const encoded = try runtime_image.encodeRgbaTiled(2, 2, 1, 1, &pixels, &canonical);
     var decoded_pixels: [pixels.len]ui.Color = undefined;
     const header = try decode(encoded, &decoded_pixels);
-    try @import("std").testing.expectEqual(@as(usize, 2), header.width);
-    try @import("std").testing.expectEqualSlices(ui.Color, &pixels, &decoded_pixels);
+    if (header.width != 2) return error.TestExpectedEqual;
+    if (!equalSlices(ui.Color, &pixels, &decoded_pixels)) return error.TestExpectedEqual;
+}
+
+fn equalSlices(comptime T: type, expected: []const T, actual: []const T) bool {
+    if (expected.len != actual.len) return false;
+    for (expected, actual) |expected_item, actual_item| {
+        if (expected_item != actual_item) return false;
+    }
+    return true;
 }
 
 test {

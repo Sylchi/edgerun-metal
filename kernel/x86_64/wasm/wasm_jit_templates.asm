@@ -200,8 +200,7 @@ er_fn jit_template_global_set
 ; -----------------------------------------------------------------+
 er_fn jit_template_table_get
     mov     eax, [rdi + 12]         ; imm0 = table index
-    test    eax, eax
-    jnz     .table_get_bad_index
+    er_check_nonzero eax, .table_get_bad_index
     xor     ecx, ecx                ; rax
     call    jit_emit_pop_reg         ; rax = index
     mov     cl, 1                   ; rcx
@@ -228,8 +227,7 @@ er_fn jit_template_table_get
 ; -----------------------------------------------------------------+
 er_fn jit_template_table_set
     mov     eax, [rdi + 12]         ; imm0 = table index
-    test    eax, eax
-    jnz     .table_set_bad_index
+    er_check_nonzero eax, .table_set_bad_index
     mov     cl, 2                   ; rdx
     call    jit_emit_pop_reg         ; rdx = value
     xor     ecx, ecx                ; rax
@@ -1537,8 +1535,7 @@ er_fn jit_template_call
     mov     r8d, [rdi + 12]         ; r8 = func_idx (imm0)
     mov     edi, r8d
     call    er_wasm_type_index_for_function
-    test    rdx, rdx
-    jnz     .call_type_error
+    er_check_nonzero rdx, .call_type_error
     mov     r10, rax
     imul    r10, FUNC_TYPE_SIZE
     mov     r11, [rel types_buf + r10 + FUNC_TYPE_PARAM_COUNT_OFF]

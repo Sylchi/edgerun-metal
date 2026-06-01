@@ -1,10 +1,5 @@
 er_wasm_decode_body:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi            ; body start
     mov     r13, rdi
@@ -169,8 +164,7 @@ er_wasm_decode_body:
 .decode_memidx:
     ; Read memory index (must be 0)
     er_call er_wasm_read_leb_u32, .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
@@ -251,8 +245,7 @@ er_wasm_decode_body:
     er_call er_wasm_read_leb_u32, .error
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = type_index
     er_call er_wasm_read_leb_u32, .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = table_index
     mov     eax, esi
     sub     eax, edi
@@ -262,8 +255,7 @@ er_wasm_decode_body:
 
 .decode_select_typed:
     call    er_wasm_read_leb_u32  ; type count
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     cmp     eax, 1
     jne     .unsupported
     er_call er_wasm_read_value_type, .error
@@ -275,10 +267,8 @@ er_wasm_decode_body:
 
 .decode_table:
     call    er_wasm_read_leb_u32  ; table index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     mov     [decoded_ops + rbx + 12], eax
     mov     eax, esi
     sub     eax, edi
@@ -309,8 +299,7 @@ er_wasm_decode_body:
     jmp     .br_table_loop
 .br_table_done:
     call    er_wasm_read_leb_u32  ; default target
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
@@ -347,85 +336,61 @@ er_wasm_decode_body:
 
 .ext_mem_init:
     call    er_wasm_read_leb_u32  ; data segment index
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     call    er_wasm_read_leb_u32  ; memory index (must be 0)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_data_drop:
     call    er_wasm_read_leb_u32  ; data segment index
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     jmp     .ext_done
 .ext_mem_copy:
     call    er_wasm_read_leb_u32  ; memory index (dst)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     call    er_wasm_read_leb_u32  ; memory index (src)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_mem_fill:
     call    er_wasm_read_leb_u32  ; memory index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_table_init:
     call    er_wasm_read_leb_u32  ; element segment index
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     call    er_wasm_read_leb_u32  ; table index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_elem_drop:
     call    er_wasm_read_leb_u32  ; element segment index
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     jmp     .ext_done
 .ext_table_copy:
     call    er_wasm_read_leb_u32  ; table index (dst)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     call    er_wasm_read_leb_u32  ; table index (src)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_table_grow:
     call    er_wasm_read_leb_u32  ; table index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_table_size:
     call    er_wasm_read_leb_u32  ; table index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_table_fill:
     call    er_wasm_read_leb_u32  ; table index
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     jmp     .ext_done
 .ext_done:
     mov     eax, esi
@@ -444,10 +409,4 @@ er_wasm_decode_body:
 .error:
     mov     eax, edx
 .out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15

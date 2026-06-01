@@ -56,8 +56,7 @@ SECTION .text
 ; void er_agent_http_init(void)
 ; ==================================================================
 er_fn er_agent_http_init
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     sub     rsp, 32                 ; hash output
 
@@ -65,13 +64,11 @@ er_fn er_agent_http_init
     mov     rsi, [rel http_agent_label_len]
     mov     rdx, rsp
     call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .fail
+    er_check_zero rax, .fail
 
     mov     rdi, rsp
     call    er_local_route_register
-    test    edx, edx
-    jnz     .fail
+    er_check_nonzero edx, .fail
 
     mov     r12d, eax               ; slot_id
 
@@ -83,16 +80,14 @@ er_fn er_agent_http_init
     add     rsp, 32
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .fail:
     add     rsp, 32
     xor     eax, eax
     er_err  ERROR_LOCAL_BUSY
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -100,9 +95,7 @@ er_fn er_agent_http_init
 ; rdi = cell ptr, rsi = sender slot_id
 ; ==================================================================
 _http_handler:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi                ; cell ptr
     mov     r13d, esi               ; sender slot_id
@@ -163,8 +156,7 @@ _http_handler:
 
     lea     rdi, [r12 + LOCAL_CELL_PAYLOAD]
     pop     rax
-    test    ax, ax
-    jz      .set_error
+    er_check_zero ax, .set_error
 
     mov     byte [rdi], AGENT_MSG_RESPONSE
     jmp     .build_body
@@ -194,15 +186,11 @@ _http_handler:
 
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret

@@ -99,8 +99,7 @@ _ed25519_point_base:
     ret
 
 _ed25519_point_copy:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12, rsi
     lea     rdi, [rbx + ED25519_POINT_X]
@@ -115,16 +114,11 @@ _ed25519_point_copy:
     lea     rdi, [rbx + ED25519_POINT_T]
     lea     rsi, [r12 + ED25519_POINT_T]
     call    _fe_copy
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; _ed25519_point_add(out, p, q)
 _ed25519_point_add:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     sub     rsp, 360
     ; A=0 B=40 C=80 D=120 E=160 F=200 G=240 H=280 d2=320
     mov     rbx, rdi
@@ -214,16 +208,11 @@ _ed25519_point_add:
     call    _fe_mul
 
     add     rsp, 360
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 ; _ed25519_point_double(out, p)
 _ed25519_point_double:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     sub     rsp, 320
     ; A=0 B=40 C=80 D=120 E=160 F=200 G=240 H=280
     mov     rbx, rdi
@@ -292,22 +281,14 @@ _ed25519_point_double:
     call    _fe_mul
 
     add     rsp, 320
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; er_ed25519_point_base_mul(out32, scalar32)
 ; Computes compressed [scalar]B. Returns rax=0,rdx=0 on success.
 er_fn er_ed25519_point_base_mul
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 480
     ; result=0, current=160, tmp=320
     mov     r12, rdi
@@ -353,21 +334,14 @@ er_fn er_ed25519_point_base_mul
     xor     eax, eax
     er_ok
     add     rsp, 480
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
     mov     edx, 1
     ret
 
 _ed25519_point_encode:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     sub     rsp, 160
     ; zinv=0, x=40, y=80, xbytes=120
     mov     r12, rdi
@@ -395,28 +369,17 @@ _ed25519_point_encode:
     and     byte [r12 + 31], 0x7f
     or      [r12 + 31], al
     add     rsp, 160
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; er_ed25519_sign(seed32, msg, msg_len, out_sig64)
 ; Deterministic RFC 8032 Ed25519 signature.
 er_fn er_ed25519_sign
-    test    rdi, rdi
-    jz      .fail
-    test    rcx, rcx
-    jz      .fail
-    test    edx, edx
-    jz      .args_ok
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rcx, .fail
+    er_check_zero edx, .args_ok
+    er_check_zero rsi, .fail
 .args_ok:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 576
     ; 0 scalar, 32 prefix, 64 public, 96 nonce_hash, 160 nonce,
     ; 192 R, 224 challenge_hash, 288 challenge, 320 s, 352 sha512 ctx.
@@ -429,94 +392,77 @@ er_fn er_ed25519_sign
     lea     rsi, [rsp]
     lea     rdx, [rsp + 32]
     call    er_ed25519_seed_scalar_prefix
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 64]
     lea     rsi, [rsp]
     call    er_ed25519_point_base_mul
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 352]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 32]
     mov     edx, ED25519_PREFIX_LEN
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
-    test    r14d, r14d
-    jz      .nonce_final
+    er_check_zero rax, .fail_pop
+    er_check_zero r14d, .nonce_final
     lea     rdi, [rsp + 352]
     mov     rsi, r13
     mov     edx, r14d
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 .nonce_final:
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 96]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 96]
     lea     rsi, [rsp + 160]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 192]
     lea     rsi, [rsp + 160]
     call    er_ed25519_point_base_mul
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 352]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 192]
     mov     edx, 32
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 64]
     mov     edx, 32
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
-    test    r14d, r14d
-    jz      .challenge_final
+    er_check_zero rax, .fail_pop
+    er_check_zero r14d, .challenge_final
     lea     rdi, [rsp + 352]
     mov     rsi, r13
     mov     edx, r14d
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 .challenge_final:
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 224]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 224]
     lea     rsi, [rsp + 288]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 288]
     lea     rsi, [rsp]
     lea     rdx, [rsp + 160]
     lea     rcx, [rsp + 320]
     call    er_ed25519_scalar_muladd
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     mov     rdi, r15
     lea     rsi, [rsp + 192]
@@ -529,19 +475,10 @@ er_fn er_ed25519_sign
     xor     eax, eax
     er_ok
     add     rsp, 576
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail_pop:
     add     rsp, 576
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
     mov     edx, 1
@@ -550,22 +487,13 @@ er_fn er_ed25519_sign
 ; er_ed25519_blind_sign(seed32, blind32, msg, msg_len, out_sig64, out_pub32_or_null)
 ; Deterministic blinded signing used by Tor onion-service descriptor signing.
 er_fn er_ed25519_blind_sign
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    test    r8, r8
-    jz      .fail
-    test    ecx, ecx
-    jz      .args_ok
-    test    rdx, rdx
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
+    er_check_zero r8, .fail
+    er_check_zero ecx, .args_ok
+    er_check_zero rdx, .fail
 .args_ok:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 736
     ; 0 identity scalar, 32 prefix, 64 blind scalar, 96 blinded scalar,
     ; 128 blinded public, 160 rh hash, 224 nonce hash, 288 nonce,
@@ -582,8 +510,7 @@ er_fn er_ed25519_blind_sign
     lea     rsi, [rsp]
     lea     rdx, [rsp + 32]
     call    er_ed25519_seed_scalar_prefix
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 64]
     mov     rsi, r13
@@ -598,116 +525,95 @@ er_fn er_ed25519_blind_sign
     lea     rdx, [rel ed25519_zero32]
     lea     rcx, [rsp + 96]
     call    er_ed25519_scalar_muladd
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 128]
     lea     rsi, [rsp + 96]
     call    er_ed25519_point_base_mul
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 480]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rel ed25519_rh_blind_string]
     mov     edx, ed25519_rh_blind_string_len
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 32]
     mov     edx, ED25519_PREFIX_LEN
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 160]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 
     lea     rdi, [rsp + 480]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 160]
     mov     edx, 32
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
-    test    r15d, r15d
-    jz      .nonce_final
+    er_check_zero rax, .fail_pop
+    er_check_zero r15d, .nonce_final
     lea     rdi, [rsp + 480]
     mov     rsi, r14
     mov     edx, r15d
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 .nonce_final:
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 224]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 224]
     lea     rsi, [rsp + 288]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 320]
     lea     rsi, [rsp + 288]
     call    er_ed25519_point_base_mul
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 480]
     call    er_sha512_init
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 320]
     mov     edx, 32
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 128]
     mov     edx, 32
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
-    test    r15d, r15d
-    jz      .challenge_final
+    er_check_zero rax, .fail_pop
+    er_check_zero r15d, .challenge_final
     lea     rdi, [rsp + 480]
     mov     rsi, r14
     mov     edx, r15d
     call    er_sha512_update
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 .challenge_final:
     lea     rdi, [rsp + 480]
     lea     rsi, [rsp + 352]
     call    er_sha512_final
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
     lea     rdi, [rsp + 352]
     lea     rsi, [rsp + 416]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 416]
     lea     rsi, [rsp + 96]
     lea     rdx, [rsp + 288]
     lea     rcx, [rsp + 448]
     call    er_ed25519_scalar_muladd
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     mov     rdi, [rsp + 704]
     lea     rsi, [rsp + 320]
@@ -726,19 +632,10 @@ er_fn er_ed25519_blind_sign
     xor     eax, eax
     er_ok
     add     rsp, 736
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail_pop:
     add     rsp, 736
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
     mov     edx, 1
@@ -747,8 +644,7 @@ er_fn er_ed25519_blind_sign
 ; _ed25519_scalar_add_mod(acc32, addend32)
 ; acc = (acc + addend) mod l. Inputs must already be < l.
 _ed25519_scalar_add_mod:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     xor     r8d, r8d
     xor     ecx, ecx
 .add_loop:
@@ -763,8 +659,7 @@ _ed25519_scalar_add_mod:
     cmp     ecx, ED25519_SCALAR_LEN
     jb      .add_loop
 
-    test    r8b, r8b
-    jnz     .subtract_l
+    er_check_nonzero r8b, .subtract_l
     mov     r9d, ED25519_SCALAR_LEN - 1
 .cmp_loop:
     mov     al, [rdi + r9]
@@ -790,9 +685,7 @@ _ed25519_scalar_add_mod:
     jb      .sub_loop
 
 .done:
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; _ed25519_scalar_double_mod(acc32)
 ; acc = (acc * 2) mod l. Input must already be < l.
@@ -813,8 +706,7 @@ _ed25519_scalar_double_mod:
     cmp     ecx, ED25519_SCALAR_LEN
     jb      .dbl_loop
 
-    test    r8b, r8b
-    jnz     .subtract_l
+    er_check_nonzero r8b, .subtract_l
     mov     r9d, ED25519_SCALAR_LEN - 1
 .cmp_loop:
     mov     al, [rdi + r9]
@@ -847,20 +739,12 @@ _ed25519_scalar_double_mod:
 ; out = (a * b + c) mod l.
 ; Returns rax=0, rdx=0 on success; rax=-1, rdx=1 on invalid pointers.
 er_fn er_ed25519_scalar_muladd
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    test    rdx, rdx
-    jz      .fail
-    test    rcx, rcx
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
+    er_check_zero rdx, .fail
+    er_check_zero rcx, .fail
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 192
     ; [rsp+0] result, [rsp+32] current addend, [rsp+64] reduced a,
     ; [rsp+96] reduce input scratch64, [rsp+160] caller out pointer.
@@ -885,8 +769,7 @@ er_fn er_ed25519_scalar_muladd
     lea     rdi, [rsp + 96]
     lea     rsi, [rsp + 64]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 96]
     xor     eax, eax
@@ -899,8 +782,7 @@ er_fn er_ed25519_scalar_muladd
     lea     rdi, [rsp + 96]
     lea     rsi, [rsp + 32]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     lea     rdi, [rsp + 96]
     xor     eax, eax
@@ -913,8 +795,7 @@ er_fn er_ed25519_scalar_muladd
     lea     rdi, [rsp + 96]
     lea     rsi, [rsp]
     call    er_ed25519_scalar_reduce64
-    test    eax, eax
-    jnz     .fail_pop
+    er_check_nonzero eax, .fail_pop
 
     xor     r14d, r14d
 .mul_byte_loop:
@@ -946,19 +827,10 @@ er_fn er_ed25519_scalar_muladd
     xor     eax, eax
     er_ok
     add     rsp, 192
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail_pop:
     add     rsp, 192
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
     mov     edx, 1
@@ -968,16 +840,10 @@ er_fn er_ed25519_scalar_muladd
 ; Reduces a 512-bit little-endian integer modulo the Ed25519 group order.
 ; Returns rax=0, rdx=0 on success; rax=-1, rdx=1 on invalid pointers.
 er_fn er_ed25519_scalar_reduce64
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, ED25519_SCALAR_LEN
 
     mov     r12, rdi
@@ -1049,12 +915,7 @@ er_fn er_ed25519_scalar_reduce64
     xor     eax, eax
     er_ok
     add     rsp, ED25519_SCALAR_LEN
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 .fail:
     mov     eax, -1
     mov     edx, 1
@@ -1063,17 +924,11 @@ er_fn er_ed25519_scalar_reduce64
 ; er_ed25519_seed_scalar_prefix(seed32, out_scalar32, out_prefix32)
 ; Returns rax=0, rdx=0 on success; rax=-1, rdx=1 on invalid pointers.
 er_fn er_ed25519_seed_scalar_prefix
-    test    rdi, rdi
-    jz      .fail
-    test    rsi, rsi
-    jz      .fail
-    test    rdx, rdx
-    jz      .fail
+    er_check_zero rdi, .fail
+    er_check_zero rsi, .fail
+    er_check_zero rdx, .fail
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     sub     rsp, 64
 
     mov     r12, rdi
@@ -1084,8 +939,7 @@ er_fn er_ed25519_seed_scalar_prefix
     mov     esi, ED25519_SEED_LEN
     lea     rdx, [rsp]
     call    er_sha512
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 
     mov     rdi, r13
     lea     rsi, [rsp]
@@ -1103,18 +957,11 @@ er_fn er_ed25519_seed_scalar_prefix
     xor     eax, eax
     er_ok
     add     rsp, 64
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 .fail_pop:
     add     rsp, 64
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
 .fail:
     mov     eax, -1
     mov     edx, 1

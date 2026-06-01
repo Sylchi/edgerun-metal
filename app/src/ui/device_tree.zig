@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const bytes = @import("../bytes.zig");
 const arena = @import("../arena.zig");
 const codec = @import("codec.zig");

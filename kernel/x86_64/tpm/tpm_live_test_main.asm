@@ -158,13 +158,11 @@ SECTION .text
     mov     rdx, rsp_buf
     mov     ecx, 1024
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      %%fail
+    er_check_zero rax, %%fail
     mov     rdi, rsp_buf
     mov     esi, eax
     call    er_tpm_response_success
-    test    eax, eax
-    jz      %%fail
+    er_check_zero eax, %%fail
     jmp     %%done
 %%fail:
 %%done:
@@ -174,11 +172,7 @@ SECTION .text
 ; er_kernel_main — entry point called by entry.asm
 ; =================================================================
 er_fn er_kernel_main
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     dword [rel test_ctr], 0
     mov     dword [rel pass_ctr], 0
@@ -224,8 +218,7 @@ er_fn er_kernel_main
     call    er_serial_putchar
     pop     rax
     call    er_tpm_crb_present
-    test    eax, eax
-    jnz     .tpm_found
+    er_check_nonzero eax, .tpm_found
     TEST_FAIL
     jmp     .done
 .tpm_found:
@@ -239,20 +232,17 @@ er_fn er_kernel_main
     mov     rdi, cmd_buf
     mov     esi, 32
     call    er_tpm_get_random
-    test    rax, rax
-    jz      .fail_random
+    er_check_zero rax, .fail_random
     mov     esi, TPM_CMD_GET_RANDOM_LEN
     mov     rdx, rsp_buf
     mov     ecx, 512
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .fail_random
+    er_check_zero rax, .fail_random
     mov     r12d, eax
     mov     rdi, rsp_buf
     mov     esi, eax
     call    er_tpm_response_success
-    test    eax, eax
-    jz      .fail_random
+    er_check_zero eax, .fail_random
     TEST_PASS
     ; Dump first 8 random bytes as hex
     mov     rdi, COM1_PORT
@@ -283,8 +273,7 @@ er_fn er_kernel_main
     xor     edx, edx
     mov     ecx, 64
     call    er_tpm_get_capability
-    test    rax, rax
-    jz      .fail_getcaps
+    er_check_zero rax, .fail_getcaps
     mov     esi, TPM_CMD_GET_CAP_LEN
     CRB_SEND_CHECK
     jz      .fail_getcaps
@@ -319,8 +308,7 @@ er_fn er_kernel_main
     mov     esi, r12d               ; response size from GetCapability
     mov     edx, TPM_ALG_SHA256
     call    er_tpm_has_algorithm
-    test    al, al
-    jz      .no_sha256
+    er_check_zero al, .no_sha256
     TEST_PASS
     jmp     .test_algs_ecc
 .no_sha256:
@@ -336,8 +324,7 @@ er_fn er_kernel_main
     mov     esi, r12d               ; response size from GetCapability
     mov     edx, TPM_ALG_ECC
     call    er_tpm_has_algorithm
-    test    al, al
-    jz      .no_ecc
+    er_check_zero al, .no_ecc
     TEST_PASS
     jmp     .test_hash
 .no_ecc:
@@ -350,8 +337,7 @@ er_fn er_kernel_main
     mov     rdi, cmd_buf
     mov     esi, TPM_SU_CLEAR
     call    er_tpm_startup
-    test    rax, rax
-    jz      .test_hash
+    er_check_zero rax, .test_hash
     mov     esi, TPM_CMD_STARTUP_LEN
     mov     rdx, rsp_buf
     mov     ecx, 512
@@ -375,14 +361,12 @@ er_fn er_kernel_main
     mov     rdx, rsp_buf
     mov     ecx, 1024
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .fail_hash
+    er_check_zero rax, .fail_hash
     ; Check response code
     mov     rdi, rsp_buf
     mov     esi, eax
     call    er_tpm_response_success
-    test    eax, eax
-    jz      .dump_hash_rc
+    er_check_zero eax, .dump_hash_rc
     ; Extract digest from response
     ; NO_SESSIONS response: Tag(2) + Size(4) + RC(4) + TPM2B_size(2) + digest(32)
     movzx   eax, word [rsp_buf]  ; tag
@@ -488,8 +472,7 @@ er_fn er_kernel_main
     PRINT_STR
     mov     rdi, cmd_buf
     call    er_tpm_create_primary_p256_signing
-    test    rax, rax
-    jz      .fail_crtprim
+    er_check_zero rax, .fail_crtprim
     ; dbg1
     mov     rdi, COM1_PORT
     mov     sil, '1'
@@ -507,8 +490,7 @@ er_fn er_kernel_main
     mov     rdi, rsp_buf
     mov     esi, r14d
     call    er_tpm_parse_handle
-    test    eax, eax
-    jz      .fail_crtprim
+    er_check_zero eax, .fail_crtprim
     ; dbg3
     mov     rdi, COM1_PORT
     mov     sil, '3'
@@ -596,13 +578,11 @@ er_fn er_kernel_main
 .test_readpub:
     mov     rsi, str_readpub
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_readpub
+    er_check_zero r12d, .skip_readpub
     mov     rdi, cmd_buf
     mov     esi, r12d
     call    er_tpm_read_public
-    test    rax, rax
-    jz      .fail_readpub
+    er_check_zero rax, .fail_readpub
     mov     esi, TPM_CMD_READ_PUBLIC_LEN
     CRB_SEND_CHECK
     jz      .fail_readpub
@@ -620,14 +600,12 @@ er_fn er_kernel_main
 .test_sign:
     mov     rsi, str_sign
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_sign
+    er_check_zero r12d, .skip_sign
     mov     rdi, cmd_buf
     mov     esi, r12d
     mov     rdx, hash_out
     call    er_tpm_sign_p256_sha256
-    test    rax, rax
-    jz      .fail_sign
+    er_check_zero rax, .fail_sign
     mov     esi, TPM_CMD_SIGN_LEN
     CRB_SEND_CHECK
     jz      .fail_sign
@@ -645,16 +623,14 @@ er_fn er_kernel_main
 .test_verify:
     mov     rsi, str_verify
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_verify
+    er_check_zero r12d, .skip_verify
     mov     rdi, cmd_buf
     mov     esi, r12d
     mov     rdx, hash_out
     mov     rcx, sig_r
     mov     r8, sig_s
     call    er_tpm_verify_p256_sha256
-    test    rax, rax
-    jz      .fail_verify
+    er_check_zero rax, .fail_verify
     mov     esi, TPM_CMD_VERIFY_SHA256_LEN
     CRB_SEND_CHECK
     jz      .fail_verify
@@ -675,8 +651,7 @@ er_fn er_kernel_main
     mov     rdi, cmd_buf
     mov     rsi, pub_key
     call    er_tpm_load_external_p256_verify
-    test    rax, rax
-    jz      .fail_loadext
+    er_check_zero rax, .fail_loadext
     mov     esi, TPM_CMD_LOAD_EXT_P256_LEN
     CRB_SEND_CHECK
     jz      .fail_loadext
@@ -686,8 +661,7 @@ er_fn er_kernel_main
     mov     rdi, rsp_buf
     mov     esi, r14d
     call    er_tpm_parse_handle
-    test    eax, eax
-    jz      .fail_loadext
+    er_check_zero eax, .fail_loadext
     mov     r13d, eax           ; r13 = ext key handle
     TEST_PASS
     jmp     .test_ecdh
@@ -702,8 +676,7 @@ er_fn er_kernel_main
 .test_ecdh:
     mov     rsi, str_ecdh
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_ecdh
+    er_check_zero r12d, .skip_ecdh
     ; Build peer point from the public key
     mov     rdi, point_buf
     mov     rsi, x_out
@@ -716,8 +689,7 @@ er_fn er_kernel_main
     mov     esi, r12d
     mov     rdx, point_buf
     call    er_tpm_ecdh_zgen_p256
-    test    rax, rax
-    jz      .fail_ecdh
+    er_check_zero rax, .fail_ecdh
     mov     esi, TPM_CMD_ECDH_ZGEN_LEN
     CRB_SEND_CHECK
     jz      .fail_ecdh
@@ -735,8 +707,7 @@ er_fn er_kernel_main
 .test_encdec:
     mov     rsi, str_encdec
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_encdec
+    er_check_zero r12d, .skip_encdec
     ; IV = zeros
     push    rdi
     mov     rdi, iv_buf
@@ -751,8 +722,7 @@ er_fn er_kernel_main
     mov     r8, iv_buf
     mov     r9d, TPM_ALG_CFB
     call    er_tpm_encrypt_decrypt2
-    test    rax, rax
-    jz      .fail_encdec
+    er_check_zero rax, .fail_encdec
     mov     edx, 21
     add     edx, TPM_CMD_ENC_DEC2_FIXED_LEN
     add     edx, 16
@@ -773,15 +743,13 @@ er_fn er_kernel_main
 .test_hmac:
     mov     rsi, str_hmac
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_hmac
+    er_check_zero r12d, .skip_hmac
     mov     rdi, cmd_buf
     mov     esi, r12d
     mov     rdx, hash_test_data
     mov     ecx, 21
     call    er_tpm_hmac_sha256
-    test    rax, rax
-    jz      .fail_hmac
+    er_check_zero rax, .fail_hmac
     mov     esi, TPM_CMD_HMAC_FIXED_LEN + 21
     CRB_SEND_CHECK
     jz      .fail_hmac
@@ -799,13 +767,11 @@ er_fn er_kernel_main
 .test_flush:
     mov     rsi, str_flush
     PRINT_STR
-    test    r12d, r12d
-    jz      .skip_flush
+    er_check_zero r12d, .skip_flush
     mov     rdi, cmd_buf
     mov     esi, r12d
     call    er_tpm_flush_context
-    test    rax, rax
-    jz      .fail_flush
+    er_check_zero rax, .fail_flush
     mov     esi, TPM_CMD_FLUSH_CONTEXT_LEN
     CRB_SEND_CHECK
     jz      .fail_flush
@@ -818,13 +784,11 @@ er_fn er_kernel_main
     TEST_FAIL
 
 .test_flush2:
-    test    r13d, r13d
-    jz      .skip_flush2
+    er_check_zero r13d, .skip_flush2
     mov     rdi, cmd_buf
     mov     esi, r13d
     call    er_tpm_flush_context
-    test    rax, rax
-    jz      .fail_flush2
+    er_check_zero rax, .fail_flush2
     mov     esi, TPM_CMD_FLUSH_CONTEXT_LEN
     CRB_SEND_CHECK
     jz      .fail_flush2
@@ -842,8 +806,7 @@ er_fn er_kernel_main
     mov     rdi, cmd_buf
     xor     esi, esi
     call    er_tpm_shutdown
-    test    rax, rax
-    jz      .fail_shutdown
+    er_check_zero rax, .fail_shutdown
     mov     esi, TPM_CMD_SHUTDOWN_LEN
     CRB_SEND_CHECK
     jz      .fail_shutdown
@@ -883,12 +846,7 @@ er_fn er_kernel_main
     call    .crlf
 
     call    er_halt
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ─── Internal helpers ──────────────────────────────────────────────
 .crlf:

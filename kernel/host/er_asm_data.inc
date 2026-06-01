@@ -12,6 +12,7 @@ key_preproc: db "preproc", 0
 key_directives: db "directives", 0
 key_labels: db "labels", 0
 key_instructions: db "instructions", 0
+key_text_len: db "text_len", 0
 key_exit_step: db "exit_step", 0
 key_exit_bad: db "exit_bad", 0
 key_generic_mode: db "generic_mode", 0
@@ -62,6 +63,18 @@ tok_percent_define: db "%define"
 tok_percent_define_len equ $ - tok_percent_define
 tok_percent_include: db "%include"
 tok_percent_include_len equ $ - tok_percent_include
+tok_percent_macro: db "%macro"
+tok_percent_macro_len equ $ - tok_percent_macro
+tok_percent_endmacro: db "%endmacro"
+tok_percent_endmacro_len equ $ - tok_percent_endmacro
+tok_percent_ifdef: db "%ifdef"
+tok_percent_ifdef_len equ $ - tok_percent_ifdef
+tok_percent_ifndef: db "%ifndef"
+tok_percent_ifndef_len equ $ - tok_percent_ifndef
+tok_percent_else: db "%else"
+tok_percent_else_len equ $ - tok_percent_else
+tok_percent_endif: db "%endif"
+tok_percent_endif_len equ $ - tok_percent_endif
 tok_x86_macros_inc: db "x86_64/macros.inc"
 tok_x86_macros_inc_len equ $ - tok_x86_macros_inc
 tok_test_macros_inc: db "test/test_macros.inc"
@@ -70,6 +83,14 @@ tok_er_fn: db "er_fn"
 tok_er_fn_len equ $ - tok_er_fn
 tok_er_ret: db "er_ret"
 tok_er_ret_len equ $ - tok_er_ret
+tok_er_ok: db "er_ok"
+tok_er_ok_len equ $ - tok_er_ok
+tok_er_err: db "er_err"
+tok_er_err_len equ $ - tok_er_err
+tok_er_check_zero: db "er_check_zero"
+tok_er_check_zero_len equ $ - tok_er_check_zero
+tok_er_check_nonzero: db "er_check_nonzero"
+tok_er_check_nonzero_len equ $ - tok_er_check_nonzero
 tok_er_frame_push: db "er_frame_push"
 tok_er_frame_push_len equ $ - tok_er_frame_push
 tok_er_frame_pop: db "er_frame_pop"
@@ -90,6 +111,8 @@ tok_test_data_total_passed_failed: db "TEST_DATA_TOTAL_PASSED_FAILED"
 tok_test_data_total_passed_failed_len equ $ - tok_test_data_total_passed_failed
 tok_test_exit: db "TEST_EXIT"
 tok_test_exit_len equ $ - tok_test_exit
+tok_test_call_eax: db "TEST_CALL_EAX"
+tok_test_call_eax_len equ $ - tok_test_call_eax
 tok_total_sym: db "total"
 tok_total_sym_len equ $ - tok_total_sym
 tok_passed_sym: db "passed"

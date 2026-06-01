@@ -16,12 +16,9 @@ SECTION .text
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_vp9_parse_frame_header
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdx
     movzx   ebx, byte [rdi]
     mov     eax, ebx
@@ -49,8 +46,7 @@ er_fn er_vp9_parse_frame_header
     test    ebx, VP9_SHOW_EXISTING_MASK
     setnz   al
     mov     [r12 + VP9_HEADER_DESC_SHOW_EXISTING], al
-    test    eax, eax
-    jnz     .show_existing
+    er_check_nonzero eax, .show_existing
     mov     byte [r12 + VP9_HEADER_DESC_EXISTING_FRAME_IDX], 0
     mov     eax, ebx
     and     eax, VP9_FRAME_TYPE_MASK
@@ -193,8 +189,7 @@ er_fn er_vp9_is_key_frame
     er_stack_alloc VP9_HEADER_DESC_SIZE
     mov     rdx, rsp
     call    er_vp9_parse_frame_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [rsp + VP9_HEADER_DESC_SHOW_EXISTING], 0
     jne     .not_key
     cmp     byte [rsp + VP9_HEADER_DESC_FRAME_TYPE], VP9_FRAME_TYPE_KEY
@@ -214,20 +209,17 @@ er_fn er_vp9_is_key_frame
 ; rdi=reader
 er_fn er_vp9_read_tx_mode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     esi, VP9_TX_MODE_LITERAL_BITS
     call    er_vp8_bool_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     cmp     ebx, VP9_TX_MODE_ALLOW_32X32
     jne     .ok
     mov     rdi, r12
     call    er_vp8_bool_read_flag
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     ebx, eax
 .ok:
     mov     eax, ebx
@@ -247,10 +239,8 @@ er_fn er_vp9_read_tx_mode
 ; rdi=reader, rsi=out
 er_fn er_vp9_parse_tx_size_probability_updates
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     xor     ebx, ebx
@@ -261,15 +251,12 @@ er_fn er_vp9_parse_tx_size_probability_updates
     mov     byte [r13 + rbx], 0
     mov     rdi, r12
     call    er_vp8_bool_read_flag
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .next
+    er_check_nonzero edx, .done
+    er_check_zero eax, .next
     mov     rdi, r12
     mov     esi, VP9_TX_PROB_UPDATE_BITS
     call    er_vp8_bool_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r13 + rbx], al
     inc     r14d
 .next:
@@ -327,24 +314,19 @@ er_fn er_vp9_tx_mode_max_tx_size
 ; rdi=reader, esi=tx_mode, rdx=compressed desc
 er_fn er_vp9_parse_coef_probability_updates
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     edi, esi
     call    er_vp9_tx_mode_max_tx_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     call    er_vp8_bool_read_flag
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r13 + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], eax
     mov     dword [r13 + VP9_COMPRESSED_HEADER_COEF_UPDATE_COUNT], 0
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     xor     eax, eax
     er_ok
     jmp     .done
@@ -394,8 +376,7 @@ er_fn er_vp9_inv_map
     mov     edx, r9d
     mov     r10d, VP9_INV_MAP_FAST_STEP
     div     r10d
-    test    edx, edx
-    jz      .loop
+    er_check_zero edx, .loop
 .candidate:
     cmp     ecx, r8d
     je      .ok
@@ -441,14 +422,12 @@ er_fn er_vp9_inv_recenter_nonneg
 ; edi=deltaProb, esi=current probability.
 er_fn er_vp9_inv_remap_prob
     er_push rbx, r12
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero esi, .invalid_param
     cmp     esi, VP9_PROBABILITY_MAX
     ja      .invalid_param
     mov     ebx, esi
     call    er_vp9_inv_map
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r12d, eax
     dec     ebx
     mov     eax, ebx
@@ -458,8 +437,7 @@ er_fn er_vp9_inv_remap_prob
     mov     edi, r12d
     mov     esi, ebx
     call    er_vp9_inv_recenter_nonneg
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     er_ok
     jmp     .done
@@ -468,8 +446,7 @@ er_fn er_vp9_inv_remap_prob
     sub     esi, ebx
     mov     edi, r12d
     call    er_vp9_inv_recenter_nonneg
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, VP9_PROBABILITY_MAX
     sub     ecx, eax
     mov     eax, ecx
@@ -487,10 +464,8 @@ er_fn er_vp9_inv_remap_prob
 ; rdi=reader, rsi=compressed desc
 er_fn er_vp9_parse_skip_probability_updates
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     xor     ebx, ebx
@@ -502,10 +477,8 @@ er_fn er_vp9_parse_skip_probability_updates
     mov     rdi, r12
     mov     esi, VP9_DIFF_UPDATE_PROB
     call    er_vp8_bool_read
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .done
+    er_check_nonzero eax, .unsupported
     inc     ebx
     jmp     .loop
 .ok:
@@ -531,18 +504,14 @@ er_fn er_vp9_parse_skip_probability_updates
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_vp9_parse_compressed_header_prefix
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     call    er_vp8_bool_reader_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     call    er_vp9_read_tx_mode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + VP9_COMPRESSED_HEADER_TX_MODE], eax
     mov     dword [r12 + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], 0
     mov     dword [r12 + VP9_COMPRESSED_HEADER_COEF_UPDATE_FLAG], 0
@@ -553,21 +522,18 @@ er_fn er_vp9_parse_compressed_header_prefix
     mov     rdi, r12
     lea     rsi, [r12 + VP9_COMPRESSED_HEADER_TX_UPDATES]
     call    er_vp9_parse_tx_size_probability_updates
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + VP9_COMPRESSED_HEADER_TX_UPDATE_COUNT], eax
 .ok:
     mov     rdi, r12
     mov     esi, [r12 + VP9_COMPRESSED_HEADER_TX_MODE]
     mov     rdx, r12
     call    er_vp9_parse_coef_probability_updates
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     rsi, r12
     call    er_vp9_parse_skip_probability_updates
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, VP9_COMPRESSED_HEADER_SIZE
     er_ok
     jmp     .done
@@ -584,12 +550,9 @@ er_fn er_vp9_parse_compressed_header_prefix
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_vp9_parse_superframe_index
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdi
     mov     r13, rdx
     mov     r14d, esi
@@ -643,8 +606,7 @@ er_fn er_vp9_parse_superframe_index
     shl     edx, 24
     or      eax, edx
 .size_done:
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     add     r11d, eax
     jc      .corrupt
     mov     [r13 + VP9_SUPERFRAME_DESC_FRAME_SIZES + r10 * 4], eax
@@ -687,25 +649,20 @@ er_fn er_vp9_parse_superframe_index
 er_fn er_vp9_validate_frame_payload
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc VP9_VALIDATE_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    esi, esi
-    jz      .no_data
+    er_check_zero rdi, .invalid_param
+    er_check_zero esi, .no_data
     mov     r12, rdi
     mov     r13d, esi
     mov     rdx, rsp
     add     rdx, VP9_VALIDATE_STACK_SUPER
     call    er_vp9_parse_superframe_index
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jnz     .superframe
+    er_check_nonzero edx, .done
+    er_check_nonzero eax, .superframe
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + VP9_VALIDATE_STACK_HEADER]
     call    er_vp9_parse_frame_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, 1
     er_ok
     jmp     .done
@@ -725,8 +682,7 @@ er_fn er_vp9_validate_frame_payload
     lea     rdi, [r12 + r15]
     lea     rdx, [rsp + VP9_VALIDATE_STACK_HEADER]
     call    er_vp9_parse_frame_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [rsp + VP9_VALIDATE_STACK_SUPER + VP9_SUPERFRAME_DESC_FRAME_SIZES + rbx * 4]
     add     r15d, esi
     inc     ebx
@@ -756,8 +712,7 @@ er_fn er_vp9_validate_frame_payload
 ; er_vp9_ivf_is(buf, len) -> eax=1 if DKIF, else 0
 ; rdi=buf, esi=len
 er_fn er_vp9_ivf_is
-    test    rdi, rdi
-    jz      .no
+    er_check_zero rdi, .no
     cmp     esi, 4
     jb      .no
     cmp     dword [rdi], VP9_IVF_SIGNATURE
@@ -775,10 +730,8 @@ er_fn er_vp9_ivf_is
 ;       timebase_num u32, frame_count u32.
 ; rdi=buf, esi=len, rdx=desc
 er_fn er_vp9_ivf_decode_header
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     esi, VP9_IVF_HEADER_SIZE
     jb      .no_data
     cmp     dword [rdi], VP9_IVF_SIGNATURE
@@ -790,11 +743,9 @@ er_fn er_vp9_ivf_decode_header
     cmp     dword [rdi + VP9_IVF_FILE_CODEC], VP9_IVF_CODEC_VP90
     jne     .unsupported
     movzx   eax, word [rdi + VP9_IVF_FILE_WIDTH]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     movzx   ecx, word [rdi + VP9_IVF_FILE_HEIGHT]
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero ecx, .corrupt
     mov     [rdx + VP9_IVF_HDR_CODEC], dword VP9_IVF_CODEC_VP90
     mov     [rdx + VP9_IVF_HDR_WIDTH], ax
     mov     [rdx + VP9_IVF_HDR_HEIGHT], cx
@@ -829,10 +780,8 @@ er_fn er_vp9_ivf_decode_header
 ; rdi=buf, esi=len, edx=cursor, rcx=frame_desc
 er_fn er_vp9_ivf_read_frame
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13, rcx
     mov     ebx, edx
@@ -878,16 +827,14 @@ er_fn er_vp9_ivf_read_frame
 er_fn er_vp9_ivf_count_frames
     er_push rbx, r12, r13, r14
     er_stack_alloc VP9_IVF_SCAN_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + VP9_IVF_SCAN_HDR]
     call    er_vp9_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, VP9_IVF_HEADER_SIZE
     xor     r14d, r14d
 .loop:
@@ -899,8 +846,7 @@ er_fn er_vp9_ivf_count_frames
     mov     edx, ebx
     lea     rcx, [rsp + VP9_IVF_SCAN_FRAME]
     call    er_vp9_ivf_read_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r14d, VP9_U32_MAX
     je      .corrupt
     inc     r14d
@@ -927,20 +873,17 @@ er_fn er_vp9_ivf_count_frames
 er_fn er_vp9_ivf_validate_frame_count
     er_push rbx, r12, r13
     er_stack_alloc VP9_IVF_HDR_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     call    er_vp9_ivf_count_frames
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, rsp
     call    er_vp9_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     ebx, [rsp + VP9_IVF_HDR_FRAME_COUNT]
     jne     .corrupt
     mov     eax, ebx
@@ -964,16 +907,14 @@ er_fn er_vp9_ivf_validate_frame_count
 er_fn er_vp9_ivf_validate_timestamps
     er_push rbx, r12, r13, r14
     er_stack_alloc VP9_IVF_SCAN_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + VP9_IVF_SCAN_HDR]
     call    er_vp9_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, VP9_IVF_HEADER_SIZE
     xor     r14d, r14d
     mov     qword [rsp + VP9_IVF_SCAN_PREV_TIMESTAMP], 0
@@ -986,10 +927,8 @@ er_fn er_vp9_ivf_validate_timestamps
     mov     edx, ebx
     lea     rcx, [rsp + VP9_IVF_SCAN_FRAME]
     call    er_vp9_ivf_read_frame
-    test    edx, edx
-    jnz     .done
-    test    r14d, r14d
-    jz      .first_frame
+    er_check_nonzero edx, .done
+    er_check_zero r14d, .first_frame
     mov     rcx, [rsp + VP9_IVF_SCAN_FRAME + VP9_IVF_FRAME_TIMESTAMP]
     cmp     rcx, [rsp + VP9_IVF_SCAN_PREV_TIMESTAMP]
     jbe     .corrupt
@@ -1024,10 +963,8 @@ er_fn er_vp9_ivf_validate_timestamps
 er_fn er_vp9_ivf_seek_frame
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc VP9_IVF_HDR_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
@@ -1036,8 +973,7 @@ er_fn er_vp9_ivf_seek_frame
     mov     esi, r13d
     mov     rdx, rsp
     call    er_vp9_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r14d, [rsp + VP9_IVF_HDR_FRAME_COUNT]
     jae     .not_found
     mov     ebx, VP9_IVF_HEADER_SIZE
@@ -1047,10 +983,8 @@ er_fn er_vp9_ivf_seek_frame
     mov     edx, ebx
     mov     rcx, r15
     call    er_vp9_ivf_read_frame
-    test    edx, edx
-    jnz     .done
-    test    r14d, r14d
-    jz      .ok
+    er_check_nonzero edx, .done
+    er_check_zero r14d, .ok
     dec     r14d
     mov     ebx, eax
     jmp     .loop
@@ -1075,16 +1009,14 @@ er_fn er_vp9_ivf_seek_frame
 er_fn er_vp9_ivf_validate_payloads
     er_push rbx, r12, r13, r14
     er_stack_alloc VP9_IVF_SCAN_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + VP9_IVF_SCAN_HDR]
     call    er_vp9_ivf_decode_header
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, VP9_IVF_HEADER_SIZE
     xor     r14d, r14d
 .loop:
@@ -1096,15 +1028,13 @@ er_fn er_vp9_ivf_validate_payloads
     mov     edx, ebx
     lea     rcx, [rsp + VP9_IVF_SCAN_FRAME]
     call    er_vp9_ivf_read_frame
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     eax, [rsp + VP9_IVF_SCAN_FRAME + VP9_IVF_FRAME_PAYLOAD_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + VP9_IVF_SCAN_FRAME + VP9_IVF_FRAME_PAYLOAD_LEN]
     call    er_vp9_validate_frame_payload
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     r14d, VP9_U32_MAX
     je      .corrupt
     inc     r14d

@@ -437,8 +437,6 @@ fn writePrincipal(writer: *preimage.Writer, principal: Principal) bool {
 }
 
 test "authority chain is ordered and deterministic" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
@@ -448,27 +446,23 @@ test "authority chain is ordered and deterministic" {
     const receipt = intent.admit(user, device, user, allocator, .grant_resource, .delegates_resources, epoch, request).?;
 
     var chain = Chain.init(Principal.user(user).?).?;
-    try testing.expect(chain.appendIntent(Principal.app(allocator).?, .delegated_to_allocator, receipt));
-    try testing.expect(chain.valid());
-    try testing.expect(bytes.nonzero(&chain.id().?));
+    if (!chain.appendIntent(Principal.app(allocator).?, .delegated_to_allocator, receipt)) return error.TestExpectedTrue;
+    if (!chain.valid()) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&chain.id().?)) return error.TestExpectedTrue;
 }
 
 test "tpm principal requires a tpm backed app identity" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{4} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ordinary app")).?, epoch).?;
     const public = [_]u8{0xa5} ** identity.p256_public_size;
     const tpm = identity.Identity.init(.app, identity.Source.prepare(.tpm_p256_public, &public).?, epoch).?;
 
-    try testing.expectEqual(@as(?Principal, null), Principal.tpm(app));
-    try testing.expect(Principal.tpm(tpm).?.kind == .tpm);
+    if (Principal.tpm(app) != null) return error.TestExpectedNull;
+    if (Principal.tpm(tpm).?.kind != .tpm) return error.TestExpectedEqual;
 }
 
 test "authority packet binds resource grant manifest state and proof" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const start = clock.Stamp{ .keeper = keeper, .tick = 4 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 6 };
@@ -499,17 +493,15 @@ test "authority packet binds resource grant manifest state and proof" {
         .proof = preimage.hash("edgerun:test", "proof"),
     };
 
-    try testing.expect(packet.valid());
-    try testing.expect(bytes.nonzero(&packet.id().?));
-    try testing.expect(packet.actionPermittedBy(receipt, start));
+    if (!packet.valid()) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&packet.id().?)) return error.TestExpectedTrue;
+    if (!packet.actionPermittedBy(receipt, start)) return error.TestExpectedTrue;
 
     const wrong_receipt = intent.admitWindow(user, device, app, other, .sync_data, .exports_data, start, start, end, intent.requestId("wrong packet grant").?).?;
-    try testing.expect(!packet.actionPermittedBy(wrong_receipt, start));
+    if (packet.actionPermittedBy(wrong_receipt, start)) return error.TestExpectedFalse;
 }
 
 test "external approval binds exact authority packet and clock window" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     const start = clock.Stamp{ .keeper = keeper, .tick = 1 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 3 };
@@ -547,10 +539,10 @@ test "external approval binds exact authority packet and clock window" {
         .signature = preimage.hash("edgerun:test", "approval signature"),
     };
 
-    try testing.expect(approval.permits(packet, start));
-    try testing.expect(bytes.nonzero(&approval.id().?));
-    try testing.expect(!approval.permits(packet, .{ .keeper = keeper, .tick = 4 }));
+    if (!approval.permits(packet, start)) return error.TestExpectedTrue;
+    if (!bytes.nonzero(&approval.id().?)) return error.TestExpectedTrue;
+    if (approval.permits(packet, .{ .keeper = keeper, .tick = 4 })) return error.TestExpectedFalse;
 
     packet.post_state = preimage.hash("edgerun:test", "tampered post");
-    try testing.expect(!approval.permits(packet, start));
+    if (approval.permits(packet, start)) return error.TestExpectedFalse;
 }

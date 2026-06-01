@@ -5,8 +5,7 @@ er_fn er_fn_pop
     er_frame_push
 
     mov     rax, [frame_stack_len]
-    test    rax, rax
-    jz      .underflow
+    er_check_zero rax, .underflow
 
     dec     rax
     mov     [frame_stack_len], rax
@@ -82,8 +81,7 @@ er_fn exec_save_frame_state
 
     ; Push locals: exec_locals[0..local_count] onto save area
     mov     rcx, [exec_local_count]
-    test    rcx, rcx
-    jz      .save_stack
+    er_check_zero rcx, .save_stack
     mov     rax, exec_locals
     mov     rdx, [exec_frame_save_ptr]
 .save_locals_loop:
@@ -98,8 +96,7 @@ er_fn exec_save_frame_state
 .save_stack:
     ; Push stack entries
     mov     rcx, [exec_stack_len]
-    test    rcx, rcx
-    jz      .save_control
+    er_check_zero rcx, .save_control
     mov     rax, exec_stack
     mov     rdx, [exec_frame_save_ptr]
 .save_stack_loop:
@@ -114,8 +111,7 @@ er_fn exec_save_frame_state
 .save_control:
     ; Push control frames
     mov     rcx, [exec_control_len]
-    test    rcx, rcx
-    jz      .save_meta
+    er_check_zero rcx, .save_meta
     mov     rax, exec_control
     mov     rdx, [exec_frame_save_ptr]
 .save_control_loop:
@@ -195,8 +191,7 @@ er_fn exec_restore_frame_state
 
     ; Pop control frames
     mov     rcx, [exec_control_len]
-    test    rcx, rcx
-    jz      .rest_stack
+    er_check_zero rcx, .rest_stack
     mov     rdx, [exec_frame_save_ptr]
 .rest_control_loop:
     sub     rdx, CONTROL_FRAME_SIZE
@@ -217,8 +212,7 @@ er_fn exec_restore_frame_state
 .rest_stack:
     ; Pop stack entries
     mov     rcx, [exec_stack_len]
-    test    rcx, rcx
-    jz      .rest_locals
+    er_check_zero rcx, .rest_locals
     mov     rdx, [exec_frame_save_ptr]
 .rest_stack_loop:
     sub     rdx, 8
@@ -237,8 +231,7 @@ er_fn exec_restore_frame_state
 .rest_locals:
     ; Pop locals
     mov     rcx, [exec_local_count]
-    test    rcx, rcx
-    jz      .done_rest
+    er_check_zero rcx, .done_rest
     mov     rdx, [exec_frame_save_ptr]
 .rest_locals_loop:
     sub     rdx, 8
@@ -268,8 +261,7 @@ er_fn exec_restore_frame_state
 er_fn exec_stack_pop
     er_frame_push
     mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow
+    er_check_zero rax, .underflow
     dec     rax
     mov     [exec_stack_len], rax
     mov     rax, [exec_stack + rax * 8]
@@ -304,8 +296,7 @@ er_fn exec_stack_push
 ; Returns value in rax
 er_fn exec_stack_peek
     mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow
+    er_check_zero rax, .underflow
     mov     rax, [exec_stack + rax * 8 - 8]
     clc
     ret
@@ -394,8 +385,7 @@ er_fn exec_branch_to_control
     er_frame_push
     ; target_index = control_len - 1 - branch_depth
     mov     rax, [exec_control_len]
-    test    rax, rax
-    jz      .error
+    er_check_zero rax, .error
     sub     rax, 1
     sub     rax, rdi
     jc      .error
@@ -434,8 +424,7 @@ er_fn exec_memory_prepare
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_mem
+    er_check_nonzero rdx, .corrupt_mem
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
@@ -444,8 +433,7 @@ er_fn exec_memory_prepare
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_mem
+    er_check_nonzero rdx, .corrupt_mem
     push    rsi
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi

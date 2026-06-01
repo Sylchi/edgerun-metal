@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 // zig fmt: off
 pub const Icon = enum(u16) {

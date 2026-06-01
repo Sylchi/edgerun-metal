@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 const clock = @import("clock.zig");
 const encrypted_chat = @import("encrypted_chat.zig");

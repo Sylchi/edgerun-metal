@@ -1,4 +1,3 @@
-const std = @import("std");
 const ui = @import("core.zig");
 
 pub const header_h: f32 = 56.0;
@@ -134,12 +133,14 @@ pub fn uniformGridCell(grid: UniformGrid, index: usize) ui.Rect {
 
 test "shared ui tokens expose deterministic app style and interaction colors" {
     const value = appStyle();
-    try std.testing.expect(std.meta.eql(value.bg, Palette.bg));
-    try std.testing.expect(std.meta.eql(value.accent, Palette.accent));
-    try std.testing.expect(std.meta.eql(State.focus_border, Palette.yellow));
-    try std.testing.expect(std.meta.eql(State.invalid_border, Palette.danger));
-    try std.testing.expectEqual(@as(f32, 24.0), Component.badge_height);
+    if (value.bg != Palette.bg) return error.TestExpectedEqual;
+    if (value.accent != Palette.accent) return error.TestExpectedEqual;
+    if (State.focus_border != Palette.yellow) return error.TestExpectedEqual;
+    if (State.invalid_border != Palette.danger) return error.TestExpectedEqual;
+    if (Component.badge_height != 24.0) return error.TestExpectedEqual;
     const grid = uniformGrid(ui.Rect.init(0.0, 0.0, 220.0, 100.0), 2, 1, 20.0, 0.0);
-    try std.testing.expectEqual(@as(usize, 2), grid.columns);
-    try std.testing.expect(std.math.approxEqAbs(f32, uniformGridCell(grid, 1).x, 120.0, 0.001));
+    if (grid.columns != 2) return error.TestExpectedEqual;
+    const cell_x = uniformGridCell(grid, 1).x;
+    const diff = if (cell_x > 120.0) cell_x - 120.0 else 120.0 - cell_x;
+    if (diff > 0.001) return error.TestExpectedApproxEqAbs;
 }

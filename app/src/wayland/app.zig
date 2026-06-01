@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const protocol = @import("protocol.zig");
 const client = @import("client.zig");
 

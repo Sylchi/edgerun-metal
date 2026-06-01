@@ -16,10 +16,7 @@ SECTION .text
 ; er_wasm_apply_data_segments(memory_ptr=rdi, memory_pages=rsi)
 ; =================================================================+
 er_wasm_apply_data_segments:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
+    er_frame_push_regs rbx, r12, r13
 
     mov     r12, rdi            ; memory_ptr
     ; Convert pages to bytes
@@ -33,24 +30,13 @@ er_wasm_apply_data_segments:
     jae     .done
 
     ; Check if active
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    cmp     byte [data_segments + r10 + 24], 0  ; active flag
-        pop     r10
+    er_load_struct_byte al, data_segments, r11, DATA_SEGMENT_SIZE, 24
+    cmp     al, 0               ; active flag
     je      .next
 
     ; offset + bytes_len <= limit?
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     rdx, [data_segments + r10]       ; offset
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     rcx, [data_segments + r10 + 16]  ; byte count
-        pop     r10
+    er_load_struct_qword rdx, data_segments, r11, DATA_SEGMENT_SIZE, 0     ; offset
+    er_load_struct_qword rcx, data_segments, r11, DATA_SEGMENT_SIZE, 16    ; byte count
     mov     rax, rdx
     add     rax, rcx
     jc      .nomemory
@@ -62,11 +48,7 @@ er_wasm_apply_data_segments:
     ; Copy bytes: memcpy(memory + offset, segment_bytes, count)
     mov     rdi, r12
     add     rdi, rdx
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     rsi, [data_segments + r10 + 8]  ; bytes ptr
-        pop     r10
+    er_load_struct_qword rsi, data_segments, r11, DATA_SEGMENT_SIZE, 8     ; bytes ptr
     mov     rdx, rcx
     call    er_memcpy
 
@@ -83,11 +65,7 @@ er_wasm_apply_data_segments:
 .error:
     ; rdx already has error from called function — pass through
 .out:
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13
 
 ; ==================================================================
 ; Find export by name
@@ -95,10 +73,7 @@ er_wasm_apply_data_segments:
 ; Returns export index in rax, or error in rdx
 ; =================================================================+
 er_wasm_find_export:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
+    er_frame_push_regs rbx, r12, r13
 
     mov     r12, rdi            ; name ptr
     mov     r13, rsi            ; name len
@@ -117,8 +92,7 @@ er_wasm_find_export:
     mov     rcx, r13
     call    er_wasm_eql
     pop     r11
-    test    rax, rax
-    jnz     .found
+    er_check_nonzero rax, .found
 
     inc     r11
     jmp     .search_loop
@@ -131,11 +105,7 @@ er_wasm_find_export:
     er_err  ERROR_MISSING_EXPORT
     xor     eax, eax
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13
 
 ; ==================================================================
 ; Type index for function
@@ -151,11 +121,7 @@ er_wasm_type_index_for_function:
     jae     .defined
 
     ; Imported: return imports[function_index].type_index
-    push    r10
-        mov     r10, rdi
-        imul    r10, IMPORTED_FUNC_SIZE
-    mov     rax, [imports_buf + r10 + 32]  ; type_index
-        pop     r10
+    er_load_struct_qword rax, imports_buf, rdi, IMPORTED_FUNC_SIZE, 32     ; type_index
     er_ok
     pop     rbp
     ret
@@ -165,11 +131,7 @@ er_wasm_type_index_for_function:
     sub     rdi, rsi            ; subtract import count
     cmp     rdi, [function_count]
     jae     .corrupt
-    push    r10
-    mov     r10, rdi
-    imul    r10, FUNCTION_SIZE
-    mov     rax, [functions_buf + r10]  ; type_index
-    pop     r10
+    er_load_struct_qword rax, functions_buf, rdi, FUNCTION_SIZE, 0         ; type_index
     er_ok
     pop     rbp
     ret
@@ -196,11 +158,7 @@ er_wasm_code_index_for_function:
     cmp     rdi, [function_count]
     jae     .corrupt
 
-    push    r10
-    mov     r10, rdi
-    imul    r10, FUNCTION_SIZE
-    mov     rax, [functions_buf + r10 + 8]  ; code_index
-    pop     r10
+    er_load_struct_qword rax, functions_buf, rdi, FUNCTION_SIZE, 8         ; code_index
     er_ok
     pop     rbp
     ret

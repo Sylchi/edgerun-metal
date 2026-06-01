@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 const app_encrypted_chat = @import("app_encrypted_chat.zig");
 const interaction = @import("ui/interaction.zig");

@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const bytes = @import("bytes.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gles = @import("render/backends/gles.zig");

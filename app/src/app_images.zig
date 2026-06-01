@@ -58,14 +58,14 @@ pub fn cloudMemeRuntimeLen() usize {
 }
 
 test "cloud meme imports to tiled runtime image and rgba texture" {
-    try @import("std").testing.expectEqual(image.ImportFormat.png, try image.importDetectFormat(cloud_meme_png));
+    if (try image.importDetectFormat(cloud_meme_png) != .png) return error.TestExpectedEqual;
     const runtime = try cloudMemeRuntime();
-    try @import("std").testing.expectEqual(image.Format.erimg, try image.detectFormat(runtime));
-    try @import("std").testing.expectEqual(cloud_meme_runtime_len, runtime.len);
+    if (try image.detectFormat(runtime) != .erimg) return error.TestExpectedEqual;
+    if (runtime.len != cloud_meme_runtime_len) return error.TestExpectedEqual;
     const view = try image.decodeRuntimeImage(runtime);
-    try @import("std").testing.expect(view.header.tile_count > 1);
+    if (view.header.tile_count <= 1) return error.TestExpectedTrue;
     const texture = try cloudMeme();
-    try @import("std").testing.expectEqual(cloud_meme_width, texture.width);
-    try @import("std").testing.expectEqual(cloud_meme_height, texture.height);
-    try @import("std").testing.expect(texture.pixels[0].a != 0);
+    if (texture.width != cloud_meme_width) return error.TestExpectedEqual;
+    if (texture.height != cloud_meme_height) return error.TestExpectedEqual;
+    if (texture.pixels[0].a == 0) return error.TestExpectedTrue;
 }

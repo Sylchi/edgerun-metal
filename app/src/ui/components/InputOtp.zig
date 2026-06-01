@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
 const ui = @import("../core.zig");

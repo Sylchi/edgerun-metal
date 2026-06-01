@@ -84,14 +84,12 @@ _local_route_entry_ptr:
 ; returns edx = 0 on success, ERROR_INVALID_PARAM on failure
 ; ==================================================================
 _local_route_hash_valid:
-    test    rdi, rdi
-    jz      .bad
+    er_check_zero rdi, .bad
     mov     rax, [rdi]
     or      rax, [rdi + 8]
     or      rax, [rdi + 16]
     or      rax, [rdi + 24]
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
     xor     eax, eax
     er_ok
     ret
@@ -106,14 +104,12 @@ _local_route_hash_valid:
 ; returns edx = 0 on success, ERROR_INVALID_PARAM on failure
 ; ==================================================================
 _local_route_entry_active:
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
     mov     rcx, [rax + LOCAL_ID_HASH]
     or      rcx, [rax + LOCAL_ID_HASH + 8]
     or      rcx, [rax + LOCAL_ID_HASH + 16]
     or      rcx, [rax + LOCAL_ID_HASH + 24]
-    test    rcx, rcx
-    jz      .bad
+    er_check_zero rcx, .bad
     movzx   ecx, byte [rax + LOCAL_ID_ROUTE_KIND]
     cmp     ecx, LOCAL_ROUTE_KIND_LOCAL
     je      .ok
@@ -139,8 +135,7 @@ _local_route_find_free:
     ; Check if hash (first 8 bytes) is zero
     push    rdi
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .next_pop
+    er_check_nonzero edx, .next_pop
     mov     rdi, rax
     mov     rcx, 4
     xor     eax, eax
@@ -166,8 +161,7 @@ _local_route_find_free:
 ; returns eax = slot_id, or edx = ERROR_LOCAL_NOT_FOUND
 ; ==================================================================
 _local_route_find_by_hash:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi        ; target hash
     xor     ebx, ebx        ; slot index
@@ -178,15 +172,13 @@ _local_route_find_by_hash:
 
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .next
+    er_check_nonzero edx, .next
 
     lea     rdi, [rax + LOCAL_ID_HASH]
     mov     rsi, r12
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jz      .found
+    er_check_zero eax, .found
 
 .next:
     inc     ebx
@@ -195,24 +187,19 @@ _local_route_find_by_hash:
 .found:
     mov     eax, ebx
     er_ok
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 .not_found:
     mov     eax, -1
     er_err  ERROR_LOCAL_NOT_FOUND
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; er_local_cell_init — initialize local cell transport
 ; void er_local_cell_init(void)
 ; ==================================================================
 er_fn er_local_cell_init
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     ; Clear entire routing table
     mov     edi, local_route_table
@@ -228,8 +215,7 @@ er_fn er_local_cell_init
 
     mov     edi, r12d
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .next
+    er_check_nonzero edx, .next
 
     lea     rdi, [rax + LOCAL_ID_RING]
     call    er_local_ring_init
@@ -242,8 +228,7 @@ er_fn er_local_cell_init
     mov     dword [local_identity_count], 0
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -253,33 +238,28 @@ er_fn er_local_cell_init
 ; Returns: eax = slot_id on success, edx = error on failure
 ; ==================================================================
 er_fn er_local_route_register
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi        ; identity hash
 
     call    _local_route_hash_valid
-    test    edx, edx
-    jnz     .internal_error
+    er_check_nonzero edx, .internal_error
 
     ; Check if already registered
     mov     rdi, r12
     call    _local_route_find_by_hash
-    test    edx, edx
-    jz      .already_exists
+    er_check_zero edx, .already_exists
 
     ; Find free slot
     call    _local_route_find_free
-    test    edx, edx
-    jnz     .full
+    er_check_nonzero edx, .full
 
     mov     ebx, eax        ; slot_id
 
     ; Copy identity hash into slot
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .internal_error
+    er_check_nonzero edx, .internal_error
 
     lea     rdi, [rax + LOCAL_ID_HASH]
     mov     rsi, r12
@@ -288,35 +268,30 @@ er_fn er_local_route_register
 
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .internal_error
+    er_check_nonzero edx, .internal_error
     mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
 
     inc     dword [local_identity_count]
 
     mov     eax, ebx
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .already_exists:
     mov     eax, -1
     er_err  ERROR_LOCAL_EXISTS
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .full:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .internal_error:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -327,8 +302,7 @@ er_fn er_local_route_register
 ; ==================================================================
 er_fn er_local_route_lookup
     call    _local_route_hash_valid
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     call    _local_route_find_by_hash
     ret
 .bad:
@@ -342,28 +316,23 @@ er_fn er_local_route_lookup
 ; ==================================================================
 global er_route_register_relay
 er_fn er_route_register_relay
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi
 
     call    _local_route_hash_valid
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     mov     rdi, r12
     call    _local_route_find_by_hash
-    test    edx, edx
-    jz      .use_slot
+    er_check_zero edx, .use_slot
 
     call    _local_route_find_free
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, eax
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     lea     rdi, [rax + LOCAL_ID_HASH]
     mov     rsi, r12
     mov     edx, 32
@@ -376,20 +345,17 @@ er_fn er_route_register_relay
 .write:
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_RELAY
     mov     eax, ebx
     er_ok
 .done:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .bad:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -402,12 +368,10 @@ er_fn er_local_route_unregister
     push    rbx
 
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     mov     rbx, rax
     call    _local_route_entry_active
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     ; Clear the full route entry and reinitialize its ring.
     mov     rdi, rbx
@@ -434,17 +398,14 @@ er_fn er_local_route_unregister
 ; Returns: eax = 0, edx = 0 on success
 ; ==================================================================
 er_fn er_local_route_set_handler
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12b, dl            ; flags
 
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     call    _local_route_entry_active
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
     jne     .bad
 
@@ -455,13 +416,11 @@ er_fn er_local_route_set_handler
 
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .bad:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -472,11 +431,9 @@ er_fn er_local_route_set_handler
 ; ==================================================================
 er_fn er_local_route_get_ring
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     call    _local_route_entry_active
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
     jne     .bad
     add     rax, LOCAL_ID_RING
@@ -495,28 +452,22 @@ er_fn er_local_route_get_ring
 ; ==================================================================
 global er_route_send
 er_fn er_route_send
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r13, rdi        ; destination hash
     mov     r12, rsi        ; cell
-    test    r12, r12
-    jz      .bad_param
+    er_check_zero r12, .bad_param
 
     call    _local_route_hash_valid
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     call    _local_route_find_by_hash
-    test    edx, edx
-    jnz     .send_tor_unknown
+    er_check_nonzero edx, .send_tor_unknown
 
     mov     ebx, eax        ; slot_id
     mov     edi, ebx
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     movzx   ecx, byte [rax + LOCAL_ID_ROUTE_KIND]
     cmp     ecx, LOCAL_ROUTE_KIND_RELAY
@@ -528,16 +479,13 @@ er_fn er_route_send
     mov     rsi, r12        ; cell
     call    er_local_cell_send_to_slot
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .send_tor_unknown:
     mov     rdi, r13
     call    er_route_register_relay
-    test    edx, edx
-    jnz     .tor_fail
+    er_check_nonzero edx, .tor_fail
     mov     ebx, eax
     jmp     .send_tor
 
@@ -549,39 +497,29 @@ er_fn er_route_send
     js      .tor_fail
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .tor_fail:
     mov     eax, -1
     er_err  ERROR_TOR_STREAM_FAIL
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .not_found:
     mov     eax, -1
     er_err  ERROR_LOCAL_NOT_FOUND
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad_param:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -591,26 +529,22 @@ er_fn er_route_send
 ; Returns: eax = 0, edx = 0 on success, ERROR_LOCAL_EMPTY if none
 ; ==================================================================
 er_fn er_local_cell_recv
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rsi        ; out buffer
 
     call    er_local_route_get_ring
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     mov     rdi, rax        ; ring_ptr
     mov     rsi, r12        ; out cell
     call    er_local_ring_read
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .bad:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -620,20 +554,16 @@ er_fn er_local_cell_recv
 ; Skip hash lookup, use slot_id directly.
 ; ==================================================================
 er_fn er_local_cell_send_to_slot
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     ebx, edi        ; slot_id
     mov     r12, rsi        ; cell
 
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     mov     r13, rax        ; route entry
     call    _local_route_entry_active
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     cmp     byte [r13 + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
     jne     .bad
 
@@ -642,8 +572,7 @@ er_fn er_local_cell_send_to_slot
     test    cl, AGENT_FLAG_SYNC
     jz      .enqueue
     mov     rcx, [r13 + LOCAL_ID_HANDLER]
-    test    rcx, rcx
-    jz      .enqueue
+    er_check_zero rcx, .enqueue
 
     mov     rdi, r12
     mov     esi, [r12 + LOCAL_CELL_PAYLOAD + AGENT_PAYLOAD_SENDER_SLOT]
@@ -656,15 +585,11 @@ er_fn er_local_cell_send_to_slot
     call    er_local_ring_write
 
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -675,10 +600,7 @@ er_fn er_local_cell_send_to_slot
 ; and pending cells, calls the handler.
 ; ==================================================================
 er_fn er_local_cell_poll
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     xor     r12d, r12d          ; slot index
     xor     r14d, r14d          ; cells processed
@@ -689,18 +611,15 @@ er_fn er_local_cell_poll
 
     mov     edi, r12d
     call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .next
+    er_check_nonzero edx, .next
     call    _local_route_entry_active
-    test    edx, edx
-    jnz     .next
+    er_check_nonzero edx, .next
     cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
     jne     .next
 
     ; Check for handler
     mov     rcx, [rax + LOCAL_ID_HANDLER]
-    test    rcx, rcx
-    jz      .next
+    er_check_zero rcx, .next
 
     ; SYNC handlers are delivered by send_to_slot, not by queue polling.
     movzx   ebx, byte [rax + LOCAL_ID_FLAGS]
@@ -713,16 +632,14 @@ er_fn er_local_cell_poll
     lea     r13, [rax + LOCAL_ID_RING]
     mov     rdi, r13
     call    er_local_ring_available
-    test    eax, eax
-    jz      .next
+    er_check_zero eax, .next
 
     ; Read one pending cell and dispatch
     sub     rsp, LOCAL_CELL_SIZE
     mov     rdi, r13
     mov     rsi, rsp
     call    er_local_ring_read
-    test    edx, edx
-    jnz     .pop_next
+    er_check_nonzero edx, .pop_next
 
     ; Dispatch: handler(rdi=cell_ptr, rsi=sender_slot_id)
     mov     rdi, rsp
@@ -741,10 +658,7 @@ er_fn er_local_cell_poll
 .done:
     mov     eax, r14d
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================

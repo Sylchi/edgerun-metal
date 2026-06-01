@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("../bytes.zig");
 const icon_vector = @import("icon_vector.zig");
 const icon = @import("icon.zig");
@@ -55,30 +54,30 @@ pub fn getIr(icon_id: u32) ?[]const f32 {
 }
 
 test "asset pack has tabler icons" {
-    try std.testing.expect(icon_count > 5000);
+    if (icon_count <= 5000) return error.TestExpectedTrue;
 }
 
 test "iconId returns correct positions" {
-    try std.testing.expect(iconId(.dashboard) > 0);
-    try std.testing.expect(iconId(.circle_check) > 0);
-    try std.testing.expect(iconId(.circle_x) > 0);
-    try std.testing.expect(iconId(.git_commit) > 0);
-    try std.testing.expect(iconId(.dashboard) != iconId(.circle_check));
+    if (iconId(.dashboard) == 0) return error.TestExpectedTrue;
+    if (iconId(.circle_check) == 0) return error.TestExpectedTrue;
+    if (iconId(.circle_x) == 0) return error.TestExpectedTrue;
+    if (iconId(.git_commit) == 0) return error.TestExpectedTrue;
+    if (iconId(.dashboard) == iconId(.circle_check)) return error.TestExpectedNotEqual;
 }
 
 test "asset pack contains cursor icons" {
-    try std.testing.expect(getIr(cursor_pointer_2_icon_id) != null);
-    try std.testing.expect(getIr(cursor_hand_finger_icon_id) != null);
+    if (getIr(cursor_pointer_2_icon_id) == null) return error.TestExpectedValue;
+    if (getIr(cursor_hand_finger_icon_id) == null) return error.TestExpectedValue;
 }
 
 test "getIr returns non-empty data for cursor icons" {
     const pointer = getIr(cursor_pointer_2_icon_id) orelse return error.TestFailed;
     const hand = getIr(cursor_hand_finger_icon_id) orelse return error.TestFailed;
-    try std.testing.expect(pointer.len > 0);
-    try std.testing.expect(hand.len > 0);
+    if (pointer.len == 0) return error.TestExpectedTrue;
+    if (hand.len == 0) return error.TestExpectedTrue;
 }
 
 test "getIr returns null for unknown icon id" {
-    try std.testing.expectEqual(@as(?[]const f32, null), getIr(0));
-    try std.testing.expectEqual(@as(?[]const f32, null), getIr(999_999));
+    if (getIr(0) != null) return error.TestExpectedNull;
+    if (getIr(999_999) != null) return error.TestExpectedNull;
 }

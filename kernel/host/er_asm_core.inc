@@ -438,8 +438,30 @@ er_fn handle_directive_emit
     mov     ecx, tok_db_len
     call    token_eq
     test    eax, eax
-    jz      .dq
+    jz      .dw
     call    emit_db_directive
+    jmp     .done
+.dw:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_dw]
+    mov     ecx, tok_dw_len
+    call    token_eq
+    test    eax, eax
+    jz      .dd
+    mov     r10d, 2
+    call    emit_int_directive
+    jmp     .done
+.dd:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_dd]
+    mov     ecx, tok_dd_len
+    call    token_eq
+    test    eax, eax
+    jz      .dq
+    mov     r10d, 4
+    call    emit_int_directive
     jmp     .done
 .dq:
     mov     rdi, r12
@@ -448,8 +470,41 @@ er_fn handle_directive_emit
     mov     ecx, tok_dq_len
     call    token_eq
     test    eax, eax
-    jz      .resq
+    jz      .resb
     call    emit_dq_directive
+    jmp     .done
+.resb:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_resb]
+    mov     ecx, tok_resb_len
+    call    token_eq
+    test    eax, eax
+    jz      .resw
+    mov     r10d, 1
+    call    emit_res_directive
+    jmp     .done
+.resw:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_resw]
+    mov     ecx, tok_resw_len
+    call    token_eq
+    test    eax, eax
+    jz      .resd
+    mov     r10d, 2
+    call    emit_res_directive
+    jmp     .done
+.resd:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_resd]
+    mov     ecx, tok_resd_len
+    call    token_eq
+    test    eax, eax
+    jz      .resq
+    mov     r10d, 4
+    call    emit_res_directive
     jmp     .done
 .resq:
     mov     rdi, r12
@@ -459,13 +514,15 @@ er_fn handle_directive_emit
     call    token_eq
     test    eax, eax
     jz      .done
-    call    emit_resq_directive
+    mov     r10d, 8
+    call    emit_res_directive
 .done:
     er_pop  r12, r13
     ret
 
-er_fn emit_resq_directive
-    er_push rbx
+er_fn emit_res_directive
+    er_push rbx, r12
+    mov     r12, r10
     call    expect_u32_operand
     test    eax, eax
     jz      .bad
@@ -473,16 +530,18 @@ er_fn emit_resq_directive
     test    eax, eax
     jz      .bad
     mov     rbx, [rel imm_u32_value]
+    imul    rbx, r12
 .loop:
     test    rbx, rbx
     jz      .done
-    call    append_zero_qword
+    xor     edi, edi
+    call    append_text_byte
     dec     rbx
     jmp     .loop
 .bad:
     mov     qword [rel exit_subset_bad], 1
 .done:
-    er_pop  rbx
+    er_pop  rbx, r12
     ret
 
 er_fn record_global_operands
@@ -747,16 +806,42 @@ er_fn add_global_symbol
 er_fn record_equ
     er_push r10, r11
     call    skip_token
+    push    r14
     call    expect_u32_operand
     test    eax, eax
-    jz      .bad
+    jz      .expr
+    pop     r12
     call    expect_line_end
     test    eax, eax
-    jz      .bad
+    jz      .expr_from_saved
     call    add_equ_symbol
     test    eax, eax
     jz      .bad
     jmp     .done
+.expr_from_saved:
+    mov     r14, r12
+    jmp     .expr_have_cursor
+.expr:
+    pop     r14
+.expr_have_cursor:
+    call    expect_equ_mul_operand
+    test    eax, eax
+    jz      .skip_unsupported
+    call    expect_line_end
+    test    eax, eax
+    jz      .skip_unsupported
+    call    add_equ_symbol
+    test    eax, eax
+    jz      .bad
+    jmp     .done
+.skip_unsupported:
+    cmp     r14, r15
+    jae     .done
+    movzx   eax, byte [r14]
+    cmp     al, 10
+    je      .done
+    inc     r14
+    jmp     .skip_unsupported
 .bad:
     mov     qword [rel exit_subset_bad], 1
 .done:
@@ -765,7 +850,7 @@ er_fn record_equ
 
 ; handle_preproc(r14=line cursor at %).
 er_fn handle_preproc
-    er_push r12, r13, r14, r15
+    er_push r12, r13, r15
     mov     r12, r14
     call    skip_token
     mov     r13, r14
@@ -786,12 +871,112 @@ er_fn handle_preproc
     mov     ecx, tok_percent_include_len
     call    token_eq
     test    eax, eax
-    jz      .done
+    jz      .macro
     cmp     qword [rel assemble_mode], 0
     je      .done
     call    record_include
+    jmp     .done
+.macro:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_percent_macro]
+    mov     ecx, tok_percent_macro_len
+    call    token_eq
+    test    eax, eax
+    jz      .ifdef
+    lea     rdx, [rel tok_percent_endmacro]
+    mov     ecx, tok_percent_endmacro_len
+    call    skip_to_preproc_token
+    jmp     .done
+.ifdef:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_percent_ifdef]
+    mov     ecx, tok_percent_ifdef_len
+    call    token_eq
+    test    eax, eax
+    jz      .ifndef
+    call    skip_undefined_ifdef
+    jmp     .done
+.ifndef:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_percent_ifndef]
+    mov     ecx, tok_percent_ifndef_len
+    call    token_eq
+    test    eax, eax
+    jz      .else
+    jmp     .done
+.else:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_percent_else]
+    mov     ecx, tok_percent_else_len
+    call    token_eq
+    test    eax, eax
+    jz      .done
+    lea     rdx, [rel tok_percent_endif]
+    mov     ecx, tok_percent_endif_len
+    call    skip_to_preproc_token
 .done:
-    er_pop  r12, r13, r14, r15
+    er_pop  r12, r13, r15
+    ret
+
+er_fn skip_undefined_ifdef
+    er_push rbx
+    lea     rdx, [rel tok_percent_else]
+    mov     ecx, tok_percent_else_len
+    call    skip_to_preproc_token
+    cmp     r14, r15
+    jae     .done
+    mov     rbx, r14
+    call    skip_space_inline
+    mov     rdi, r14
+    call    skip_token
+    mov     rsi, r14
+    sub     rsi, rdi
+    lea     rdx, [rel tok_percent_else]
+    mov     ecx, tok_percent_else_len
+    call    token_eq
+    test    eax, eax
+    jnz     .done
+    mov     r14, rbx
+.done:
+    er_pop  rbx
+    ret
+
+er_fn skip_to_preproc_token
+    er_push rbx, r12, r13
+    mov     r12, rdx
+    mov     r13, rcx
+.line:
+    cmp     r14, r15
+    jae     .done
+    movzx   eax, byte [r14]
+    inc     r14
+    cmp     al, 10
+    jne     .line
+    mov     rbx, r14
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .done
+    cmp     byte [r14], '%'
+    jne     .line
+    mov     rdi, r14
+    call    skip_token
+    mov     rsi, r14
+    sub     rsi, rdi
+    mov     rdx, r12
+    mov     rcx, r13
+    call    token_eq
+    test    eax, eax
+    jnz     .found
+    mov     r14, rbx
+    jmp     .line
+.found:
+    mov     r14, rbx
+.done:
+    er_pop  rbx, r12, r13
     ret
 
 er_fn record_define
@@ -1001,6 +1186,45 @@ er_fn emit_db_directive
     mov     qword [rel exit_subset_bad], 1
 .done:
     er_pop  r12, r13
+    ret
+
+er_fn emit_int_directive
+    er_push rbx, r12
+    mov     r12, r10
+.next_value:
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    cmp     r12, 2
+    jne     .dword
+    cmp     qword [rel imm_u32_value], 65535
+    ja      .bad
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    shr     rdi, 8
+    call    append_text_byte
+    jmp     .separator
+.dword:
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u32
+.separator:
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .done
+    movzx   eax, byte [r14]
+    cmp     al, ','
+    jne     .line_end
+    inc     r14
+    jmp     .next_value
+.line_end:
+    call    expect_line_end
+    test    eax, eax
+    jnz     .done
+.bad:
+    mov     qword [rel exit_subset_bad], 1
+.done:
+    er_pop  rbx, r12
     ret
 
 er_fn emit_dq_directive

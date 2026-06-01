@@ -87,6 +87,9 @@ er_fn print_report
     lea     rdi, [rel key_instructions]
     mov     rsi, [rel instr_count]
     call    print_kv
+    lea     rdi, [rel key_text_len]
+    mov     rsi, [rel text_len]
+    call    print_kv
     lea     rdi, [rel key_exit_step]
     mov     rsi, [rel exit_instr_step]
     call    print_kv
@@ -196,4 +199,3 @@ er_fn write_cstr_fd
 er_fn exit_now
     mov     eax, SYS_exit_group
     syscall
-

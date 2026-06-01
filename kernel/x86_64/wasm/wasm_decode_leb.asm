@@ -221,8 +221,7 @@ er_wasm_eql:
     ; rdi = ptr1, rsi = len1, rdx = ptr2, rcx = len2
     cmp     rsi, rcx
     jne     .not_equal
-    test    rsi, rsi
-    jz      .equal
+    er_check_zero rsi, .equal
     mov     r8, rsi
     mov     rsi, rdx
     mov     rcx, r8

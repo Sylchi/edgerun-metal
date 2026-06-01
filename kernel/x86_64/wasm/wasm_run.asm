@@ -8,12 +8,7 @@
 ; Returns: rax = result value, rdx = error code
 ; =================================================================+
 er_fn er_fn_run
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     push    r8              ; save export_name_len
 
     mov     r12, rdi        ; runtime_ptr
@@ -27,20 +22,17 @@ er_fn er_fn_run
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_parse_resolve_validate
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     edi, 1
     call    _er_wasm_prime_loaded_module
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     ; Resolve export to function index
     mov     rdi, r15
     mov     rsi, [rbp - 48]
     call    _er_wasm_resolve_export_function_index
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
     mov     r15, rax
 
     ; Execute exported function
@@ -48,8 +40,7 @@ er_fn er_fn_run
     xor     rsi, rsi        ; no args for now
     xor     rdx, rdx
     call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     ; Return result
     mov     rax, [exec_result_values]
@@ -62,13 +53,7 @@ er_fn er_fn_run
     mov     qword [executor_runtime_ptr], 0
 .done:
     pop     r8              ; restore export_name_len
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_fn_run_args: Top-level entry point with WASM value arguments
@@ -82,12 +67,7 @@ er_fn er_fn_run
 ; Returns: rax = result value, rdx = error code
 ; =================================================================+
 er_fn er_fn_run_args
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     push    r8              ; save export_name_len
     push    r9              ; save args ptr
 
@@ -103,24 +83,20 @@ er_fn er_fn_run_args
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_parse_resolve_validate
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     edi, 1
     call    _er_wasm_prime_loaded_module
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     rdi, r15
     mov     rsi, [rbp - 48]
     call    _er_wasm_resolve_export_function_index
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
     mov     r15, rax
 
     mov     rbx, [rbp + 16] ; args count
-    test    rbx, rbx
-    jz      .exec
+    er_check_zero rbx, .exec
     cmp     qword [rbp - 56], 0
     je      .bad_args
 .exec:
@@ -128,8 +104,7 @@ er_fn er_fn_run_args
     mov     rsi, [rbp - 56]
     mov     rdx, rbx
     call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     rax, [exec_result_values]
     mov     rdx, [exec_result_count]
@@ -144,15 +119,7 @@ er_fn er_fn_run_args
     mov     byte [exec_storage_module_valid], 0
     mov     qword [executor_runtime_ptr], 0
 .done:
-    pop     r9
-    pop     r8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15, r8, r9
 
 ; ==================================================================
 ; Initialize the runtime context
@@ -185,12 +152,7 @@ er_fn er_fn_init
 extern er_wasm_runtime_ptr
 %endif
 er_fn er_fn_load
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; runtime_ptr
     mov     r13, rsi        ; wasm_bytes
@@ -205,13 +167,11 @@ er_fn er_fn_load
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_parse_resolve_validate
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     xor     edi, edi
     call    _er_wasm_prime_loaded_module
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     xor     edx, edx
     jmp     .done
@@ -220,13 +180,7 @@ er_fn er_fn_load
     mov     byte [exec_storage_module_valid], 0
     mov     qword [executor_runtime_ptr], 0
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_fn_load_trusted — Load a trusted internal WASM module.
@@ -234,12 +188,7 @@ er_fn er_fn_load
 ; Use for built-in modules that the kernel ships, not untrusted payloads.
 ; =================================================================+
 er_fn er_fn_load_trusted
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -252,13 +201,11 @@ er_fn er_fn_load_trusted
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_parse_resolve_trusted
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     xor     edi, edi
     call    _er_wasm_prime_loaded_module
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     xor     edx, edx
     jmp     .done
@@ -267,13 +214,7 @@ er_fn er_fn_load_trusted
     mov     byte [exec_storage_module_valid], 0
     mov     qword [executor_runtime_ptr], 0
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _er_wasm_validate_launch_pages
@@ -287,16 +228,14 @@ _er_wasm_validate_launch_pages:
     jb      .no_memory
 
     mov     rcx, [memory_max_pages]
-    test    rcx, rcx
-    jz      .check_backing
+    er_check_zero rcx, .check_backing
     cmp     rax, rcx
     ja      .no_memory
 
 .check_backing:
     mov     rdi, rax
     call    er_wasm_pages_to_bytes
-    test    rdx, rdx
-    jnz     .no_memory
+    er_check_nonzero rdx, .no_memory
     cmp     rax, [runtime_memory_len]
     ja      .no_memory
 
@@ -365,16 +304,13 @@ _er_wasm_stage_runtime_for_module:
 ; ==================================================================
 _er_wasm_parse_resolve_validate:
     call    er_wasm_parse_module
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     call    er_wasm_resolve_imports
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     call    er_wasm_validate_no_recursion
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     mov     byte [exec_storage_module_valid], 1
     er_ok
@@ -388,12 +324,10 @@ _er_wasm_parse_resolve_validate:
 ; ==================================================================
 _er_wasm_parse_resolve_trusted:
     call    er_wasm_parse_module
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     call    er_wasm_resolve_imports
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     mov     byte [exec_storage_module_valid], 1
     er_ok
@@ -414,8 +348,7 @@ _er_wasm_prime_loaded_module:
     mov     rax, [memory_min_pages]
 .set_memory_pages:
     call    _er_wasm_validate_launch_pages
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
     mov     [executor_memory_pages], rax
     shl     rax, WASM_PAGE_SHIFT
     mov     [executor_memory_limit], rax
@@ -430,8 +363,7 @@ _er_wasm_prime_loaded_module:
     xor     rsi, rsi
     xor     rdx, rdx
     call    er_fn_exec
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
     cmp     qword [exec_result_count], 0
     je      .mark_start_ran
     er_err  ERROR_CORRUPT
@@ -456,8 +388,7 @@ _er_wasm_prime_loaded_module:
 ; ==================================================================
 _er_wasm_resolve_export_function_index:
     call    er_wasm_find_export
-    test    rdx, rdx
-    jnz     .done
+    er_check_nonzero rdx, .done
 
     mov     rbx, rax
     imul    rbx, EXPORT_SIZE
@@ -482,12 +413,7 @@ _er_wasm_resolve_export_function_index:
 ; Multiple calls are safe — execution state is reset each time.
 ; =================================================================+
 er_fn er_fn_call
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; runtime_ptr
     mov     r13, rsi        ; export_name_ptr
@@ -505,8 +431,7 @@ er_fn er_fn_call
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_resolve_export_function_index
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
     mov     rbx, rax
 
     ; Execute the function
@@ -514,8 +439,7 @@ er_fn er_fn_call
     xor     rsi, rsi        ; no args
     xor     rdx, rdx        ; 0 args
     call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     ; Return result
     mov     rax, [exec_result_values]
@@ -530,13 +454,7 @@ er_fn er_fn_call
     xor     eax, eax
     er_err  ERROR_BAD_ARGUMENT
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_fn_call_args — Call an exported function of a loaded module with args
@@ -547,12 +465,7 @@ er_fn er_fn_call
 ; Args are 64-bit slots, one per WASM value, matching er_fn_exec.
 ; =================================================================+
 er_fn er_fn_call_args
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; runtime_ptr
     mov     r13, rsi        ; export_name_ptr
@@ -567,24 +480,20 @@ er_fn er_fn_call_args
     jne     .bad_loaded_state
     cmp     r12, [executor_runtime_ptr]
     jne     .bad_loaded_state
-    test    rbx, rbx
-    jz      .resolve
-    test    r15, r15
-    jz      .bad_loaded_state
+    er_check_zero rbx, .resolve
+    er_check_zero r15, .bad_loaded_state
 
 .resolve:
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_resolve_export_function_index
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     rdi, rax
     mov     rsi, r15
     mov     rdx, rbx
     call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     rax, [exec_result_values]
     xor     edx, edx
@@ -597,13 +506,7 @@ er_fn er_fn_call_args
     xor     eax, eax
     er_err  ERROR_BAD_ARGUMENT
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Resolve all imports against host-provided import table
@@ -613,25 +516,18 @@ er_fn er_fn_call_args
 ; Returns: rdx = 0 on success, ERROR_MISSING_IMPORT on failure
 ; =================================================================+
 er_wasm_resolve_imports:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     xor     r12d, r12d
     mov     r13, [import_count]
     mov     r14, [runtime_imports_len]
 
-    test    r13, r13
-    jz      .done_ok
+    er_check_zero r13, .done_ok
 
     cmp     qword [runtime_imports_ptr], 0
     je      .not_found_all
 
-    test    r14, r14
-    jz      .not_found_all
+    er_check_zero r14, .not_found_all
 
 .loop:
     cmp     r12, r13
@@ -655,8 +551,7 @@ er_wasm_resolve_imports:
     mov     rdx, [imports_buf + rbx + IMPORT_MODULE_NAME_PTR_OFF]
     mov     rcx, [imports_buf + rbx + IMPORT_MODULE_NAME_LEN_OFF]
     call    er_wasm_eql
-    test    eax, eax
-    jz      .scan_next
+    er_check_zero eax, .scan_next
 
     ; Module name matches — compare function name
     mov     rax, r15
@@ -667,8 +562,7 @@ er_wasm_resolve_imports:
     mov     rdx, [imports_buf + rbx + IMPORT_FUNC_NAME_PTR_OFF]
     mov     rcx, [imports_buf + rbx + IMPORT_FUNC_NAME_LEN_OFF]
     call    er_wasm_eql
-    test    eax, eax
-    jz      .scan_next
+    er_check_zero eax, .scan_next
 
     ; Both names match — store resolved index
     mov     [imports_buf + rbx + IMPORT_RESOLVED_FUNC_IDX_OFF], r15
@@ -687,13 +581,7 @@ er_wasm_resolve_imports:
 .done_ok:
     xor     edx, edx
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Validate that the call graph has no cycles (recursion is banned).
@@ -704,11 +592,7 @@ er_wasm_resolve_imports:
 er_wasm_validate_no_recursion:
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     ; Stack-allocate visited[0..1023] + in_progress[1024..2047]
     sub     rsp, MAX_FUNCTIONS * 2
@@ -735,8 +619,7 @@ er_wasm_validate_no_recursion:
     lea     rdx, [rsp + MAX_FUNCTIONS]  ; in_progress
     mov     rcx, r15                ; function_count
     call    .dfs_cycle
-    test    rdx, rdx
-    jnz     .check_error
+    er_check_nonzero rdx, .check_error
 
 .check_next:
     inc     r12
@@ -752,13 +635,7 @@ er_wasm_validate_no_recursion:
     ; rdx already set
 
 .check_out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ── DFS cycle detection ──
 ; rdi = function index
@@ -771,10 +648,7 @@ er_wasm_validate_no_recursion:
     mov     byte [rdx + rdi], 1
     mov     byte [rsi + rdi], 1
 
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push r12, r13, r14, r15
     push    rcx                 ; save function_count
 
     mov     r12, rdi            ; current function
@@ -784,8 +658,7 @@ er_wasm_validate_no_recursion:
     ; Get code info
     push    rdi
     call    er_wasm_code_index_for_function
-    test    rdx, rdx
-    jnz     .dfs_ok             ; skip on error (caught elsewhere)
+    er_check_nonzero rdx, .dfs_ok
     pop     rdi
 
     imul    r10, rax, CODE_SIZE
@@ -824,8 +697,7 @@ er_wasm_validate_no_recursion:
     mov     rdx, r14
     mov     rcx, [rsp]          ; function_count (on stack above our pushes)
     call    .dfs_cycle
-    test    rdx, rdx
-    jnz     .dfs_error
+    er_check_nonzero rdx, .dfs_error
 
 .dfs_op_next:
     inc     ecx
@@ -844,11 +716,7 @@ er_wasm_validate_no_recursion:
 .dfs_done:
     mov     byte [r14 + r12], 0  ; clear in_progress
     add     rsp, 8               ; discard saved function_count from stack
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    ret
+    er_pop_ret r12, r13, r14, r15
 
 .dfs_ok:
     pop     rdi

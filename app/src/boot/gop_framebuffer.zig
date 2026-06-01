@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const uefi = std.os.uefi;
 
 const GraphicsOutput = uefi.protocol.GraphicsOutput;

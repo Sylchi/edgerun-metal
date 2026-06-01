@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const media_common = @import("common.zig");
 const bytes_mod = @import("../bytes.zig");
 const video_common = @import("video_common.zig");

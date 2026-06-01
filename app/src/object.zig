@@ -902,9 +902,41 @@ fn zeroed(in: []const u8) bool {
     return !bytes.nonzero(in);
 }
 
+const testing = struct {
+    fn expect(condition: bool) !void {
+        if (!condition) return error.TestExpectedTrue;
+    }
+
+    fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+        switch (@typeInfo(@TypeOf(expected))) {
+            .array => |array| if (array.child == u8) {
+                if (!bytes.eql(expected[0..], actual[0..])) return error.TestExpectedEqual;
+                return;
+            },
+            else => {},
+        }
+        if (actual != expected) return error.TestExpectedEqual;
+    }
+
+    fn expectEqualStrings(expected: []const u8, actual: []const u8) !void {
+        if (!bytes.eql(expected, actual)) return error.TestExpectedEqual;
+    }
+
+    fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const T) !void {
+        if (expected.len != actual.len) return error.TestExpectedEqual;
+        for (expected, actual) |expected_item, actual_item| {
+            if (expected_item != actual_item) return error.TestExpectedEqual;
+        }
+    }
+
+    fn expectError(expected: anyerror, actual: anytype) !void {
+        if (actual) |_| return error.TestExpectedError else |err| {
+            if (err != expected) return err;
+        }
+    }
+};
+
 test "requirements are encoded and hashed deterministically" {
-    const std = @import("std");
-    const testing = std.testing;
     const req = Requirements{
         .durability = .durable,
         .confidentiality = .user_app_private,
@@ -919,8 +951,6 @@ test "requirements are encoded and hashed deterministically" {
 }
 
 test "header encode decode owns canonical layout" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -949,8 +979,6 @@ test "header encode decode owns canonical layout" {
 }
 
 test "header decode rejects nonzero reserved bytes" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -977,8 +1005,6 @@ test "header decode rejects nonzero reserved bytes" {
 }
 
 test "owner and child encode decode are symmetric" {
-    const std = @import("std");
-    const testing = std.testing;
     const node_id = [_]u8{2} ++ [_]u8{0} ** 31;
     const requirement_id = [_]u8{3} ++ [_]u8{0} ** 31;
     const owner = Owner{ .kind = .app, .node_id = node_id };
@@ -1002,8 +1028,6 @@ test "owner and child encode decode are symmetric" {
 }
 
 test "envelope encode decode validates owner and algorithm" {
-    const std = @import("std");
-    const testing = std.testing;
     const owner = Owner{
         .kind = .app,
         .node_id = [_]u8{4} ++ [_]u8{0} ** 31,
@@ -1033,8 +1057,6 @@ test "envelope encode decode validates owner and algorithm" {
 }
 
 test "view decodes canonical bytes node and owns body slicing" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1057,8 +1079,6 @@ test "view decodes canonical bytes node and owns body slicing" {
 }
 
 test "writer builds owned canonical bytes nodes" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1106,8 +1126,6 @@ test "writer builds owned canonical bytes nodes" {
 }
 
 test "object tpm encryption binds storage envelope to caller policy" {
-    const std = @import("std");
-    const testing = std.testing;
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1204,8 +1222,6 @@ test "object tpm encryption binds storage envelope to caller policy" {
 }
 
 test "object app private encryption is app sealed without user decrypt principal" {
-    const std = @import("std");
-    const testing = std.testing;
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1274,8 +1290,6 @@ test "object app private encryption is app sealed without user decrypt principal
 }
 
 test "writer builds canonical tree nodes from child records" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1326,8 +1340,6 @@ test "writer builds canonical tree nodes from child records" {
 }
 
 test "writer builds owned canonical tree nodes" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1375,8 +1387,6 @@ test "writer builds owned canonical tree nodes" {
 }
 
 test "writer builds canonical receipt nodes" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1399,8 +1409,6 @@ test "writer builds canonical receipt nodes" {
 }
 
 test "signature receipts bind signer challenge and subject object ids" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{
@@ -1432,8 +1440,6 @@ test "signature receipts bind signer challenge and subject object ids" {
 }
 
 test "signature receipts reject malformed body policy and zero signatures" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{

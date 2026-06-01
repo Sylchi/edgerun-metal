@@ -19,8 +19,7 @@ er_wasm_checked_add:
 er_wasm_pages_to_bytes:
     mov     rax, rdi
     shr     rax, 48             ; if pages > 2^48, overflow (since 2^48 >> 16 = 2^32)
-    test    rax, rax
-    jnz     .overflow
+    er_check_nonzero rax, .overflow
     mov     rax, rdi
     shl     rax, WASM_PAGE_SHIFT
     er_ok
@@ -36,12 +35,7 @@ er_wasm_pages_to_bytes:
 ; Destroys current module state, re-parses into global structures
 ; =================================================================+
 er_wasm_parse_module:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 64             ; local vars
 
     ; Reset module state
@@ -107,8 +101,7 @@ er_wasm_parse_module:
     mov     r11, rax            ; r11 = section_size
 
     ; Skip custom sections (id == 0)
-    test    r15d, r15d
-    jz      .skip_section
+    er_check_zero r15d, .skip_section
 
     ; Validate section order (section must have strictly increasing order)
     movzx   eax, byte [section_order + r15]
@@ -252,8 +245,7 @@ er_wasm_parse_module:
     jne     .corrupt
     ; Validate declared_data_count matches data_segment_count if present
     mov     rax, [declared_data_count]
-    test    rax, rax
-    jz      .success
+    er_check_zero rax, .success
     cmp     rax, [data_segment_count]
     jne     .corrupt
 .success:
@@ -269,10 +261,4 @@ er_wasm_parse_module:
     ; rdx already has error from called function — pass through
 .done:
     lea     rsp, [rbp - 40]
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15

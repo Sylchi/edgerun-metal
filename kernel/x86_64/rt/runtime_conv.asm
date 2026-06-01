@@ -7,9 +7,7 @@
 ; Returns parsed value, or 0 on parse failure.
 ; ==================================================================
 er_fn er_strtou64
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     xor     r10d, r10d
@@ -50,13 +48,11 @@ er_fn er_strtou64
     ja      .strtou64_done
     sub     al, '0'
     movzx   ecx, al
-    test    r11, r11
-    jnz     .strtou64_consume
+    er_check_nonzero r11, .strtou64_consume
     mov     rax, r9
     mov     rbx, 10
     mul     rbx
-    test    rdx, rdx
-    jnz     .strtou64_overflow
+    er_check_nonzero rdx, .strtou64_overflow
     add     rax, rcx
     jc      .strtou64_overflow
     mov     r9, rax
@@ -68,22 +64,17 @@ er_fn er_strtou64
     inc     r12
     jmp     .strtou64_parse
 .strtou64_done:
-    test    r13, r13
-    jz      .strtou64_ret
+    er_check_zero r13, .strtou64_ret
     mov     [r13], r12
 .strtou64_ret:
-    test    r10, r10
-    jz      .strtou64_return_accum
+    er_check_zero r10, .strtou64_return_accum
     neg     r9
 .strtou64_return_accum:
-    test    r11, r11
-    jz      .strtou64_no_overflow
+    er_check_zero r11, .strtou64_no_overflow
     mov     r9, -1
 .strtou64_no_overflow:
     mov     rax, r9
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -93,9 +84,7 @@ er_fn er_strtou64
 ; Returns parsed value, clamped to INT64_MIN/INT64_MAX on overflow.
 ; ==================================================================
 er_fn er_strtoi64
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     xor     r10d, r10d
@@ -136,13 +125,11 @@ er_fn er_strtoi64
     ja      .strtoi64_done
     sub     al, '0'
     movzx   ecx, al
-    test    r11, r11
-    jnz     .strtoi64_consume
+    er_check_nonzero r11, .strtoi64_consume
     mov     rax, r9
     mov     rbx, 10
     mul     rbx
-    test    rdx, rdx
-    jnz     .strtoi64_overflow
+    er_check_nonzero rdx, .strtoi64_overflow
     add     rax, rcx
     jc      .strtoi64_overflow
     mov     r9, rax
@@ -154,14 +141,11 @@ er_fn er_strtoi64
     inc     r12
     jmp     .strtoi64_parse
 .strtoi64_done:
-    test    r13, r13
-    jz      .strtoi64_ret
+    er_check_zero r13, .strtoi64_ret
     mov     [r13], r12
 .strtoi64_ret:
-    test    r11, r11
-    jnz     .strtoi64_clamp
-    test    r10, r10
-    jz      .strtoi64_pos
+    er_check_nonzero r11, .strtoi64_clamp
+    er_check_zero r10, .strtoi64_pos
     mov     rax, r9
     mov     rbx, 0x7fffffffffffffff
     cmp     rax, rbx
@@ -172,17 +156,14 @@ er_fn er_strtoi64
     mov     r9, 0x8000000000000000
     jmp     .strtoi64_pos
 .strtoi64_clamp:
-    test    r10, r10
-    jnz     .strtoi64_clamp_neg
+    er_check_nonzero r10, .strtoi64_clamp_neg
     mov     r9, 0x7fffffffffffffff
     jmp     .strtoi64_pos
 .strtoi64_clamp_neg:
     mov     r9, 0x8000000000000000
 .strtoi64_pos:
     mov     rax, r9
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -191,9 +172,7 @@ er_fn er_strtoi64
 ; Skips optional "0x" or "0X" prefix. Sets endptr if non-NULL.
 ; ==================================================================
 er_fn er_strtou64_hex
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     xor     r9d, r9d
@@ -246,13 +225,11 @@ er_fn er_strtou64_hex
     sub     al, 'a' - 10
 .strtou64_hex_digit:
     movzx   ecx, al
-    test    r11, r11
-    jnz     .strtou64_hex_consume
+    er_check_nonzero r11, .strtou64_hex_consume
     mov     rax, r9
     mov     rbx, 16
     mul     rbx
-    test    rdx, rdx
-    jnz     .strtou64_hex_overflow
+    er_check_nonzero rdx, .strtou64_hex_overflow
     add     rax, rcx
     jc      .strtou64_hex_overflow
     mov     r9, rax
@@ -264,18 +241,14 @@ er_fn er_strtou64_hex
     inc     r12
     jmp     .strtou64_hex_parse
 .strtou64_hex_done:
-    test    r13, r13
-    jz      .strtou64_hex_ret
+    er_check_zero r13, .strtou64_hex_ret
     mov     [r13], r12
 .strtou64_hex_ret:
-    test    r11, r11
-    jz      .strtou64_hex_no_overflow
+    er_check_zero r11, .strtou64_hex_no_overflow
     mov     r9, -1
 .strtou64_hex_no_overflow:
     mov     rax, r9
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -284,8 +257,7 @@ er_fn er_strtou64_hex
 ; out must have space for len*2 characters (no null terminator added)
 ; ==================================================================
 er_fn er_hex_encode
-    test    rsi, rsi
-    jz      .hexenc_done
+    er_check_zero rsi, .hexenc_done
     xor     r8d, r8d
 .hexenc_loop:
     cmp     r8, rsi
@@ -322,8 +294,7 @@ er_fn er_hex_encode
 ; Returns number of bytes written, or 0 on invalid hex or odd length.
 ; ==================================================================
 er_fn er_hex_decode
-    test    rsi, rsi
-    jz      .hexdec_done_zero
+    er_check_zero rsi, .hexdec_done_zero
     test    sil, 1
     jnz     .hexdec_done_zero
     xor     r8d, r8d
@@ -458,8 +429,7 @@ er_fn er_utf8_encode
 ; ==================================================================
 er_fn er_utf8_decode
     movzx   eax, byte [rdi]
-    test    al, al
-    jz      .utf8dec_invalid
+    er_check_zero al, .utf8dec_invalid
     test    al, 0x80
     jz      .utf8dec_1byte
     test    al, 0x20
@@ -499,15 +469,13 @@ er_fn er_utf8_decode
     inc     r8
     jmp     .utf8dec_cont_loop
 .utf8dec_store_len:
-    test    rsi, rsi
-    jz      .utf8dec_ret
+    er_check_zero rsi, .utf8dec_ret
     mov     [rsi], rcx
 .utf8dec_ret:
     er_ret
 .utf8dec_invalid:
     xor     eax, eax
-    test    rsi, rsi
-    jz      .utf8dec_ret
+    er_check_zero rsi, .utf8dec_ret
     mov     qword [rsi], 0
     er_ret
 
@@ -552,9 +520,7 @@ er_digit_from_char:
 ; Overflow returns UINT64_MAX.
 ; ==================================================================
 er_fn er_strtou64_base
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     mov     ebx, edx
@@ -597,8 +563,7 @@ er_fn er_strtou64_base
     cmp     al, bl
     jae     .stoub_done
     movzx   ecx, al
-    test    r11, r11
-    jnz     .stoub_consume
+    er_check_nonzero r11, .stoub_consume
     mov     rax, -1
     sub     rax, rcx
     xor     edx, edx
@@ -617,32 +582,24 @@ er_fn er_strtou64_base
     inc     r12
     jmp     .stoub_parse
 .stoub_done:
-    test    r13, r13
-    jz      .stoub_ret
+    er_check_zero r13, .stoub_ret
     mov     [r13], r12
 .stoub_ret:
-    test    r10, r10
-    jz      .stoub_no_neg
+    er_check_zero r10, .stoub_no_neg
     neg     r9
 .stoub_no_neg:
-    test    r11, r11
-    jz      .stoub_no_of
+    er_check_zero r11, .stoub_no_of
     mov     r9, -1
 .stoub_no_of:
     mov     rax, r9
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .stoub_set_endptr:
-    test    r13, r13
-    jz      .stoub_ret_zero
+    er_check_zero r13, .stoub_ret_zero
     mov     [r13], r12
 .stoub_ret_zero:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -651,9 +608,7 @@ er_fn er_strtou64_base
 ; Skips whitespace, handles sign. Returns INT64_MIN/MAX on overflow.
 ; ==================================================================
 er_fn er_strtoi64_base
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     mov     ebx, edx
@@ -696,8 +651,7 @@ er_fn er_strtoi64_base
     cmp     al, bl
     jae     .stoib_done
     movzx   ecx, al
-    test    r11, r11
-    jnz     .stoib_consume
+    er_check_nonzero r11, .stoib_consume
     mov     rax, 0x7fffffffffffffff
     sub     rax, rcx
     xor     edx, edx
@@ -716,14 +670,11 @@ er_fn er_strtoi64_base
     inc     r12
     jmp     .stoib_parse
 .stoib_done:
-    test    r13, r13
-    jz      .stoib_ret
+    er_check_zero r13, .stoib_ret
     mov     [r13], r12
 .stoib_ret:
-    test    r11, r11
-    jnz     .stoib_clamp
-    test    r10, r10
-    jz      .stoib_pos
+    er_check_nonzero r11, .stoib_clamp
+    er_check_zero r10, .stoib_pos
     mov     rax, r9
     mov     rbx, 0x7fffffffffffffff
     cmp     rax, rbx
@@ -734,25 +685,19 @@ er_fn er_strtoi64_base
     mov     r9, 0x8000000000000000
     jmp     .stoib_pos
 .stoib_clamp:
-    test    r10, r10
-    jnz     .stoib_clamp_neg
+    er_check_nonzero r10, .stoib_clamp_neg
     mov     r9, 0x7fffffffffffffff
     jmp     .stoib_pos
 .stoib_clamp_neg:
     mov     r9, 0x8000000000000000
 .stoib_pos:
     mov     rax, r9
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .stoib_set_endptr:
-    test    r13, r13
-    jz      .stoib_ret_zero
+    er_check_zero r13, .stoib_ret_zero
     mov     [r13], r12
 .stoib_ret_zero:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret

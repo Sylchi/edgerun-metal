@@ -123,11 +123,7 @@ er_fn er_checksum
 ; Returns: eax = 0 on success, -1 on error, rdx = error code
 ; ==================================================================
 er_fn er_ip_send
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; dst_ip
     mov     r13b, sil       ; protocol
@@ -230,42 +226,26 @@ er_fn er_ip_send
 
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .pending:
     ; ARP resolution in progress — caller should retry later
     mov     eax, -1
     er_err  ERROR_ARP_PENDING
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .fail_param:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .fail_unreachable:
     mov     eax, -1
     er_err  ERROR_NET_UNREACHABLE
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 ; ==================================================================
 
@@ -278,9 +258,7 @@ er_fn er_ip_send
 ; Valid local packets with unsupported protocols fail explicitly.
 ; ==================================================================
 er_fn er_ip_handle
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi        ; frame
     mov     r13d, esi       ; frame_len
@@ -323,14 +301,12 @@ er_fn er_ip_handle
 
 .valid_ihl:
     ; Verify checksum
-    push    rbx
-    push    rsi
+    er_push rbx, rsi
     mov     rdi, rbx
     mov     esi, 20          ; only checksum header (20 bytes for 5-dword IHL)
     call    er_checksum
     test    ax, ax
-    pop     rsi
-    pop     rbx
+    er_pop  rbx, rsi
     jnz     .done            ; bad checksum, drop
 
     ; Verify destination IP is ours (or broadcast)
@@ -339,8 +315,7 @@ er_fn er_ip_handle
     je      .for_us
     cmp     eax, 0xFFFFFFFF  ; limited broadcast
     je      .for_us
-    test    eax, eax
-    jz      .done            ; 0.0.0.0, drop
+    er_check_zero eax, .done
 
     ; Check if subnet broadcast
     mov     ecx, [ip_config.netmask]
@@ -376,9 +351,7 @@ er_fn er_ip_handle
     er_ok
 
 .ret:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 ; ==================================================================
 

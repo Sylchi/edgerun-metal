@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 pub const clock_id_emmc: u32 = 1;
 pub const clock_id_uart: u32 = 2;

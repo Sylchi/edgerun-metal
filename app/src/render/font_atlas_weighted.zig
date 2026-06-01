@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const font_builtin = @import("font.zig");
 const font_vector = @import("font.zig");
 const raster = @import("vector_raster.zig");

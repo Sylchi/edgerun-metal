@@ -37,18 +37,11 @@ er_fn er_wasmc_parse_tsx
 ; Returns rax=root_count, rcx=element_count, r8=attribute_count,
 ; r9=text_node_count, rdx=0.
 er_fn er_wasmc_scan_tsx_source
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 64
 
-    test    rdi, rdi
-    jz      .bad_argument
-    test    rsi, rsi
-    jz      .bad_argument
+    er_check_zero rdi, .bad_argument
+    er_check_zero rsi, .bad_argument
     mov     rbx, rdi
     mov     [rbp - 56], rdi
     lea     r12, [rdi + rsi]
@@ -85,13 +78,11 @@ er_fn er_wasmc_scan_tsx_source
     mov     rdi, rbx
     mov     rsi, [rbp - 56]
     call    _er_tsx_source_context_allows_regex
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_regex_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -105,13 +96,11 @@ er_fn er_wasmc_scan_tsx_source
     je      .parse_prefix
     movzx   eax, byte [r10]
     call    _er_tsx_is_name_start
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
     mov     rdi, rbx
     mov     rsi, [rbp - 56]
     call    _er_tsx_source_context_allows_root
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
 
 .parse_prefix:
     mov     rdi, rbx
@@ -120,8 +109,7 @@ er_fn er_wasmc_scan_tsx_source
     xor     edx, edx
     xor     ecx, ecx
     call    er_wasmc_parse_tsx_prefix_tree
-    test    rdx, rdx
-    jnz     .advance_one
+    er_check_nonzero rdx, .advance_one
     inc     r13
     add     r14, rax
     add     r15, rcx
@@ -133,8 +121,7 @@ er_fn er_wasmc_scan_tsx_source
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -142,8 +129,7 @@ er_fn er_wasmc_scan_tsx_source
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_scan_template_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     add     r13, rcx
     add     r14, r8
     add     r15, r9
@@ -155,8 +141,7 @@ er_fn er_wasmc_scan_tsx_source
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_line_comment_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -164,8 +149,7 @@ er_fn er_wasmc_scan_tsx_source
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_block_comment_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -195,13 +179,7 @@ er_fn er_wasmc_scan_tsx_source
     mov     edx, ERROR_PARSE
 .done:
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; er_wasmc_parse_tsx_tree(source=rdi, source_len=rsi, nodes=rdx, node_cap=rcx)
 ; Validates one TSX element tree and optionally writes preorder element records.
@@ -220,18 +198,11 @@ er_fn er_wasmc_parse_tsx_prefix_tree
     jmp     _er_wasmc_parse_tsx_tree_mode
 
 er_fn _er_wasmc_parse_tsx_tree_mode
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 640
 
-    test    rdi, rdi
-    jz      .bad_argument
-    test    rsi, rsi
-    jz      .bad_argument
+    er_check_zero rdi, .bad_argument
+    er_check_zero rsi, .bad_argument
     mov     r12, rdi
     lea     r13, [rdi + rsi]
     mov     [rbp - 112], rdx
@@ -271,8 +242,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     jae     .parse_error
     cmp     byte [rbx], '<'
     je      .tag
-    test    r14, r14
-    jz      .top_text
+    er_check_zero r14, .top_text
     mov     qword [rbp - 96], 0
 .text_loop:
     cmp     rbx, r13
@@ -301,8 +271,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_entity
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .text_loop
 .brace_child:
@@ -310,8 +279,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     je      .skip_brace_child
     inc     qword [rbp - 88]
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .skip_brace_child
+    er_check_zero r10, .skip_brace_child
     mov     r11, r14
     dec     r11
     lea     r9, [rbp - WASMC_TSX_STACK_INDEX_OFF]
@@ -322,8 +290,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     [rbp - 152], rax
     cmp     qword [rbp - 112], 0
     jne     .brace_child_tree
@@ -331,8 +298,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rsi, [rbp - 152]
     dec     rsi
     call    _er_tsx_scan_inner_stats
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     add     r15, rcx
     add     [rbp - 80], r8
     add     [rbp - 88], r9
@@ -349,8 +315,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     r8, [r9 + r8 * 8]
     mov     r9, r15
     call    _er_tsx_scan_inner_tree
-    test    rdx, rdx
-    jnz     .inner_tree_error
+    er_check_nonzero rdx, .inner_tree_error
     add     r15, rax
     add     [rbp - 80], rcx
     add     [rbp - 88], r8
@@ -362,8 +327,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     je      .loop
     inc     qword [rbp - 88]
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .loop
+    er_check_zero r10, .loop
     mov     r11, r14
     dec     r11
     lea     r9, [rbp - WASMC_TSX_STACK_INDEX_OFF]
@@ -378,10 +342,8 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     call    _er_wasmc_skip_ws
     cmp     rax, r13
     jne     .parse_error
-    test    r14, r14
-    jnz     .parse_error
-    test    r15, r15
-    jz      .parse_error
+    er_check_nonzero r14, .parse_error
+    er_check_zero r15, .parse_error
     mov     rax, r15
     mov     rcx, [rbp - 80]
     mov     r8, [rbp - 88]
@@ -404,8 +366,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_parse_name
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     [rbp - 56], rax
     mov     [rbp - 64], rcx
     mov     rbx, r8
@@ -416,14 +377,12 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_type_args
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
 .open_name_done:
     mov     [rbp - 104], r15
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .record_done
+    er_check_zero r10, .record_done
     cmp     r15, [rbp - 120]
     jae     .no_space
     mov     r11, r15
@@ -434,8 +393,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     [r10 + r11 + WASMC_TSX_NODE_NAME_LEN], rax
     mov     qword [r10 + r11 + WASMC_TSX_NODE_ATTR_COUNT], 0
     mov     qword [r10 + r11 + WASMC_TSX_NODE_TEXT_COUNT], 0
-    test    r14, r14
-    jz      .record_root
+    er_check_zero r14, .record_root
     mov     rax, r14
     dec     rax
     lea     r9, [rbp - WASMC_TSX_STACK_INDEX_OFF]
@@ -455,8 +413,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     [rbp - 64], rax
     mov     [rbp - 104], r15
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .record_fragment_done
+    er_check_zero r10, .record_fragment_done
     cmp     r15, [rbp - 120]
     jae     .no_space
     mov     r11, r15
@@ -465,8 +422,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     qword [r10 + r11 + WASMC_TSX_NODE_NAME_LEN], 0
     mov     qword [r10 + r11 + WASMC_TSX_NODE_ATTR_COUNT], 0
     mov     qword [r10 + r11 + WASMC_TSX_NODE_TEXT_COUNT], 0
-    test    r14, r14
-    jz      .record_fragment_root
+    er_check_zero r14, .record_fragment_root
     mov     rax, r14
     dec     rax
     lea     r9, [rbp - WASMC_TSX_STACK_INDEX_OFF]
@@ -495,13 +451,11 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_parse_name
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, r8
     inc     qword [rbp - 80]
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .attr_record_done
+    er_check_zero r10, .attr_record_done
     mov     r11, [rbp - 104]
     imul    r11, r11, WASMC_TSX_NODE_STRIDE
     inc     qword [r10 + r11 + WASMC_TSX_NODE_ATTR_COUNT]
@@ -577,8 +531,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     [rbp - 152], rax
     cmp     qword [rbp - 112], 0
     jne     .spread_attr_tree
@@ -586,8 +539,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rsi, [rbp - 152]
     dec     rsi
     call    _er_tsx_scan_inner_stats
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     add     r15, rcx
     add     [rbp - 80], r8
     add     [rbp - 88], r9
@@ -601,8 +553,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     r8, [rbp - 104]
     mov     r9, r15
     call    _er_tsx_scan_inner_tree
-    test    rdx, rdx
-    jnz     .inner_tree_error
+    er_check_nonzero rdx, .inner_tree_error
     add     r15, rax
     add     [rbp - 80], rcx
     add     [rbp - 88], r8
@@ -611,8 +562,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rbx, rax
     inc     qword [rbp - 80]
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .attr_loop
+    er_check_zero r10, .attr_loop
     mov     r11, [rbp - 104]
     imul    r11, r11, WASMC_TSX_NODE_STRIDE
     inc     qword [r10 + r11 + WASMC_TSX_NODE_ATTR_COUNT]
@@ -622,8 +572,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_quoted_attr
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .attr_loop
 
@@ -665,8 +614,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rsi, [rbp - 152]
     dec     rsi
     call    _er_tsx_scan_inner_stats
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     add     r15, rcx
     add     [rbp - 80], r8
     add     [rbp - 88], r9
@@ -680,8 +628,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     r8, [rbp - 104]
     mov     r9, r15
     call    _er_tsx_scan_inner_tree
-    test    rdx, rdx
-    jnz     .inner_tree_error
+    er_check_nonzero rdx, .inner_tree_error
     add     r15, rax
     add     [rbp - 80], rcx
     add     [rbp - 88], r8
@@ -692,8 +639,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .brace_loop
 .brace_slash:
@@ -707,13 +653,11 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_source_context_allows_regex
-    test    eax, eax
-    jz      .brace_slash_advance
+    er_check_zero eax, .brace_slash_advance
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_regex_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .brace_loop
 .brace_slash_advance:
@@ -758,8 +702,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     cmp     byte [r10], '>'
     jne     .parse_error
     lea     rbx, [rbx + 2]
-    test    r14, r14
-    jnz     .loop
+    er_check_nonzero r14, .loop
     mov     qword [rbp - 48], 1
     jmp     .after_root_close
 
@@ -767,8 +710,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, [rbp - 56]
     mov     rsi, [rbp - 64]
     call    _er_tsx_name_is_raw
-    test    eax, eax
-    jnz     .raw_text_element
+    er_check_nonzero eax, .raw_text_element
     cmp     r14, WASMC_TSX_MAX_DEPTH
     jae     .no_space
     lea     r11, [rbp - WASMC_TSX_STACK_PTR_OFF]
@@ -791,27 +733,22 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdx, [rbp - 56]
     mov     rcx, [rbp - 64]
     call    _er_tsx_scan_raw_close
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
-    test    r8, r8
-    jz      .raw_text_counted
+    er_check_zero r8, .raw_text_counted
     inc     qword [rbp - 88]
     mov     r10, [rbp - 112]
-    test    r10, r10
-    jz      .raw_text_counted
+    er_check_zero r10, .raw_text_counted
     mov     r11, [rbp - 104]
     imul    r11, r11, WASMC_TSX_NODE_STRIDE
     inc     qword [r10 + r11 + WASMC_TSX_NODE_TEXT_COUNT]
 .raw_text_counted:
-    test    r14, r14
-    jnz     .loop
+    er_check_nonzero r14, .loop
     mov     qword [rbp - 48], 1
     jmp     .after_root_close
 
 .close_tag:
-    test    r14, r14
-    jz      .parse_error
+    er_check_zero r14, .parse_error
     lea     rbx, [rbx + 2]
     cmp     rbx, r13
     jae     .parse_error
@@ -820,8 +757,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_parse_name
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     dec     r14
     lea     r11, [rbp - WASMC_TSX_STACK_LEN_OFF]
     cmp     rcx, [r11 + r14 * 8]
@@ -843,8 +779,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rbx, r8
     xor     r10d, r10d
 .name_compare:
-    test    r10, r10
-    jz      .name_match
+    er_check_zero r10, .name_match
     mov     al, [rdi]
     cmp     al, [rsi]
     jne     .parse_error
@@ -862,8 +797,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     cmp     byte [rbx], '>'
     jne     .parse_error
     inc     rbx
-    test    r14, r14
-    jnz     .loop
+    er_check_nonzero r14, .loop
     mov     qword [rbp - 48], 1
 
 .after_root_close:
@@ -886,11 +820,9 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_trailing_assertions
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
-    test    r10, r10
-    jz      .trailing_semicolon
+    er_check_zero r10, .trailing_semicolon
     cmp     rbx, r13
     jae     .parse_error
     cmp     byte [rbx], ')'
@@ -945,13 +877,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     xor     r8d, r8d
 .done:
     add     rsp, 640
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; _er_tsx_scan_inner_stats(start=rdi, end_exclusive=rsi)
 ; Returns rcx=elements, r8=attributes, r9=text nodes, rdx=0/error.
@@ -1017,12 +943,7 @@ er_fn _er_tsx_skip_block_comment_source
 ; Scans expression contents, appends nested JSX nodes, and remaps parent indexes.
 ; Returns rax=elements, rcx=attributes, r8=text nodes, rdx=0/error.
 er_fn _er_tsx_scan_inner_tree
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 128
 
     xor     r13d, r13d
@@ -1030,8 +951,7 @@ er_fn _er_tsx_scan_inner_tree
     xor     r15d, r15d
     cmp     rsi, rdi
     jbe     .success
-    test    rdx, rdx
-    jz      .bad_argument
+    er_check_zero rdx, .bad_argument
     mov     rbx, rdi
     mov     [rbp - 56], rdi
     mov     r12, rsi
@@ -1068,13 +988,11 @@ er_fn _er_tsx_scan_inner_tree
     mov     rdi, rbx
     mov     rsi, [rbp - 56]
     call    _er_tsx_source_context_allows_regex
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_regex_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -1088,13 +1006,11 @@ er_fn _er_tsx_scan_inner_tree
     je      .parse_prefix
     movzx   eax, byte [r10]
     call    _er_tsx_is_name_start
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
     mov     rdi, rbx
     mov     rsi, [rbp - 56]
     call    _er_tsx_source_context_allows_root
-    test    eax, eax
-    jz      .advance_one
+    er_check_zero eax, .advance_one
 
 .parse_prefix:
     mov     r11, [rbp - 128]
@@ -1112,8 +1028,7 @@ er_fn _er_tsx_scan_inner_tree
     sub     rsi, rbx
     mov     rcx, r10
     call    er_wasmc_parse_tsx_prefix_tree
-    test    rdx, rdx
-    jnz     .inner_error
+    er_check_nonzero rdx, .inner_error
     mov     [rbp - 96], rax
     mov     [rbp - 104], rcx
     mov     [rbp - 112], r8
@@ -1148,8 +1063,7 @@ er_fn _er_tsx_scan_inner_tree
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -1162,8 +1076,7 @@ er_fn _er_tsx_scan_inner_tree
     mov     r9, [rbp - 128]
     add     r9, r13
     call    _er_tsx_scan_template_tree
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     add     r13, rcx
     add     r14, r8
@@ -1174,8 +1087,7 @@ er_fn _er_tsx_scan_inner_tree
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_line_comment_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -1183,8 +1095,7 @@ er_fn _er_tsx_scan_inner_tree
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_block_comment_source
-    test    rdx, rdx
-    jnz     .parse_error
+    er_check_nonzero rdx, .parse_error
     mov     rbx, rax
     jmp     .scan_loop
 
@@ -1222,13 +1133,7 @@ er_fn _er_tsx_scan_inner_tree
     mov     edx, ERROR_PARSE
 .done:
     add     rsp, 128
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; _er_tsx_parse_name(cursor=rdi, end=rsi)
 ; Returns rax=name_ptr, rcx=name_len, r8=cursor_after_name, rdx=0.
@@ -1237,8 +1142,7 @@ er_fn _er_tsx_parse_name
     jae     .bad
     movzx   eax, byte [rdi]
     call    _er_tsx_is_name_start
-    test    eax, eax
-    jz      .bad
+    er_check_zero eax, .bad
     mov     r8, rdi
     inc     r8
 .loop:
@@ -1246,8 +1150,7 @@ er_fn _er_tsx_parse_name
     jae     .done
     movzx   eax, byte [r8]
     call    _er_tsx_is_name_continue
-    test    eax, eax
-    jz      .done
+    er_check_zero eax, .done
     inc     r8
     jmp     .loop
 .done:
@@ -1320,8 +1223,7 @@ er_fn _er_tsx_skip_entity
     je      .numeric
     movzx   edx, byte [rbx]
     call    _er_tsx_is_entity_alpha
-    test    eax, eax
-    jz      .bad
+    er_check_zero eax, .bad
 .name_loop:
     inc     rbx
     cmp     rbx, rsi
@@ -1330,8 +1232,7 @@ er_fn _er_tsx_skip_entity
     je      .done
     movzx   edx, byte [rbx]
     call    _er_tsx_is_entity_alnum
-    test    eax, eax
-    jnz     .name_loop
+    er_check_nonzero eax, .name_loop
     jmp     .bad
 .numeric:
     inc     rbx
@@ -1343,8 +1244,7 @@ er_fn _er_tsx_skip_entity
     je      .hex_prefix
     movzx   edx, byte [rbx]
     call    _er_tsx_is_digit
-    test    eax, eax
-    jz      .bad
+    er_check_zero eax, .bad
 .digit_loop:
     inc     rbx
     cmp     rbx, rsi
@@ -1353,8 +1253,7 @@ er_fn _er_tsx_skip_entity
     je      .done
     movzx   edx, byte [rbx]
     call    _er_tsx_is_digit
-    test    eax, eax
-    jnz     .digit_loop
+    er_check_nonzero eax, .digit_loop
     jmp     .bad
 .hex_prefix:
     inc     rbx
@@ -1362,8 +1261,7 @@ er_fn _er_tsx_skip_entity
     jae     .bad
     movzx   edx, byte [rbx]
     call    _er_tsx_is_hex_digit
-    test    eax, eax
-    jz      .bad
+    er_check_zero eax, .bad
 .hex_loop:
     inc     rbx
     cmp     rbx, rsi
@@ -1372,8 +1270,7 @@ er_fn _er_tsx_skip_entity
     je      .done
     movzx   edx, byte [rbx]
     call    _er_tsx_is_hex_digit
-    test    eax, eax
-    jnz     .hex_loop
+    er_check_nonzero eax, .hex_loop
     jmp     .bad
 .done:
     lea     rax, [rbx + 1]
@@ -1415,8 +1312,7 @@ er_fn _er_tsx_is_digit
 
 er_fn _er_tsx_is_entity_alnum
     call    _er_tsx_is_entity_alpha
-    test    eax, eax
-    jnz     .true
+    er_check_nonzero eax, .true
     jmp     _er_tsx_is_digit
 .true:
     mov     eax, 1
@@ -1424,8 +1320,7 @@ er_fn _er_tsx_is_entity_alnum
 
 er_fn _er_tsx_is_hex_digit
     call    _er_tsx_is_digit
-    test    eax, eax
-    jnz     .true
+    er_check_nonzero eax, .true
     cmp     dl, 'A'
     jb      .false
     cmp     dl, 'F'
@@ -1743,8 +1638,7 @@ er_fn _er_tsx_source_context_allows_root
 ; Regex literals use expression-start contexts, but not TSX statement boundaries.
 er_fn _er_tsx_source_context_allows_regex
     call    _er_tsx_source_context_allows_root
-    test    eax, eax
-    jz      .false
+    er_check_zero eax, .false
     mov     rax, rdi
 .back_ws:
     cmp     rax, rsi
@@ -1804,9 +1698,7 @@ er_fn _er_tsx_skip_quoted_source
 ; _er_tsx_skip_quoted_attr(cursor=rdi, end=rsi)
 ; Returns rax=after closing quote, validating text entities inside the value.
 er_fn _er_tsx_skip_quoted_attr
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rsi
     cmp     rbx, r12
@@ -1835,30 +1727,22 @@ er_fn _er_tsx_skip_quoted_attr
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_entity
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .done:
     lea     rax, [rbx + 1]
     xor     edx, edx
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; _er_tsx_skip_trailing_assertions(cursor=rdi, end=rsi)
 ; Skips trailing "as Type" and "satisfies Type" expression assertions.
 er_fn _er_tsx_skip_trailing_assertions
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12, rsi
 .loop:
@@ -1910,35 +1794,26 @@ er_fn _er_tsx_skip_trailing_assertions
     jae     .bad
     movzx   eax, byte [rbx]
     call    _er_tsx_is_name_continue
-    test    eax, eax
-    jnz     .success
+    er_check_nonzero eax, .success
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_trailing_type_expr
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .success:
     mov     rax, rbx
     xor     edx, edx
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; _er_tsx_skip_trailing_type_expr(cursor=rdi, end=rsi)
 ; Returns before enclosing ")" / ";" / EOF after an assertion type.
 er_fn _er_tsx_skip_trailing_type_expr
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rsi
     xor     r13d, r13d
@@ -1979,16 +1854,14 @@ er_fn _er_tsx_skip_trailing_type_expr
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .braced:
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .slash:
@@ -2034,8 +1907,7 @@ er_fn _er_tsx_skip_trailing_type_expr
     inc     rbx
     jmp     .loop
 .angle_dec:
-    test    r13, r13
-    jz      .advance
+    er_check_zero r13, .advance
     cmp     byte [rbx - 1], '='
     je      .advance
     dec     r13
@@ -2047,45 +1919,29 @@ er_fn _er_tsx_skip_trailing_type_expr
     inc     rbx
     jmp     .loop
 .maybe_done_paren:
-    test    r13, r13
-    jnz     .advance
-    test    r14, r14
-    jz      .success
+    er_check_nonzero r13, .advance
+    er_check_zero r14, .success
     dec     r14
     inc     rbx
     jmp     .loop
 .maybe_done_semicolon:
-    test    r13, r13
-    jnz     .advance
-    test    r14, r14
-    jz      .success
+    er_check_nonzero r13, .advance
+    er_check_zero r14, .success
     inc     rbx
     jmp     .loop
 .success:
     mov     rax, rbx
     xor     edx, edx
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 ; _er_tsx_scan_template_source(cursor=rdi, end=rsi)
 ; Returns rax=after template, rcx/r8/r9/r10=roots/elements/attrs/text, rdx=0.
 er_fn _er_tsx_scan_template_source
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     sub     rsp, 24
     mov     qword [rsp], 0
     mov     qword [rsp + 8], 0
@@ -2129,8 +1985,7 @@ er_fn _er_tsx_scan_template_source
     mov     rdi, r11
     mov     rsi, r12
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     [rsp + 8], rax
     mov     rdi, [rsp + 16]
     mov     rsi, rax
@@ -2138,8 +1993,7 @@ er_fn _er_tsx_scan_template_source
     sub     rsi, rdi
     jbe     .expr_done
     call    er_wasmc_scan_tsx_source
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     add     r13, rax
     add     r14, rcx
     add     r15, r8
@@ -2168,23 +2022,13 @@ er_fn _er_tsx_scan_template_source
     mov     edx, ERROR_PARSE
 .ret:
     add     rsp, 24
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; _er_tsx_scan_template_tree(cursor=rdi, end=rsi, nodes=rdx,
 ;                            node_cap=rcx, parent_index=r8, base_index=r9)
 ; Returns rax=after template, rcx=elements, r8=attrs, r9=text, rdx=0/error.
 er_fn _er_tsx_scan_template_tree
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 96
 
     mov     rbx, rdi
@@ -2231,8 +2075,7 @@ er_fn _er_tsx_scan_template_tree
     mov     rdi, r11
     mov     rsi, r12
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     [rbp - 88], rax
     mov     rdi, [rbp - 96]
     mov     rsi, rax
@@ -2243,8 +2086,7 @@ er_fn _er_tsx_scan_template_tree
     mov     r9, [rbp - 80]
     add     r9, r13
     call    _er_tsx_scan_inner_tree
-    test    rdx, rdx
-    jnz     .inner_error
+    er_check_nonzero rdx, .inner_error
     add     r13, rax
     add     r14, rcx
     add     r15, r8
@@ -2275,13 +2117,7 @@ er_fn _er_tsx_scan_template_tree
     mov     edx, ERROR_PARSE
 .ret:
     add     rsp, 96
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; _er_tsx_skip_regex_source(cursor=rdi, end=rsi)
 ; Returns rax=after regex literal and flags, rdx=0.
@@ -2326,8 +2162,7 @@ er_fn _er_tsx_skip_regex_source
     inc     rax
     jmp     .loop
 .maybe_done:
-    test    r8d, r8d
-    jnz     .regex_slash
+    er_check_nonzero r8d, .regex_slash
 .done:
     inc     rax
 .flag_loop:
@@ -2359,9 +2194,7 @@ er_fn _er_tsx_skip_regex_source
 ; _er_tsx_skip_type_args(cursor=rdi, end=rsi)
 ; Returns rax=after matching generic tag type arguments, rdx=0.
 er_fn _er_tsx_skip_type_args
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12, rsi
     cmp     rbx, r12
@@ -2394,16 +2227,14 @@ er_fn _er_tsx_skip_type_args
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .braced:
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_balanced_braces
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .slash:
@@ -2456,24 +2287,17 @@ er_fn _er_tsx_skip_type_args
     je      .advance
     dec     r13
     inc     rbx
-    test    r13, r13
-    jnz     .loop
+    er_check_nonzero r13, .loop
     mov     rax, rbx
     xor     edx, edx
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 .advance:
     inc     rbx
     jmp     .loop
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; _er_tsx_name_is_raw(name=rdi, name_len=rsi) -> eax=1 for raw-text tags.
 er_fn _er_tsx_name_is_raw
@@ -2518,11 +2342,7 @@ er_fn _er_tsx_name_is_raw
 ; _er_tsx_scan_raw_close(cursor=rdi, end=rsi, name=rdx, name_len=rcx)
 ; Returns rax=after_close_gt, r8=has_non_ws_text, rdx=0.
 er_fn _er_tsx_scan_raw_close
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13, rdx
@@ -2556,8 +2376,7 @@ er_fn _er_tsx_scan_raw_close
     mov     r10, r14
     mov     r11, r13
 .name_loop:
-    test    r10, r10
-    jz      .name_done
+    er_check_zero r10, .name_done
     cmp     r9, r12
     jae     .bad
     mov     al, [r9]
@@ -2588,20 +2407,12 @@ er_fn _er_tsx_scan_raw_close
     xor     r8d, r8d
     mov     edx, ERROR_PARSE
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; _er_tsx_skip_balanced_braces(cursor=rdi, end=rsi)
 ; Returns rax=cursor_after_balanced_expression, rdx=0.
 er_fn _er_tsx_skip_balanced_braces
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     rbx, rdi
     mov     r12, rsi
     mov     r14, rdi
@@ -2636,21 +2447,15 @@ er_fn _er_tsx_skip_balanced_braces
 .dec_depth:
     dec     r13
     inc     rbx
-    test    r13, r13
-    jnz     .loop
+    er_check_nonzero r13, .loop
     mov     rax, rbx
     xor     edx, edx
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 .quoted:
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_quoted_source
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .slash:
@@ -2664,13 +2469,11 @@ er_fn _er_tsx_skip_balanced_braces
     mov     rdi, rbx
     mov     rsi, r14
     call    _er_tsx_source_context_allows_regex
-    test    eax, eax
-    jz      .slash_advance
+    er_check_zero eax, .slash_advance
     mov     rdi, rbx
     mov     rsi, r12
     call    _er_tsx_skip_regex_source
-    test    rdx, rdx
-    jnz     .bad
+    er_check_nonzero rdx, .bad
     mov     rbx, rax
     jmp     .loop
 .slash_advance:
@@ -2710,8 +2513,4 @@ er_fn _er_tsx_skip_balanced_braces
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14

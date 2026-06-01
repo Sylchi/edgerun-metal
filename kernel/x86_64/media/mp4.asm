@@ -34,10 +34,8 @@ extern er_av1_obu_scan_units
 ; rdi=buf, esi=len, edx=cursor, rcx=desc
 er_fn er_mp4_read_box
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     ebx, edx
     cmp     ebx, esi
     ja      .corrupt
@@ -129,10 +127,8 @@ er_fn er_mp4_read_box
 ; er_mp4_ftyp_has_brand(buf, len, box_desc, brand) -> eax=1 if present, else 0.
 ; rdi=buf, esi=len, rdx=box_desc, ecx=brand
 er_fn er_mp4_ftyp_has_brand
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_FTYP
     jne     .unsupported
     mov     r8d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -153,8 +149,7 @@ er_fn er_mp4_ftyp_has_brand
     test    r9d, MP4_BRAND_SIZE - 1
     jnz     .corrupt
 .loop:
-    test    r9d, r9d
-    jz      .no
+    er_check_zero r9d, .no
     mov     eax, [rdi + r8]
     cmp     eax, ecx
     je      .yes
@@ -187,10 +182,8 @@ er_fn er_mp4_ftyp_has_brand
 ; rdi=buf, esi=len, edx=cursor, ecx=type, r8=desc
 er_fn er_mp4_find_box
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -205,8 +198,7 @@ er_fn er_mp4_find_box
     mov     edx, ebx
     mov     rcx, r15
     call    er_mp4_read_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     dword [r15 + MP4_BOX_DESC_TYPE], r14d
     je      .ok
     cmp     eax, ebx
@@ -235,8 +227,7 @@ er_fn er_mp4_find_box
 ; Scans direct children inside a parent box payload.
 ; rdi=buf, esi=len, rdx=parent_desc, ecx=type, r8=child_desc
 er_fn er_mp4_find_child_box
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r9d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
     mov     r10d, [rdx + MP4_BOX_DESC_PAYLOAD_LEN]
     cmp     r9d, esi
@@ -267,12 +258,9 @@ er_fn er_mp4_find_child_box
 ; rdi=buf, esi=len, rdx=stsd_desc, rcx=entry_desc
 er_fn er_mp4_stsd_first_entry
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSD
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -287,8 +275,7 @@ er_fn er_mp4_stsd_first_entry
     jb      .corrupt
     lea     r13, [rdi + rbx + MP4_STSD_ENTRY_COUNT_OFFSET]
     mp4_load_be32 r13, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     lea     edx, [ebx + MP4_STSD_FIRST_ENTRY_OFFSET]
     mov     r13d, ebx
     add     r13d, r12d
@@ -316,8 +303,7 @@ er_fn er_mp4_stsd_first_entry
 ; rdi=buf, esi=len, rdx=entry_desc, ecx=type, r8=child_desc
 er_fn er_mp4_sample_entry_find_child
     er_push rbx, r12
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_AV01
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -360,12 +346,9 @@ er_fn er_mp4_sample_entry_find_child
 ; rdi=buf, esi=len, rdx=stbl_desc, rcx=out_tables
 er_fn er_mp4_sample_tables_find
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STBL
     jne     .unsupported
     mov     r12, rdi
@@ -378,16 +361,14 @@ er_fn er_mp4_sample_tables_find
     mov     ecx, MP4_BOX_TYPE_STSZ
     lea     r8, [rbx + MP4_SAMPLE_TABLES_STSZ_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, r14
     mov     ecx, MP4_BOX_TYPE_STCO
     lea     r8, [rbx + MP4_SAMPLE_TABLES_STCO_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jz      .find_stsc
+    er_check_zero edx, .find_stsc
     cmp     edx, ERROR_NO_DATA
     jne     .done
     mov     rdi, r12
@@ -396,8 +377,7 @@ er_fn er_mp4_sample_tables_find
     mov     ecx, MP4_BOX_TYPE_CO64
     lea     r8, [rbx + MP4_SAMPLE_TABLES_STCO_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .find_stsc:
     mov     rdi, r12
     mov     esi, r13d
@@ -405,8 +385,7 @@ er_fn er_mp4_sample_tables_find
     mov     ecx, MP4_BOX_TYPE_STSC
     lea     r8, [rbx + MP4_SAMPLE_TABLES_STSC_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, MP4_SAMPLE_TABLES_SIZE
     er_ok
     jmp     .done
@@ -427,12 +406,9 @@ er_fn er_mp4_sample_tables_find
 er_fn er_mp4_video_stbl_find
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc MP4_VIDEO_STBL_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_MOOV
     jne     .unsupported
     mov     r12, rdi
@@ -463,8 +439,7 @@ er_fn er_mp4_video_stbl_find
     mov     ecx, MP4_BOX_TYPE_TRAK
     lea     r8, [rsp + MP4_VIDEO_STBL_TRAK_DESC]
     call    er_mp4_find_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, ebx
     jbe     .corrupt
     mov     [rsp + MP4_VIDEO_STBL_CURSOR], eax
@@ -474,32 +449,27 @@ er_fn er_mp4_video_stbl_find
     mov     ecx, MP4_BOX_TYPE_MDIA
     lea     r8, [rsp + MP4_VIDEO_STBL_MDIA_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_VIDEO_STBL_MDIA_DESC]
     mov     ecx, MP4_BOX_TYPE_HDLR
     lea     r8, [rsp + MP4_VIDEO_STBL_HDLR_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_VIDEO_STBL_HDLR_DESC]
     call    er_mp4_hdlr_is_video
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .trak_loop
+    er_check_nonzero edx, .done
+    er_check_zero eax, .trak_loop
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_VIDEO_STBL_MDIA_DESC]
     mov     ecx, MP4_BOX_TYPE_MINF
     lea     r8, [rsp + MP4_VIDEO_STBL_MINF_DESC]
     call    er_mp4_find_child_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_VIDEO_STBL_MINF_DESC]
@@ -533,12 +503,9 @@ er_fn er_mp4_video_stbl_find
 er_fn er_mp4_video_sample_tables_find
     er_push rbx, r12, r13, r14
     er_stack_alloc MP4_BOX_DESC_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rcx
@@ -546,8 +513,7 @@ er_fn er_mp4_video_sample_tables_find
     mov     esi, r13d
     mov     rcx, rsp
     call    er_mp4_video_stbl_find
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, rsp
@@ -568,10 +534,8 @@ er_fn er_mp4_video_sample_tables_find
 er_fn er_mp4_file_video_sample_tables_find
     er_push rbx, r12, r13
     er_stack_alloc MP4_BOX_DESC_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     rbx, rdx
@@ -579,8 +543,7 @@ er_fn er_mp4_file_video_sample_tables_find
     mov     ecx, MP4_BOX_TYPE_MOOV
     mov     r8, rsp
     call    er_mp4_find_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, rsp
@@ -601,18 +564,15 @@ er_fn er_mp4_file_video_sample_tables_find
 er_fn er_mp4_file_video_sample_locate
     er_push rbx, r12, r13, r14
     er_stack_alloc MP4_SAMPLE_TABLES_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
     mov     r14, rcx
     mov     rdx, rsp
     call    er_mp4_file_video_sample_tables_find
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, rsp
@@ -634,10 +594,8 @@ er_fn er_mp4_file_video_sample_locate
 er_fn er_mp4_file_video_sample_payload
     er_push rbx, r12, r13, r14
     er_stack_alloc MP4_FILE_SAMPLE_PAYLOAD_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -646,15 +604,13 @@ er_fn er_mp4_file_video_sample_payload
     mov     ecx, MP4_BOX_TYPE_MDAT
     lea     r8, [rsp + MP4_FILE_SAMPLE_PAYLOAD_MDAT_DESC]
     call    er_mp4_find_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     mov     edx, ebx
     lea     rcx, [rsp + MP4_FILE_SAMPLE_PAYLOAD_SAMPLE_DESC]
     call    er_mp4_file_video_sample_locate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_FILE_SAMPLE_PAYLOAD_MDAT_DESC]
@@ -676,10 +632,8 @@ er_fn er_mp4_file_video_sample_payload
 er_fn er_mp4_file_video_sample_obu_scan
     er_push rbx, r12, r13, r14
     er_stack_alloc MP4_SAMPLE_DESC_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -687,8 +641,7 @@ er_fn er_mp4_file_video_sample_obu_scan
     mov     edx, ebx
     mov     rcx, rsp
     call    er_mp4_file_video_sample_payload
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + MP4_SAMPLE_DESC_PAYLOAD_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + MP4_SAMPLE_DESC_PAYLOAD_LEN]
@@ -709,10 +662,8 @@ er_fn er_mp4_file_video_sample_obu_scan
 er_fn er_mp4_file_video_sample_obu_route
     er_push rbx, r12, r13, r14
     er_stack_alloc MP4_SAMPLE_DESC_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     ebx, edx
@@ -720,8 +671,7 @@ er_fn er_mp4_file_video_sample_obu_route
     mov     edx, ebx
     mov     rcx, rsp
     call    er_mp4_file_video_sample_payload
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + MP4_SAMPLE_DESC_PAYLOAD_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + MP4_SAMPLE_DESC_PAYLOAD_LEN]
@@ -741,12 +691,9 @@ er_fn er_mp4_file_video_sample_obu_route
 ; rdi=buf, esi=len, rdx=entry_desc, rcx=out_desc
 er_fn er_mp4_visual_sample_entry_decode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_AV01
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -761,18 +708,15 @@ er_fn er_mp4_visual_sample_entry_decode
     jb      .corrupt
     lea     r8, [rdi + rbx + MP4_VISUAL_SAMPLE_ENTRY_DATA_REF]
     mp4_load_be16 r8, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [rcx + MP4_VISUAL_SAMPLE_ENTRY_DESC_DATA_REF], eax
     lea     r8, [rdi + rbx + MP4_VISUAL_SAMPLE_ENTRY_WIDTH]
     mp4_load_be16 r8, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [rcx + MP4_VISUAL_SAMPLE_ENTRY_DESC_WIDTH], eax
     lea     r8, [rdi + rbx + MP4_VISUAL_SAMPLE_ENTRY_HEIGHT]
     mp4_load_be16 r8, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [rcx + MP4_VISUAL_SAMPLE_ENTRY_DESC_HEIGHT], eax
     mov     eax, [rcx + MP4_VISUAL_SAMPLE_ENTRY_DESC_WIDTH]
     er_ok
@@ -797,12 +741,9 @@ er_fn er_mp4_visual_sample_entry_decode
 ; rdi=buf, esi=len, rdx=mdhd_desc, rcx=out_desc
 er_fn er_mp4_mdhd_decode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_MDHD
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -816,8 +757,7 @@ er_fn er_mp4_mdhd_decode
     cmp     r12d, MP4_FULLBOX_HEADER_SIZE
     jb      .corrupt
     movzx   eax, byte [rdi + rbx + MP4_FULLBOX_VERSION]
-    test    eax, eax
-    jz      .v0
+    er_check_zero eax, .v0
     cmp     eax, 1
     je      .v1
     jmp     .unsupported
@@ -826,8 +766,7 @@ er_fn er_mp4_mdhd_decode
     jb      .corrupt
     lea     r8, [rdi + rbx + MP4_MDHD_V0_TIMESCALE]
     mp4_load_be32 r8, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [rcx + MP4_MDHD_DESC_TIMESCALE], eax
     lea     r8, [rdi + rbx + MP4_MDHD_V0_DURATION]
     mp4_load_be32 r8, eax
@@ -840,13 +779,11 @@ er_fn er_mp4_mdhd_decode
     jb      .corrupt
     lea     r8, [rdi + rbx + MP4_MDHD_V1_TIMESCALE]
     mp4_load_be32 r8, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     [rcx + MP4_MDHD_DESC_TIMESCALE], eax
     lea     r8, [rdi + rbx + MP4_MDHD_V1_DURATION_HI]
     mp4_load_be32 r8, eax
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     lea     r8, [rdi + rbx + MP4_MDHD_V1_DURATION_LO]
     mp4_load_be32 r8, eax
     mov     [rcx + MP4_MDHD_DESC_DURATION], eax
@@ -873,12 +810,9 @@ er_fn er_mp4_mdhd_decode
 ; rdi=buf, esi=len, rdx=tkhd_desc, rcx=out_desc
 er_fn er_mp4_tkhd_decode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_TKHD
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -892,8 +826,7 @@ er_fn er_mp4_tkhd_decode
     cmp     r12d, MP4_FULLBOX_HEADER_SIZE
     jb      .corrupt
     movzx   eax, byte [rdi + rbx + MP4_FULLBOX_VERSION]
-    test    eax, eax
-    jz      .v0
+    er_check_zero eax, .v0
     cmp     eax, 1
     je      .v1
     jmp     .unsupported
@@ -917,8 +850,7 @@ er_fn er_mp4_tkhd_decode
     jb      .corrupt
     lea     r8, [rdi + rbx + MP4_TKHD_V1_DURATION_HI]
     mp4_load_be32 r8, eax
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     lea     r8, [rdi + rbx + MP4_TKHD_V1_DURATION_LO]
     mp4_load_be32 r8, eax
     mov     [rcx + MP4_TKHD_DESC_DURATION], eax
@@ -951,12 +883,9 @@ er_fn er_mp4_tkhd_decode
 ; rdi=buf, esi=len, rdx=hdlr_desc, rcx=out_desc
 er_fn er_mp4_hdlr_decode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_HDLR
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -970,8 +899,7 @@ er_fn er_mp4_hdlr_decode
     cmp     r12d, MP4_HDLR_MIN_PAYLOAD
     jb      .corrupt
     movzx   eax, byte [rdi + rbx + MP4_FULLBOX_VERSION]
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mov     eax, [rdi + rbx + MP4_HDLR_HANDLER_TYPE]
     mov     [rcx + MP4_HDLR_DESC_HANDLER_TYPE], eax
     er_ok
@@ -997,8 +925,7 @@ er_fn er_mp4_hdlr_is_video
     er_stack_alloc MP4_HDLR_DESC_SIZE
     mov     rcx, rsp
     call    er_mp4_hdlr_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, MP4_HANDLER_TYPE_VIDE
     sete    al
     movzx   eax, al
@@ -1011,12 +938,9 @@ er_fn er_mp4_hdlr_is_video
 ; rdi=buf, esi=len, rdx=av1c_desc, rcx=out_desc
 er_fn er_mp4_av1c_decode
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_AV1C
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1103,12 +1027,9 @@ er_fn er_mp4_av1c_decode
 ; rdi=buf, esi=len, rdx=stts_desc, ecx=entry_index, r8=out_desc
 er_fn er_mp4_stts_entry
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STTS
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1169,12 +1090,9 @@ er_fn er_mp4_stts_entry
 er_fn er_mp4_stts_sample_time
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc MP4_STTS_SAMPLE_TIME_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1186,18 +1104,15 @@ er_fn er_mp4_stts_sample_time
     xor     ecx, ecx
     lea     r8, [rsp + MP4_STTS_SAMPLE_TIME_CUR_DESC]
     call    er_mp4_stts_entry
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     mov     [rsp + MP4_STTS_SAMPLE_TIME_ENTRY_COUNT], eax
     mov     dword [rsp + MP4_STTS_SAMPLE_TIME_ENTRY_INDEX], 0
     mov     dword [rsp + MP4_STTS_SAMPLE_TIME_SAMPLE_CURSOR], 0
     mov     dword [rsp + MP4_STTS_SAMPLE_TIME_DTS], 0
 .loop:
     mov     eax, [rsp + MP4_STTS_SAMPLE_TIME_CUR_DESC + MP4_STTS_DESC_SAMPLE_COUNT]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     edx, [rsp + MP4_STTS_SAMPLE_TIME_SAMPLE_CURSOR]
     add     edx, eax
     jc      .corrupt
@@ -1220,8 +1135,7 @@ er_fn er_mp4_stts_sample_time
     mov     ecx, eax
     lea     r8, [rsp + MP4_STTS_SAMPLE_TIME_CUR_DESC]
     call    er_mp4_stts_entry
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .loop
 .found:
     mov     eax, ebx
@@ -1257,12 +1171,9 @@ er_fn er_mp4_stts_sample_time
 ; rdi=buf, esi=len, rdx=ctts_desc, ecx=entry_index, r8=out_desc
 er_fn er_mp4_ctts_entry
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_CTTS
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1326,12 +1237,9 @@ er_fn er_mp4_ctts_entry
 er_fn er_mp4_ctts_sample_offset
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc MP4_CTTS_SAMPLE_OFFSET_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1343,17 +1251,14 @@ er_fn er_mp4_ctts_sample_offset
     xor     ecx, ecx
     lea     r8, [rsp + MP4_CTTS_SAMPLE_OFFSET_CUR_DESC]
     call    er_mp4_ctts_entry
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     mov     [rsp + MP4_CTTS_SAMPLE_OFFSET_ENTRY_COUNT], eax
     mov     dword [rsp + MP4_CTTS_SAMPLE_OFFSET_ENTRY_INDEX], 0
     mov     dword [rsp + MP4_CTTS_SAMPLE_OFFSET_SAMPLE_CURSOR], 0
 .loop:
     mov     eax, [rsp + MP4_CTTS_SAMPLE_OFFSET_CUR_DESC + MP4_CTTS_DESC_SAMPLE_COUNT]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     edx, [rsp + MP4_CTTS_SAMPLE_OFFSET_SAMPLE_CURSOR]
     add     edx, eax
     jc      .corrupt
@@ -1371,8 +1276,7 @@ er_fn er_mp4_ctts_sample_offset
     mov     ecx, eax
     lea     r8, [rsp + MP4_CTTS_SAMPLE_OFFSET_CUR_DESC]
     call    er_mp4_ctts_entry
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .loop
 .found:
     mov     eax, [rsp + MP4_CTTS_SAMPLE_OFFSET_CUR_DESC + MP4_CTTS_DESC_SAMPLE_COUNT]
@@ -1400,10 +1304,8 @@ er_fn er_mp4_ctts_sample_offset
 ; er_mp4_stss_sync_count(buf, len, stss_desc) -> eax=count, rdx=error
 ; rdi=buf, esi=len, rdx=stss_desc
 er_fn er_mp4_stss_sync_count
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSS
     jne     .unsupported
     mov     r8d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1438,10 +1340,8 @@ er_fn er_mp4_stss_sync_count
 ; rdi=buf, esi=len, rdx=stss_desc, ecx=sample_index
 er_fn er_mp4_stss_is_sync_sample
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSS
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1471,8 +1371,7 @@ er_fn er_mp4_stss_is_sync_sample
     cmp     ecx, r14d
     jae     .no
     mp4_load_be32 r13, eax
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     cmp     eax, r15d
     je      .yes
     ja      .no
@@ -1505,10 +1404,8 @@ er_fn er_mp4_stss_is_sync_sample
 ; er_mp4_stsz_sample_count(buf, len, stsz_desc) -> eax=count, rdx=error
 ; rdi=buf, esi=len, rdx=stsz_desc
 er_fn er_mp4_stsz_sample_count
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSZ
     jne     .unsupported
     mov     r8d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1543,10 +1440,8 @@ er_fn er_mp4_stsz_sample_count
 ; rdi=buf, esi=len, rdx=stsz_desc, ecx=sample_index
 er_fn er_mp4_stsz_sample_size
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSZ
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1565,8 +1460,7 @@ er_fn er_mp4_stsz_sample_size
     jae     .no_data
     lea     r13, [rdi + rbx + MP4_STSZ_SAMPLE_SIZE_OFFSET]
     mp4_load_be32 r13, eax
-    test    eax, eax
-    jnz     .ok
+    er_check_nonzero eax, .ok
     mov     eax, ecx
     imul    eax, MP4_STSZ_ENTRY_SIZE
     add     eax, MP4_STSZ_FIRST_ENTRY_OFFSET
@@ -1607,10 +1501,8 @@ er_fn er_mp4_stsz_sample_size
 ; rdi=buf, esi=len, rdx=stco_desc, ecx=chunk_index
 er_fn er_mp4_stco_chunk_offset
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STCO
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1664,10 +1556,8 @@ er_fn er_mp4_stco_chunk_offset
 ; er_mp4_stco_chunk_count(buf, len, stco_desc) -> eax=count, rdx=error
 ; rdi=buf, esi=len, rdx=stco_desc
 er_fn er_mp4_stco_chunk_count
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STCO
     jne     .unsupported
     mov     r8d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1702,10 +1592,8 @@ er_fn er_mp4_stco_chunk_count
 ; rdi=buf, esi=len, rdx=co64_desc, ecx=chunk_index
 er_fn er_mp4_co64_chunk_offset
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_CO64
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1735,8 +1623,7 @@ er_fn er_mp4_co64_chunk_offset
     lea     r13, [rdi + rbx + MP4_CO64_FIRST_ENTRY_OFFSET]
     add     r13, rax
     mp4_load_be32 r13, eax
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mp4_load_be32 r13 + 4, eax
     er_ok
     jmp     .done
@@ -1762,10 +1649,8 @@ er_fn er_mp4_co64_chunk_offset
 ; er_mp4_co64_chunk_count(buf, len, co64_desc) -> eax=count, rdx=error
 ; rdi=buf, esi=len, rdx=co64_desc
 er_fn er_mp4_co64_chunk_count
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_CO64
     jne     .unsupported
     mov     r8d, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1800,12 +1685,9 @@ er_fn er_mp4_co64_chunk_count
 ; rdi=buf, esi=len, rdx=stsc_desc, ecx=entry_index, r8=out_desc
 er_fn er_mp4_stsc_entry
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_STSC
     jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -1868,12 +1750,9 @@ er_fn er_mp4_stsc_entry
 er_fn er_mp4_sample_locate
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc MP4_SAMPLE_LOC_STACK_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
@@ -1883,8 +1762,7 @@ er_fn er_mp4_sample_locate
     mov     esi, r13d
     lea     rdx, [r14 + MP4_SAMPLE_TABLES_STSZ_DESC]
     call    er_mp4_stsz_sample_count
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     ebx, eax
     jae     .no_data
     mov     rdi, r12
@@ -1901,10 +1779,8 @@ er_fn er_mp4_sample_locate
 .chunk_count_co64:
     call    er_mp4_co64_chunk_count
 .chunk_count_done:
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     mov     [rsp + MP4_SAMPLE_LOC_CHUNK_COUNT], eax
     mov     rdi, r12
     mov     esi, r13d
@@ -1912,20 +1788,16 @@ er_fn er_mp4_sample_locate
     xor     ecx, ecx
     lea     r8, [rsp + MP4_SAMPLE_LOC_CUR_STSC]
     call    er_mp4_stsc_entry
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .corrupt
+    er_check_nonzero edx, .done
+    er_check_zero eax, .corrupt
     mov     [rsp + MP4_SAMPLE_LOC_ENTRY_COUNT], eax
     mov     dword [rsp + MP4_SAMPLE_LOC_ENTRY_INDEX], 0
     mov     dword [rsp + MP4_SAMPLE_LOC_SAMPLE_CURSOR], 0
 .entry_loop:
     mov     eax, [rsp + MP4_SAMPLE_LOC_CUR_STSC + MP4_STSC_DESC_FIRST_CHUNK]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     mov     ecx, [rsp + MP4_SAMPLE_LOC_CUR_STSC + MP4_STSC_DESC_SAMPLES_PER_CHUNK]
-    test    ecx, ecx
-    jz      .corrupt
+    er_check_zero ecx, .corrupt
     mov     edx, [rsp + MP4_SAMPLE_LOC_ENTRY_INDEX]
     inc     edx
     cmp     edx, [rsp + MP4_SAMPLE_LOC_ENTRY_COUNT]
@@ -1937,8 +1809,7 @@ er_fn er_mp4_sample_locate
     inc     ecx
     lea     r8, [rsp + MP4_SAMPLE_LOC_NEXT_STSC]
     call    er_mp4_stsc_entry
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [rsp + MP4_SAMPLE_LOC_NEXT_STSC + MP4_STSC_DESC_FIRST_CHUNK]
     cmp     eax, [rsp + MP4_SAMPLE_LOC_CUR_STSC + MP4_STSC_DESC_FIRST_CHUNK]
     jbe     .corrupt
@@ -1998,8 +1869,7 @@ er_fn er_mp4_sample_locate
 .chunk_offset_co64:
     call    er_mp4_co64_chunk_offset
 .chunk_offset_done:
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + MP4_SAMPLE_LOC_OFFSET_IN_CHUNK], eax
     mov     ecx, [rsp + MP4_SAMPLE_LOC_SAMPLE_CURSOR]
 .sum_loop:
@@ -2009,8 +1879,7 @@ er_fn er_mp4_sample_locate
     mov     esi, r13d
     lea     rdx, [r14 + MP4_SAMPLE_TABLES_STSZ_DESC]
     call    er_mp4_stsz_sample_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     [rsp + MP4_SAMPLE_LOC_OFFSET_IN_CHUNK], eax
     jc      .corrupt
     inc     ecx
@@ -2021,8 +1890,7 @@ er_fn er_mp4_sample_locate
     lea     rdx, [r14 + MP4_SAMPLE_TABLES_STSZ_DESC]
     mov     ecx, ebx
     call    er_mp4_stsz_sample_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r15 + MP4_SAMPLE_DESC_PAYLOAD_LEN], eax
     mov     eax, [rsp + MP4_SAMPLE_LOC_OFFSET_IN_CHUNK]
     mov     [r15 + MP4_SAMPLE_DESC_PAYLOAD_OFFSET], eax
@@ -2058,14 +1926,10 @@ er_fn er_mp4_sample_locate
 ; Validates that an already located sample lies inside both the file buffer and mdat payload.
 ; rdi=buf, esi=len, rdx=mdat_desc, rcx=sample_desc, r8=out_desc
 er_fn er_mp4_sample_payload
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_MDAT
     jne     .unsupported
     mov     eax, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
@@ -2125,15 +1989,13 @@ mp4_decode_fixed_16:
 er_fn er_mp4_is_av1
     er_push rbx, r12
     er_stack_alloc MP4_BOX_DESC_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     rbx, rdi
     mov     r12d, esi
     xor     edx, edx
     mov     rcx, rsp
     call    er_mp4_read_box
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rbx
     mov     esi, r12d
     mov     rdx, rsp

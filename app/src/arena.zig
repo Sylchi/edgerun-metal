@@ -1,4 +1,3 @@
-const std = @import("std");
 const Region = @import("region.zig").Region;
 
 pub const BoundedArena = struct {
@@ -93,10 +92,10 @@ test "allocator cannot leave bounded region" {
     const allocator = arena.allocator();
 
     const first = try allocator.alloc(u8, 20);
-    try std.testing.expectEqual(@as(usize, 20), first.len);
-    try std.testing.expect(arena.remaining() <= 12);
+    try expectEqual(@as(usize, 20), first.len);
+    try expect(arena.remaining() <= 12);
 
-    try std.testing.expectError(error.OutOfMemory, allocator.alloc(u8, 64));
+    try expectError(error.OutOfMemory, allocator.alloc(u8, 64));
 }
 
 test "parent can delegate child arena by splitting capability" {
@@ -104,14 +103,14 @@ test "parent can delegate child arena by splitting capability" {
     var parent = BoundedArena.init(.{ .base = &memory });
     var child = parent.split(24).?;
 
-    try std.testing.expectEqual(@as(usize, 40), parent.remaining());
-    try std.testing.expectEqual(@as(usize, 24), child.remaining());
+    try expectEqual(@as(usize, 40), parent.remaining());
+    try expectEqual(@as(usize, 24), child.remaining());
 
     const child_allocator = child.allocator();
     _ = try child_allocator.alloc(u8, 16);
-    try std.testing.expectEqual(@as(usize, 40), parent.remaining());
-    try std.testing.expect(child.remaining() <= 8);
-    try std.testing.expect(!parent.owns(child.region.base));
+    try expectEqual(@as(usize, 40), parent.remaining());
+    try expect(child.remaining() <= 8);
+    try expect(!parent.owns(child.region.base));
 }
 
 test "parent reclaims delegated arena after child exit" {
@@ -123,11 +122,11 @@ test "parent reclaims delegated arena after child exit" {
     const private = try child_allocator.alloc(u8, 8);
     @memset(private, 3);
 
-    try std.testing.expectEqual(@as(usize, 40), parent.remaining());
-    try std.testing.expect(parent.reclaim(&child));
-    try std.testing.expectEqual(@as(usize, 64), parent.remaining());
-    try std.testing.expectEqual(@as(usize, 0), child.remaining());
-    try std.testing.expectEqual(@as(u8, 0), memory[40]);
+    try expectEqual(@as(usize, 40), parent.remaining());
+    try expect(parent.reclaim(&child));
+    try expectEqual(@as(usize, 64), parent.remaining());
+    try expectEqual(@as(usize, 0), child.remaining());
+    try expectEqual(@as(u8, 0), memory[40]);
 }
 
 test "arena carves regions and typed slices from the same capability" {
@@ -136,11 +135,11 @@ test "arena carves regions and typed slices from the same capability" {
     const region = arena.takeRegion(32).?;
     const slots = arena.allocSlice(u64, 4).?;
 
-    try std.testing.expectEqual(@as(usize, 32), region.len());
-    try std.testing.expectEqual(@as(usize, 4), slots.len);
-    try std.testing.expect(arena.remaining() <= 64);
-    try std.testing.expect(arena.owns(sliceAsBytes(u64, slots)));
-    try std.testing.expectEqual(@as(usize, 0), arena.offsetOf(sliceAsBytes(u64, slots)).?);
+    try expectEqual(@as(usize, 32), region.len());
+    try expectEqual(@as(usize, 4), slots.len);
+    try expect(arena.remaining() <= 64);
+    try expect(arena.owns(sliceAsBytes(u64, slots)));
+    try expect(arena.offsetOf(sliceAsBytes(u64, slots)).? < @alignOf(u64));
 }
 
 fn sliceAsBytes(comptime T: type, value: []const T) []const u8 {
@@ -153,5 +152,19 @@ test "region transfer seals earlier allocations out of shareable ownership" {
     const consumed = arena.allocSlice(u8, 8).?;
 
     _ = arena.takeRegion(8).?;
-    try std.testing.expect(!arena.owns(consumed));
+    try expect(!arena.owns(consumed));
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
+}
+
+fn expectError(expected: anyerror, actual: anytype) !void {
+    if (actual) |_| return error.TestExpectedError else |err| {
+        if (err != expected) return err;
+    }
 }

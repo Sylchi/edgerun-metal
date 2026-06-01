@@ -32,9 +32,7 @@ SECTION .text
 ; Builds command buffer, sends via CRB, parses response.
 ; ==================================================================
 er_fn _tor_digest_tpm_sha256
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi        ; data
     mov     r13d, esi       ; data_len
@@ -46,8 +44,7 @@ er_fn _tor_digest_tpm_sha256
     mov     edx, r13d
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
-    test    rax, rax
-    jz      .err
+    er_check_zero rax, .err
 
     ; Compute command size
     sub     rax, tor_digest_cmd
@@ -58,29 +55,21 @@ er_fn _tor_digest_tpm_sha256
     mov     rdx, tor_digest_rsp
     mov     ecx, 128
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .err
+    er_check_zero rax, .err
 
     ; Parse digest from response
     mov     edi, tor_digest_rsp
     mov     esi, eax        ; response length
     mov     rdx, rbx        ; output
     call    er_tpm_parse_sha256_digest
-    test    rax, rax
-    jz      .err
+    er_check_zero rax, .err
 
     mov     eax, 32
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 .err:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; er_tor_sha256 — compute SHA-256 of data via TPM
@@ -98,11 +87,7 @@ er_fn er_tor_sha256
 ; If key_len > 64, key is compressed via SHA-256 first.
 ; ==================================================================
 er_fn er_tor_hmac_sha256
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; key
     mov     r13d, esi       ; key_len
@@ -119,8 +104,7 @@ er_fn er_tor_hmac_sha256
     mov     esi, r13d
     mov     rdx, tor_digest_out
     call    _tor_digest_tpm_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     mov     r12, tor_digest_out
     mov     r13d, 32
@@ -160,8 +144,7 @@ er_fn er_tor_hmac_sha256
     lea     esi, [r15d + 64]
     mov     rdx, tor_digest_out
     call    _tor_digest_tpm_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     ; Rebuild K_block (key padded to 64 bytes)
     mov     rdi, tor_digest_work
@@ -196,22 +179,11 @@ er_fn er_tor_hmac_sha256
     mov     esi, 96
     mov     rdx, rbx
     call    _tor_digest_tpm_sha256
-    test    eax, eax
-    jz      .err
+    er_check_zero eax, .err
 
     mov     eax, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .err:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15

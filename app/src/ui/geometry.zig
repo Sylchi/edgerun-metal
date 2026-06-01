@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const Rect = struct {
     x: f32,
     y: f32,
@@ -123,61 +121,61 @@ test "rect helpers match the C primitive bounds semantics" {
     const bounds = Rect.init(10.0, 20.0, 100.0, 60.0);
 
     const inset = bounds.inset(8.0, 4.0);
-    try std.testing.expectEqual(@as(f32, 18.0), inset.x);
-    try std.testing.expectEqual(@as(f32, 24.0), inset.y);
-    try std.testing.expectEqual(@as(f32, 84.0), inset.w);
-    try std.testing.expectEqual(@as(f32, 52.0), inset.h);
+    if (inset.x != 18.0) return error.TestExpectedEqual;
+    if (inset.y != 24.0) return error.TestExpectedEqual;
+    if (inset.w != 84.0) return error.TestExpectedEqual;
+    if (inset.h != 52.0) return error.TestExpectedEqual;
 
     const ltrb = bounds.insetLtrb(2.0, 3.0, 5.0, 7.0);
-    try std.testing.expectEqual(@as(f32, 12.0), ltrb.x);
-    try std.testing.expectEqual(@as(f32, 23.0), ltrb.y);
-    try std.testing.expectEqual(@as(f32, 93.0), ltrb.w);
-    try std.testing.expectEqual(@as(f32, 50.0), ltrb.h);
+    if (ltrb.x != 12.0) return error.TestExpectedEqual;
+    if (ltrb.y != 23.0) return error.TestExpectedEqual;
+    if (ltrb.w != 93.0) return error.TestExpectedEqual;
+    if (ltrb.h != 50.0) return error.TestExpectedEqual;
 
     const centered_h = bounds.withHeightCentered(20.0);
-    try std.testing.expectEqual(@as(f32, 40.0), centered_h.y);
-    try std.testing.expectEqual(@as(f32, 20.0), centered_h.h);
+    if (centered_h.y != 40.0) return error.TestExpectedEqual;
+    if (centered_h.h != 20.0) return error.TestExpectedEqual;
 
     const centered_w = bounds.withWidthCentered(40.0);
-    try std.testing.expectEqual(@as(f32, 40.0), centered_w.x);
-    try std.testing.expectEqual(@as(f32, 40.0), centered_w.w);
+    if (centered_w.x != 40.0) return error.TestExpectedEqual;
+    if (centered_w.w != 40.0) return error.TestExpectedEqual;
 
     const right = bounds.right(24.0);
-    try std.testing.expectEqual(@as(f32, 86.0), right.x);
-    try std.testing.expectEqual(@as(f32, 24.0), right.w);
+    if (right.x != 86.0) return error.TestExpectedEqual;
+    if (right.w != 24.0) return error.TestExpectedEqual;
 
     const bottom = bounds.bottom(16.0);
-    try std.testing.expectEqual(@as(f32, 64.0), bottom.y);
-    try std.testing.expectEqual(@as(f32, 16.0), bottom.h);
+    if (bottom.y != 64.0) return error.TestExpectedEqual;
+    if (bottom.h != 16.0) return error.TestExpectedEqual;
 }
 
 test "rect validation hit and intersection semantics match C primitives" {
     const bounds = Rect.init(10.0, 20.0, 100.0, 60.0);
 
-    try std.testing.expect(bounds.containsInclusive(10.0, 20.0));
-    try std.testing.expect(bounds.containsInclusive(110.0, 80.0));
-    try std.testing.expect(!bounds.containsInclusive(111.0, 80.0));
+    if (!bounds.containsInclusive(10.0, 20.0)) return error.TestExpectedTrue;
+    if (!bounds.containsInclusive(110.0, 80.0)) return error.TestExpectedTrue;
+    if (bounds.containsInclusive(111.0, 80.0)) return error.TestExpectedFalse;
 
     const intersection = bounds.intersect(Rect.init(50.0, 40.0, 80.0, 80.0)).?;
-    try std.testing.expectEqual(@as(f32, 50.0), intersection.x);
-    try std.testing.expectEqual(@as(f32, 40.0), intersection.y);
-    try std.testing.expectEqual(@as(f32, 60.0), intersection.w);
-    try std.testing.expectEqual(@as(f32, 40.0), intersection.h);
-    try std.testing.expect(bounds.intersect(Rect.init(200.0, 200.0, 10.0, 10.0)) == null);
-    try std.testing.expect(bounds.intersect(Rect.init(110.0, 20.0, 10.0, 10.0)) == null);
+    if (intersection.x != 50.0) return error.TestExpectedEqual;
+    if (intersection.y != 40.0) return error.TestExpectedEqual;
+    if (intersection.w != 60.0) return error.TestExpectedEqual;
+    if (intersection.h != 40.0) return error.TestExpectedEqual;
+    if (bounds.intersect(Rect.init(200.0, 200.0, 10.0, 10.0)) != null) return error.TestExpectedNull;
+    if (bounds.intersect(Rect.init(110.0, 20.0, 10.0, 10.0)) != null) return error.TestExpectedNull;
 
-    try std.testing.expect(bounds.valid());
-    try std.testing.expect(!Rect.init(0.0, 0.0, 0.0, 1.0).valid());
-    try std.testing.expect(!finite(std.math.nan(f32)));
+    if (!bounds.valid()) return error.TestExpectedTrue;
+    if (Rect.init(0.0, 0.0, 0.0, 1.0).valid()) return error.TestExpectedFalse;
+    if (finite(@as(f32, @bitCast(@as(u32, 0x7fc0_0000))))) return error.TestExpectedFalse;
 }
 
 test "primitive scalar and ascii helpers match C semantics" {
-    try std.testing.expectEqual(@as(f32, 2.0), clamp(4.0, 0.0, 2.0));
-    try std.testing.expectEqual(@as(f32, 0.0), clamp(-1.0, 0.0, 2.0));
-    try std.testing.expectEqual(@as(f32, 1.5), clamp(1.5, 0.0, 2.0));
-    try std.testing.expectEqual(@as(f32, 1.0), min(1.0, 2.0));
-    try std.testing.expectEqual(@as(f32, 2.0), max(1.0, 2.0));
-    try std.testing.expectEqual(@as(usize, 0), asciiLen(null));
-    try std.testing.expectEqual(@as(usize, 0), asciiLen(""));
-    try std.testing.expectEqual(@as(usize, 6), asciiLen("Ledger"));
+    if (clamp(4.0, 0.0, 2.0) != 2.0) return error.TestExpectedEqual;
+    if (clamp(-1.0, 0.0, 2.0) != 0.0) return error.TestExpectedEqual;
+    if (clamp(1.5, 0.0, 2.0) != 1.5) return error.TestExpectedEqual;
+    if (min(1.0, 2.0) != 1.0) return error.TestExpectedEqual;
+    if (max(1.0, 2.0) != 2.0) return error.TestExpectedEqual;
+    if (asciiLen(null) != 0) return error.TestExpectedEqual;
+    if (asciiLen("") != 0) return error.TestExpectedEqual;
+    if (asciiLen("Ledger") != 6) return error.TestExpectedEqual;
 }

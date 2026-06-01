@@ -273,11 +273,7 @@ _fe_sub:
 ; Each cN is 128-bit on stack: lo,hi.
 ; ==================================================================
 _fe_mul:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; a
@@ -403,12 +399,7 @@ _fe_mul:
 
     add     rsp, 80
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _fe_square(void *out, const void *a) — out = a^2
@@ -514,11 +505,7 @@ _fe_frombytes:
 ; Otherwise encode x.
 ; ==================================================================
 _fe_tobytes:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; in
@@ -652,12 +639,7 @@ _fe_tobytes:
 
     add     rsp, 80
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _fe_cswap(void *a, void *b, u64 swap)
@@ -729,11 +711,7 @@ _fe_invert:
     push    rbp
     mov     rbp, rsp
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; z
@@ -936,13 +914,7 @@ _fe_invert:
 
     add     rsp, 200
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _curve25519_ladder_step — Montgomery differential addition/doubling
@@ -956,11 +928,7 @@ _curve25519_ladder_step:
     push    rbp
     mov     rbp, rsp
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; x2
     mov     r13, rsi        ; z2
@@ -1088,13 +1056,7 @@ _curve25519_ladder_step:
 
     add     rsp, 552
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_tor_curve25519_scalar_mult
@@ -1109,11 +1071,7 @@ er_tor_curve25519_scalar_mult:
     push    rbp
     mov     rbp, rsp
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; scalar
@@ -1281,8 +1239,7 @@ er_tor_curve25519_scalar_mult:
     or      rax, [Z2 + 16]
     or      rax, [Z2 + 24]
     or      rax, [Z2 + 32]
-    test    rax, rax
-    jnz     .dbg_z2_nonzero_raw
+    er_check_nonzero rax, .dbg_z2_nonzero_raw
     mov     edi, 0xE3
     mov     eax, 60
     syscall
@@ -1329,8 +1286,7 @@ er_tor_curve25519_scalar_mult:
     or      rax, [Z2 + 16]
     or      rax, [Z2 + 24]
     or      rax, [Z2 + 32]
-    test    rax, rax
-    jnz     .dbg_final_z2_nonzero
+    er_check_nonzero rax, .dbg_final_z2_nonzero
     mov     edi, 0xE5
     mov     eax, 60
     syscall
@@ -1396,10 +1352,4 @@ er_tor_curve25519_scalar_mult:
 
     add     rsp, 424
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15

@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const codec = @import("ui/codec.zig");
 const dashboard = @import("ui/dashboard.zig");
 const device_tree = @import("ui/device_tree.zig");

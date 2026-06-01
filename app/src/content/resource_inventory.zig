@@ -140,7 +140,6 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
 }
 
 test "resource inventory defines boot resource universe and validates contracts" {
-    const testing = @import("std").testing;
     var resources: [2]Resource = undefined;
     var inventory = Inventory.init(&resources);
     try inventory.add(Resource.init(chunk("memory-bank-0"), .memory, resource_contract.Bounds.init(0x100000, 0x100000)));
@@ -151,15 +150,16 @@ test "resource inventory defines boot resource universe and validates contracts"
     const wrong_kind = resource_contract.Contract.init(chunk("contract-wrong"), chunk("app-a"), chunk("cpu-slot-0"), .memory, 10, 20, resource_contract.Bounds.init(0, 1), resource_contract.Pattern.exclusive());
     const out_of_bounds = resource_contract.Contract.init(chunk("contract-oob"), chunk("app-a"), chunk("memory-bank-0"), .memory, 10, 20, resource_contract.Bounds.init(0x1ff000, 0x2000), resource_contract.Pattern.exclusive());
 
-    try testing.expect(inventory.contractFits(memory_contract));
-    try testing.expect(inventory.contractFits(cpu_contract));
-    try testing.expect(!inventory.contractFits(wrong_kind));
-    try testing.expect(!inventory.contractFits(out_of_bounds));
-    try testing.expectError(error.OutOfBounds, inventory.requireContractFits(out_of_bounds));
+    if (!inventory.contractFits(memory_contract)) return error.TestExpectedTrue;
+    if (!inventory.contractFits(cpu_contract)) return error.TestExpectedTrue;
+    if (inventory.contractFits(wrong_kind)) return error.TestExpectedFalse;
+    if (inventory.contractFits(out_of_bounds)) return error.TestExpectedFalse;
+    if (inventory.requireContractFits(out_of_bounds)) return error.TestExpectedError else |err| {
+        if (err != error.OutOfBounds) return err;
+    }
 }
 
 test "app memory plan requires public and private regions allocated up front" {
-    const testing = @import("std").testing;
     var resources: [1]Resource = undefined;
     var inventory = Inventory.init(&resources);
     try inventory.add(Resource.init(chunk("memory-bank-0"), .memory, resource_contract.Bounds.init(0, 4096)));
@@ -168,15 +168,14 @@ test "app memory plan requires public and private regions allocated up front" {
     const private_contract = resource_contract.Contract.init(chunk("private-memory"), chunk("app-a"), chunk("memory-bank-0"), .memory, 1, 100, resource_contract.Bounds.init(1024, 2048), resource_contract.Pattern.exclusive());
     const plan = AppMemoryPlan.init(chunk("app-a"), public_contract, private_contract);
 
-    try testing.expect(plan.valid());
-    try testing.expect(plan.fits(inventory));
+    if (!plan.valid()) return error.TestExpectedTrue;
+    if (!plan.fits(inventory)) return error.TestExpectedTrue;
 
     const overlapping_private = resource_contract.Contract.init(chunk("private-memory"), chunk("app-a"), chunk("memory-bank-0"), .memory, 1, 100, resource_contract.Bounds.init(512, 2048), resource_contract.Pattern.exclusive());
-    try testing.expect(!AppMemoryPlan.init(chunk("app-a"), public_contract, overlapping_private).valid());
+    if (AppMemoryPlan.init(chunk("app-a"), public_contract, overlapping_private).valid()) return error.TestExpectedFalse;
 }
 
 test "boot resource map exposes only usable memory as resource blocks" {
-    const testing = @import("std").testing;
     var resources: [2]Resource = undefined;
     var inventory = Inventory.init(&resources);
     var id_storage: [4]ResourceIdStorage = undefined;
@@ -194,21 +193,20 @@ test "boot resource map exposes only usable memory as resource blocks" {
 
     try addBootResourceMap(&inventory, map, &id_storage);
 
-    try testing.expectEqual(@as(usize, 2), inventory.len);
-    try testing.expectEqual(@as(u64, 0x100000), inventory.resources[0].bounds.offset);
-    try testing.expectEqual(@as(u64, page_size * 2), inventory.resources[0].bounds.length);
-    try testing.expectEqual(@as(u64, 0x300000), inventory.resources[1].bounds.offset);
-    try testing.expectEqualStrings("boot-memory-0000000000000000", inventory.resources[0].id.body());
-    try testing.expectEqualStrings("boot-memory-0000000000000003", inventory.resources[1].id.body());
+    if (inventory.len != 2) return error.TestExpectedEqual;
+    if (inventory.resources[0].bounds.offset != 0x100000) return error.TestExpectedEqual;
+    if (inventory.resources[0].bounds.length != page_size * 2) return error.TestExpectedEqual;
+    if (inventory.resources[1].bounds.offset != 0x300000) return error.TestExpectedEqual;
+    if (!bytes.eql("boot-memory-0000000000000000", inventory.resources[0].id.body())) return error.TestExpectedEqual;
+    if (!bytes.eql("boot-memory-0000000000000003", inventory.resources[1].id.body())) return error.TestExpectedEqual;
 }
 
 test "boot resource map rejects overflowing physical ranges" {
-    const testing = @import("std").testing;
     var resources: [1]Resource = undefined;
     var inventory = Inventory.init(&resources);
     var id_storage: [1]ResourceIdStorage = undefined;
     const regions = [_]boot_resource_map.MemoryRegion{
-        boot_resource_map.MemoryRegion.init(.usable, 0, @import("std").math.maxInt(u64)),
+        boot_resource_map.MemoryRegion.init(.usable, 0, max_u64),
     };
     const map = boot_resource_map.Map{
         .memory_regions = &regions,
@@ -216,5 +214,7 @@ test "boot resource map rejects overflowing physical ranges" {
     };
 
     try addBootResourceMap(&inventory, map, &id_storage);
-    try testing.expectEqual(@as(usize, 0), inventory.len);
+    if (inventory.len != 0) return error.TestExpectedEqual;
 }
+
+const max_u64: u64 = 0xffff_ffff_ffff_ffff;

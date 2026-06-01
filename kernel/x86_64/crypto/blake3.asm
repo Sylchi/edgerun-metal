@@ -144,12 +144,7 @@ er_blake3_store32:
 ; =================================================================+
 global er_blake3_compress
 er_blake3_compress:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 64             ; state[16]
 
     mov     r12, rdi            ; cv
@@ -226,11 +221,7 @@ er_blake3_compress:
     jb      .fxor
 
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 
@@ -242,12 +233,7 @@ er_blake3_compress:
 global er_blake3_compress_cv
 er_blake3_compress_cv:
     ; rdi=cv[8], rsi=block[64], rdx=counter, rcx=block_len, r8=flags, r9=new_cv[8]
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 136            ; words[16] + out[16] + saved[2]
 
     mov     r12, rdi            ; cv
@@ -283,11 +269,7 @@ er_blake3_compress_cv:
     jb      .xcv
 
     add     rsp, 136
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 
@@ -298,11 +280,7 @@ er_blake3_compress_cv:
 global er_blake3_parent_cv
 er_blake3_parent_cv:
     ; rdi=left_cv, rsi=right_cv, rdx=out_cv
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_frame_push_regs rbx, r12, r13, r14
     sub     rsp, 64             ; block[64]
     mov     r12, rdi            ; left_cv
     mov     r13, rsi            ; right_cv
@@ -325,10 +303,7 @@ er_blake3_parent_cv:
     mov     r9, r14             ; out_cv
     call    er_blake3_compress_cv
     add     rsp, 64
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_frame_pop
     er_ret
 
@@ -340,12 +315,7 @@ er_blake3_parent_cv:
 ; =================================================================+
 global er_blake3_hash_chunk
 er_blake3_hash_chunk:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 112            ; see layout above
 
     mov     r12, rdi            ; input
@@ -373,8 +343,7 @@ er_blake3_hash_chunk:
     mov     ecx, [rax + 28]
     mov     [rsp + 28], ecx
 
-    test    r13, r13
-    jnz     .nonempty
+    er_check_nonzero r13, .nonempty
     ; len == 0: copy IV to out_cv
     mov     ecx, [rax]
     mov     [rbx], ecx
@@ -419,14 +388,12 @@ er_blake3_hash_chunk:
     mov     rax, r13
     and     eax, 63
     mov     r11d, eax
-    test    eax, eax
-    jz      .skip_rem
+    er_check_zero eax, .skip_rem
     mov     r10d, eax
 .skip_rem:
 
     ; bflags |= CHUNK_START if i == 0
-    test    rcx, rcx
-    jnz     .no_cs2
+    er_check_nonzero rcx, .no_cs2
     or      r8d, BLAKE3_CHUNK_START
 .no_cs2:
 
@@ -445,8 +412,7 @@ er_blake3_hash_chunk:
 .no_frc:
 
     ; Set up block pointer
-    test    r11d, r11d
-    jz      .direct_block
+    er_check_zero r11d, .direct_block
 
     ; Partial last block: zero zb then copy rem bytes
     lea     rdi, [rsp + 32]
@@ -504,11 +470,7 @@ er_blake3_hash_chunk:
 
 .done:
     add     rsp, 112
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 
@@ -526,12 +488,7 @@ er_blake3_hash_one_chunk:
     xor     eax, eax
     er_ret
 .valid_len:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 224            ; cv[32] + words[64] + zb[64] + tmp[64]
 
     mov     r12, rdi            ; input
@@ -557,8 +514,7 @@ er_blake3_hash_one_chunk:
     mov     ecx, [rax + 28]
     mov     [rsp + 28], ecx
 
-    test    r13, r13
-    jnz     .hoc_nonempty
+    er_check_nonzero r13, .hoc_nonempty
 
     ; Empty input: compress(IV, zeros, 0, 0, C|E|R, tmp)
     ; Zero block_words at rsp+32
@@ -610,8 +566,7 @@ er_blake3_hash_one_chunk:
     xor     rdx, rdx            ; counter = 0
     mov     ecx, 64             ; block_len
     mov     r8d, 0              ; flags (default)
-    test    r15, r15
-    jnz     .hoc_flags_set
+    er_check_nonzero r15, .hoc_flags_set
     mov     r8d, BLAKE3_CHUNK_START
 .hoc_flags_set:
     mov     r9, rsp             ; new_cv = cv
@@ -643,8 +598,7 @@ er_blake3_hash_one_chunk:
     ; flags = CHUNK_END
     mov     r8d, BLAKE3_CHUNK_END
     ; Add CHUNK_START if offset == 0 (single block total)
-    test    r15, r15
-    jnz     .hoc_flags_done
+    er_check_nonzero r15, .hoc_flags_done
     or      r8d, BLAKE3_CHUNK_START
 .hoc_flags_done:
     or      r8d, BLAKE3_ROOT
@@ -698,11 +652,7 @@ er_blake3_hash_one_chunk:
     mov     eax, 1
 
     add     rsp, 224
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 
@@ -731,12 +681,7 @@ er_blake3_subtree_cv:
     jmp     er_blake3_hash_chunk   ; tail call (same args)
 
 .multi_chunk:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 96             ; left_cv[32] + right_cv[32] + saved[32]
 
     mov     r12, rdi            ; input
@@ -851,11 +796,7 @@ er_blake3_subtree_cv:
 
 .stc_done:
     add     rsp, 96
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 
@@ -868,10 +809,7 @@ er_blake3_root_from_parent_cvs:
     ; rdi=left_cv, rsi=right_cv, rdx=out
     ; Build block = left_cv|right_cv, compress(IV, block_words, 0, 64, P|R, tmp),
     ; copy tmp[0..7] bytes to out
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
+    er_frame_push_regs rbx, r12, r13
     sub     rsp, 192            ; block[64] + words[64] + tmp[64]
 
     mov     r12, rdi            ; left_cv
@@ -922,9 +860,7 @@ er_blake3_root_from_parent_cvs:
     mov     [rbx + 28], ecx
 
     add     rsp, 192
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_frame_pop
     er_ret
 
@@ -936,26 +872,18 @@ er_blake3_root_from_parent_cvs:
 global er_blake3_hash_bytes
 er_blake3_hash_bytes:
     ; Allow NULL input only when len == 0
-    test    rdi, rdi
-    jz      .check_len_for_null
+    er_check_zero rdi, .check_len_for_null
     jmp     .hb_ready
 .check_len_for_null:
-    test    rsi, rsi
-    jnz     .null_input     ; input == NULL && len != 0 → error
+    er_check_nonzero rsi, .null_input
 .hb_ready:
-    test    rdx, rdx
-    jz      .null_input     ; out == NULL → error
+    er_check_zero rdx, .null_input
 
     cmp     rsi, BLAKE3_CHUNK_LEN
     jbe     .single
 
     ; Multi-chunk
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 64             ; left_cv[32] + right_cv[32]
 
     mov     r12, rdi            ; input
@@ -970,12 +898,10 @@ er_blake3_hash_bytes:
     ; left_chunks = pow2 split
     ; If nfull is power of 2 and len % CHUNK_LEN == 0: split evenly
     ; else: largest power-of-2 of nfull
-    test    rdx, rdx            ; len % CHUNK_LEN?
-    jnz     .split_pow2
+    er_check_nonzero rdx, .split_pow2
     ; Check if nfull is power of 2
     mov     rax, r15
-    test    rax, rax
-    jz      .split_pow2
+    er_check_zero rax, .split_pow2
     mov     rcx, rax
     dec     rcx
     test    rax, rcx
@@ -1021,11 +947,7 @@ er_blake3_hash_bytes:
     mov     eax, 1
 
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
     er_ret
 

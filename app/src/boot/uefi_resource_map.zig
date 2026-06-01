@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const uefi = std.os.uefi;
 const boot_resource_map = @import("../boot_resource_map.zig");
 
@@ -48,7 +48,7 @@ pub fn memoryKind(memory_type: uefi.tables.MemoryType) boot_resource_map.MemoryK
 }
 
 test "uefi adapter maps conventional memory to neutral usable memory" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     const descriptor = uefi.tables.MemoryDescriptor{
         .type = .conventional_memory,
         .physical_start = 0x100000,
@@ -65,7 +65,7 @@ test "uefi adapter maps conventional memory to neutral usable memory" {
 }
 
 test "uefi adapter does not mark firmware or mmio as usable" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
 
     try testing.expectEqual(boot_resource_map.MemoryKind.firmware, memoryKind(.boot_services_data));
     try testing.expectEqual(boot_resource_map.MemoryKind.runtime, memoryKind(.runtime_services_data));

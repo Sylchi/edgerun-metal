@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const gpu = @import("linux_gpu.zig");
 
 pub const GLenum = gpu.GLenum;

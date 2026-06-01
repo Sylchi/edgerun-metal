@@ -3,11 +3,7 @@
 ; Parses types from [r12] into types_buf
 ; =================================================================+
 er_wasm_parse_type_section:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_frame_push_regs rbx, r12, r13, r14
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -84,23 +80,13 @@ er_wasm_parse_type_section:
 .error:
     er_err  ERROR_CORRUPT
 .out:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14
 
 ; ==================================================================
 ; Import section parser
 ; =================================================================+
 er_wasm_parse_import_section:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -115,25 +101,17 @@ er_wasm_parse_import_section:
 
     ; Read module name
     er_call er_wasm_read_leb_u32, .error
-    push    r10
-    mov     r10, r13
-    imul    r10, IMPORTED_FUNC_SIZE
-    mov     [imports_buf + r10], rsi        ; module_name_ptr
-    mov     [imports_buf + r10 + 8], rax    ; module_name_len
-    pop     r10
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 0, rsi     ; module_name_ptr
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 8, rax     ; module_name_len
     add     rsi, rax                        ; skip module name bytes
 
     ; Read import name
     er_call er_wasm_read_leb_u32, .error
-    push    r10
-    mov     r10, r13
-    imul    r10, IMPORTED_FUNC_SIZE
-    mov     [imports_buf + r10 + 16], rsi   ; func_name_ptr
-    mov     [imports_buf + r10 + 24], rax   ; func_name_len
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 16, rsi    ; func_name_ptr
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 24, rax    ; func_name_len
     ; Initialize resolved fields to -1 (unresolved)
-    mov     qword [imports_buf + r10 + 40], -1  ; resolved_module_id
-    mov     qword [imports_buf + r10 + 48], -1  ; resolved_func_index
-    pop     r10
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 40, -1     ; resolved_module_id
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 48, -1     ; resolved_func_index
     add     rsi, rax                        ; skip import name bytes
 
     ; Read external kind
@@ -157,11 +135,7 @@ er_wasm_parse_import_section:
     mov     rbx, rax
     cmp     rbx, [type_count]
     jae     .corrupt
-    push    r10
-        mov     r10, r13
-        imul    r10, IMPORTED_FUNC_SIZE
-    mov     [imports_buf + r10 + 32], rbx  ; type_index @ offset 32
-        pop     r10
+    er_store_struct_qword imports_buf, r13, IMPORTED_FUNC_SIZE, 32, rbx    ; type_index
     jmp     .import_next
 
 .import_memory:
@@ -171,8 +145,7 @@ er_wasm_parse_import_section:
     push    rsi
     call    er_wasm_read_limits
     pop     rsi
-    test    edx, edx
-    jnz     .error
+    er_check_nonzero edx, .error
     mov     rax, [rsp - 16]      ; min
     mov     rbx, [rsp - 8]       ; max
     mov     [imported_memory_min], rax
@@ -192,17 +165,9 @@ er_wasm_parse_import_section:
     mov     rdi, [global_count]
     cmp     rdi, MAX_GLOBALS
     jae     .unsupported
-    push    r10
-        mov     r10, rdi
-        imul    r10, GLOBAL_SIZE
-    mov     [globals_buf + r10], r15b  ; value_type
-        pop     r10
+    er_store_struct_byte globals_buf, rdi, GLOBAL_SIZE, 0, r15b            ; value_type
     ; Store ImportedGlobal
-    push    r10
-    mov     r10, r13
-    imul    r10, IMPORTED_GLOBAL_SIZE
-    mov     [imported_globals_buf + r10 + 16], rdi  ; global_index
-    pop     r10
+    er_store_struct_qword imported_globals_buf, r13, IMPORTED_GLOBAL_SIZE, 16, rdi ; global_index
     inc     qword [global_count]
     inc     qword [imported_global_count]
     jmp     .import_next
@@ -219,8 +184,7 @@ er_wasm_parse_import_section:
     mov     rbx, [imported_table_max]  ; max
     cmp     rax, MAX_TABLE_ENTRIES
     ja      .unsupported
-    test    rbx, rbx
-    jz      .table_ok
+    er_check_zero rbx, .table_ok
     cmp     rbx, MAX_TABLE_ENTRIES
     ja      .unsupported
 .table_ok:
@@ -249,21 +213,13 @@ er_wasm_parse_import_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Function section parser
 ; =================================================================+
 er_wasm_parse_function_section:
-    er_frame_push
-    push    rbx
-    push    r12
+    er_frame_push_regs rbx, r12
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -286,12 +242,8 @@ er_wasm_parse_function_section:
     cmp     rax, [type_count]
     jae     .corrupt
     ; Store Function { type_index, code_index = index }
-    push    r10
-    mov     r10, r11
-    imul    r10, FUNCTION_SIZE
-    mov     [functions_buf + r10], rax       ; type_index
-    mov     [functions_buf + r10 + 8], r11   ; code_index
-    pop     r10
+    er_store_struct_qword functions_buf, r11, FUNCTION_SIZE, 0, rax       ; type_index
+    er_store_struct_qword functions_buf, r11, FUNCTION_SIZE, 8, r11       ; code_index
     inc     r11
     jmp     .func_loop
 
@@ -308,10 +260,7 @@ er_wasm_parse_function_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12
 
 ; ==================================================================
 ; Table section parser
@@ -324,8 +273,7 @@ er_wasm_parse_table_section:
     er_call er_wasm_read_leb_u32, .error
     cmp     rax, 1
     ja      .unsupported
-    test    rax, rax
-    jz      .done               ; count == 0, nothing to parse
+    er_check_zero rax, .done
 
     cmp     byte [imported_table_present], 1
     je      .corrupt
@@ -341,8 +289,7 @@ er_wasm_parse_table_section:
     mov     rbx, [table_max]    ; max
     cmp     rax, MAX_TABLE_ENTRIES
     ja      .unsupported
-    test    rbx, rbx
-    jz      .table_ok
+    er_check_zero rbx, .table_ok
     cmp     rbx, MAX_TABLE_ENTRIES
     ja      .unsupported
 .table_ok:
@@ -363,9 +310,7 @@ er_wasm_parse_table_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12
 
 ; ==================================================================
 ; Memory section parser
@@ -377,8 +322,7 @@ er_wasm_parse_memory_section:
     er_call er_wasm_read_leb_u32, .error
     cmp     rax, 1
     ja      .unsupported
-    test    rax, rax
-    jz      .done
+    er_check_zero rax, .done
 
     cmp     byte [imported_memory_present], 1
     je      .corrupt
@@ -406,12 +350,7 @@ er_wasm_parse_memory_section:
 ; Export section parser
 ; =================================================================+
 er_wasm_parse_export_section:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -438,26 +377,10 @@ er_wasm_parse_export_section:
     ; Read index
     er_call er_wasm_read_leb_u32, .error
     ; Store export
-    push    r10
-        mov     r10, r14
-        imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10], r13      ; name ptr
-        pop     r10
-    push    r10
-        mov     r10, r14
-        imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10 + 8], r15   ; name length
-        pop     r10
-    push    r10
-        mov     r10, r14
-        imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10 + 16], r11b ; kind
-        pop     r10
-    push    r10
-        mov     r10, r14
-        imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10 + 24], rax  ; index
-        pop     r10
+    er_store_struct_qword exports_buf, r14, EXPORT_SIZE, 0, r13      ; name ptr
+    er_store_struct_qword exports_buf, r14, EXPORT_SIZE, 8, r15      ; name length
+    er_store_struct_byte  exports_buf, r14, EXPORT_SIZE, 16, r11b    ; kind
+    er_store_struct_qword exports_buf, r14, EXPORT_SIZE, 24, rax     ; index
 
     inc     r14
     jmp     .export_loop
@@ -475,13 +398,7 @@ er_wasm_parse_export_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Start section parser
@@ -529,12 +446,7 @@ er_wasm_parse_data_count_section:
 ; Code section parser (most complex — also decodes ops)
 ; =================================================================+
 er_wasm_parse_code_section:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -561,23 +473,14 @@ er_wasm_parse_code_section:
     mov     r13, rax            ; local_group_count
 
     ; Store code entry: body_offset(8) + body_len(8) + local_count(8)
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10], rsi         ; provisional body_offset before locals
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 0, rsi          ; provisional body_offset before locals
     ; body_len = r15 - rsi (computed later after locals)
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 16], r13    ; local_group_count (reuse field — will convert to local_count after processing)
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 16, r13         ; local_group_count (reuse field, converted later)
 
     ; Parse local groups
     xor     r11d, r11d          ; total local count
 .local_group_loop:
-    test    r13, r13
-    jz      .locals_done
+    er_check_zero r13, .locals_done
     dec     r13
 
     ; Read repeat count
@@ -611,35 +514,18 @@ er_wasm_parse_code_section:
 
 .locals_done:
     ; Store the executable body start after local declarations.
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10], rsi         ; body_offset (pointer into wasm bytes)
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 0, rsi          ; body_offset (pointer into wasm bytes)
     ; Store local count
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 16], r11    ; local_count
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 16, r11         ; local_count
     ; Store body end pointer - start = body length
     mov     rax, r15
     sub     rax, rsi
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 8], rax     ; body_len
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 8, rax          ; body_len
     ; Store decoded_start = current decoded_op_count
     mov     rax, [decoded_op_count]
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 24], rax    ; decoded_start
-        pop     r10
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 24, rax         ; decoded_start
     ; Decode the body
-    push    r14
-    push    r15
+    er_push r14, r15
     mov     r12, rsi            ; body start for decoder
     ; We need the body bytes — already at rsi, length = r15 - rsi
     mov     rax, r15
@@ -647,22 +533,13 @@ er_wasm_parse_code_section:
     mov     rdi, rsi            ; body ptr
     mov     rsi, rax            ; body len
     call    er_wasm_decode_body
-    pop     r15
-    pop     r14
-    test    edx, edx
-    jnz     .error
+    er_pop  r14, r15
+    er_check_nonzero edx, .error
     ; Store decoded_count = decoded_op_count - decoded_start
     mov     rax, [decoded_op_count]
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    sub     rax, [code_buf + r10 + 24]
-        pop     r10
-    push    r10
-        mov     r10, r14
-        imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 32], rax  ; decoded_count
-        pop     r10
+    er_load_struct_qword r9, code_buf, r14, CODE_SIZE, 24
+    sub     rax, r9
+    er_store_struct_qword code_buf, r14, CODE_SIZE, 32, rax       ; decoded_count
     mov     rsi, r15
     inc     r14
     jmp     .code_loop
@@ -680,23 +557,13 @@ er_wasm_parse_code_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Global section parser
 ; =================================================================+
 er_wasm_parse_global_section:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_frame_push_regs rbx, r12, r13, r14
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -727,22 +594,10 @@ er_wasm_parse_global_section:
 
     ; Store global
     mov     rdi, [global_count]
-    push    r10
-        mov     r10, rdi
-        imul    r10, GLOBAL_SIZE
-    mov     [globals_buf + r10], r14b    ; value_type
-        pop     r10
-    push    r10
-        mov     r10, rdi
-        imul    r10, GLOBAL_SIZE
-    mov     [globals_buf + r10 + 1], r11b ; mutable
-        pop     r10
+    er_store_struct_byte  globals_buf, rdi, GLOBAL_SIZE, 0, r14b          ; value_type
+    er_store_struct_byte  globals_buf, rdi, GLOBAL_SIZE, 1, r11b          ; mutable
     ; value stored in rax
-    push    r10
-        mov     r10, rdi
-        imul    r10, GLOBAL_SIZE
-    mov     [globals_buf + r10 + 8], rax  ; value_data
-        pop     r10
+    er_store_struct_qword globals_buf, rdi, GLOBAL_SIZE, 8, rax           ; value_data
     inc     qword [global_count]
     inc     r13
     jmp     .global_loop
@@ -760,12 +615,7 @@ er_wasm_parse_global_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14
 
 ; ==================================================================
 ; Helper: er_wasm_read_constant_value
@@ -847,27 +697,17 @@ er_wasm_read_constant_value:
 
 .unsupported:
     er_err  ERROR_UNSUPPORTED
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx
 .error:
     mov     edx, edx
 .done:
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx
 
 ; ==================================================================
 ; Element section parser
 ; =================================================================+
 er_wasm_parse_element_section:
-    er_frame_push
-    push    rbx
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r11, r12, r13, r14, r15
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -882,13 +722,9 @@ er_wasm_parse_element_section:
     jae     .done
 
     ; Initialize segment
-    push    r10
-    mov     r10, r11
-    imul    r10, ELEMENT_SEGMENT_SIZE
-    mov     qword [element_segments + r10 + 256], 0   ; count = 0
-    mov     byte [element_segments + r10 + 264], 0    ; passive = 0
-    mov     byte [element_segments + r10 + 265], 0    ; dropped = 0
-    pop     r10
+    er_store_struct_qword element_segments, r11, ELEMENT_SEGMENT_SIZE, 256, 0 ; count = 0
+    er_store_struct_byte  element_segments, r11, ELEMENT_SEGMENT_SIZE, 264, 0 ; passive = 0
+    er_store_struct_byte  element_segments, r11, ELEMENT_SEGMENT_SIZE, 265, 0 ; dropped = 0
 
     ; Read mode
     er_call er_wasm_read_leb_u32, .error
@@ -923,8 +759,7 @@ er_wasm_parse_element_section:
     cmp     byte [table_has], 1
     jne     .unsupported_section
     er_call er_wasm_read_leb_u32, .error  ; table index
-    test    eax, eax
-    jnz     .unsupported_section          ; only table 0 supported
+    er_check_nonzero eax, .unsupported_section
     er_call er_wasm_read_constant_i32, .error
     mov     rbx, rax
     jmp     .active_tail
@@ -932,8 +767,7 @@ er_wasm_parse_element_section:
 .active_tail:
     movzx   eax, byte [rsi]     ; elem_kind
     inc     rsi
-    test    al, al
-    jnz     .unsupported_section
+    er_check_nonzero al, .unsupported_section
     er_call er_wasm_read_leb_u32, .error
     mov     r14, rax
     cmp     r14, MAX_TABLE_ENTRIES
@@ -944,12 +778,8 @@ er_wasm_parse_element_section:
     cmp     rax, [table_min]
     ja      .unsupported_section
 
-    push    r10
-    mov     r10, r11
-    imul    r10, ELEMENT_SEGMENT_SIZE
-    mov     [element_segments + r10 + 256], r14  ; count
-    mov     byte [element_segments + r10 + 264], 0  ; active
-    pop     r10
+    er_store_struct_qword element_segments, r11, ELEMENT_SEGMENT_SIZE, 256, r14 ; count
+    er_store_struct_byte  element_segments, r11, ELEMENT_SEGMENT_SIZE, 264, 0   ; active
 
     xor     r13d, r13d
 .active_idx_loop:
@@ -960,11 +790,7 @@ er_wasm_parse_element_section:
     add     rcx, [function_count]
     cmp     rax, rcx
     jae     .unsupported_section
-    push    r10
-    mov     r10, r11
-    imul    r10, ELEMENT_SEGMENT_SIZE
-    mov     [element_segments + r10 + r13 * 8], rax
-    pop     r10
+    er_store_struct_qword element_segments, r11, ELEMENT_SEGMENT_SIZE, r13 * 8, rax
     mov     r10, rbx
     add     r10, r13
     mov     [table_entries + r10 * 8], rax
@@ -974,20 +800,15 @@ er_wasm_parse_element_section:
 .passive_tail:
     movzx   eax, byte [rsi]     ; elem_kind
     inc     rsi
-    test    al, al
-    jnz     .unsupported_section
+    er_check_nonzero al, .unsupported_section
     er_call er_wasm_read_leb_u32, .error
     mov     r14, rax            ; count
     cmp     r14, MAX_TABLE_ENTRIES
     ja      .unsupported_section
 
     ; Store in element segment
-    push    r10
-    mov     r10, r11
-    imul    r10, ELEMENT_SEGMENT_SIZE
-    mov     [element_segments + r10 + 256], r14  ; count
-    mov     byte [element_segments + r10 + 264], 1  ; passive = 1
-    pop     r10
+    er_store_struct_qword element_segments, r11, ELEMENT_SEGMENT_SIZE, 256, r14 ; count
+    er_store_struct_byte  element_segments, r11, ELEMENT_SEGMENT_SIZE, 264, 1   ; passive = 1
 
     xor     r13d, r13d
 .idx_loop:
@@ -998,11 +819,7 @@ er_wasm_parse_element_section:
     add     rcx, [function_count]
     cmp     rax, rcx
     jae     .unsupported_section
-    push    r10
-    mov     r10, r11
-    imul    r10, ELEMENT_SEGMENT_SIZE
-    mov     [element_segments + r10 + r13 * 8], rax
-    pop     r10
+    er_store_struct_qword element_segments, r11, ELEMENT_SEGMENT_SIZE, r13 * 8, rax
     inc     r13
     jmp     .idx_loop
 
@@ -1010,15 +827,13 @@ er_wasm_parse_element_section:
     ; Declarative: elem_kind byte + vec(func_idx) — validate and discard.
     movzx   eax, byte [rsi]
     inc     rsi
-    test    al, al
-    jnz     .unsupported_section
+    er_check_nonzero al, .unsupported_section
     er_call er_wasm_read_leb_u32, .error
     mov     r14, rax
     cmp     r14, MAX_TABLE_ENTRIES
     ja      .unsupported_section
 .skip_idx_loop:
-    test    r14, r14
-    jz      .next
+    er_check_zero r14, .next
     er_call er_wasm_read_leb_u32, .error
     mov     rcx, [import_count]
     add     rcx, [function_count]
@@ -1033,37 +848,16 @@ er_wasm_parse_element_section:
 
 .done:
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r11, r12, r13, r14, r15
 
 .error:
     ; rdx already has error from er_call
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r11, r12, r13, r14, r15
 
 .unsupported:
 .unsupported_section:
     er_err  ERROR_UNSUPPORTED
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r11, r12, r13, r14, r15
 
 ; ==================================================================
 ; Data section parser
@@ -1102,96 +896,38 @@ er_wasm_parse_data_section:
     mov     rcx, rax            ; byte count
     pop     rdx                 ; offset
     ; Store DataSegment
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10], rdx     ; offset
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 8], rsi ; bytes ptr
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 16], rcx ; bytes len
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 24], 1  ; active
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 25], 0  ; not dropped
-        pop     r10
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 0, rdx    ; offset
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 8, rsi    ; bytes ptr
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 16, rcx   ; bytes len
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 24, 1     ; active
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 25, 0     ; not dropped
     add     rsi, rcx
     jmp     .next
 
 .passive:
     er_call er_wasm_read_leb_u32, .error
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 8], rsi  ; bytes ptr
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 16], rax ; bytes len
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 24], 0  ; not active
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 25], 0
-        pop     r10
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 8, rsi    ; bytes ptr
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 16, rax   ; bytes len
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 24, 0     ; not active
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 25, 0
     add     rsi, rax
     jmp     .next
 
 .active_2:
     ; mode 2: active with explicit memory index
     call    er_wasm_read_leb_u32  ; read and ignore memory index (must be 0)
-    test    edx, edx
-    jnz     .error
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero edx, .error
+    er_check_nonzero eax, .unsupported
     er_call er_wasm_read_constant_i32, .error
     push    rax                 ; offset
     er_call er_wasm_read_leb_u32, .error
     mov     rcx, rax
     pop     rdx
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10], rdx
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 8], rsi
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     [data_segments + r10 + 16], rcx
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 24], 1
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, DATA_SEGMENT_SIZE
-    mov     byte [data_segments + r10 + 25], 0
-        pop     r10
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 0, rdx
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 8, rsi
+    er_store_struct_qword data_segments, r11, DATA_SEGMENT_SIZE, 16, rcx
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 24, 1
+    er_store_struct_byte  data_segments, r11, DATA_SEGMENT_SIZE, 25, 0
     add     rsi, rcx
     jmp     .next
 
@@ -1209,9 +945,7 @@ er_wasm_parse_data_section:
 .error:
     mov     edx, edx
 .out:
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12
 
 ; ==================================================================
 ; Decoded op cache

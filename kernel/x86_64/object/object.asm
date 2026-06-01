@@ -54,44 +54,37 @@ _validate_requirements:
     mov     esi, 1
     mov     edx, 3
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 4]   ; confidentiality
     mov     esi, 1
     mov     edx, 7
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 8]   ; portability
     mov     esi, 1
     mov     edx, 4
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 12]  ; integrity
     mov     esi, 1
     mov     edx, 3
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 16]  ; lifetime
     mov     esi, 1
     mov     edx, 5
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 20]  ; visibility
     mov     esi, 1
     mov     edx, 4
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     mov     edi, [rbx + 24]  ; access
     mov     esi, 1
     mov     edx, 2
     call    _validate_u32_range
-    test    eax, eax
-    jz      .fail
+    er_check_zero eax, .fail
     pop     rbx
     mov     eax, 1
     er_ret
@@ -209,8 +202,7 @@ _envelope_algorithm_matches:
 ; Writes 7 u32 values in canonical order.
 ; ==================================================================
 er_fn er_object_requirements_encode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi          ; out
     mov     rbx, rsi          ; req
 
@@ -236,8 +228,7 @@ er_fn er_object_requirements_encode
     mov     esi, [rbx + 24]
     call    er_store32
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
@@ -249,8 +240,7 @@ er_fn er_object_requirements_encode
 ; rdi=in, rsi=req
 ; ==================================================================
 er_fn er_object_requirements_decode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -278,17 +268,14 @@ er_fn er_object_requirements_decode
 
     mov     rdi, rbx
     call    _validate_requirements
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -300,8 +287,7 @@ er_fn er_object_requirements_decode
 ; rdi=req, rsi=out
 ; ==================================================================
 er_fn er_object_requirements_hash
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12, rsi
 
@@ -316,8 +302,7 @@ er_fn er_object_requirements_hash
     call    er_preimage_raw_hash
 
     add     rsp, 32
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
@@ -328,17 +313,14 @@ er_fn er_object_requirements_hash
 ; rdi=out, rsi=header
 ; ==================================================================
 er_fn er_object_header_encode
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     rbx, rsi
 
     ; Validate epoch
     lea     rdi, [rbx + 32]       ; epoch stamp in header struct
     call    er_stamp_valid
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     ; Zero header buffer
     mov     rdi, r12
@@ -405,16 +387,12 @@ er_fn er_object_header_encode
     lea     rsi, [rbx + 96]
     call    er_object_requirements_encode
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     mov     eax, 1
     er_ok
     er_ret
 .bad_arg:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
     er_ret
@@ -426,8 +404,7 @@ er_fn er_object_header_encode
 ; rdi=in, rsi=header
 ; ==================================================================
 er_fn er_object_header_decode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -447,8 +424,7 @@ er_fn er_object_header_decode
     lea     rdi, [r12 + 132]
     mov     esi, 16
     call    er_bytes_nonzero
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
 
     ; Kind
     lea     rdi, [r12 + 10]
@@ -456,8 +432,7 @@ er_fn er_object_header_decode
     mov     [rbx + 0], ax
     mov     di, ax
     call    _validate_kind
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     ; Flags
     lea     rdi, [r12 + 12]
@@ -494,24 +469,20 @@ er_fn er_object_header_decode
     mov     esi, 64
     lea     rdx, [rbx + 32]       ; stamp at header_struct+32
     call    er_preimage_decode_epoch
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     ; Requirements
     lea     rdi, [r12 + 104]
     lea     rsi, [rbx + 96]       ; requirements at header_struct+96
     call    er_object_requirements_decode
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -534,8 +505,7 @@ er_fn er_object_header_id
 ; rdi=out, rsi=owner
 ; ==================================================================
 er_fn er_object_owner_encode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -543,8 +513,7 @@ er_fn er_object_owner_encode
     lea     rdi, [rbx + 4]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     ; Kind
     lea     rdi, [r12 + 0]
@@ -563,14 +532,12 @@ er_fn er_object_owner_encode
     cmp     r8d, ecx
     jb      .copy_loop
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .bad_arg:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
     er_ret
@@ -582,8 +549,7 @@ er_fn er_object_owner_encode
 ; rdi=in, rsi=owner
 ; ==================================================================
 er_fn er_object_owner_decode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -592,8 +558,7 @@ er_fn er_object_owner_decode
     mov     [rbx + 0], eax
     mov     edi, eax
     call    _validate_owner_kind
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     ; Copy node_id 32 bytes
     lea     rdi, [rbx + 4]
@@ -610,17 +575,14 @@ er_fn er_object_owner_decode
     lea     rdi, [rbx + 4]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -633,29 +595,24 @@ er_fn er_object_owner_decode
 ; rdi=out, rsi=envelope, rdx=owner
 ; ==================================================================
 er_fn er_object_envelope_encode
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     rbx, rsi
     mov     r13, rdx
 
     mov     edi, [rbx + 0]
     call    _validate_envelope_kind
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     mov     edi, [rbx + 0]
     mov     esi, [r13 + 0]
     call    _envelope_owner_matches
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     mov     edi, [rbx + 0]
     mov     si, [rbx + 6]       ; algorithm field (u16 at offset 6)
     call    _envelope_algorithm_matches
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     ; For NONE kind: key_id and metadata_hash must be zero
     cmp     dword [rbx + 0], OBJECT_ENVELOPE_KIND_NONE
@@ -663,26 +620,22 @@ er_fn er_object_envelope_encode
     lea     rdi, [rbx + 12]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jnz     .bad_arg
+    er_check_nonzero eax, .bad_arg
     lea     rdi, [rbx + 44]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jnz     .bad_arg
+    er_check_nonzero eax, .bad_arg
     jmp     .write
 
 .check_nonzero:
     lea     rdi, [rbx + 12]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
     lea     rdi, [rbx + 44]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
 .write:
     lea     rdi, [r12 + 0]
@@ -725,16 +678,12 @@ er_fn er_object_envelope_encode
     cmp     r8d, ecx
     jb      .mloop
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     mov     eax, 1
     er_ok
     er_ret
 .bad_arg:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
     er_ret
@@ -746,8 +695,7 @@ er_fn er_object_envelope_encode
 ; rdi=in, rsi=envelope
 ; ==================================================================
 er_fn er_object_envelope_decode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -756,8 +704,7 @@ er_fn er_object_envelope_decode
     mov     [rbx + 0], eax
     mov     edi, eax
     call    _validate_envelope_kind
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     lea     rdi, [r12 + 4]
     call    er_load16
@@ -768,8 +715,7 @@ er_fn er_object_envelope_decode
     mov     [rbx + 6], ax
     mov     di, ax
     call    _validate_algorithm
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     lea     rdi, [r12 + 8]
     call    er_load32
@@ -799,14 +745,12 @@ er_fn er_object_envelope_decode
     cmp     r8d, ecx
     jb      .mloop
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -818,58 +762,49 @@ er_fn er_object_envelope_decode
 ; rdi=envelope, rsi=owner
 ; ==================================================================
 er_fn er_object_envelope_validate
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     rbx, rdi
     mov     r12, rsi
 
     mov     edi, [rbx + 0]
     mov     esi, [r12 + 0]
     call    _envelope_owner_matches
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     mov     edi, [rbx + 0]
     mov     si, [rbx + 6]
     call    _envelope_algorithm_matches
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     cmp     dword [rbx + 0], OBJECT_ENVELOPE_KIND_NONE
     jne     .check_nonzero
     lea     rdi, [rbx + 12]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
     lea     rdi, [rbx + 44]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
     jmp     .ok
 
 .check_nonzero:
     lea     rdi, [rbx + 12]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     lea     rdi, [rbx + 44]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
 .ok:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -881,8 +816,7 @@ er_fn er_object_envelope_validate
 ; rdi=out, rsi=child
 ; ==================================================================
 er_fn er_object_child_encode
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rsi
 
@@ -890,13 +824,11 @@ er_fn er_object_child_encode
     lea     rdi, [rbx + 0]       ; object_id
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     movzx   edi, word [rbx + 48]
     call    _validate_kind
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     cmp     qword [rbx + 40], 0  ; logical_len
     je      .bad_arg
@@ -904,8 +836,7 @@ er_fn er_object_child_encode
     lea     rdi, [rbx + 52]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     ; Object_id 32 bytes
     lea     rdi, [r12 + 0]
@@ -951,14 +882,12 @@ er_fn er_object_child_encode
     cmp     r8d, ecx
     jb      .rh_loop
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     mov     eax, 1
     er_ok
     er_ret
 .bad_arg:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
     er_ret
@@ -971,9 +900,7 @@ er_fn er_object_child_encode
 ; rdi=in, rsi=expected_offset, rdx=child
 ; ==================================================================
 er_fn er_object_child_decode
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     r12, rdi
     mov     r13, rsi
     mov     rbx, rdx
@@ -981,8 +908,7 @@ er_fn er_object_child_decode
     ; Pad must be zero
     lea     rdi, [r12 + 50]
     call    er_load16
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
 
     ; Object_id 32 bytes
     lea     rdi, [rbx + 0]
@@ -1007,8 +933,7 @@ er_fn er_object_child_decode
     lea     rdi, [r12 + 40]
     call    er_load64
     mov     [rbx + 40], rax
-    test    rax, rax
-    jz      .corrupt
+    er_check_zero rax, .corrupt
 
     ; Kind
     lea     rdi, [r12 + 48]
@@ -1016,8 +941,7 @@ er_fn er_object_child_decode
     mov     [rbx + 48], ax
     mov     di, ax
     call    _validate_kind
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     ; Requirements_hash 32 bytes
     lea     rdi, [rbx + 52]
@@ -1035,25 +959,19 @@ er_fn er_object_child_decode
     lea     rdi, [rbx + 0]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
     lea     rdi, [rbx + 52]
     mov     esi, 32
     call    er_bytes_nonzero
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     mov     eax, 1
     er_ok
     er_ret
 .corrupt:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -1071,8 +989,7 @@ er_fn er_object_canonical_size
 
     mov     di, di
     call    _validate_kind
-    test    eax, eax
-    jz      .bad_arg
+    er_check_zero eax, .bad_arg
 
     cmp     dx, 16            ; OBJECT_MAX_OWNERS
     ja      .bad_arg
@@ -1088,12 +1005,10 @@ er_fn er_object_canonical_size
     je      .no_children
     jmp     .check_tree
 .no_children:
-    test    r8d, r8d
-    jnz     .bad_arg
+    er_check_nonzero r8d, .bad_arg
     jmp     .compute
 .check_tree:
-    test    rsi, rsi
-    jnz     .bad_arg
+    er_check_nonzero rsi, .bad_arg
 
 .compute:
     mov     rax, 148          ; OBJECT_HEADER_SIZE
@@ -1146,11 +1061,7 @@ er_fn er_object_canonical_size
 ;  +16: header (124 = HEADER_STRUCT_SIZE)
 ; ==================================================================
 er_fn er_object_view_decode
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13d, esi
@@ -1164,8 +1075,7 @@ er_fn er_object_view_decode
     mov     rdi, r12
     lea     rsi, [r14 + 16]
     call    er_object_header_decode
-    test    eax, eax
-    jz      .corrupt_pop
+    er_check_zero eax, .corrupt_pop
 
     movzx   ebx, word [r14 + 16 + 16]
     movzx   r8d, word [r14 + 16 + 18]
@@ -1180,8 +1090,7 @@ er_fn er_object_view_decode
     mov     r8d, r10d
     lea     r9, [rsp + 80]
     call    er_object_canonical_size
-    test    eax, eax
-    jz      .corrupt_pop
+    er_check_zero eax, .corrupt_pop
 
     mov     rax, [rsp + 80]
     cmp     eax, r13d
@@ -1200,8 +1109,7 @@ er_fn er_object_view_decode
     mov     [r14], rax
     mov     [r14 + 8], r9
 
-    test    ebx, ebx
-    jz      .check_env
+    er_check_zero ebx, .check_env
     xor     r15d, r15d
 .ol:
     mov     ecx, r15d
@@ -1210,34 +1118,16 @@ er_fn er_object_view_decode
     add     rcx, r12
     mov     rdi, rcx
     mov     rsi, rsp
-    push    rbx
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r8, r9, r10, r11, r12, r13, r14, r15
     call    er_object_owner_decode
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rbx
-    test    eax, eax
-    jz      .corrupt_pop
+    er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
+    er_check_zero eax, .corrupt_pop
     inc     r15d
     cmp     r15d, ebx
     jb      .ol
 
 .check_env:
-    test    r8d, r8d
-    jz      .check_child
+    er_check_zero r8d, .check_child
     xor     r15d, r15d
 .el:
     mov     eax, 148
@@ -1250,27 +1140,10 @@ er_fn er_object_view_decode
     add     rax, r12
     mov     rdi, rax
     mov     rsi, rsp
-    push    rbx
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r8, r9, r10, r11, r12, r13, r14, r15
     call    er_object_envelope_decode
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rbx
-    test    eax, eax
-    jz      .corrupt_pop
+    er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
+    er_check_zero eax, .corrupt_pop
 
     movzx   eax, word [rsp + 4]
     cmp     eax, ebx
@@ -1281,61 +1154,26 @@ er_fn er_object_view_decode
     imul    ecx, 36
     add     ecx, 148
     add     rcx, r12
-    push    rbx
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r8, r9, r10, r11, r12, r13, r14, r15
     mov     rdi, rcx
     lea     rsi, [rsp + 96 + 72]
     call    er_object_owner_decode
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rbx
-    test    eax, eax
-    jz      .corrupt_pop
+    er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
+    er_check_zero eax, .corrupt_pop
 
-    push    rbx
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r8, r9, r10, r11, r12, r13, r14, r15
     mov     rdi, rsp
     lea     rsi, [rsp + 96 + 72]
     call    er_object_envelope_validate
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rbx
-    test    eax, eax
-    jz      .corrupt_pop
+    er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
+    er_check_zero eax, .corrupt_pop
 
     inc     r15d
     cmp     r15d, r8d
     jb      .el
 
 .check_child:
-    test    r10d, r10d
-    jz      .success
+    er_check_zero r10d, .success
     xor     r15d, r15d
     xor     r11d, r11d
 .cl:
@@ -1354,27 +1192,10 @@ er_fn er_object_view_decode
     mov     rdi, rax
     mov     esi, r11d
     mov     rdx, rsp
-    push    rbx
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r8, r9, r10, r11, r12, r13, r14, r15
     call    er_object_child_decode
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rbx
-    test    eax, eax
-    jz      .corrupt_pop
+    er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
+    er_check_zero eax, .corrupt_pop
 
     mov     rax, [rsp + 40]
     add     r11, rax
@@ -1392,22 +1213,14 @@ er_fn er_object_view_decode
 
 .success:
     add     rsp, 96
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     mov     eax, 1
     er_ok
     er_ret
 .corrupt_pop:
     add     rsp, 96
 .corrupt:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret

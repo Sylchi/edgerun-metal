@@ -28,8 +28,7 @@ er_fn er_xorshift64
 ; ==================================================================
 er_fn er_crc32c
     mov     eax, edi            ; crc
-    test    rdx, rdx
-    jz      .crc32c_done
+    er_check_zero rdx, .crc32c_done
     mov     r8, rsi             ; data ptr
     mov     rcx, rdx            ; len
 .crc32c_8:
@@ -47,8 +46,7 @@ er_fn er_crc32c
     sub     rcx, 4
     jmp     .crc32c_4
 .crc32c_1:
-    test    rcx, rcx
-    jz      .crc32c_done
+    er_check_zero rcx, .crc32c_done
     crc32   eax, byte [r8]
     inc     r8
     dec     rcx
@@ -62,8 +60,7 @@ er_fn er_crc32c
 ; ==================================================================
 er_fn er_fnv1a64
     mov     rax, 0xcbf29ce484222325   ; FNV offset basis
-    test    rsi, rsi
-    jz      .fnv1a_done
+    er_check_zero rsi, .fnv1a_done
     xor     rcx, rcx
     mov     r10, rsi
 .fnv1a_loop:

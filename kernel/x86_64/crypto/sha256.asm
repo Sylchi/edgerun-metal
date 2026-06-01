@@ -60,12 +60,7 @@ H0:
 ; Clobbers: rax, rcx, rdx, rsi, rdi, r8-r15
 ; =====================================================================
 er_fn _sha256_compress
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
     sub     rsp, 64 * 4 + 8   ; W[0..63] + 8 bytes for ctx save
 
     ; Save ctx at [rsp + 256] (dedicated slot, not overlapping saved regs)
@@ -205,13 +200,7 @@ er_fn _sha256_compress
     add     [rdi + SHA256_CTX_H + 28], r15d
 
     add     rsp, 64 * 4 + 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 ; =====================================================================
 ; er_sha256_init — initialize SHA-256 context
@@ -219,12 +208,9 @@ er_fn _sha256_compress
 ; rdi = ctx → rax = ctx
 ; =====================================================================
 er_fn er_sha256_init
-    test    rdi, rdi
-    jz      .err
+    er_check_zero rdi, .err
 
-    push    rdi
-    push    rsi
-    push    rcx
+    er_push rdi, rsi, rcx
 
     ; Copy H[0..7] from rodata
     lea     rsi, [rel H0]
@@ -245,8 +231,7 @@ er_fn er_sha256_init
     mov     ecx, 64 / 4
     rep     stosd
 
-    pop     rcx
-    pop     rsi
+    er_pop  rsi, rcx
     pop     rax            ; return original ctx pointer
     ret
 
@@ -261,17 +246,10 @@ er_fn er_sha256_init
 ; Returns: rax = ctx if any data was consumed, 0 on error
 ; =====================================================================
 er_fn er_sha256_update
-    test    rdi, rdi
-    jz      .err
-    test    rdx, rdx
-    jz      .err_rdx
+    er_check_zero rdi, .err
+    er_check_zero rdx, .err_rdx
 
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
 
     mov     r12, rdi           ; r12 = ctx
     mov     r13, rsi           ; r13 = data
@@ -282,8 +260,7 @@ er_fn er_sha256_update
 
     ; Process partial buffer first
     mov     r15d, [r12 + SHA256_CTX_BUFLEN]  ; r15 = bytes in buffer
-    test    r15d, r15d
-    jz      .full_blocks
+    er_check_zero r15d, .full_blocks
 
     ; Calculate how many bytes to fill the buffer
     mov     ebp, 64
@@ -323,8 +300,7 @@ er_fn er_sha256_update
 
 .partial_copy:
     ; Copy remaining bytes to buffer
-    test    r14d, r14d
-    jz      .done
+    er_check_zero r14d, .done
     mov     dword [r12 + SHA256_CTX_BUFLEN], r14d
     lea     rdi, [r12 + SHA256_CTX_BUF]
     mov     rsi, r13
@@ -342,13 +318,7 @@ er_fn er_sha256_update
 
 .done:
     mov     rax, r12
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
-    ret
+    er_pop_ret rbx, rbp, r12, r13, r14, r15
 
 .err:
     xor     eax, eax
@@ -365,15 +335,10 @@ er_fn er_sha256_update
 ; Returns: rax = out
 ; =====================================================================
 er_fn er_sha256_final
-    test    rdi, rdi
-    jz      .err
-    test    rsi, rsi
-    jz      .err
+    er_check_zero rdi, .err
+    er_check_zero rsi, .err
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi           ; r12 = ctx
     mov     r13, rsi           ; r13 = out
@@ -440,11 +405,7 @@ er_fn er_sha256_final
     jb      .out_loop
 
     mov     rax, r13
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 .err:
     xor     eax, eax

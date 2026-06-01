@@ -94,8 +94,7 @@ er_fn er_tcp_get_state
 
     mov     edi, ebx
     call    _tcp_conn_ptr
-    test    rax, rax
-    jz      .bad
+    er_check_zero rax, .bad
 
     mov     eax, [rax + TCP_CONN_STATE]
     er_ok
@@ -110,18 +109,13 @@ er_fn er_tcp_get_state
 ; ==================================================================
 
 er_fn er_tcp_connect
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; dst_ip (network order)
     mov     r13w, si        ; dst_port (host order)
     mov     r14d, edx       ; src_ip (network order)
     mov     r15w, cx        ; src_port (host order, 0 = auto)
-    test    r14d, r14d
-    jnz     .have_src_ip
+    er_check_nonzero r14d, .have_src_ip
     call    er_net_get_ip
     mov     r14d, eax
 .have_src_ip:
@@ -169,23 +163,20 @@ er_fn er_tcp_connect
     mov     rdi, tpm_isn_cmd
     mov     esi, 4
     call    er_tpm_get_random
-    test    rax, rax
-    jz      .tpm_fail
+    er_check_zero rax, .tpm_fail
 
     mov     esi, 12             ; TPM_CMD_GET_RANDOM_LEN
     mov     rdx, tpm_isn_rsp
     mov     ecx, 64
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .tpm_fail
+    er_check_zero rax, .tpm_fail
 
     mov     rdi, tpm_isn_rsp
     mov     esi, eax
     mov     rdx, tpm_isn_out
     mov     ecx, 4
     call    er_tpm_parse_get_random
-    test    rax, rax
-    jz      .tpm_fail
+    er_check_zero rax, .tpm_fail
 
     ; Recalculate connection pointer (r8 may be clobbered by TPM calls)
     mov     eax, ebx
@@ -220,21 +211,13 @@ er_fn er_tcp_connect
     ; Return connection ID
     mov     eax, ebx
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .full:
     mov     eax, -1
     er_err  ERROR_BUSY
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .send_fail:
@@ -245,11 +228,7 @@ er_fn er_tcp_connect
 
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .tpm_fail:
@@ -344,10 +323,7 @@ _tcp_send_syn:
 ; Stores checksum (network byte order) at tcp_seg + TCP_CHECKSUM
 ; ==================================================================
 _tcp_compute_checksum:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi        ; conn
     mov     r13, rsi        ; tcp_seg
@@ -407,11 +383,7 @@ _tcp_compute_checksum:
     mov     [r13 + TCP_CHECKSUM], ax
 
     add     rsp, 16
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 ; Missing label for pseudo-header length field
 TCP_PSEUDO_LEN_IDX equ TCP_PSEUDO_LEN  ; use same offset
@@ -436,8 +408,7 @@ _tcp_checksum_add_bytes:
     sub     ecx, 2
     jmp     .add_loop
 .add_odd:
-    test    ecx, ecx
-    jz      .add_done
+    er_check_zero ecx, .add_done
     movzx   edx, byte [rbx]
     shl     edx, 8
     add     eax, edx
@@ -451,11 +422,7 @@ _tcp_checksum_add_bytes:
 ; int er_tcp_send(uint32_t conn_id, const void *data, uint32_t len)
 ; ==================================================================
 er_fn er_tcp_send
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi       ; conn_id
     mov     r13, rsi        ; data
@@ -464,8 +431,7 @@ er_fn er_tcp_send
     ; Get connection pointer
     mov     edi, r12d
     call    _tcp_conn_ptr
-    test    rax, rax
-    jz      .bad_conn
+    er_check_zero rax, .bad_conn
 
     mov     rbx, rax        ; conn pointer
 
@@ -473,18 +439,15 @@ er_fn er_tcp_send
     cmp     dword [rbx + TCP_CONN_STATE], TCP_ESTABLISHED
     jne     .not_established
 
-    test    r14d, r14d
-    jz      .done
+    er_check_zero r14d, .done
 
-    test    r13, r13
-    jz      .bad_conn
+    er_check_zero r13, .bad_conn
 
     cmp     dword [rbx + TCP_CONN_TX_LEN], 0
     jne     .busy
 
     movzx   eax, word [rbx + TCP_CONN_SND_WND]
-    test    eax, eax
-    jz      .busy
+    er_check_zero eax, .busy
     cmp     r14d, eax
     ja      .busy
 
@@ -515,60 +478,36 @@ er_fn er_tcp_send
 .done:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .busy:
     mov     eax, -1
     er_err  ERROR_BUSY
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_conn:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .not_established:
     mov     eax, -1
     er_err  ERROR_TCP_CLOSED
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .send_fail:
     mov     eax, -1
     er_err  ERROR_IO
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 ; ==================================================================
 
 _tcp_send_data_range:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; conn
     mov     r13, rsi        ; data
@@ -577,8 +516,7 @@ _tcp_send_data_range:
     xor     ebx, ebx        ; bytes successfully sent
 
 .range_loop:
-    test    r14d, r14d
-    jz      .range_done
+    er_check_zero r14d, .range_done
     movzx   edx, word [r12 + TCP_CONN_MSS]
     cmp     r14d, edx
     ja      .have_chunk
@@ -600,19 +538,10 @@ _tcp_send_data_range:
 
 .range_done:
     mov     eax, ebx
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 _tcp_send_data_segment:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; conn
     mov     r13, rsi        ; data
@@ -668,45 +597,29 @@ _tcp_send_data_segment:
     js      .fail
 
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 er_fn er_tcp_recv
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12d, edi       ; conn_id
     mov     r13, rsi        ; buf
     mov     r14, rdx        ; len pointer
 
-    test    r14, r14
-    jz      .bad_conn
+    er_check_zero r14, .bad_conn
     cmp     dword [r14], 0
     je      .args_ok
-    test    r13, r13
-    jz      .bad_conn
+    er_check_zero r13, .bad_conn
 .args_ok:
 
     ; Get connection pointer
     mov     edi, r12d
     call    _tcp_conn_ptr
-    test    rax, rax
-    jz      .bad_conn
+    er_check_zero rax, .bad_conn
 
     mov     rbx, rax
 
@@ -720,10 +633,7 @@ er_fn er_tcp_recv
     mov     dword [r14], 0
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .recv_data:
@@ -775,29 +685,20 @@ er_fn er_tcp_recv
 
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .no_data:
     mov     dword [r14], 0
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .bad_conn:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 ; ==================================================================
 
@@ -813,8 +714,7 @@ er_fn er_tcp_close
     ; Get connection pointer
     mov     edi, ebx
     call    _tcp_conn_ptr
-    test    rax, rax
-    jz      .bad_conn
+    er_check_zero rax, .bad_conn
 
     mov     rbx, rax
 
@@ -971,8 +871,7 @@ _tcp_send_fin:
     ret
 
 _tcp_send_fin_segment:
-    push    r12
-    push    r13
+    er_push r12, r13
     mov     r12, rdi
     mov     r13d, ecx
 
@@ -1030,21 +929,13 @@ _tcp_send_fin_segment:
     js      .fail
 
     xor     eax, eax
-    pop     r13
-    pop     r12
-    ret
+    er_pop_ret r12, r13
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    ret
+    er_pop_ret r12, r13
 
 er_fn er_tcp_handle
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; IP header
     mov     r13d, esi       ; IP total length
@@ -1141,8 +1032,7 @@ er_fn er_tcp_handle
     mov     rsi, [tcp_in_hdr_ptr]
     mov     edx, [tcp_seg_len]
     call    _tcp_compute_checksum
-    test    ax, ax
-    jnz     .done
+    er_check_nonzero ax, .done
     mov     rbx, [tcp_in_hdr_ptr]
     mov     r8d, [rbx + TCP_SEQ_NUM]
     bswap   r8d
@@ -1375,11 +1265,7 @@ er_fn er_tcp_handle
     jmp     .done
 
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 ; ==================================================================
@@ -1391,8 +1277,7 @@ er_fn er_tcp_handle
 ; Should be called periodically by the main loop.
 ; ==================================================================
 er_fn er_tcp_poll
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     xor     ebx, ebx
 
@@ -1446,8 +1331,7 @@ er_fn er_tcp_poll
     jmp     .next_poll
 
 .done_poll:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 ; ==================================================================

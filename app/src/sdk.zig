@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const app_mod = @import("app.zig");
 const arena = @import("arena.zig");
 const authority = @import("authority.zig");

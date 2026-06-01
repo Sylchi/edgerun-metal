@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const component = @import("Component.zig");
 const ui_input = @import("../../input.zig");
 const object = @import("../../object.zig");

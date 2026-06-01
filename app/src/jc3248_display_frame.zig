@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 const jc3248_frame = @import("ui/jc3248_frame.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");

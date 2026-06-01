@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const font_vector = @import("font.zig");
 const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const icon_line_buffer = @import("icon_line_buffer.zig");

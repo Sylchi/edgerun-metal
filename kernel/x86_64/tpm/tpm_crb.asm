@@ -89,20 +89,12 @@ er_fn er_tpm_crb_wait_start
 ;   9. GO_IDLE (CTRL_REQ ← GO_IDLE)
 ; =================================================================
 er_fn er_tpm_crb_transfer
-    test    rdi, rdi
-    jz      .err
-    test    esi, esi
-    jz      .err
-    test    rdx, rdx
-    jz      .err
-    test    ecx, ecx
-    jz      .err
+    er_check_zero rdi, .err
+    er_check_zero esi, .err
+    er_check_zero rdx, .err
+    er_check_zero ecx, .err
 
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13d, esi
@@ -135,8 +127,7 @@ er_fn er_tpm_crb_transfer
     ; Step 6: Wait for completion
     mov     rdi, rbx
     call    er_tpm_crb_wait_start
-    test    eax, eax
-    jz      .err_pop
+    er_check_zero eax, .err_pop
 
     ; Step 7: Read response header from cmdmem via rep movsb
     sub     rsp, 16
@@ -156,8 +147,7 @@ er_fn er_tpm_crb_transfer
     mov     dl, [rsp + 5]
     add     rsp, 16
 
-    test    edx, edx
-    jz      .err_pop
+    er_check_zero edx, .err_pop
     cmp     edx, r15d
     ja      .err_pop
 
@@ -173,12 +163,7 @@ er_fn er_tpm_crb_transfer
     mov     eax, edx
 
 .pop:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 .err_pop:
     xor     eax, eax
@@ -195,8 +180,7 @@ er_fn er_tpm_crb_transfer
 er_fn er_tpm_crb_present
     mov     edi, CRB_BASE
     mov     eax, [rdi + CRB_INTF_ID]
-    test    eax, eax
-    jz      .not_found
+    er_check_zero eax, .not_found
     test    eax, 0x11
     jz      .not_found
     mov     eax, 1

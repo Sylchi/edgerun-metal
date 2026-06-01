@@ -18,8 +18,7 @@ extern er_av1_symbol_exit
     mov     esi, %1
     mov     edx, %2
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 SECTION .text
@@ -31,20 +30,16 @@ SECTION .text
 er_fn er_av1_tile_group_decode_uniform
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 8
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     byte [rdx + AV1_TILE_INFO_UNIFORM], 1
     jne     .unsupported
     mov     r12, rdi
     mov     r13, rcx
     mov     r14d, esi
     mov     r15d, [rdx + AV1_TILE_INFO_COUNT]
-    test    r15d, r15d
-    jz      .invalid_param
+    er_check_zero r15d, .invalid_param
     cmp     r15d, r8d
     ja      .invalid_param
     movzx   r11d, byte [rdx + AV1_TILE_INFO_TILE_SIZE_BYTES]
@@ -53,8 +48,7 @@ er_fn er_av1_tile_group_decode_uniform
     cmp     r11d, AV1_TILE_SIZE_BYTES_MAX
     ja      .invalid_param
     mov     eax, [rdx + AV1_TILE_INFO_COLS]
-    test    eax, eax
-    jz      .invalid_param
+    er_check_zero eax, .invalid_param
     mov     [rsp], eax
     xor     ebx, ebx
     xor     r10d, r10d
@@ -148,20 +142,16 @@ er_fn er_av1_tile_group_decode_uniform
 ; Entries use qword source pointer and dword length. Returns eax=bytes written.
 er_fn er_av1_tile_group_encode_uniform
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
     cmp     byte [rdx + AV1_TILE_INFO_UNIFORM], 1
     jne     .unsupported
     mov     r12, rdi
     mov     r13, rcx
     mov     r14d, esi
     mov     r15d, r8d
-    test    r15d, r15d
-    jz      .invalid_param
+    er_check_zero r15d, .invalid_param
     cmp     r15d, [rdx + AV1_TILE_INFO_COUNT]
     jne     .invalid_param
     movzx   r11d, byte [rdx + AV1_TILE_INFO_TILE_SIZE_BYTES]
@@ -177,16 +167,14 @@ er_fn er_av1_tile_group_encode_uniform
     imul    eax, r10d, AV1_TILE_ENTRY_SIZE
     lea     r9, [r13 + rax]
     mov     rsi, [r9 + AV1_TILE_ENTRY_PTR]
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     ecx, [r9 + AV1_TILE_ENTRY_LEN]
     mov     r8d, ecx
     mov     eax, r15d
     dec     eax
     cmp     r10d, eax
     je      .copy_tile
-    test    ecx, ecx
-    jz      .invalid_param
+    er_check_zero ecx, .invalid_param
     mov     eax, ebx
     add     eax, r11d
     jc      .corrupt
@@ -204,8 +192,7 @@ er_fn er_av1_tile_group_encode_uniform
     inc     edx
     jmp     .write_size
 .after_size:
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
     add     ebx, r11d
 .copy_tile:
     mov     eax, ebx
@@ -248,14 +235,10 @@ er_fn er_av1_tile_group_encode_uniform
 er_fn er_av1_tile_group_decode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE + 8
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     byte [rdx + AV1_TILE_INFO_UNIFORM], 1
     jne     .unsupported
     mov     r12, rdi
@@ -265,8 +248,7 @@ er_fn er_av1_tile_group_decode
     mov     r15, r8
     mov     [rsp + AV1_BITS_SIZE], r9d
     mov     eax, [r13 + AV1_TILE_INFO_COUNT]
-    test    eax, eax
-    jz      .invalid_param
+    er_check_zero eax, .invalid_param
     mov     dword [r14 + AV1_TILE_GROUP_START], 0
     dec     eax
     mov     [r14 + AV1_TILE_GROUP_END], eax
@@ -279,23 +261,18 @@ er_fn er_av1_tile_group_decode
     mov     rsi, r12
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     mov     esi, 1
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .byte_align
+    er_check_nonzero edx, .done
+    er_check_zero eax, .byte_align
     movzx   esi, byte [r13 + AV1_TILE_INFO_COLS_LOG2]
     add     sil, [r13 + AV1_TILE_INFO_ROWS_LOG2]
-    test    esi, esi
-    jz      .corrupt
+    er_check_zero esi, .corrupt
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r13 + AV1_TILE_INFO_COUNT]
     jae     .corrupt
     mov     [r14 + AV1_TILE_GROUP_START], eax
@@ -303,8 +280,7 @@ er_fn er_av1_tile_group_decode
     add     sil, [r13 + AV1_TILE_INFO_ROWS_LOG2]
     mov     rdi, rsp
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, [r13 + AV1_TILE_INFO_COUNT]
     jae     .corrupt
     cmp     eax, [r14 + AV1_TILE_GROUP_START]
@@ -314,15 +290,12 @@ er_fn er_av1_tile_group_decode
     mov     ecx, [rsp + AV1_BITS_POS]
     neg     ecx
     and     ecx, 7
-    test    ecx, ecx
-    jz      .header_done
+    er_check_zero ecx, .header_done
     mov     rdi, rsp
     mov     esi, ecx
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero edx, .done
+    er_check_nonzero eax, .corrupt
 .header_done:
     mov     eax, [rsp + AV1_BITS_POS]
     shr     eax, 3
@@ -452,14 +425,10 @@ er_fn er_av1_tile_group_decode
 er_fn er_av1_tile_group_encode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE + 8
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     cmp     byte [rdx + AV1_TILE_INFO_UNIFORM], 1
     jne     .unsupported
     mov     r12, rdi
@@ -469,8 +438,7 @@ er_fn er_av1_tile_group_encode
     mov     r15, r8
     mov     [rsp + AV1_BITS_SIZE], r9d
     mov     eax, [r13 + AV1_TILE_INFO_COUNT]
-    test    eax, eax
-    jz      .invalid_param
+    er_check_zero eax, .invalid_param
     mov     r11d, [r14 + AV1_TILE_GROUP_END]
     sub     r11d, [r14 + AV1_TILE_GROUP_START]
     jc      .corrupt
@@ -493,8 +461,7 @@ er_fn er_av1_tile_group_encode
     mov     rsi, r12
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [r13 + AV1_TILE_INFO_COUNT]
     dec     eax
     cmp     dword [r14 + AV1_TILE_GROUP_START], 0
@@ -505,48 +472,40 @@ er_fn er_av1_tile_group_encode
     xor     esi, esi
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .pad_header
 .write_range:
     mov     rdi, rsp
     mov     esi, 1
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   edx, byte [r13 + AV1_TILE_INFO_COLS_LOG2]
     add     dl, [r13 + AV1_TILE_INFO_ROWS_LOG2]
-    test    edx, edx
-    jz      .corrupt
+    er_check_zero edx, .corrupt
     mov     esi, [r14 + AV1_TILE_GROUP_START]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   edx, byte [r13 + AV1_TILE_INFO_COLS_LOG2]
     add     dl, [r13 + AV1_TILE_INFO_ROWS_LOG2]
     mov     esi, [r14 + AV1_TILE_GROUP_END]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .pad_header:
     mov     edx, [rsp + AV1_BITS_POS]
     neg     edx
     and     edx, 7
-    test    edx, edx
-    jz      .header_written
+    er_check_zero edx, .header_written
     mov     rdi, rsp
     xor     esi, esi
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .header_written:
     mov     rdi, rsp
     call    er_av1_bits_bytes_written
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r8d, eax
     mov     [r14 + AV1_TILE_GROUP_DATA_OFFSET], eax
 .payload:
@@ -558,16 +517,14 @@ er_fn er_av1_tile_group_encode
     imul    eax, r9d, AV1_TILE_ENTRY_SIZE
     lea     rdi, [r15 + rax]
     mov     rsi, [rdi + AV1_TILE_ENTRY_PTR]
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     eax, [rdi + AV1_TILE_ENTRY_LEN]
     mov     r11d, eax
     mov     edx, [rsp + AV1_BITS_SIZE]
     dec     edx
     cmp     r9d, edx
     je      .copy_tile
-    test    eax, eax
-    jz      .invalid_param
+    er_check_zero eax, .invalid_param
     mov     edx, r8d
     add     edx, ecx
     jc      .corrupt
@@ -588,8 +545,7 @@ er_fn er_av1_tile_group_encode
     inc     edx
     jmp     .write_size
 .after_size:
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero eax, .corrupt
     add     ecx, r10d
 .copy_tile:
     mov     eax, r8d
@@ -641,10 +597,8 @@ er_fn er_av1_tile_group_encode
 er_fn er_av1_tile_info_encode
     er_push rbx, r12
     er_stack_alloc AV1_BITS_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     cmp     byte [r12 + AV1_TILE_INFO_UNIFORM], 1
     jne     .unsupported
@@ -660,39 +614,33 @@ er_fn er_av1_tile_info_encode
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     tile_write_bits 1, 1
     movzx   esi, byte [r12 + AV1_TILE_INFO_COLS_LOG2]
     mov     rdi, rsp
     mov     edx, AV1_TILE_LOG2_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_TILE_INFO_ROWS_LOG2]
     mov     rdi, rsp
     mov     edx, AV1_TILE_LOG2_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   ebx, byte [r12 + AV1_TILE_INFO_COLS_LOG2]
     add     bl, [r12 + AV1_TILE_INFO_ROWS_LOG2]
-    test    ebx, ebx
-    jz      .tile_size_bytes
+    er_check_zero ebx, .tile_size_bytes
     mov     esi, [r12 + AV1_TILE_INFO_CONTEXT_UPDATE_ID]
     mov     edx, ebx
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .tile_size_bytes:
     movzx   esi, byte [r12 + AV1_TILE_INFO_TILE_SIZE_BYTES]
     dec     esi
     mov     rdi, rsp
     mov     edx, AV1_TILE_SIZE_BYTES_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     call    er_av1_bits_bytes_written
     jmp     .done
@@ -714,28 +662,24 @@ er_fn er_av1_tile_info_encode
 er_fn er_av1_tile_info_decode
     er_push rbx, r12
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     mov     rdx, rsi
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     mov     esi, 1
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, 1
     jne     .unsupported
     mov     [r12 + AV1_TILE_INFO_UNIFORM], al
     mov     rdi, rsp
     mov     esi, AV1_TILE_LOG2_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, AV1_TILE_LOG2_MAX
     ja      .corrupt
     mov     [r12 + AV1_TILE_INFO_COLS_LOG2], al
@@ -746,8 +690,7 @@ er_fn er_av1_tile_info_decode
     mov     rdi, rsp
     mov     esi, AV1_TILE_LOG2_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, AV1_TILE_LOG2_MAX
     ja      .corrupt
     mov     [r12 + AV1_TILE_INFO_ROWS_LOG2], al
@@ -759,21 +702,18 @@ er_fn er_av1_tile_info_decode
     mov     [r12 + AV1_TILE_INFO_COUNT], eax
     movzx   ebx, byte [r12 + AV1_TILE_INFO_COLS_LOG2]
     add     bl, [r12 + AV1_TILE_INFO_ROWS_LOG2]
-    test    ebx, ebx
-    jz      .read_tile_size
+    er_check_zero ebx, .read_tile_size
     mov     rdi, rsp
     mov     esi, ebx
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_TILE_INFO_CONTEXT_UPDATE_ID], eax
     jmp     .read_tile_size
 .read_tile_size:
     mov     rdi, rsp
     mov     esi, AV1_TILE_SIZE_BYTES_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_TILE_INFO_TILE_SIZE_BYTES], al
     mov     eax, [rsp + AV1_BITS_POS]
@@ -803,12 +743,9 @@ er_fn er_av1_tile_info_decode
 er_fn er_av1_tile_entries_validate_entropy
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_SYMBOL_SIZE
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    ecx, ecx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero ecx, .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     r14d, esi
@@ -821,8 +758,7 @@ er_fn er_av1_tile_entries_validate_entropy
     lea     r11, [r13 + rax]
     mov     r8, [r11 + AV1_TILE_ENTRY_OFFSET]
     mov     r9d, [r11 + AV1_TILE_ENTRY_LEN]
-    test    r9d, r9d
-    jz      .invalid_param
+    er_check_zero r9d, .invalid_param
     mov     eax, r14d
     cmp     r8, rax
     ja      .no_data
@@ -836,12 +772,10 @@ er_fn er_av1_tile_entries_validate_entropy
     mov     edx, r9d
     mov     rdi, rsp
     call    er_av1_symbol_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     call    er_av1_symbol_exit
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     ebx
     jmp     .loop
 .ok:
@@ -870,14 +804,10 @@ er_fn er_av1_tile_entries_validate_entropy
 er_fn er_av1_tile_group_decode_entropy
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 8
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
     mov     r12, rdi
     mov     ebx, esi
     mov     r13, rcx
@@ -885,8 +815,7 @@ er_fn er_av1_tile_group_decode_entropy
     mov     r15d, r9d
     mov     [rsp], rdx
     call    er_av1_tile_group_decode
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r9d, [r13 + AV1_TILE_GROUP_END]
     sub     r9d, [r13 + AV1_TILE_GROUP_START]
     jc      .corrupt
@@ -898,8 +827,7 @@ er_fn er_av1_tile_group_decode_entropy
     mov     rdx, r14
     mov     ecx, r9d
     call    er_av1_tile_entries_validate_entropy
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     eax, [r13 + AV1_TILE_GROUP_DATA_OFFSET]
     add     eax, [r13 + AV1_TILE_GROUP_DATA_LEN]
     jc      .corrupt
@@ -920,10 +848,8 @@ er_fn er_av1_tile_group_decode_entropy
 ; er_av1_tile_group_decode_single(payload, len, desc) -> eax=bytes_consumed, rdx=error
 ; rdi=payload, esi=len, rdx=desc. For NumTiles=1, tile data is the whole payload.
 er_fn er_av1_tile_group_decode_single
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     dword [rdx + AV1_TILE_GROUP_START], 0
     mov     dword [rdx + AV1_TILE_GROUP_END], 0
     mov     dword [rdx + AV1_TILE_GROUP_DATA_OFFSET], 0
@@ -940,17 +866,14 @@ er_fn er_av1_tile_group_decode_single
 ; rdi=out, esi=cap, rdx=tile_ptr, ecx=tile_len.
 er_fn er_av1_tile_group_encode_single
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     cmp     ecx, esi
     ja      .no_space
     mov     r12, rdi
     mov     r13, rdx
     mov     ebx, ecx
-    test    ebx, ebx
-    jz      .ok
+    er_check_zero ebx, .ok
 .loop:
     mov     al, [r13]
     mov     [r12], al
@@ -976,14 +899,11 @@ er_fn er_av1_tile_group_encode_single
 ; er_av1_tile_raw420_size(width, height) -> eax=Y+U+V bytes, rdx=error
 ; edi=width, esi=height. 8-bit 4:2:0 planes, chroma dimensions are ceil / 2.
 er_fn er_av1_tile_raw420_size
-    test    edi, edi
-    jz      .invalid_param
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero edi, .invalid_param
+    er_check_zero esi, .invalid_param
     mov     eax, edi
     mul     esi
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     mov     r8d, eax
     mov     eax, edi
     cmp     eax, AV1_LEB128_U32_MAX
@@ -996,8 +916,7 @@ er_fn er_av1_tile_raw420_size
     inc     ecx
     shr     ecx, 1
     mul     ecx
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     mov     ecx, eax
     add     eax, ecx
     jc      .corrupt
@@ -1018,14 +937,10 @@ er_fn er_av1_tile_raw420_size
 ; rdi=desc, esi=width, edx=height, rcx=y, r8=u, r9=v. Returns eax=total bytes.
 er_fn er_av1_tile_raw420_fill_desc
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rcx, rcx
-    jz      .invalid_param
-    test    r8, r8
-    jz      .invalid_param
-    test    r9, r9
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
+    er_check_zero r9, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
@@ -1035,13 +950,11 @@ er_fn er_av1_tile_raw420_fill_desc
     mov     edi, r13d
     mov     esi, r14d
     call    er_av1_tile_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r10d, eax
     mov     eax, r13d
     mul     r14d
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     mov     [r12 + AV1_IMAGE_Y_LEN], eax
     mov     ecx, r10d
     sub     ecx, eax
@@ -1070,8 +983,7 @@ er_fn er_av1_tile_raw420_fill_desc
 ; Verifies pointers and that Y/U/V lengths match 8-bit 4:2:0 dimensions.
 er_fn er_av1_tile_raw420_validate
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     cmp     dword [r12 + AV1_IMAGE_WIDTH], 0
     je      .invalid_param
@@ -1086,13 +998,11 @@ er_fn er_av1_tile_raw420_validate
     mov     edi, [r12 + AV1_IMAGE_WIDTH]
     mov     esi, [r12 + AV1_IMAGE_HEIGHT]
     call    er_av1_tile_raw420_size
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     r13d, eax
     mov     eax, [r12 + AV1_IMAGE_WIDTH]
     mul     dword [r12 + AV1_IMAGE_HEIGHT]
-    test    edx, edx
-    jnz     .corrupt
+    er_check_nonzero edx, .corrupt
     cmp     [r12 + AV1_IMAGE_Y_LEN], eax
     jne     .corrupt
     mov     ebx, r13d
@@ -1121,17 +1031,14 @@ er_fn er_av1_tile_raw420_validate
 ; Copies Y, U, V planes from image_desc into a contiguous tile payload.
 er_fn er_av1_tile_raw420_encode
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, r13d
     ja      .no_space
     mov     ebx, eax
@@ -1173,17 +1080,14 @@ er_fn er_av1_tile_raw420_encode
 ; Copies a contiguous raw 4:2:0 tile payload into Y, U, V planes in image_desc.
 er_fn er_av1_tile_raw420_decode
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
     mov     rdi, r14
     call    er_av1_tile_raw420_validate
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, r13d
     ja      .no_data
     mov     ebx, eax
@@ -1222,8 +1126,7 @@ er_fn er_av1_tile_raw420_decode
     er_ret
 
 copy_bytes:
-    test    ecx, ecx
-    jz      .done
+    er_check_zero ecx, .done
 .loop:
     mov     al, [rsi]
     mov     [rdi], al

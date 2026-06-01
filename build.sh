@@ -924,6 +924,16 @@ cmd_test_er_asm_cli() {
  local src_zero_fn="${ASM_BUILD}/er_asm_zero_fn_probe.asm"
  local src_identity_fn="${ASM_BUILD}/er_asm_identity_fn_probe.asm"
  local src_local_call="${ASM_BUILD}/er_asm_local_call_probe.asm"
+ local src_negative="${ASM_BUILD}/er_asm_negative_probe.asm"
+ local src_and_eax="${ASM_BUILD}/er_asm_and_eax_probe.asm"
+ local src_and_edx="${ASM_BUILD}/er_asm_and_edx_probe.asm"
+ local src_shr_acc="${ASM_BUILD}/er_asm_shr_acc_probe.asm"
+ local src_data_dirs="${ASM_BUILD}/er_asm_data_dirs_probe.asm"
+ local src_status_macros="${ASM_BUILD}/er_asm_status_macros_probe.asm"
+ local src_rel_mem="${ASM_BUILD}/er_asm_rel_mem_probe.asm"
+ local src_reg_moves="${ASM_BUILD}/er_asm_reg_moves_probe.asm"
+ local src_sized_mem="${ASM_BUILD}/er_asm_sized_mem_probe.asm"
+ local src_test_call="${ASM_BUILD}/er_asm_test_call_probe.asm"
  local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
  local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
  local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
@@ -936,7 +946,7 @@ cmd_test_er_asm_cli() {
  local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
  local out="${ASM_BUILD}/er_asm_exit_probe.bin"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
- local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
+ local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_sized_mem" "$src_test_call" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -1109,6 +1119,96 @@ _start:
 .done:
     ret
 EOF
+ cat > "$src_negative" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, -1
+    ret
+EOF
+ cat > "$src_and_eax" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    and     eax, 0x0000FFFF
+    ret
+EOF
+ cat > "$src_and_edx" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    and     edx, 0x55555555
+    ret
+EOF
+ cat > "$src_shr_acc" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    shr     eax, 8
+    shr     rax, 32
+    ret
+EOF
+ cat > "$src_data_dirs" <<'EOF'
+[BITS 64]
+section .data
+    dw      0x1234, 5
+    dd      0x89abcdef
+section .bss
+    resb    2
+    resw    1
+    resd    1
+    resq    1
+EOF
+ cat > "$src_status_macros" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    er_ok
+    er_err  12
+    ret
+EOF
+ cat > "$src_rel_mem" <<'EOF'
+[BITS 64]
+section .data
+sym: resd 1
+section .text
+global _start
+_start:
+    mov     [rel sym], edi
+    inc     dword [rel sym]
+EOF
+ cat > "$src_reg_moves" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     rsi, rdx
+    mov     edx, ecx
+    mov     rcx, rdx
+    mov     eax, esi
+    ret
+EOF
+ cat > "$src_sized_mem" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     dword [rdx], 0x01020304
+    mov     dword [rcx], 0
+EOF
+ cat > "$src_test_call" <<'EOF'
+[BITS 64]
+TEST_BSS_TOTAL_PASSED
+section .text
+global _start
+_start:
+    TEST_CALL_EAX er_probe, 1, 2
+EOF
  cat > "$bad_src" <<'EOF'
 [BITS 64]
 section .text
@@ -1170,6 +1270,16 @@ EOF
  expect_er_asm_bytes "$src_zero_fn" "31c0c3" "zero function"
  expect_er_asm_bytes "$src_identity_fn" "89f8c3" "identity function"
  expect_er_asm_bytes "$src_local_call" "e801000000c3c3" "local call"
+ expect_er_asm_bytes "$src_negative" "b8ffffffffc3" "negative immediate"
+ expect_er_asm_bytes "$src_and_eax" "25ffff0000c3" "and eax immediate"
+ expect_er_asm_bytes "$src_and_edx" "81e255555555c3" "and edx immediate"
+ expect_er_asm_bytes "$src_shr_acc" "c1e80848c1e820c3" "shr accumulator immediate"
+ expect_er_asm_bytes "$src_data_dirs" "34120500efcdab8900000000000000000000000000000000" "data directives"
+ expect_er_asm_bytes "$src_status_macros" "31d2ba0c000000c3" "status macros"
+ expect_er_asm_bytes "$src_rel_mem" "00000000893df6ffffffff05f0ffffff" "rel memory ops"
+ expect_er_asm_bytes "$src_reg_moves" "4889d689ca4889d189f0c3" "register moves"
+ expect_er_asm_bytes "$src_sized_mem" "c70204030201c70100000000" "sized memory immediates"
+ expect_er_asm_builds "$src_test_call" "test call macro"
  expect_er_asm_builds "${ASM_DIR}/rt/ctype.asm" "ctype flat binary"
  expect_er_asm_builds "kernel/driver/portio.asm" "portio flat binary"
  expect_er_asm_builds "${ASM_DIR}/wasm/test_table.asm" "test table flat binary"

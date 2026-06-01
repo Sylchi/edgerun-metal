@@ -491,6 +491,8 @@ er_fn expect_u32_operand
     cmp     r14, r15
     jae     .bad
     movzx   eax, byte [r14]
+    cmp     al, '-'
+    je      .negative
     cmp     al, ASCII_SQUOTE
     je      .char
     cmp     al, ASCII_0
@@ -554,6 +556,16 @@ er_fn expect_u32_operand
     jmp     .done
 .char:
     call    expect_char_operand
+    jmp     .done
+.negative:
+    inc     r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .done
+    mov     rbx, [rel imm_u32_value]
+    neg     ebx
+    mov     [rel imm_u32_value], rbx
+    mov     eax, 1
     jmp     .done
 
 er_fn expect_imm8_operand
@@ -805,6 +817,31 @@ er_fn expect_equ_operand
     er_pop  rbx, r12, r13
     ret
 
+er_fn expect_equ_mul_operand
+    er_push rbx
+    call    expect_equ_operand
+    test    eax, eax
+    jz      .bad
+    mov     rbx, [rel imm_u32_value]
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], '*'
+    jne     .bad
+    inc     r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    imul    rbx, [rel imm_u32_value]
+    mov     [rel imm_u32_value], rbx
+    mov     eax, 1
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx
+    ret
+
 ; operand_has_hex_prefix() -> eax=1/0; consumes 0x prefix when present.
 er_fn operand_has_hex_prefix
     cmp     r14, r15
@@ -884,4 +921,3 @@ er_fn expect_line_end
 .yes:
     mov     eax, 1
     ret
-

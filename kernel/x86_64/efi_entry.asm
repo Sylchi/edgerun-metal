@@ -193,17 +193,14 @@ _start.halt:
 ;       on success; all zero on failure
 ; ==================================================================
 efi_get_fb:
-    push    r12
-    push    r13
-    push    r14
+    er_push r12, r13, r14
 
     mov     r12, [saved_systab]
     mov     r12, [r12 + 0x60]      ; r12 = BootServices
 
     ; LocateProtocol
     mov     r13, [r12 + 0x140]     ; LocateProtocol function ptr
-    test    r13, r13
-    jz      .err
+    er_check_zero r13, .err
 
     sub     rsp, 40                ; shadow space (32) + alignment (8)
     lea     rcx, [rel gop_guid]
@@ -211,8 +208,7 @@ efi_get_fb:
     lea     r8, [rel gop_pointer]
     call    r13
     add     rsp, 40
-    test    eax, eax
-    jnz     .err                   ; no GOP
+    er_check_nonzero eax, .err
 
     ; GOP protocol obtained
     mov     r14, [gop_pointer]
@@ -244,10 +240,7 @@ efi_get_fb:
     ; BPP: assume 32 bits (4 bytes) per pixel
     mov     byte [fb_bpp], 4
 
-    pop     r14
-    pop     r13
-    pop     r12
-    ret
+    er_pop_ret r12, r13, r14
 
 .err:
     ; Zero out framebuffer data (no GOP available)
@@ -257,9 +250,6 @@ efi_get_fb:
     mov     [fb_height], eax
     mov     [fb_pitch], eax
     mov     [fb_bpp], al
-    pop     r14
-    pop     r13
-    pop     r12
-    ret
+    er_pop_ret r12, r13, r14
 
 %include "x86_64/entry_common.inc"

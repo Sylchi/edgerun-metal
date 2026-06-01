@@ -4,7 +4,7 @@ const common = @import("../component_common.zig");
 const component_union = @import("Component.zig");
 const primitives = @import("Primitives.zig");
 const stack_component = @import("Stack.zig");
-const std = @import("std");
+const std = @import("er_std");
 const Text = @import("Text.zig").Text;
 const ui = @import("../core.zig");
 

@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const audio = @import("audio.zig");
 const webm_container = @import("audio_webm.zig");
 const webm_test = @import("test_webm_builder.zig");

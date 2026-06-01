@@ -161,8 +161,7 @@ er_fn er_render_ir_pack_channel
     lea     r9, [rax + %1]       ; r9 = *len + stride
     cmp     r9, rdx
     ja      %%budget
-    push    rdi
-    push    rsi
+    er_push rdi, rsi
     lea     rdi, [rdi + rax*4]   ; dst = &buffer[*len]
     mov     rsi, r8              ; src = data
     mov     ecx, %2              ; byte count
@@ -324,12 +323,7 @@ er_fn er_render_ir_push_rect_ex
     call    er_render_ir_push_rect
 
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 er_fn er_render_ir_push_textured_vertex_ex
     er_frame_push
@@ -381,19 +375,10 @@ er_fn er_render_ir_push_textured_vertex_ex
     call    er_render_ir_push_textured_vertex
 
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 er_fn er_render_ir_push_icon_ex
-    er_frame_push
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs r12, r13, r14, r15
     sub     rsp, 48                ; temp 9-float array + alignment
 
     mov     r12, rdi               ; buffer
@@ -444,19 +429,10 @@ er_fn er_render_ir_push_icon_ex
     call    er_render_ir_push_icon
 
     add     rsp, 48
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 er_fn er_render_ir_push_textured_quad
-    er_frame_push
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs r12, r13, r14, r15
     sub     rsp, 64
 
     mov     r12, rdi               ; buffer
@@ -692,12 +668,7 @@ er_fn er_render_ir_push_textured_quad
     mov     eax, -1
 .cleanup_tq:
     add     rsp, 64
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    ret
+    er_pop_ret rbp, r12, r13, r14, r15
 
 ; ==================================================================
 ; Count validation helpers
@@ -712,8 +683,7 @@ er_fn er_render_ir_rect_count
     xor     edx, edx
     mov     ecx, RENDER_IR_RECT_FLOAT_STRIDE
     div     rcx
-    test    rdx, rdx
-    jnz     .invalid_cnt
+    er_check_nonzero rdx, .invalid_cnt
     ret
 .invalid_cnt:
     mov     rax, RENDER_IR_INVALID
@@ -730,8 +700,7 @@ er_fn er_render_ir_textured_vertex_count
     mov     rdx, rax
     and     edx, 7          ; rem = len & (STRIDE - 1)
     shr     rax, 3          ; count = len >> 3 (STRIDE = 8 = 2^3)
-    test    rdx, rdx
-    jnz     .invalid_vtx
+    er_check_nonzero rdx, .invalid_vtx
     ret
 .invalid_vtx:
     mov     rax, RENDER_IR_INVALID
@@ -748,8 +717,7 @@ er_fn er_render_ir_icon_count
     xor     edx, edx
     mov     ecx, RENDER_IR_ICON_FLOAT_STRIDE
     div     rcx
-    test    rdx, rdx
-    jnz     .invalid_icon
+    er_check_nonzero rdx, .invalid_icon
     ret
 .invalid_icon:
     mov     rax, RENDER_IR_INVALID
@@ -766,8 +734,7 @@ er_fn er_render_ir_icon_line_vertex_count
     xor     edx, edx
     mov     ecx, RENDER_IR_ICON_LINE_FLOAT_STRIDE
     div     rcx
-    test    rdx, rdx
-    jnz     .invalid_ilv
+    er_check_nonzero rdx, .invalid_ilv
     ret
 .invalid_ilv:
     mov     rax, RENDER_IR_INVALID
@@ -861,12 +828,7 @@ _ir_pack_color:
 ; rcx = rect_buf, r8 = rect_count
 ; ==================================================================
 er_fn sw_fb_render_ir_rects
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12d, edi
     mov     r13d, esi
@@ -874,8 +836,7 @@ er_fn sw_fb_render_ir_rects
     mov     r15, rcx
     mov     ebx, r8d
 
-    test    ebx, ebx
-    jz      .done_rr
+    er_check_zero ebx, .done_rr
 
     xor     ebp, ebp
 
@@ -901,15 +862,13 @@ er_fn sw_fb_render_ir_rects
     jmp     .next_rr
 
 .shadow_rr:
-    push    rcx
-    push    r8
+    er_push rcx, r8
 
     lea     rdi, [rcx + RECT_R2*4]
     call    _ir_pack_color
     mov     r9d, eax
 
-    pop     r8
-    pop     rcx
+    er_pop  rcx, r8
 
     sub     rsp, 16
     movss   xmm0, [rcx + RECT_X*4]
@@ -945,13 +904,7 @@ er_fn sw_fb_render_ir_rects
     jb      .loop_rr
 
 .done_rr:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; void sw_fb_render_ir_icons(u32 fb_width, u32 fb_height, u32 *pixels,
@@ -961,12 +914,7 @@ er_fn sw_fb_render_ir_rects
 ; rcx = icon_buf, r8 = icon_count
 ; ==================================================================
 er_fn sw_fb_render_ir_icons
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
 
     mov     r12d, edi
     mov     r13d, esi
@@ -974,8 +922,7 @@ er_fn sw_fb_render_ir_icons
     mov     r15, rcx
     mov     ebx, r8d
 
-    test    ebx, ebx
-    jz      .done_ri
+    er_check_zero ebx, .done_ri
 
     xor     ebp, ebp
 
@@ -998,10 +945,4 @@ er_fn sw_fb_render_ir_icons
     jb      .loop_ri
 
 .done_ri:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15

@@ -48,8 +48,7 @@ er_fn er_memcpy
 ; Returns: 0 if equal, <0 if ptr1<ptr2, >0 if ptr1>ptr2
 ; ==================================================================
 er_fn er_memcmp
-    test    rdx, rdx
-    jz      .equal
+    er_check_zero rdx, .equal
 
 .loop:
     movzx   eax, byte [rdi]
@@ -133,8 +132,7 @@ er_fn er_bss_zero
 ; Returns: pointer to first occurrence, or NULL if not found
 ; ==================================================================
 er_fn er_memchr
-    test    rdx, rdx
-    jz      .memchr_not_found
+    er_check_zero rdx, .memchr_not_found
     mov     rcx, rdx
     mov     al, sil
     mov     rdi, rdi
@@ -153,8 +151,7 @@ er_fn er_memchr
 ; Returns: pointer to last occurrence, or NULL if not found
 ; ==================================================================
 er_fn er_memrchr
-    test    rdx, rdx
-    jz      .memrchr_not_found
+    er_check_zero rdx, .memrchr_not_found
     mov     rcx, rdx
     lea     rdi, [rdi + rcx - 1]
     mov     al, sil
@@ -209,8 +206,7 @@ er_fn er_memccpy
     mov     r9, rsi
     mov     al, dl
 .memccpy_loop:
-    test    rcx, rcx
-    jz      .memccpy_null
+    er_check_zero rcx, .memccpy_null
     mov     dl, byte [r9]
     mov     byte [r8], dl
     inc     r8
@@ -231,8 +227,7 @@ er_fn er_memccpy
 ; Returns: 0 if equal, <0 if ptr1<ptr2, >0 if ptr1>ptr2
 ; ==================================================================
 er_fn er_memicmp
-    test    rdx, rdx
-    jz      .memicmp_equal
+    er_check_zero rdx, .memicmp_equal
     xor     r8d, r8d
 .memicmp_loop:
     cmp     r8, rdx
@@ -270,13 +265,11 @@ er_fn er_memicmp
 ; Swaps in 8-byte chunks, then byte-by-byte remainder.
 ; ==================================================================
 er_fn er_memswap
-    test    rdx, rdx
-    jz      .memswap_done
+    er_check_zero rdx, .memswap_done
     mov     rcx, rdx
     shr     rcx, 3
 .memswap_8_loop:
-    test    rcx, rcx
-    jz      .memswap_remain
+    er_check_zero rcx, .memswap_remain
     mov     r8, [rdi]
     mov     r9, [rsi]
     mov     [rdi], r9
@@ -289,8 +282,7 @@ er_fn er_memswap
     mov     rcx, rdx
     and     rcx, 7
 .memswap_1_loop:
-    test    rcx, rcx
-    jz      .memswap_done
+    er_check_zero rcx, .memswap_done
     mov     al, byte [rdi + rcx - 1]
     mov     r10b, byte [rsi + rcx - 1]
     mov     byte [rsi + rcx - 1], al

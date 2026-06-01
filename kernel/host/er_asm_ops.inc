@@ -604,18 +604,28 @@ er_fn match_more_and
     call    expect_comma
     test    eax, eax
     jz      .bad
-    call    expect_imm8_operand
+    call    expect_u32_operand
     test    eax, eax
     jz      .bad
     call    expect_line_end
     test    eax, eax
     jz      .bad
+    cmp     qword [rel imm_u32_value], 255
+    ja      .and_edx_u32
     mov     edi, 0x83
     call    append_text_byte
     mov     edi, 0xe2
     call    append_text_byte
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
+    jmp     .yes
+.and_edx_u32:
+    mov     edi, 0x81
+    call    append_text_byte
+    mov     edi, 0xe2
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u32
     jmp     .yes
 .and_cl_real:
     pop     r14
@@ -2641,4 +2651,3 @@ er_fn match_more_unary
 .no:
     xor     eax, eax
     ret
-

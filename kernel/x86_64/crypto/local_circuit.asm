@@ -72,8 +72,7 @@ _local_circuit_find_free:
     cmp     edi, MAX_CIRCUITS
     jae     .full
     call    _local_circuit_entry_ptr
-    test    edx, edx
-    jnz     .full
+    er_check_nonzero edx, .full
     cmp     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_FREE
     je      .found
     inc     edi
@@ -112,12 +111,10 @@ _local_circuit_fd_to_index:
 ; ==================================================================
 _local_circuit_open_entry:
     call    _local_circuit_fd_to_index
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     mov     edi, eax
     call    _local_circuit_entry_ptr
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
     cmp     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_OPEN
     jne     .bad
     er_ok
@@ -147,10 +144,7 @@ er_fn er_local_circuit_init
 ; Returns: eax = fd (1-based circuit handle), edx = 0 on success
 ; ==================================================================
 er_fn er_local_open_circuit
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi        ; dest_hash
     mov     r13d, esi       ; own_slot
@@ -158,29 +152,25 @@ er_fn er_local_open_circuit
     ; Validate own slot before mutating global recv state.
     mov     edi, r13d
     call    er_local_route_get_ring
-    test    edx, edx
-    jnz     .not_found
+    er_check_nonzero edx, .not_found
 
     ; Look up destination in route table
     mov     rdi, r12
     call    er_local_route_lookup
-    test    edx, edx
-    jnz     .not_found
+    er_check_nonzero edx, .not_found
 
     mov     ebx, eax        ; dest_slot_id
 
     ; Find free circuit slot
     call    _local_circuit_find_free
-    test    edx, edx
-    jnz     .busy
+    er_check_nonzero edx, .busy
 
     mov     r14d, eax       ; circuit_index
 
     ; Get circuit entry pointer
     mov     edi, r14d
     call    _local_circuit_entry_ptr
-    test    edx, edx
-    jnz     .internal_error
+    er_check_nonzero edx, .internal_error
 
     ; Store destination hash
     lea     rdi, [rax + CIRCUIT_DEST_HASH]
@@ -200,31 +190,19 @@ er_fn er_local_open_circuit
     ; Return fd = circuit_index + 1
     lea     eax, [r14d + 1]
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .not_found:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .busy:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .internal_error:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -235,17 +213,14 @@ er_fn er_local_open_circuit
 ; Returns: eax = 0, edx = 0 on success
 ; ==================================================================
 er_fn er_local_send_cell
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rsi        ; cell
     mov     r13d, edi       ; fd (save for circ ID)
 
     ; Validate circuit before mutating caller-owned cell bytes.
     call    _local_circuit_open_entry
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     mov     [r12 + LOCAL_CELL_CIRC_ID], r13d
 
@@ -254,15 +229,11 @@ er_fn er_local_send_cell
     mov     rsi, r12
     call    er_local_cell_send_to_slot
 
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad:
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -272,15 +243,13 @@ er_fn er_local_send_cell
 ; Returns: eax = 0, edx = 0 on success, ERROR_LOCAL_EMPTY if none
 ; ==================================================================
 er_fn er_local_recv_cell
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rsi        ; out buffer
 
     ; Validate fd and open state.
     call    _local_circuit_open_entry
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     ; Read from own slot's ring buffer
     mov     edi, [local_circuit_own_slot]
@@ -290,13 +259,11 @@ er_fn er_local_recv_cell
     mov     rsi, r12
     call    er_local_cell_recv
 
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .bad:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -309,8 +276,7 @@ er_fn er_local_close_circuit
     push    rbx
 
     call    _local_circuit_open_entry
-    test    edx, edx
-    jnz     .bad
+    er_check_nonzero edx, .bad
 
     ; Clear the full circuit entry so stale destinations are not retained.
     mov     rdi, rax

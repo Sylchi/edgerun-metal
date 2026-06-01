@@ -464,15 +464,11 @@ SECTION .text
 
 ; Helper: save regs for TPM operations
 %macro tpm_op_save 0
-    push    r12
-    push    r13
-    push    r14
+    er_push r12, r13, r14
 %endmacro
 
 %macro tpm_op_restore 0
-    pop     r14
-    pop     r13
-    pop     r12
+    er_pop  r12, r13, r14
 %endmacro
 
 %macro ser_puts 1
@@ -494,11 +490,7 @@ SECTION .text
 %endmacro
 
 er_fn er_kernel_main
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     ser_putchar_imm 'Z'
 
@@ -534,29 +526,25 @@ er_fn er_kernel_main
     ser_putchar_sil_imm ' '
     pop     rax
     call    er_tpm_crb_present
-    test    eax, eax
-    jz      .tpm_absent
+    er_check_zero eax, .tpm_absent
 
     ; TPM present — send GetRandom to test the TPM CRB data path.
     mov     rdi, tpm_cmd_buf
     mov     esi, TPM_GET_RANDOM_BYTES
     call    er_tpm_get_random
-    test    rax, rax
-    jz      .tpm_fail
+    er_check_zero rax, .tpm_fail
     ; er_tpm_get_random/header_build return buffer pointer in rax.
     ; Command size = TPM_CMD_GET_RANDOM_LEN (known constant).
     mov     esi, TPM_CMD_GET_RANDOM_LEN
     mov     rdx, tpm_rsp_buf
     mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .tpm_fail
+    er_check_zero rax, .tpm_fail
 
     mov     rdi, tpm_rsp_buf
     mov     esi, eax
     call    er_tpm_response_success
-    test    eax, eax
-    jz      .tpm_fail
+    er_check_zero eax, .tpm_fail
 
     mov     byte [device_flags + DEV_TPM], 2
     mov     rdi, COM1_PORT
@@ -576,15 +564,13 @@ er_fn er_kernel_main
     mov     edx, SHA256_BLOCK_SIZE
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
     mov     esi, SHA256_BLOCK_SIZE + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
     mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
 
     ; Benchmark SHA-256, 64 bytes, 10 iterations
     mov     r12d, SHA256_ITER_64
@@ -599,15 +585,13 @@ er_fn er_kernel_main
     mov     edx, SHA256_BLOCK_SIZE
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
     mov     esi, SHA256_BLOCK_SIZE + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
     mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
     dec     r12d
     jnz     .bench64
 
@@ -644,15 +628,13 @@ er_fn er_kernel_main
     mov     edx, SHA256_DATA_1K
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
     mov     esi, SHA256_DATA_1K + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
     mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
-    test    rax, rax
-    jz      .bench_done
+    er_check_zero rax, .bench_done
     dec     r12d
     jnz     .bench1k
 
@@ -713,29 +695,25 @@ er_fn er_kernel_main
     pop     r12
     mov     rdi, sha256_ctx
     call    er_sha256_init
-    test    rax, rax
-    jz      .sha_fail
+    er_check_zero rax, .sha_fail
 
     mov     rdi, sha256_ctx
     lea     rsi, [rel sha256_test_abc]
     mov     edx, 3
     call    er_sha256_update
-    test    rax, rax
-    jz      .sha_fail
+    er_check_zero rax, .sha_fail
 
     mov     rdi, sha256_ctx
     mov     rsi, sha256_out
     call    er_sha256_final
-    test    rax, rax
-    jz      .sha_fail
+    er_check_zero rax, .sha_fail
 
     ; Compare with expected digest
     mov     rdi, sha256_out
     lea     rsi, [rel sha256_expected_abc]
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jnz     .sha_fail
+    er_check_nonzero eax, .sha_fail
 
     mov     rdi, COM1_PORT
     lea     rsi, [rel sha256_pass]
@@ -835,8 +813,7 @@ er_fn er_kernel_main
     lea     rsi, [rel fe_base]
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jz      .smoke_pass
+    er_check_zero eax, .smoke_pass
     mov     rdi, COM1_PORT
     mov     sil, 'F'
     call    er_serial_putchar
@@ -917,8 +894,7 @@ er_fn er_kernel_main
     lea     rsi, [rel fe_one]
     mov     edx, 32
     call    er_memcmp
-    test    eax, eax
-    jnz     .fe_inv_fail
+    er_check_nonzero eax, .fe_inv_fail
 
     mov     rdi, COM1_PORT
     lea     rsi, [rel fe_inv_pass_str]
@@ -1023,8 +999,7 @@ er_fn er_kernel_main
     call    er_serial_puts
 
     call    er_cros_ec_probe
-    test    eax, eax
-    jz      .ec_absent
+    er_check_zero eax, .ec_absent
 
     mov     rdi, r12
     mov     sil, 'p'
@@ -1078,8 +1053,7 @@ er_fn er_kernel_main
 
     mov     rdi, I2CB_MMIO
     call    er_dw_i2c_probe
-    test    eax, eax
-    jz      .tpad_absent
+    er_check_zero eax, .tpad_absent
 
     mov     rdi, I2CB_MMIO
     mov     esi, 400
@@ -1121,8 +1095,7 @@ er_fn er_kernel_main
     lea     rsi, [rsp + 1]
     lea     rdx, [rsp + 2]
     call    er_pci_find_nvme
-    test    eax, eax
-    jz      .nvme_absent
+    er_check_zero eax, .nvme_absent
 
     movzx   ebx, byte [rsp]
     movzx   r12d, byte [rsp + 1]
@@ -1207,8 +1180,7 @@ er_fn er_kernel_main
     lea     r8, [rsp + 1]       ; &out_dev
     lea     r9, [rsp + 2]       ; &out_func
     call    er_pci_find_class
-    test    eax, eax
-    jz      .emmc_absent
+    er_check_zero eax, .emmc_absent
 
     movzx   r12d, byte [rsp]     ; bus
     movzx   r13d, byte [rsp+1]   ; dev
@@ -1298,8 +1270,7 @@ er_fn er_kernel_main
     jne     .hda_next_func
     cmp     cl, 0x03
     jne     .hda_next_func
-    test    dl, dl
-    jnz     .hda_next_func
+    er_check_nonzero dl, .hda_next_func
 
     inc     r15d
     mov     rdi, COM1_PORT
@@ -1328,8 +1299,7 @@ er_fn er_kernel_main
     lea     r8, [rel hda_gcap]
     lea     r9, [rel hda_statests]
     call    er_hda_probe_init
-    test    eax, eax
-    jnz     .hda_fail_one
+    er_check_nonzero eax, .hda_fail_one
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_bar]
     call    er_serial_puts
@@ -1352,8 +1322,7 @@ er_fn er_kernel_main
     mov     esi, [rel hda_statests]
     lea     rdx, [rel hda_codec_vendor]
     call    er_hda_codec_vendor_id
-    test    eax, eax
-    jnz     .hda_print_done
+    er_check_nonzero eax, .hda_print_done
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_codec]
     call    er_serial_puts
@@ -1364,8 +1333,7 @@ er_fn er_kernel_main
     mov     esi, [rel hda_statests]
     lea     rdx, [rel hda_root_nodes]
     call    er_hda_codec_root_nodes
-    test    eax, eax
-    jnz     .hda_print_done
+    er_check_nonzero eax, .hda_print_done
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_nodes]
     call    er_serial_puts
@@ -1374,20 +1342,17 @@ er_fn er_kernel_main
     call    er_serial_puthex32
     mov     edi, [rel hda_codec_vendor]
     call    er_hda_codec_has_probe_routes
-    test    eax, eax
-    jz      .hda_print_done
+    er_check_zero eax, .hda_print_done
     mov     dword [rel hda_tone_status], 0
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_statests]
     mov     edx, [rel hda_codec_vendor]
     call    er_hda_prepare_speaker
-    test    eax, eax
-    jnz     .hda_route_fail
+    er_check_nonzero eax, .hda_route_fail
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_gcap]
     call    er_hda_start_square_wave
-    test    eax, eax
-    jz      .hda_tone_print
+    er_check_zero eax, .hda_tone_print
     call    er_hda_get_start_stage
     add     eax, 20
     mov     [rel hda_tone_status], eax
@@ -1410,8 +1375,7 @@ er_fn er_kernel_main
     lea     r8, [rel hda_stream_lpib]
     lea     r9, [rel hda_stream_cbl]
     call    er_hda_get_stream_debug
-    test    eax, eax
-    jnz     .hda_print_done
+    er_check_nonzero eax, .hda_print_done
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_ctl]
     call    er_serial_puts
@@ -1441,13 +1405,11 @@ er_fn er_kernel_main
     mov     esi, [rel hda_statests]
     mov     edx, [rel hda_codec_vendor]
     call    er_hda_prepare_mic
-    test    eax, eax
-    jnz     .hda_mic_route_fail
+    er_check_nonzero eax, .hda_mic_route_fail
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_gcap]
     call    er_hda_start_mic_capture
-    test    eax, eax
-    jz      .hda_mic_print
+    er_check_zero eax, .hda_mic_print
     call    er_hda_get_capture_stage
     add     eax, 20
     mov     [rel hda_mic_status], eax
@@ -1470,8 +1432,7 @@ er_fn er_kernel_main
     lea     r8, [rel hda_mic_lpib]
     lea     r9, [rel hda_mic_cbl]
     call    er_hda_get_capture_debug
-    test    eax, eax
-    jnz     .hda_print_done
+    er_check_nonzero eax, .hda_print_done
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_ctl]
     call    er_serial_puts
@@ -1500,8 +1461,7 @@ er_fn er_kernel_main
     lea     rsi, [rel hda_mic_xor]
     lea     rdx, [rel hda_mic_or]
     call    er_hda_get_capture_signal
-    test    eax, eax
-    jnz     .hda_print_done
+    er_check_nonzero eax, .hda_print_done
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_sum]
     call    er_serial_puts
@@ -1543,8 +1503,7 @@ er_fn er_kernel_main
     inc     r12d
     cmp     r12d, 256
     jb      .hda_bus_loop
-    test    r15d, r15d
-    jnz     .xhci_check
+    er_check_nonzero r15d, .xhci_check
 
 .hda_absent:
     mov     rdi, COM1_PORT
@@ -1614,8 +1573,7 @@ er_fn er_kernel_main
     cmp     r12d, 256
     jb      .xhci_bus_loop
 
-    test    r13d, r13d
-    jz      .xhci_absent
+    er_check_zero r13d, .xhci_absent
     mov     byte [device_flags + DEV_XHCI], 2
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_uvc]
@@ -1627,8 +1585,7 @@ er_fn er_kernel_main
     mov     dword [rel xhci_rx_count], 0
     mov     dword [rel xhci_last_cc], 0
     call    er_xhci_cmd_submit_enable_slot
-    test    eax, eax
-    jnz     .xhci_txrx_poll
+    er_check_nonzero eax, .xhci_txrx_poll
     inc     dword [rel xhci_tx_goal]
 .xhci_txrx_poll:
     mov     edi, 10000
@@ -1636,8 +1593,7 @@ er_fn er_kernel_main
     lea     rdx, [rel xhci_evt_ctl]
     lea     rcx, [rel xhci_evt_p0]
     call    er_xhci_cmd_wait_completion
-    test    eax, eax
-    jnz     .xhci_txrx_done
+    er_check_nonzero eax, .xhci_txrx_done
     inc     dword [rel xhci_rx_count]
     mov     eax, [rel xhci_evt_st]
     mov     [rel xhci_last_cc], eax
@@ -1733,8 +1689,7 @@ er_fn er_kernel_main
     mov     edi, [rel xhci_slot_id]
     mov     esi, 1
     call    er_xhci_cmd_submit_address_device
-    test    eax, eax
-    jnz     .xhci_addr_done
+    er_check_nonzero eax, .xhci_addr_done
     mov     edi, 10000
     lea     rsi, [rel xhci_addr_cc]
     lea     rdx, [rel xhci_evt_ctl]
@@ -1750,8 +1705,7 @@ er_fn er_kernel_main
 
     mov     edi, 1
     call    er_uvc_probe
-    test    eax, eax
-    jz      .uvc_absent
+    er_check_zero eax, .uvc_absent
     lea     rdi, [rel uvc_caps]
     call    er_uvc_get_caps
     mov     rdi, COM1_PORT
@@ -1772,8 +1726,7 @@ er_fn er_kernel_main
     call    er_serial_puts
     mov     edi, 0
     call    er_uvc_stream_start
-    test    eax, eax
-    jnz     .uvc_rgb_fail
+    er_check_nonzero eax, .uvc_rgb_fail
     mov     rdi, COM1_PORT
     lea     rsi, [rel ok_text]
     call    er_serial_puts
@@ -1795,8 +1748,7 @@ er_fn er_kernel_main
     call    er_serial_puts
     mov     edi, 1
     call    er_uvc_stream_start
-    test    eax, eax
-    jnz     .uvc_ir_fail
+    er_check_nonzero eax, .uvc_ir_fail
     mov     rdi, COM1_PORT
     lea     rsi, [rel ok_text]
     call    er_serial_puts
@@ -1827,8 +1779,7 @@ er_fn er_kernel_main
     sub     rsp, 56
     mov     rdi, rsp            ; &rsdp_addr
     call    er_acpi_find_rsdp
-    test    eax, eax
-    jz      .acpi_absent
+    er_check_zero eax, .acpi_absent
 
     mov     rdi, COM1_PORT
     mov     rsi, check_acpi
@@ -1843,8 +1794,7 @@ er_fn er_kernel_main
     lea     rdx, [rsp + 16]     ; &xsdt_addr
     lea     rcx, [rsp + 24]     ; &revision
     call    er_acpi_parse_rsdp
-    test    eax, eax
-    jz      .acpi_absent
+    er_check_zero eax, .acpi_absent
 
     mov     rdi, COM1_PORT
     mov     rsi, check_rsdt
@@ -1860,8 +1810,7 @@ er_fn er_kernel_main
     mov     rsi, [rsp + 16]     ; xsdt_addr
     mov     edx, 0x43495041     ; "APIC"
     call    er_acpi_find_table
-    test    eax, eax
-    jz      .skip_madt
+    er_check_zero eax, .skip_madt
 
     ; Parse MADT
     mov     rdi, [rsp + 32]     ; madt_ptr
@@ -1892,8 +1841,7 @@ er_fn er_kernel_main
     mov     rsi, [rsp + 16]
     mov     edx, 0x4746434d     ; "MCFG"
     call    er_acpi_find_table
-    test    eax, eax
-    jz      .acpi_done
+    er_check_zero eax, .acpi_done
 
     mov     rdi, COM1_PORT
     mov     rsi, check_mcfg
@@ -1924,8 +1872,7 @@ er_fn er_kernel_main
     lea     rdx, [rsp + 2]
     lea     rcx, [rel ax210_bar0]
     call    er_ax210_probe_init
-    test    eax, eax
-    jz      .wifi_absent
+    er_check_zero eax, .wifi_absent
     mov     byte [ax210_present], 1
 
     movzx   esi, byte [rsp]
@@ -1963,8 +1910,7 @@ er_fn er_kernel_main
     lea     rdi, [rel ax210_fw_ptr]
     lea     rsi, [rel ax210_fw_size]
     call    er_ax210_fw_get_blob
-    test    eax, eax
-    jnz     .wifi_fw_missing
+    er_check_nonzero eax, .wifi_fw_missing
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wifi_fw_ready]
     call    er_serial_puts
@@ -1972,16 +1918,14 @@ er_fn er_kernel_main
     mov     esi, [rel ax210_fw_size]
     call    er_serial_puthex32
     call    er_ax210_fw_prepare_upload
-    test    eax, eax
-    jnz     .wifi_tlv_bad
+    er_check_nonzero eax, .wifi_tlv_bad
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wifi_tlv_ok]
     call    er_serial_puts
     mov     rdi, [rel ax210_bar0]
     lea     rsi, [rel ax210_mmio_probe]
     call    er_ax210_mmio_probe
-    test    eax, eax
-    jnz     .wifi_mmio_bad
+    er_check_nonzero eax, .wifi_mmio_bad
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wifi_mmio_ok]
     call    er_serial_puts
@@ -1991,8 +1935,7 @@ er_fn er_kernel_main
     mov     rdi, [rel ax210_bar0]
     lea     rsi, [rel ax210_mac]
     call    er_ax210_read_mac_csr
-    test    eax, eax
-    jnz     .wifi_mac_bad
+    er_check_nonzero eax, .wifi_mac_bad
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wifi_mac]
     call    er_serial_puts
@@ -2067,8 +2010,7 @@ er_fn er_kernel_main
     lea     rdx, [rsp + 2]
     lea     rcx, [rel rtl8922_bar]
     call    er_rtl8922_probe_init
-    test    eax, eax
-    jz      .wifi_rtl8922_absent
+    er_check_zero eax, .wifi_rtl8922_absent
     mov     byte [rtl8922_present], 1
     movzx   esi, byte [rsp]
     mov     rdi, COM1_PORT
@@ -2097,8 +2039,7 @@ er_fn er_kernel_main
     mov     rdi, [rel rtl8922_bar]
     lea     rsi, [rel rtl8922_mmio_probe]
     call    er_rtl8922_mmio_probe
-    test    eax, eax
-    jnz     .wifi_rtl8922_bad
+    er_check_nonzero eax, .wifi_rtl8922_bad
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wifi_rtl8922_mmio]
     call    er_serial_puts
@@ -2128,8 +2069,7 @@ er_fn er_kernel_main
     lea     r8, [rsp + 1]
     lea     r9, [rsp + 2]
     call    er_pci_find_class
-    test    eax, eax
-    jz      .rtl_absent
+    er_check_zero eax, .rtl_absent
 
     mov     rdi, COM1_PORT
     mov     r15, rdi             ; save port in callee-saved r15
@@ -2145,16 +2085,14 @@ er_fn er_kernel_main
     mov     rcx, r8              ; port
     call    er_rtl8125_probe
     add     rsp, 3
-    test    eax, eax
-    jnz     .bt_check            ; probe failed → try BT
+    er_check_nonzero eax, .bt_check
 
     ; Init TX/RX rings
     mov     rdi, r15             ; port from saved register
     lea     rsi, [rel .net_init_str]
     call    er_serial_puts
     call    er_rtl8125_init
-    test    eax, eax
-    jnz     .net_init_fail
+    er_check_nonzero eax, .net_init_fail
     mov     rdi, r15
     lea     rsi, [rel .ok_str]
     call    er_serial_puts
@@ -2210,35 +2148,30 @@ er_fn er_kernel_main
     ; Try to load firmware / verify HCI is alive
     mov     rdi, COM2_PORT
     call    er_bt_fw_load
-    test    eax, eax
-    jnz     .bt_absent
+    er_check_nonzero eax, .bt_absent
 
     ; Reset controller to known state
     mov     rdi, COM2_PORT
     call    er_bt_reset
-    test    eax, eax
-    jnz     .bt_absent
+    er_check_nonzero eax, .bt_absent
 
     ; Set LE scan parameters
     mov     rdi, COM2_PORT
     call    er_bt_le_set_scan_params
-    test    eax, eax
-    jnz     .bt_absent
+    er_check_nonzero eax, .bt_absent
 
     ; Enable scanning
     mov     rdi, COM2_PORT
     mov     sil, 1
     call    er_bt_le_scan_enable
-    test    eax, eax
-    jnz     .bt_absent
+    er_check_nonzero eax, .bt_absent
 
     ; Poll for advertisements (up to ~3 seconds)
     mov     r12, 300
 .bt_poll:
     mov     rdi, COM2_PORT
     call    er_bt_poll_adv
-    test    eax, eax
-    jz      .bt_poll_next
+    er_check_zero eax, .bt_poll_next
     ; Got advertisement — print it
     mov     rdi, COM2_PORT
     mov     rsi, COM1_PORT
@@ -2274,8 +2207,7 @@ er_fn er_kernel_main
     lea     rdi, [rel virtio_net_dev]
     lea     rsi, [rel virtio_net_storage]
     call    er_virtio_net_init
-    test    eax, eax
-    jnz     .virtio_net_absent
+    er_check_nonzero eax, .virtio_net_absent
 
     ; Print MAC
     lea     rbx, [rel virtio_net_dev + VIRTIO_NET_DEVICE.mac]
@@ -2354,8 +2286,7 @@ er_fn er_kernel_main
     lea     r8, [rsp + 1]       ; &out_dev
     lea     r9, [rsp + 2]       ; &out_func
     call    er_pci_find_class
-    test    eax, eax
-    jz      .amdgpu_absent
+    er_check_zero eax, .amdgpu_absent
 
     movzx   ebx, byte [rsp]
     movzx   r12d, byte [rsp + 1]
@@ -2465,8 +2396,7 @@ er_fn er_kernel_main
     lea     r8, [rsp + 1]       ; &out_dev
     lea     r9, [rsp + 2]       ; &out_func
     call    er_pci_find_class
-    test    eax, eax
-    jz      .intel_gpu_absent
+    er_check_zero eax, .intel_gpu_absent
 
     movzx   r12d, byte [rsp]
     movzx   r13d, byte [rsp + 1]
@@ -2522,8 +2452,7 @@ er_fn er_kernel_main
     lea     rcx, [rsp + 4]
     lea     r8, [rsp + 8]
     call    er_intel_gpu_detect_pipe
-    test    eax, eax
-    jnz     .intel_gpu_no_scanout
+    er_check_nonzero eax, .intel_gpu_no_scanout
 
     ; Found active pipe — write test pattern
     mov     edx, [rsp + 4]       ; width
@@ -2646,8 +2575,7 @@ er_fn er_kernel_main
     lea     rcx, [rel da_wasm_test_export_name]
     mov     r8, 1
     call    er_fn_run
-    push    rax
-    push    rdx
+    er_push rax, rdx
     ser_puts check_da_wasm
     pop     rsi
     mov     rdi, COM1_PORT
@@ -2721,16 +2649,13 @@ er_fn er_kernel_main
     lea     rsi, [rel kernel_limits]
     lea     rdx, [rel kernel_clock]
     call    er_clock_init
-    test    eax, eax
-    jz      .main_loop         ; clock unavailable — run without it
+    er_check_zero eax, .main_loop
 
     ; Boot complete — pipeline main loop
 .main_loop:
-    push    rdi
-    push    rsi
+    er_push rdi, rsi
     ser_putchar_imm '.'
-    pop     rsi
-    pop     rdi
+    er_pop  rdi, rsi
     ; Advance kernel clock by 1 tick per iteration
     lea     rdi, [rel kernel_clock]
     mov     esi, 1
@@ -2747,12 +2672,7 @@ er_fn er_kernel_main
 
     jmp     .main_loop
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ── Data labels for boot-output strings used within er_kernel_main ──
 .boot_header:
@@ -2779,9 +2699,7 @@ er_fn er_kernel_main
 ; _render_display_overlay — framebuffer status overlay (outside kernel_main scope)
 ; ====================================================================
 _render_display_overlay:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     ; ── Title line (top-left) ───────────────────────────────────
     mov     dword [fb_cursor_x], 8
@@ -2924,8 +2842,7 @@ _render_display_overlay:
     movzx   edx, byte [rbx + rdx]
     mov     byte [r12], dl
     dec     r12
-    test    rax, rax
-    jnz     .ov_tick_loop
+    er_check_nonzero rax, .ov_tick_loop
     inc     r12
     mov     rdi, r12
     call    er_display_puts
@@ -2948,13 +2865,9 @@ _render_display_overlay:
     movzx   edx, byte [rbx + rdx]
     mov     byte [r12], dl
     dec     r12
-    test    rax, rax
-    jnz     .ov_elapsed_loop
+    er_check_nonzero rax, .ov_elapsed_loop
     inc     r12
     mov     rdi, r12
     call    er_display_puts
 
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13

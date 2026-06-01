@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const ui = @import("core.zig");
 
 pub const Error = error{

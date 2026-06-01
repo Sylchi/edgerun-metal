@@ -67,53 +67,53 @@ pub fn decodePrefix(canonical: []const u8) Error!DecodedPrefix {
 }
 
 test "data chunk is exact bytes with explicit canonical length" {
-    const testing = @import("std").testing;
     const body_bytes = "hello";
     const chunk = DataChunk.init(body_bytes);
     var canonical: [length_field_size + body_bytes.len]u8 = undefined;
 
     const encoded = try chunk.encode(&canonical);
-    try testing.expectEqual(@as(usize, canonical.len), encoded.len);
-    try testing.expectEqual(@as(u64, body_bytes.len), bytes.load64(encoded[0..length_field_size]).?);
-    try testing.expectEqualStrings(body_bytes, encoded[length_field_size..]);
+    if (encoded.len != canonical.len) return error.TestExpectedEqual;
+    if (bytes.load64(encoded[0..length_field_size]).? != body_bytes.len) return error.TestExpectedEqual;
+    if (!bytes.eql(body_bytes, encoded[length_field_size..])) return error.TestExpectedEqual;
 
     const decoded = try decode(encoded);
-    try testing.expect(decoded.valid());
-    try testing.expectEqual(@as(u64, body_bytes.len), decoded.length);
-    try testing.expectEqualStrings(body_bytes, decoded.body());
+    if (!decoded.valid()) return error.TestExpectedTrue;
+    if (decoded.length != body_bytes.len) return error.TestExpectedEqual;
+    if (!bytes.eql(body_bytes, decoded.body())) return error.TestExpectedEqual;
 }
 
 test "data chunk accepts empty content as a finite byte sequence" {
-    const testing = @import("std").testing;
     const chunk = DataChunk.init("");
     var canonical: [length_field_size]u8 = undefined;
 
     const encoded = try chunk.encode(&canonical);
     const decoded = try decode(encoded);
-    try testing.expect(decoded.valid());
-    try testing.expectEqual(@as(u64, 0), decoded.length);
-    try testing.expectEqual(@as(usize, 0), decoded.body().len);
+    if (!decoded.valid()) return error.TestExpectedTrue;
+    if (decoded.length != 0) return error.TestExpectedEqual;
+    if (decoded.body().len != 0) return error.TestExpectedEqual;
 }
 
 test "data chunk rejects mismatched canonical length" {
-    const testing = @import("std").testing;
     var too_short: [length_field_size + 2]u8 = undefined;
     _ = bytes.store64(too_short[0..length_field_size], 3);
     too_short[length_field_size] = 1;
     too_short[length_field_size + 1] = 2;
 
-    try testing.expectError(error.Corrupt, decode(&too_short));
+    if (decode(&too_short)) |_| return error.TestExpectedError else |err| {
+        if (err != error.Corrupt) return err;
+    }
 
     var trailing: [length_field_size + 2]u8 = undefined;
     _ = bytes.store64(trailing[0..length_field_size], 1);
     trailing[length_field_size] = 1;
     trailing[length_field_size + 1] = 2;
 
-    try testing.expectError(error.Corrupt, decode(&trailing));
+    if (decode(&trailing)) |_| return error.TestExpectedError else |err| {
+        if (err != error.Corrupt) return err;
+    }
 }
 
 test "data chunk prefix decode leaves following canonical data untouched" {
-    const testing = @import("std").testing;
     const first = DataChunk.init("one");
     const second = DataChunk.init("two");
     var canonical: [length_field_size + 3 + length_field_size + 3]u8 = undefined;
@@ -125,18 +125,19 @@ test "data chunk prefix decode leaves following canonical data untouched" {
     cursor += second_encoded.len;
 
     const decoded = try decodePrefix(&canonical);
-    try testing.expectEqual(@as(usize, first_encoded.len), decoded.used);
-    try testing.expectEqualStrings("one", decoded.chunk.body());
-    try testing.expectEqualStrings("two", (try decode(canonical[decoded.used..cursor])).body());
+    if (decoded.used != first_encoded.len) return error.TestExpectedEqual;
+    if (!bytes.eql("one", decoded.chunk.body())) return error.TestExpectedEqual;
+    if (!bytes.eql("two", (try decode(canonical[decoded.used..cursor])).body())) return error.TestExpectedEqual;
 }
 
 test "data chunk rejects noncanonical in-memory length claims" {
-    const testing = @import("std").testing;
     const invalid = DataChunk{
         .length = 4,
         .bytes = "abc",
     };
     var out: [length_field_size + 4]u8 = undefined;
 
-    try testing.expectError(error.Corrupt, invalid.encode(&out));
+    if (invalid.encode(&out)) |_| return error.TestExpectedError else |err| {
+        if (err != error.Corrupt) return err;
+    }
 }

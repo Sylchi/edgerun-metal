@@ -84,16 +84,14 @@ fn checkedMulU64(left: u64, right: u64) ?u64 {
 const max_u64: u64 = 0xffff_ffff_ffff_ffff;
 
 test "boot resource map writes stable memory resource ids" {
-    const testing = @import("std").testing;
     var raw: ResourceIdStorage = undefined;
 
     const id = writeMemoryResourceId(3, &raw) orelse return error.NoSpace;
 
-    try testing.expectEqualStrings("boot-memory-0000000000000003", id);
+    if (!bytes.eql("boot-memory-0000000000000003", id)) return error.TestExpectedEqual;
 }
 
 test "boot resource map carries explicit verifier kind" {
-    const testing = @import("std").testing;
     const regions = [_]MemoryRegion{
         MemoryRegion.init(.usable, 0x100000, 1),
     };
@@ -106,15 +104,13 @@ test "boot resource map carries explicit verifier kind" {
         .verifier_kind = .tpm_p256_sha256,
     };
 
-    try testing.expectEqual(VerifierKind.software_p256_sha256, pi_map.verifier_kind);
-    try testing.expectEqual(VerifierKind.tpm_p256_sha256, tpm_map.verifier_kind);
+    if (pi_map.verifier_kind != .software_p256_sha256) return error.TestExpectedEqual;
+    if (tpm_map.verifier_kind != .tpm_p256_sha256) return error.TestExpectedEqual;
 }
 
 test "boot resource map accepts only non-overflowing memory regions" {
-    const testing = @import("std").testing;
-
-    try testing.expect(MemoryRegion.init(.usable, 0x100000, 2).valid());
-    try testing.expectEqual(@as(u64, page_size * 2), MemoryRegion.init(.usable, 0x100000, 2).byteLength().?);
-    try testing.expect(!MemoryRegion.init(.usable, 0x100000, 0).valid());
-    try testing.expect(!MemoryRegion.init(.usable, 0, @import("std").math.maxInt(u64)).valid());
+    if (!MemoryRegion.init(.usable, 0x100000, 2).valid()) return error.TestExpectedTrue;
+    if (MemoryRegion.init(.usable, 0x100000, 2).byteLength().? != page_size * 2) return error.TestExpectedEqual;
+    if (MemoryRegion.init(.usable, 0x100000, 0).valid()) return error.TestExpectedFalse;
+    if (MemoryRegion.init(.usable, 0, max_u64).valid()) return error.TestExpectedFalse;
 }

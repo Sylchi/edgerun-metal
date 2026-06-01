@@ -8,8 +8,7 @@ er_fn er_strlen
     push    rcx
     xor     eax, eax
 
-    test    rdi, rdi
-    jz      .done
+    er_check_zero rdi, .done
 
     mov     rcx, -1
     cld
@@ -36,8 +35,7 @@ er_fn er_strcmp
     cmp     al, cl
     jne     .diff
 
-    test    al, al
-    jz      .equal
+    er_check_zero al, .equal
 
     inc     rdi
     inc     rsi
@@ -67,8 +65,7 @@ er_fn er_strcpy
 .loop:
     mov     cl, byte [rsi]
     mov     byte [rdi], cl
-    test    cl, cl
-    jz      .done
+    er_check_zero cl, .done
     inc     rdi
     inc     rsi
     jmp     .loop
@@ -87,12 +84,10 @@ er_fn er_strcmp_prefix
 
 .loop:
     mov     al, byte [rsi]
-    test    al, al
-    jz      .match
+    er_check_zero al, .match
 
     mov     cl, byte [rdi]
-    test    cl, cl
-    jz      .no_match
+    er_check_zero cl, .no_match
 
     cmp     al, cl
     jne     .no_match
@@ -117,8 +112,7 @@ er_fn er_strcmp_prefix
 ; Returns: pointer to first occurrence, or NULL
 ; ==================================================================
 er_fn er_strchr
-    test    rdi, rdi
-    jz      .strchr_null
+    er_check_zero rdi, .strchr_null
     mov     al, sil
 .strchr_loop:
     cmp     byte [rdi], al
@@ -140,8 +134,7 @@ er_fn er_strchr
 ; Returns: pointer to last occurrence, or NULL
 ; ==================================================================
 er_fn er_strrchr
-    test    rdi, rdi
-    jz      .strrchr_null
+    er_check_zero rdi, .strrchr_null
     mov     al, sil
     xor     rcx, rcx
     xor     edx, edx
@@ -170,16 +163,14 @@ er_fn er_strrchr
 ; ==================================================================
 er_fn er_strncpy
     mov     r8, rdi
-    test    rdx, rdx
-    jz      .strncpy_done
+    er_check_zero rdx, .strncpy_done
     xor     r9d, r9d
 .strncpy_copy:
     cmp     r9, rdx
     jae     .strncpy_done
     mov     al, byte [rsi + r9]
     mov     byte [rdi + r9], al
-    test    al, al
-    jz      .strncpy_pad
+    er_check_zero al, .strncpy_pad
     inc     r9
     jmp     .strncpy_copy
 .strncpy_pad:
@@ -213,8 +204,7 @@ er_fn er_strncat
     jae     .strncat_terminate
     mov     al, byte [rsi + r10]
     mov     byte [rdi + r9], al
-    test    al, al
-    jz      .strncat_done
+    er_check_zero al, .strncat_done
     inc     r9
     inc     r10
     jmp     .strncat_loop
@@ -230,8 +220,7 @@ er_fn er_strncat
 ; Compares at most n chars. Returns: 0 if equal, <0 if s1<s2, >0 if s1>s2
 ; ==================================================================
 er_fn er_strncmp
-    test    rdx, rdx
-    jz      .strncmp_equal
+    er_check_zero rdx, .strncmp_equal
     xor     r8d, r8d
 .strncmp_loop:
     cmp     r8, rdx
@@ -240,8 +229,7 @@ er_fn er_strncmp
     mov     cl, byte [rsi + r8]
     cmp     al, cl
     jne     .strncmp_diff
-    test    al, al
-    jz      .strncmp_equal
+    er_check_zero al, .strncmp_equal
     inc     r8
     jmp     .strncmp_loop
 .strncmp_diff:
@@ -277,8 +265,7 @@ er_fn er_strcasecmp
 .strcasecmp_after_fold:
     cmp     al, cl
     jne     .strcasecmp_diff
-    test    al, al
-    jz      .strcasecmp_equal
+    er_check_zero al, .strcasecmp_equal
     inc     rdi
     inc     rsi
     jmp     .strcasecmp_loop
@@ -297,22 +284,18 @@ er_fn er_strcasecmp
 ; Returns: pointer to start of first occurrence, or NULL
 ; ==================================================================
 er_fn er_strstr
-    test    rsi, rsi
-    jz      .strstr_null
-    test    rdi, rdi
-    jz      .strstr_null
+    er_check_zero rsi, .strstr_null
+    er_check_zero rdi, .strstr_null
     cmp     byte [rsi], 0
     je      .strstr_haystack
 .strstr_outer:
     mov     al, byte [rdi]
-    test    al, al
-    jz      .strstr_null
+    er_check_zero al, .strstr_null
     mov     r8, rdi
     mov     r9, rsi
 .strstr_inner:
     mov     al, byte [r9]
-    test    al, al
-    jz      .strstr_found
+    er_check_zero al, .strstr_found
     cmp     al, byte [r8]
     jne     .strstr_next
     inc     r8
@@ -340,13 +323,11 @@ er_fn er_strspn
     xor     r8d, r8d
 .strspn_outer:
     movzx   eax, byte [rdi + r8]
-    test    al, al
-    jz      .strspn_done
+    er_check_zero al, .strspn_done
     mov     rcx, rsi
 .strspn_inner:
     movzx   edx, byte [rcx]
-    test    dl, dl
-    jz      .strspn_done
+    er_check_zero dl, .strspn_done
     cmp     al, dl
     je      .strspn_found
     inc     rcx
@@ -367,13 +348,11 @@ er_fn er_strcspn
     xor     r8d, r8d
 .strcspn_outer:
     movzx   eax, byte [rdi + r8]
-    test    al, al
-    jz      .strcspn_done
+    er_check_zero al, .strcspn_done
     mov     rcx, rsi
 .strcspn_inner:
     movzx   edx, byte [rcx]
-    test    dl, dl
-    jz      .strcspn_found
+    er_check_zero dl, .strcspn_found
     cmp     al, dl
     je      .strcspn_done
     inc     rcx
@@ -394,13 +373,11 @@ er_fn er_strpbrk
     xor     r8d, r8d
 .strpbrk_outer:
     movzx   eax, byte [rdi + r8]
-    test    al, al
-    jz      .strpbrk_null
+    er_check_zero al, .strpbrk_null
     mov     rcx, rsi
 .strpbrk_inner:
     movzx   edx, byte [rcx]
-    test    dl, dl
-    jz      .strpbrk_next
+    er_check_zero dl, .strpbrk_next
     cmp     al, dl
     je      .strpbrk_found
     inc     rcx
@@ -426,23 +403,19 @@ _strtok_save: resq 1
 
 SECTION .text
 er_fn er_strtok
-    test    rdi, rdi
-    jz      .strtok_continue
+    er_check_zero rdi, .strtok_continue
     mov     [rel _strtok_save], rdi
 .strtok_continue:
     mov     rdi, [rel _strtok_save]
-    test    rdi, rdi
-    jz      .strtok_null
+    er_check_zero rdi, .strtok_null
 .strtok_skip:
     movzx   eax, byte [rdi]
-    test    al, al
-    jz      .strtok_null
+    er_check_zero al, .strtok_null
     mov     rsi, rsi
     mov     rcx, rsi
 .strtok_delim_check:
     movzx   edx, byte [rcx]
-    test    dl, dl
-    jz      .strtok_token_start
+    er_check_zero dl, .strtok_token_start
     cmp     al, dl
     je      .strtok_skip_char
     inc     rcx
@@ -454,13 +427,11 @@ er_fn er_strtok
     mov     r8, rdi
 .strtok_find_end:
     movzx   eax, byte [rdi]
-    test    al, al
-    jz      .strtok_end
+    er_check_zero al, .strtok_end
     mov     rcx, rsi
 .strtok_end_check:
     movzx   edx, byte [rcx]
-    test    dl, dl
-    jz      .strtok_next_char
+    er_check_zero dl, .strtok_next_char
     cmp     al, dl
     je      .strtok_terminate
     inc     rcx

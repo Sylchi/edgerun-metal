@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const bytes = @import("../bytes.zig");
 const ui = @import("core.zig");
 const component = @import("components/Component.zig");

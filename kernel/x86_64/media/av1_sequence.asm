@@ -16,8 +16,7 @@ extern er_av1_bits_bytes_written
     mov     rdi, rsp
     mov     esi, 1
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 %macro write_bits 2
@@ -25,16 +24,14 @@ extern er_av1_bits_bytes_written
     mov     esi, %1
     mov     edx, %2
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 %macro write_one_from_esi 0
     mov     rdi, rsp
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 %endmacro
 
 SECTION .text
@@ -47,22 +44,18 @@ av1_sequence_read_uvlc:
     mov     rdi, r12
     mov     esi, 1
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jnz     .have_stop_bit
+    er_check_nonzero edx, .done
+    er_check_nonzero eax, .have_stop_bit
     cmp     ebx, 31
     jae     .corrupt
     inc     ebx
     jmp     .zero_loop
 .have_stop_bit:
-    test    ebx, ebx
-    jz      .zero
+    er_check_zero ebx, .zero
     mov     rdi, r12
     mov     esi, ebx
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, ebx
     mov     ebx, 1
     shl     ebx, cl
@@ -78,8 +71,7 @@ av1_sequence_read_uvlc:
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
-    er_pop  rbx, r12
-    ret
+    er_pop_ret rbx, r12
 
 av1_sequence_write_uvlc:
     er_push rbx, r12, r13, r14
@@ -104,8 +96,7 @@ av1_sequence_write_uvlc:
     push    rcx
     call    er_av1_bits_write
     pop     rcx
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     ecx
     jmp     .zero_loop
 .stop_bit:
@@ -113,16 +104,13 @@ av1_sequence_write_uvlc:
     mov     esi, 1
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    test    ebx, ebx
-    jz      .ok
+    er_check_nonzero edx, .done
+    er_check_zero ebx, .ok
     mov     rdi, r12
     mov     esi, r14d
     mov     edx, ebx
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .ok:
     mov     eax, r13d
     er_ok
@@ -131,8 +119,7 @@ av1_sequence_write_uvlc:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
 .done:
-    er_pop  rbx, r12, r13, r14
-    ret
+    er_pop_ret rbx, r12, r13, r14
 
 ; er_av1_sequence_decode(payload, len, seq_desc)
 ; Parses a profile-0 AV1 sequence_header_obu into seq_desc.
@@ -140,21 +127,18 @@ av1_sequence_write_uvlc:
 er_fn er_av1_sequence_decode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     mov     rdx, rsi
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     rdi, rsp
     mov     esi, AV1_SEQ_PROFILE_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, AV1_SEQ_PROFILE_MAIN
     jne     .unsupported
     mov     [r12 + AV1_SEQ_PROFILE], al
@@ -164,13 +148,11 @@ er_fn er_av1_sequence_decode
 
     call_read_bit
     mov     [r12 + AV1_SEQ_REDUCED_STILL], al
-    test    eax, eax
-    jnz     .reduced_operating_point
+    er_check_nonzero eax, .reduced_operating_point
 
     call_read_bit
     mov     [r12 + AV1_SEQ_TIMING_INFO_PRESENT], al
-    test    eax, eax
-    jnz     .timing_info
+    er_check_nonzero eax, .timing_info
     mov     dword [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 0
     mov     dword [r12 + AV1_SEQ_TIME_SCALE], 0
     mov     byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
@@ -181,23 +163,19 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, 32
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], eax
     mov     rdi, rsp
     mov     esi, 32
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_TIME_SCALE], eax
     call_read_bit
     mov     [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], al
-    test    eax, eax
-    jz      .timing_interval_done
+    er_check_zero eax, .timing_interval_done
     mov     rdi, rsp
     call    av1_sequence_read_uvlc
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1], eax
     jmp     .initial_display_delay
 .timing_interval_done:
@@ -206,16 +184,13 @@ er_fn er_av1_sequence_decode
 .initial_display_delay:
     call_read_bit
     mov     [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY], al
-    test    eax, eax
-    jz      .initial_display_delay_zero
+    er_check_zero eax, .initial_display_delay_zero
     call_read_bit
-    test    eax, eax
-    jz      .initial_display_delay_zero
+    er_check_zero eax, .initial_display_delay_zero
     mov     rdi, rsp
     mov     esi, AV1_SEQ_INITIAL_DISPLAY_DELAY_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY_MINUS_1], eax
     jmp     .initial_display_delay_done
 .initial_display_delay_zero:
@@ -225,24 +200,20 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, AV1_SEQ_OPERATING_POINTS_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_OPERATING_POINTS_MINUS_1], al
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
 
     mov     rdi, rsp
     mov     esi, AV1_SEQ_OPERATING_POINT_IDC_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_OPERATING_POINT_IDC], ax
 
     mov     rdi, rsp
     mov     esi, AV1_SEQ_LEVEL_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_LEVEL_IDX], al
     cmp     eax, AV1_SEQ_LEVEL_MAX
     ja      .unsupported
@@ -269,8 +240,7 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, AV1_SEQ_LEVEL_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_LEVEL_IDX], al
     mov     byte [r12 + AV1_SEQ_LEVEL_TIER], 0
 
@@ -278,8 +248,7 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, AV1_SEQ_DIMENSION_BITS_FIELD
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_WIDTH_BITS], al
     mov     r14d, eax
@@ -287,8 +256,7 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, AV1_SEQ_DIMENSION_BITS_FIELD
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_HEIGHT_BITS], al
     mov     r15d, eax
@@ -296,16 +264,14 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, r14d
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_MAX_WIDTH], eax
 
     mov     rdi, rsp
     mov     esi, r15d
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_MAX_HEIGHT], eax
 
@@ -314,20 +280,17 @@ er_fn er_av1_sequence_decode
 
     call_read_bit
     mov     [r12 + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], al
-    test    eax, eax
-    jz      .frame_id_done
+    er_check_zero eax, .frame_id_done
     mov     rdi, rsp
     mov     esi, AV1_SEQ_FRAME_ID_DELTA_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, AV1_SEQ_FRAME_ID_DELTA_BASE
     mov     [r12 + AV1_SEQ_DELTA_FRAME_ID_LENGTH], al
     mov     rdi, rsp
     mov     esi, AV1_SEQ_FRAME_ID_ADDITIONAL_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, AV1_SEQ_FRAME_ID_ADDITIONAL_BASE
     mov     [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH], al
     jmp     .after_frame_id_lengths
@@ -351,8 +314,7 @@ er_fn er_av1_sequence_decode
     mov     [r12 + AV1_SEQ_ENABLE_DUAL_FILTER], al
     call_read_bit
     mov     [r12 + AV1_SEQ_ENABLE_ORDER_HINT], al
-    test    eax, eax
-    jz      .no_order_hint
+    er_check_zero eax, .no_order_hint
     call_read_bit
     mov     [r12 + AV1_SEQ_ENABLE_JNT_COMP], al
     call_read_bit
@@ -364,8 +326,7 @@ er_fn er_av1_sequence_decode
 
 .screen_content_tools:
     call_read_bit
-    test    eax, eax
-    jz      .read_force_screen_content_tools
+    er_check_zero eax, .read_force_screen_content_tools
     mov     byte [r12 + AV1_SEQ_FORCE_SCREEN_CONTENT_TOOLS], AV1_SEQ_SELECT_SCREEN_CONTENT_TOOLS
     jmp     .integer_mv_tools
 .read_force_screen_content_tools:
@@ -374,11 +335,9 @@ er_fn er_av1_sequence_decode
 
 .integer_mv_tools:
     movzx   eax, byte [r12 + AV1_SEQ_FORCE_SCREEN_CONTENT_TOOLS]
-    test    eax, eax
-    jz      .no_integer_mv_tools
+    er_check_zero eax, .no_integer_mv_tools
     call_read_bit
-    test    eax, eax
-    jz      .read_force_integer_mv
+    er_check_zero eax, .read_force_integer_mv
     mov     byte [r12 + AV1_SEQ_FORCE_INTEGER_MV], AV1_SEQ_SELECT_INTEGER_MV
     jmp     .order_hint_bits
 .read_force_integer_mv:
@@ -394,8 +353,7 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, AV1_SEQ_ORDER_HINT_BITS_FIELD
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_ORDER_HINT_BITS], al
     jmp     .after_order_hint_bits
@@ -433,8 +391,7 @@ er_fn er_av1_sequence_decode
 
 .color_config:
     call_read_bit
-    test    eax, eax
-    jz      .bit_depth_8
+    er_check_zero eax, .bit_depth_8
     mov     byte [r12 + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_10
     jmp     .read_mono_chrome
 .bit_depth_8:
@@ -446,25 +403,21 @@ er_fn er_av1_sequence_decode
 
     call_read_bit
     mov     [r12 + AV1_SEQ_COLOR_DESCRIPTION_PRESENT], al
-    test    eax, eax
-    jz      .no_color_description
+    er_check_zero eax, .no_color_description
     mov     rdi, rsp
     mov     esi, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_COLOR_PRIMARIES], al
     mov     rdi, rsp
     mov     esi, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_TRANSFER_CHARACTERISTICS], al
     mov     rdi, rsp
     mov     esi, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_MATRIX_COEFFICIENTS], al
     jmp     .color_range
 .no_color_description:
@@ -482,8 +435,7 @@ er_fn er_av1_sequence_decode
     mov     rdi, rsp
     mov     esi, 2
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_CHROMA_SAMPLE_POSITION], al
     jmp     .after_chroma_position
 .mono_color_done:
@@ -523,8 +475,7 @@ er_fn er_av1_sequence_decode
 er_fn er_av1_sequence_encode
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     cmp     byte [r12 + AV1_SEQ_PROFILE], AV1_SEQ_PROFILE_MAIN
     jne     .unsupported
@@ -574,27 +525,23 @@ er_fn er_av1_sequence_encode
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     movzx   esi, byte [r12 + AV1_SEQ_PROFILE]
     mov     rdi, rsp
     mov     edx, AV1_SEQ_PROFILE_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_STILL_PICTURE]
     mov     rdi, rsp
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_REDUCED_STILL]
     mov     rdi, rsp
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [r12 + AV1_SEQ_REDUCED_STILL], 1
     je      .write_reduced_level
 
@@ -606,14 +553,12 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, 32
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [r12 + AV1_SEQ_TIME_SCALE]
     mov     rdi, rsp
     mov     edx, 32
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL]
     write_one_from_esi
     cmp     byte [r12 + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
@@ -621,8 +566,7 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     esi, [r12 + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1]
     call    av1_sequence_write_uvlc
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_initial_display_delay:
     movzx   esi, byte [r12 + AV1_SEQ_INITIAL_DISPLAY_DELAY]
     write_one_from_esi
@@ -635,22 +579,19 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, AV1_SEQ_INITIAL_DISPLAY_DELAY_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_operating_points:
     write_bits 0, 5
     movzx   esi, word [r12 + AV1_SEQ_OPERATING_POINT_IDC]
     mov     rdi, rsp
     mov     edx, AV1_SEQ_OPERATING_POINT_IDC_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_LEVEL_IDX]
     mov     rdi, rsp
     mov     edx, AV1_SEQ_LEVEL_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [r12 + AV1_SEQ_LEVEL_IDX], AV1_SEQ_LEVEL_TIER_MAX
     jbe     .write_dimensions
     movzx   esi, byte [r12 + AV1_SEQ_LEVEL_TIER]
@@ -661,8 +602,7 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, AV1_SEQ_LEVEL_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
 .write_dimensions:
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
@@ -670,29 +610,25 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, AV1_SEQ_DIMENSION_BITS_FIELD
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     dec     esi
     mov     rdi, rsp
     mov     edx, AV1_SEQ_DIMENSION_BITS_FIELD
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [r12 + AV1_SEQ_MAX_WIDTH]
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     esi, [r12 + AV1_SEQ_MAX_HEIGHT]
     dec     esi
     movzx   edx, byte [r12 + AV1_SEQ_HEIGHT_BITS]
     mov     rdi, rsp
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [r12 + AV1_SEQ_REDUCED_STILL], 1
     je      .write_color_config
 
@@ -700,8 +636,7 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     byte [r12 + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 0
     je      .write_tools
     movzx   esi, byte [r12 + AV1_SEQ_DELTA_FRAME_ID_LENGTH]
@@ -711,17 +646,14 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, AV1_SEQ_FRAME_ID_DELTA_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_ADDITIONAL_FRAME_ID_LENGTH]
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero esi, .invalid_param
     sub     esi, AV1_SEQ_FRAME_ID_ADDITIONAL_BASE
     mov     rdi, rsp
     mov     edx, AV1_SEQ_FRAME_ID_ADDITIONAL_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_tools:
     movzx   esi, byte [r12 + AV1_SEQ_USE_128X128_SUPERBLOCK]
     write_one_from_esi
@@ -759,8 +691,7 @@ er_fn er_av1_sequence_encode
     write_one_from_esi
 .write_integer_mv_tools:
     movzx   eax, byte [r12 + AV1_SEQ_FORCE_SCREEN_CONTENT_TOOLS]
-    test    eax, eax
-    jz      .write_order_hint_bits
+    er_check_zero eax, .write_order_hint_bits
     movzx   eax, byte [r12 + AV1_SEQ_FORCE_INTEGER_MV]
     cmp     eax, AV1_SEQ_SELECT_INTEGER_MV
     jne     .write_force_integer_mv
@@ -776,14 +707,12 @@ er_fn er_av1_sequence_encode
     cmp     byte [r12 + AV1_SEQ_ENABLE_ORDER_HINT], 1
     jne     .write_post_order_tools
     movzx   esi, byte [r12 + AV1_SEQ_ORDER_HINT_BITS]
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero esi, .invalid_param
     dec     esi
     mov     rdi, rsp
     mov     edx, AV1_SEQ_ORDER_HINT_BITS_FIELD
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_post_order_tools:
     movzx   esi, byte [r12 + AV1_SEQ_ENABLE_SUPERRES]
     write_one_from_esi
@@ -807,20 +736,17 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_TRANSFER_CHARACTERISTICS]
     mov     rdi, rsp
     mov     edx, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     movzx   esi, byte [r12 + AV1_SEQ_MATRIX_COEFFICIENTS]
     mov     rdi, rsp
     mov     edx, AV1_SEQ_COLOR_DESCRIPTION_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_color_range:
     movzx   esi, byte [r12 + AV1_SEQ_COLOR_RANGE]
     write_one_from_esi
@@ -830,8 +756,7 @@ er_fn er_av1_sequence_encode
     mov     rdi, rsp
     mov     edx, 2
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .write_separate_uv:
     cmp     byte [r12 + AV1_SEQ_REDUCED_STILL], 1
     je      .write_film_grain
@@ -860,21 +785,18 @@ er_fn er_av1_sequence_encode
 er_fn er_av1_sequence_decode_reduced_still
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE
-    test    rdx, rdx
-    jz      .invalid_param
+    er_check_zero rdx, .invalid_param
     mov     r12, rdx
     mov     rdx, rsi
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_read_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     mov     rdi, rsp
     mov     esi, 3
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, AV1_SEQ_PROFILE_MAIN
     jne     .unsupported
     mov     [r12 + AV1_SEQ_PROFILE], al
@@ -892,16 +814,14 @@ er_fn er_av1_sequence_decode_reduced_still
     mov     rdi, rsp
     mov     esi, 5
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_LEVEL_IDX], al
     mov     byte [r12 + AV1_SEQ_LEVEL_TIER], 0
 
     mov     rdi, rsp
     mov     esi, 4
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_WIDTH_BITS], al
     mov     r14d, eax
@@ -909,8 +829,7 @@ er_fn er_av1_sequence_decode_reduced_still
     mov     rdi, rsp
     mov     esi, 4
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_HEIGHT_BITS], al
     mov     r15d, eax
@@ -918,32 +837,27 @@ er_fn er_av1_sequence_decode_reduced_still
     mov     rdi, rsp
     mov     esi, r14d
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_MAX_WIDTH], eax
 
     mov     rdi, rsp
     mov     esi, r15d
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     inc     eax
     mov     [r12 + AV1_SEQ_MAX_HEIGHT], eax
 
     call_read_bit
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mov     byte [r12 + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_8
 
     call_read_bit
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
     mov     [r12 + AV1_SEQ_MONO_CHROME], al
 
     call_read_bit
-    test    eax, eax
-    jnz     .unsupported
+    er_check_nonzero eax, .unsupported
 
     call_read_bit
     mov     [r12 + AV1_SEQ_COLOR_RANGE], al
@@ -954,8 +868,7 @@ er_fn er_av1_sequence_decode_reduced_still
     mov     rdi, rsp
     mov     esi, 2
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [r12 + AV1_SEQ_CHROMA_SAMPLE_POSITION], al
 
     call_read_bit
@@ -980,10 +893,8 @@ er_fn er_av1_sequence_decode_reduced_still
 er_fn er_av1_sequence_encode_reduced_still
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_BITS_SIZE
-    test    edx, edx
-    jz      .invalid_param
-    test    ecx, ecx
-    jz      .invalid_param
+    er_check_zero edx, .invalid_param
+    er_check_zero ecx, .invalid_param
     cmp     edx, AV1_SEQ_DIMENSION_MAX
     ja      .invalid_param
     cmp     ecx, AV1_SEQ_DIMENSION_MAX
@@ -999,8 +910,7 @@ er_fn er_av1_sequence_encode_reduced_still
     mov     rsi, rdi
     mov     rdi, rsp
     call    er_av1_bits_write_init
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     write_bits AV1_SEQ_PROFILE_MAIN, 3
     write_bits 1, 1
@@ -1013,14 +923,12 @@ er_fn er_av1_sequence_encode_reduced_still
     mov     esi, r14d
     mov     edx, 16
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     rdi, rsp
     mov     esi, r15d
     mov     edx, 16
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 
     write_bits 0, 1
     write_bits 0, 1

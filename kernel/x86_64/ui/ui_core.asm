@@ -42,9 +42,7 @@ er_fn ui_color_pack
 ; Uses (x * 257 + 257) >> 16 in place of div 255.
 ; ==================================================================
 er_fn ui_color_blend
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12d, edi              ; src
     mov     r13d, esi              ; dst
@@ -114,10 +112,7 @@ er_fn ui_color_blend
     or      r8d, eax
 
     mov     eax, r8d
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; int ui_rect_contains(const float bounds[4], float x, float y)
@@ -238,8 +233,7 @@ er_fn ui_cursor_take
     movss   xmm5, [rbx + CURSOR_BOUNDS_H]
     movss   xmm6, [rbx + CURSOR_OFFSET]
 
-    test    eax, eax
-    jnz     .col
+    er_check_nonzero eax, .col
 
     ; row: out.x = bounds.x + offset, out.y = bounds.y, out.w = main_size
     addss   xmm1, xmm6
@@ -280,8 +274,7 @@ er_fn ui_cursor_take
 ; ==================================================================
 er_fn ui_cursor_remaining
     mov     eax, [rdi + CURSOR_AXIS]
-    test    eax, eax
-    jnz     .rem_col
+    er_check_nonzero eax, .rem_col
     ; row: remaining = bounds.w - offset
     movss   xmm0, [rdi + CURSOR_BOUNDS_W]
     subss   xmm0, [rdi + CURSOR_OFFSET]

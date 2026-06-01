@@ -9,10 +9,8 @@ SECTION .text
 ; er_av1_bits_read_init(ctx, buf, len)
 ; rdi=ctx, rsi=buf, edx=len
 er_fn er_av1_bits_read_init
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     [rdi + AV1_BITS_BUF], rsi
     mov     [rdi + AV1_BITS_LEN], edx
     mov     dword [rdi + AV1_BITS_POS], 0
@@ -29,8 +27,7 @@ er_fn er_av1_bits_read_init
 ; rdi=ctx, esi=count
 er_fn er_av1_bits_read
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, 32
     ja      .invalid_param
     mov     r12, [rdi + AV1_BITS_BUF]
@@ -44,8 +41,7 @@ er_fn er_av1_bits_read
     cmp     eax, edx
     ja      .no_data
     xor     eax, eax
-    test    esi, esi
-    jz      .store_pos
+    er_check_zero esi, .store_pos
 .loop:
     shl     eax, 1
     mov     ecx, ebx
@@ -78,10 +74,8 @@ er_fn er_av1_bits_read
 ; er_av1_bits_write_init(ctx, buf, len)
 ; rdi=ctx, rsi=buf, edx=len
 er_fn er_av1_bits_write_init
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     mov     [rdi + AV1_BITS_BUF], rsi
     mov     [rdi + AV1_BITS_LEN], edx
     mov     dword [rdi + AV1_BITS_POS], 0
@@ -97,8 +91,7 @@ er_fn er_av1_bits_write_init
 ; rdi=ctx, esi=value, edx=count
 er_fn er_av1_bits_write
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     edx, 32
     ja      .invalid_param
     mov     r12, [rdi + AV1_BITS_BUF]
@@ -113,8 +106,7 @@ er_fn er_av1_bits_write
     shl     ecx, 3
     cmp     eax, ecx
     ja      .no_space
-    test    edx, edx
-    jz      .store_pos
+    er_check_zero edx, .store_pos
 .loop:
     mov     ecx, r14d
     dec     ecx
@@ -131,8 +123,7 @@ er_fn er_av1_bits_write
     shl     dl, cl
     not     dl
     and     [r12 + rsi], dl
-    test    eax, eax
-    jz      .bit_done
+    er_check_zero eax, .bit_done
     not     dl
     or      [r12 + rsi], dl
 .bit_done:
@@ -158,8 +149,7 @@ er_fn er_av1_bits_write
 ; er_av1_bits_bytes_written(ctx) -> eax=ceil(bit_pos / 8), rdx=0
 ; rdi=ctx
 er_fn er_av1_bits_bytes_written
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     eax, [rdi + AV1_BITS_POS]
     add     eax, 7
     shr     eax, 3
@@ -173,8 +163,7 @@ er_fn er_av1_bits_bytes_written
 ; er_av1_cdf_symbol(cdf, nsymbs, code) -> eax=symbol, rdx=error
 ; rdi=cdf u16 cumulative probabilities, esi=symbol count, edx=15-bit code
 er_fn er_av1_cdf_symbol
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, AV1_CDF_SYMBOLS_MIN
     jb      .invalid_param
     cmp     esi, AV1_CDF_SYMBOLS_MAX
@@ -229,12 +218,9 @@ er_fn er_av1_cdf_symbol
 ; rdi=ctx, rsi=buf, edx=len
 er_fn er_av1_symbol_init
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    edx, edx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero edx, .invalid_param
     mov     r12, rdi
     mov     [r12 + AV1_SYMBOL_BUF], rsi
     mov     [r12 + AV1_SYMBOL_LEN], edx
@@ -250,8 +236,7 @@ er_fn er_av1_symbol_init
     mov     r13d, esi
     mov     rdi, r12
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, AV1_CDF_PROB_BITS
     sub     ecx, r13d
     shl     eax, cl
@@ -276,12 +261,9 @@ er_fn er_av1_symbol_init
 ; er_av1_symbol_write_init(ctx, out, cap) -> eax=0, rdx=error
 ; rdi=ctx, rsi=out, edx=cap
 er_fn er_av1_symbol_write_init
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
-    test    edx, edx
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero edx, .invalid_param
     mov     [rdi + AV1_SYMBOL_BUF], rsi
     mov     [rdi + AV1_SYMBOL_LEN], edx
     mov     dword [rdi + AV1_SYMBOL_POS], 0
@@ -304,10 +286,8 @@ er_fn er_av1_symbol_write_init
 er_fn er_av1_symbol_write_symbol
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc 32
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_CDF_SYMBOLS_MIN
     jb      .invalid_param
     cmp     edx, AV1_CDF_SYMBOLS_MAX
@@ -320,11 +300,9 @@ er_fn er_av1_symbol_write_symbol
     mov     ebx, ecx
     mov     r15d, r8d
     call    .validate_cdf
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     call    .target_for_symbol
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp], eax
     cmp     dword [r12 + AV1_SYMBOL_POS], 0
     jne     .resolve_pending
@@ -336,8 +314,7 @@ er_fn er_av1_symbol_write_symbol
     mov     esi, eax
     mov     edx, AV1_CDF_PROB_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     jmp     .encode_current
 .resolve_pending:
     cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
@@ -347,8 +324,7 @@ er_fn er_av1_symbol_write_symbol
     mov     ecx, [r12 + AV1_SYMBOL_PENDING_SHIFT]
     cmp     ecx, 32
     jae     .corrupt
-    test    ecx, ecx
-    jz      .pending_resolved
+    er_check_zero ecx, .pending_resolved
     mov     edx, 1
     shl     edx, cl
     dec     edx
@@ -357,8 +333,7 @@ er_fn er_av1_symbol_write_symbol
     mov     esi, eax
     mov     edx, ecx
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .pending_resolved:
     mov     eax, [rsp]
     mov     [r12 + AV1_SYMBOL_VALUE], eax
@@ -366,8 +341,7 @@ er_fn er_av1_symbol_write_symbol
 .encode_current:
     mov     eax, [rsp]
     call    .threshold_for_symbol
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     [rsp + 4], eax
     mov     r8d, [r12 + AV1_SYMBOL_RANGE]
     sub     r8d, eax
@@ -387,8 +361,7 @@ er_fn er_av1_symbol_write_symbol
     mov     [r12 + AV1_SYMBOL_PENDING_BASE], eax
     mov     [r12 + AV1_SYMBOL_PENDING_SHIFT], r9d
     mov     dword [r12 + AV1_SYMBOL_PENDING], 1
-    test    r15d, r15d
-    jnz     .return_symbol
+    er_check_nonzero r15d, .return_symbol
     call    .update_cdf
 .return_symbol:
     mov     eax, ebx
@@ -456,16 +429,13 @@ er_fn er_av1_symbol_write_symbol
 
 .target_for_symbol:
     call    .threshold_for_symbol
-    test    edx, edx
-    jnz     .target_done
+    er_check_nonzero edx, .target_done
     mov     [rsp + 8], eax
-    test    ebx, ebx
-    jz      .target_upper_range
+    er_check_zero ebx, .target_upper_range
     dec     ebx
     call    .threshold_for_symbol
     inc     ebx
-    test    edx, edx
-    jnz     .target_done
+    er_check_nonzero edx, .target_done
     jmp     .target_have_upper
 .target_upper_range:
     mov     eax, [r12 + AV1_SYMBOL_RANGE]
@@ -575,8 +545,7 @@ er_fn er_av1_symbol_write_symbol
 ; Flushes pending renormalization bits and writes AV1 trailing marker padding.
 er_fn er_av1_symbol_write_finish
     er_push rbx, r12
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     cmp     dword [r12 + AV1_SYMBOL_POS], 0
     jne     .maybe_pending
@@ -584,8 +553,7 @@ er_fn er_av1_symbol_write_finish
     mov     esi, AV1_CDF_PROB_TOP - 1
     mov     edx, AV1_CDF_PROB_BITS
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .maybe_pending:
     cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
     je      .trailing_marker
@@ -593,8 +561,7 @@ er_fn er_av1_symbol_write_finish
     mov     ecx, [r12 + AV1_SYMBOL_PENDING_SHIFT]
     cmp     ecx, 32
     jae     .corrupt
-    test    ecx, ecx
-    jz      .clear_pending
+    er_check_zero ecx, .clear_pending
     mov     edx, 1
     shl     edx, cl
     dec     edx
@@ -603,8 +570,7 @@ er_fn er_av1_symbol_write_finish
     mov     esi, eax
     mov     edx, ecx
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .clear_pending:
     mov     dword [r12 + AV1_SYMBOL_PENDING], 0
 .trailing_marker:
@@ -612,8 +578,7 @@ er_fn er_av1_symbol_write_finish
     mov     esi, 1
     mov     edx, 1
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ebx, [r12 + AV1_SYMBOL_POS]
     and     ebx, 7
     jz      .bytes
@@ -622,8 +587,7 @@ er_fn er_av1_symbol_write_finish
     mov     rdi, r12
     xor     esi, esi
     call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
 .bytes:
     mov     rdi, r12
     call    er_av1_bits_bytes_written
@@ -659,16 +623,14 @@ er_fn er_av1_symbol_write_bool
 ; rdi=ctx, esi=value, edx=count
 er_fn er_av1_symbol_write_literal
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     edx, 32
     ja      .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     mov     r14d, edx
     mov     ebx, edx
-    test    ebx, ebx
-    jz      .ok
+    er_check_zero ebx, .ok
 .loop:
     mov     ecx, ebx
     dec     ecx
@@ -677,8 +639,7 @@ er_fn er_av1_symbol_write_literal
     and     esi, 1
     mov     rdi, r12
     call    er_av1_symbol_write_bool
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     dec     ebx
     jnz     .loop
 .ok:
@@ -696,10 +657,8 @@ er_fn er_av1_symbol_write_literal
 ; rdi=ctx, rsi=cdf u16[N+1], edx=N, ecx=disable_update
 er_fn er_av1_symbol_read_symbol
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    rsi, rsi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
     cmp     edx, AV1_CDF_SYMBOLS_MIN
     jb      .invalid_param
     cmp     edx, AV1_CDF_SYMBOLS_MAX
@@ -709,8 +668,7 @@ er_fn er_av1_symbol_read_symbol
     mov     r14d, edx
     mov     r15d, ecx
     mov     eax, [r12 + AV1_SYMBOL_RANGE]
-    test    eax, eax
-    jz      .corrupt
+    er_check_zero eax, .corrupt
     xor     ebx, ebx
     xor     r9d, r9d
 .validate_loop:
@@ -782,8 +740,7 @@ er_fn er_av1_symbol_read_symbol
     mov     rdi, r12
     mov     esi, r8d
     call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     mov     ecx, r9d
     sub     ecx, r8d
     shl     eax, cl
@@ -796,8 +753,7 @@ er_fn er_av1_symbol_read_symbol
     mov     eax, [r12 + AV1_SYMBOL_MAX_BITS]
     sub     eax, r9d
     mov     [r12 + AV1_SYMBOL_MAX_BITS], eax
-    test    r15d, r15d
-    jnz     .return_symbol
+    er_check_nonzero r15d, .return_symbol
     call    .update_cdf
 .return_symbol:
     mov     eax, ebx
@@ -883,20 +839,17 @@ er_fn er_av1_symbol_read_bool
 ; rdi=ctx, esi=count
 er_fn er_av1_symbol_read_literal
     er_push rbx, r12, r13
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     cmp     esi, 32
     ja      .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     xor     ebx, ebx
-    test    esi, esi
-    jz      .return_value
+    er_check_zero esi, .return_value
 .loop:
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     shl     ebx, 1
     or      ebx, eax
     dec     r13d
@@ -916,10 +869,8 @@ er_fn er_av1_symbol_read_literal
 ; rdi=ctx, esi=n
 er_fn er_av1_symbol_read_ns
     er_push rbx, r12, r13, r14
-    test    rdi, rdi
-    jz      .invalid_param
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero esi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     bsr     ecx, esi
@@ -933,15 +884,13 @@ er_fn er_av1_symbol_read_ns
     mov     esi, r14d
     dec     esi
     call    er_av1_symbol_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, ebx
     jb      .return_value
     mov     r14d, eax
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     lea     eax, [r14 * 2 + rax]
     sub     eax, ebx
 .return_value:
@@ -964,17 +913,14 @@ er_fn er_av1_symbol_read_ns
 ; rdi=ctx, esi=num_syms
 er_fn er_av1_symbol_decode_subexp
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
-    test    esi, esi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
+    er_check_zero esi, .invalid_param
     mov     r12, rdi
     mov     r13d, esi
     xor     ebx, ebx
     xor     r14d, r14d
 .loop:
-    test    ebx, ebx
-    jz      .first_bucket
+    er_check_zero ebx, .first_bucket
     mov     r15d, ebx
     add     r15d, 2
     jo      .invalid_param
@@ -999,18 +945,15 @@ er_fn er_av1_symbol_decode_subexp
     jz      .invalid_param
     mov     rdi, r12
     call    er_av1_symbol_read_ns
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, r14d
     er_ok
     jmp     .done
 .more_bucket:
     mov     rdi, r12
     call    er_av1_symbol_read_bool
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jz      .read_bucket
+    er_check_nonzero edx, .done
+    er_check_zero eax, .read_bucket
     mov     eax, 1
     mov     ecx, r15d
     shl     eax, cl
@@ -1022,8 +965,7 @@ er_fn er_av1_symbol_decode_subexp
     mov     rdi, r12
     mov     esi, r15d
     call    er_av1_symbol_read_literal
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     add     eax, r14d
     cmp     eax, r13d
     jae     .corrupt
@@ -1044,8 +986,7 @@ er_fn er_av1_symbol_decode_subexp
 ; rdi=ctx
 er_fn er_av1_symbol_exit
     er_push rbx, r12, r13, r14, r15
-    test    rdi, rdi
-    jz      .invalid_param
+    er_check_zero rdi, .invalid_param
     mov     r12, rdi
     mov     r13d, [r12 + AV1_SYMBOL_MAX_BITS]
     cmp     r13d, -14
@@ -1075,8 +1016,7 @@ er_fn er_av1_symbol_exit
     ja      .corrupt
     mov     r13d, r14d
     call    .bit_at
-    test    edx, edx
-    jnz     .done
+    er_check_nonzero edx, .done
     cmp     eax, 1
     jne     .corrupt
     inc     r13d
@@ -1084,10 +1024,8 @@ er_fn er_av1_symbol_exit
     cmp     r13d, r15d
     jae     .success
     call    .bit_at
-    test    edx, edx
-    jnz     .done
-    test    eax, eax
-    jnz     .corrupt
+    er_check_nonzero edx, .done
+    er_check_nonzero eax, .corrupt
     inc     r13d
     jmp     .padding_loop
 .success:

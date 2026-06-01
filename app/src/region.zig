@@ -56,35 +56,29 @@ pub const Region = struct {
 };
 
 test "split transfers ownership out of parent" {
-    const std = @import("std");
-    const testing = std.testing;
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
 
-    try testing.expectEqual(@as(usize, 10), parent.len());
-    try testing.expectEqual(@as(usize, 6), child.len());
+    if (parent.len() != 10) return error.TestExpectedEqual;
+    if (child.len() != 6) return error.TestExpectedEqual;
 }
 
 test "append suffix reclaims adjacent split region" {
-    const std = @import("std");
-    const testing = std.testing;
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
 
-    try testing.expect(parent.appendSuffix(child));
-    try testing.expectEqual(@as(usize, 16), parent.len());
+    if (!parent.appendSuffix(child)) return error.TestExpectedTrue;
+    if (parent.len() != 16) return error.TestExpectedEqual;
 }
 
 test "region reports contained slice offset" {
-    const std = @import("std");
-    const testing = std.testing;
     var memory: [16]u8 = undefined;
     const region = Region{ .base = &memory };
     const slice = memory[4..12];
 
-    try testing.expect(region.contains(slice));
-    try testing.expectEqual(@as(usize, 4), region.offsetOf(slice).?);
-    try testing.expect(!region.contains(&.{}));
+    if (!region.contains(slice)) return error.TestExpectedTrue;
+    if (region.offsetOf(slice).? != 4) return error.TestExpectedEqual;
+    if (region.contains(&.{})) return error.TestExpectedFalse;
 }

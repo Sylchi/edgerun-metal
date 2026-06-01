@@ -5,7 +5,7 @@ const component_union = @import("Component.zig");
 const object = @import("../../object.zig");
 const slot_component = @import("Slot.zig");
 const stack_component = @import("Stack.zig");
-const std = @import("std");
+const std = @import("er_std");
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../core.zig");
 

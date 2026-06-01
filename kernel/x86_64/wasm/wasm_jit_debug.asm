@@ -82,8 +82,7 @@ er_fn jit_debug_space
 ; rdi = string
 ; -----------------------------------------------------------------+
 er_fn jit_debug_print_str
-    push    rdi
-    push    rcx
+    er_push rdi, rcx
     mov     rcx, -1
     xor     eax, eax
     repne   scasb
@@ -139,8 +138,7 @@ er_fn jit_debug_print_hex8
 ; Note: syscall clobbers rcx, so we use r8 as loop counter
 ; -----------------------------------------------------------------+
 er_fn jit_debug_print_hex64
-    push    r8
-    push    rax
+    er_push r8, rax
 
     call    jit_debug_print_0x
     mov     r8, 16              ; loop counter in r8 (syscall-safe)
@@ -172,11 +170,7 @@ er_fn jit_debug_print_hex64
 ; rax = value
 ; -----------------------------------------------------------------+
 er_fn jit_debug_print_dec64
-    push    rax
-    push    rbx
-    push    rcx
-    push    rdx
-    push    rdi
+    er_push rax, rbx, rcx, rdx, rdi
 
     test    rax, rax
     jns     .positive
@@ -196,18 +190,12 @@ er_fn jit_debug_print_dec64
     div     rcx
     add     dl, '0'
     mov     [rbx], dl
-    test    rax, rax
-    jnz     .conv_loop
+    er_check_nonzero rax, .conv_loop
 
     mov     rdi, rbx
     call    jit_debug_print_str
 
-    pop     rdi
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    pop     rax
-    ret
+    er_pop_ret rax, rbx, rcx, rdx, rdi
 
 ; ------------------------------------------------------------------
 ; Print hex dump of JIT compiled code
@@ -218,13 +206,7 @@ er_fn jit_debug_print_dec64
 ;     0x00: 55 48 89 e5 b8 2a ...
 ; -----------------------------------------------------------------+
 er_fn jit_debug_dump_code
-    push    rax
-    push    rbx
-    push    rcx
-    push    rdx
-    push    rdi
-    push    rsi
-    push    r8
+    er_push rax, rbx, rcx, rdx, rdi, rsi, r8
 
     mov     r8, rdi             ; r8 = code_ptr
     mov     rbx, rsi            ; rbx = remaining bytes
@@ -295,14 +277,7 @@ er_fn jit_debug_dump_code
     jmp     .dump_loop
 .dump_done:
 
-    pop     r8
-    pop     rsi
-    pop     rdi
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    pop     rax
-    ret
+    er_pop_ret rax, rbx, rcx, rdx, rdi, rsi, r8
 
 .str_prefix: db "JIT code at ", 0
 .str_bytes:   db " bytes):", 0x0A, 0
@@ -312,10 +287,7 @@ er_fn jit_debug_dump_code
 ; rdi = func_idx, rsi = code_ptr, rdx = byte_count
 ; -----------------------------------------------------------------+
 er_fn jit_debug_dump_header
-    push    rax
-    push    rdi
-    push    rsi
-    push    rdx
+    er_push rax, rdi, rsi, rdx
 
     ; Print "JIT compiled func "
     lea     rdi, [rel .str_func]
@@ -344,11 +316,7 @@ er_fn jit_debug_dump_header
 
     call    jit_debug_newline
 
-    pop     rdx
-    pop     rsi
-    pop     rdi
-    pop     rax
-    ret
+    er_pop_ret rax, rdi, rsi, rdx
 
 .str_func:     db "JIT compiled func ", 0
 .str_bytes_at: db " bytes at ", 0
@@ -359,26 +327,21 @@ er_fn jit_debug_dump_header
 ; Returns rax and rdx unchanged (caller can continue using them).
 ; -----------------------------------------------------------------+
 er_fn jit_debug_dump_result
-    push    rax
-    push    rdx
+    er_push rax, rdx
 
     lea     rdi, [rel .str_result]
     call    jit_debug_print_str
 
-    pop     rdx
-    pop     rax
-    push    rax
-    push    rdx
+    er_pop  rax, rdx
+    er_push rax, rdx
 
     call    jit_debug_print_hex64
 
     lea     rdi, [rel .str_paren]
     call    jit_debug_print_str
 
-    pop     rdx
-    pop     rax
-    push    rax
-    push    rdx
+    er_pop  rax, rdx
+    er_push rax, rdx
 
     call    jit_debug_print_dec64
 
@@ -388,13 +351,10 @@ er_fn jit_debug_dump_result
     call    jit_debug_newline        ; print newline before restoring regs
 
     ; Restore rax and rdx — must come after newline since newline clobbers rax
-    pop     rdx
-    pop     rax
-    test    rdx, rdx
-    jz      .no_error
+    er_pop  rax, rdx
+    er_check_zero rdx, .no_error
     ; error path: print " ERROR: <code>"
-    push    rax
-    push    rdx
+    er_push rax, rdx
     lea     rdi, [rel .str_error]
     call    jit_debug_print_str
     pop     rax

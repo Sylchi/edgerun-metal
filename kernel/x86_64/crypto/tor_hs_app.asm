@@ -73,24 +73,16 @@ global er_tor_hs_app_build_contact_put
 er_fn er_tor_hs_app_build_contact_put
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
     mov     r14, rcx
     mov     r15d, r8d
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r14, r14
-    jz      .fail
-    test    r13d, r13d
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r14, .fail
+    er_check_zero r13d, .fail
     cmp     r15d, ER_HS_ID_SIZE
     jne     .fail
     cmp     r13d, ER_HS_NAME_MAX
@@ -114,21 +106,11 @@ er_fn er_tor_hs_app_build_contact_put
     mov     eax, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     add     eax, r13d
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_app_build_message_put(out, from_identity, identity_len, body, body_len)
@@ -136,26 +118,18 @@ global er_tor_hs_app_build_message_put
 er_fn er_tor_hs_app_build_message_put
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12, rsi
     mov     r13d, edx
     mov     r14, rcx
     mov     r15d, r8d
-    test    rbx, rbx
-    jz      .fail
-    test    r12, r12
-    jz      .fail
-    test    r14, r14
-    jz      .fail
+    er_check_zero rbx, .fail
+    er_check_zero r12, .fail
+    er_check_zero r14, .fail
     cmp     r13d, ER_HS_ID_SIZE
     jne     .fail
-    test    r15d, r15d
-    jz      .fail
+    er_check_zero r15d, .fail
     cmp     r15d, ER_HS_BODY_MAX
     ja      .fail
     mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
@@ -180,35 +154,20 @@ er_fn er_tor_hs_app_build_message_put
     mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
     add     eax, r15d
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 .fail:
     mov     eax, -1
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_app_handle_frame(data, len)
 global er_tor_hs_app_handle_frame
 er_fn er_tor_hs_app_handle_frame
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
     mov     rbx, rdi
     mov     r12d, esi
-    test    rbx, rbx
-    jz      .fail
+    er_check_zero rbx, .fail
     cmp     r12d, ER_HS_FRAME_HDR_LEN
     jb      .fail
     cmp     dword [rbx], ER_HS_APP_MAGIC
@@ -226,8 +185,7 @@ er_fn er_tor_hs_app_handle_frame
     cmp     r12d, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
     jb      .fail
     movzx   r13d, byte [rbx + ER_HS_FRAME_HDR_LEN]
-    test    r13d, r13d
-    jz      .fail
+    er_check_zero r13d, .fail
     cmp     r13d, ER_HS_NAME_MAX
     ja      .fail
     mov     eax, ER_HS_FRAME_HDR_LEN + 1 + ER_HS_ID_SIZE
@@ -260,8 +218,7 @@ er_fn er_tor_hs_app_handle_frame
     shl     r14d, 8
     movzx   eax, byte [rbx + ER_HS_FRAME_HDR_LEN + 1]
     or      r14d, eax
-    test    r14d, r14d
-    jz      .fail
+    er_check_zero r14d, .fail
     cmp     r14d, ER_HS_BODY_MAX
     ja      .fail
     mov     eax, ER_HS_FRAME_HDR_LEN + 2 + ER_HS_ID_SIZE
@@ -290,11 +247,7 @@ er_fn er_tor_hs_app_handle_frame
 .fail:
     mov     eax, -1
 .ok:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_tor_hs_app_send_message(circ_id, stream_id, sender_identity, identity_len, body, body_len)
@@ -302,8 +255,7 @@ global er_tor_hs_app_send_message
 er_fn er_tor_hs_app_send_message
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     ebx, edi
     mov     r12w, si
     lea     rdi, [rel hs_app_tmp_data]
@@ -320,23 +272,17 @@ er_fn er_tor_hs_app_send_message
     lea     rcx, [rel hs_app_tmp_data]
     mov     r8d, eax
     call    er_tor_send_relay
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12
     er_ret
 
 ; er_tor_hs_app_add_contact(name, name_len, identity, identity_len)
 global er_tor_hs_app_add_contact
 er_fn er_tor_hs_app_add_contact
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     rbx, rdi
     mov     r12d, esi
     mov     r13, rdx
@@ -352,15 +298,11 @@ er_fn er_tor_hs_app_add_contact
     lea     rdi, [rel hs_app_tmp_data]
     mov     esi, eax
     call    er_tor_hs_app_handle_frame
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; er_tor_hs_app_send_contact(circ_id, stream_id, name, name_len, identity, identity_len)
@@ -368,8 +310,7 @@ global er_tor_hs_app_send_contact
 er_fn er_tor_hs_app_send_contact
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     ebx, edi
     mov     r12w, si
     lea     rdi, [rel hs_app_tmp_data]
@@ -386,15 +327,11 @@ er_fn er_tor_hs_app_send_contact
     lea     rcx, [rel hs_app_tmp_data]
     mov     r8d, eax
     call    er_tor_send_relay
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12
     er_ret
 
 ; er_tor_hs_app_send_message_to_contact(circ_id, stream_id, contact_idx,
@@ -405,18 +342,14 @@ global er_tor_hs_app_send_message_to_contact
 er_fn er_tor_hs_app_send_message_to_contact
     push    rbp
     mov     rbp, rsp
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
     mov     ebx, edi
     mov     r12w, si
     mov     r13d, edx
     cmp     r13d, [rel hs_app_contact_count]
     jae     .fail
-    test    rcx, rcx
-    jz      .fail
-    test    r9, r9
-    jz      .fail
+    er_check_zero rcx, .fail
+    er_check_zero r9, .fail
     sub     rsp, 8
     mov     eax, [rbp + 16]
     mov     qword [rsp], 0
@@ -428,24 +361,17 @@ er_fn er_tor_hs_app_send_message_to_contact
     mov     r8, r9
     call    er_tor_hs_app_send_message
     add     rsp, 8
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13
     er_ret
 .fail:
     mov     eax, -1
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
+    er_pop  rbp, rbx, r12, r13
     er_ret
 
 ; er_tor_hs_app_recv_once(circ_id, expected_stream)
 global er_tor_hs_app_recv_once
 er_fn er_tor_hs_app_recv_once
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     ebx, edi
     mov     r12w, si
     mov     edi, ebx
@@ -463,13 +389,11 @@ er_fn er_tor_hs_app_recv_once
     lea     rdi, [rel hs_app_tmp_data]
     mov     esi, [rel hs_app_tmp_len]
     call    er_tor_hs_app_handle_frame
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail:
     mov     eax, -1
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; er_tor_hs_app_service_poll(circ_id, expected_stream, max_frames)
@@ -477,16 +401,12 @@ er_fn er_tor_hs_app_recv_once
 ; number of frames handled. A receive miss after at least one frame is success.
 global er_tor_hs_app_service_poll
 er_fn er_tor_hs_app_service_poll
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
     mov     ebx, edi
     mov     r12w, si
     mov     r13d, edx
     xor     r14d, r14d
-    test    r13d, r13d
-    jz      .done
+    er_check_zero r13d, .done
 .loop:
     mov     edi, ebx
     movzx   esi, r12w
@@ -501,10 +421,7 @@ er_fn er_tor_hs_app_service_poll
     jmp     .done
 .done:
     mov     eax, r14d
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; Accessors for tests/UI.

@@ -38,13 +38,13 @@ pub const line_vertex_shader: [:0]const u8 = "attribute vec2 a;attribute vec4 c;
 pub const line_fragment_shader: [:0]const u8 = "precision mediump float;varying vec4 k;void main(){gl_FragColor=vec4(k.rgb*k.a,k.a);}";
 
 test "GL contract pins browser and GLES attribute layout" {
-    try @import("std").testing.expectEqual(@as(u32, 0), attr_pos_location);
-    try @import("std").testing.expectEqual(@as(u32, 1), attr_uv_location);
-    try @import("std").testing.expectEqual(@as(u32, 2), attr_color_location);
-    try @import("std").testing.expectEqual(@as(i32, 0), texture_kind_red);
-    try @import("std").testing.expectEqual(@as(i32, 1), texture_kind_alpha);
-    try @import("std").testing.expectEqual(@as(u8, 10), clear_color_r_u8);
-    try @import("std").testing.expectEqual(@as(u8, 14), clear_color_g_u8);
-    try @import("std").testing.expectEqual(@as(u8, 20), clear_color_b_u8);
-    try @import("std").testing.expectEqual(@as(u8, 255), clear_color_a_u8);
+    if (attr_pos_location != 0) return error.TestExpectedEqual;
+    if (attr_uv_location != 1) return error.TestExpectedEqual;
+    if (attr_color_location != 2) return error.TestExpectedEqual;
+    if (texture_kind_red != 0) return error.TestExpectedEqual;
+    if (texture_kind_alpha != 1) return error.TestExpectedEqual;
+    if (clear_color_r_u8 != 10) return error.TestExpectedEqual;
+    if (clear_color_g_u8 != 14) return error.TestExpectedEqual;
+    if (clear_color_b_u8 != 20) return error.TestExpectedEqual;
+    if (clear_color_a_u8 != 255) return error.TestExpectedEqual;
 }

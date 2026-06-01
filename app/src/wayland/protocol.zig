@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const renderer_native_present = @import("../render/native_present.zig");
 const renderer_gpu_buffer = @import("../render/gpu_buffer.zig");
 const linux_drm = @import("../linux_drm.zig");

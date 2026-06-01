@@ -1,4 +1,4 @@
-const std = @import("std");
+const bytes = @import("../bytes.zig");
 const font_builtin = @import("../render/font.zig");
 const font_vector = @import("../render/font.zig");
 const ui = @import("core.zig");
@@ -75,34 +75,35 @@ test "ui text metrics average width treats utf8 as codepoints" {
     const value = "éé";
     const total = width(value, default_text_px);
     const average = averageWidth(value, default_text_px);
-    try std.testing.expectApproxEqAbs(total / 2.0, average, 0.0001);
+    const diff = if (total / 2.0 > average) total / 2.0 - average else average - total / 2.0;
+    if (diff > 0.0001) return error.TestExpectedApproxEqAbs;
 }
 
 test "ui text metrics use geist glyph advances and kerning" {
     const wide = width("WWW", default_text_px);
     const narrow = width("iii", default_text_px);
-    try std.testing.expect(wide > narrow);
+    if (wide <= narrow) return error.TestExpectedTrue;
 
     const kerned = width("AV", default_text_px);
     const separate = width("A", default_text_px) + width("V", default_text_px);
-    try std.testing.expect(kerned <= separate);
-    try std.testing.expect(averageWidth("EdgeRun", default_text_px) > 1.0);
+    if (kerned > separate) return error.TestExpectedTrue;
+    if (averageWidth("EdgeRun", default_text_px) <= 1.0) return error.TestExpectedTrue;
 }
 
 test "ui text metrics fit deterministic prefixes to a width" {
     const value = "Continue safely";
     const full_width = width(value, button_label_px);
-    try std.testing.expectEqualStrings(value, fitPrefix(value, button_label_px, full_width));
+    if (!bytes.eql(value, fitPrefix(value, button_label_px, full_width))) return error.TestExpectedEqual;
 
     const prefix = fitPrefix(value, button_label_px, width("Continue", button_label_px));
-    try std.testing.expect(prefix.len < value.len);
-    try std.testing.expect(std.mem.startsWith(u8, value, prefix));
+    if (prefix.len >= value.len) return error.TestExpectedTrue;
+    if (!bytes.startsWith(value, prefix)) return error.TestExpectedTrue;
 }
 
 test "ui text metrics fit prefix respects utf8 codepoint boundaries" {
     const value = "éx";
     const max_width = width("é", default_text_px);
     const prefix = fitPrefix(value, default_text_px, max_width);
-    try std.testing.expectEqual(@as(usize, 2), prefix.len);
-    try std.testing.expectEqualStrings("é", prefix);
+    if (prefix.len != 2) return error.TestExpectedEqual;
+    if (!bytes.eql("é", prefix)) return error.TestExpectedEqual;
 }

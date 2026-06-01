@@ -1694,7 +1694,7 @@ fn hashMaterial(material: []const u8) preimage.Hash {
 }
 
 test "execution host identity is device authority only" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{30} ++ [_]u8{0} ** 31 } };
     const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("host authority device")).?, epoch).?;
@@ -1707,7 +1707,7 @@ test "execution host identity is device authority only" {
 }
 
 test "manifest spawn transfers declared memory and storage to child" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
@@ -1805,7 +1805,7 @@ test "manifest spawn transfers declared memory and storage to child" {
 }
 
 test "manifest spawn can run app with no ram object storage" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 64;
     const parent_storage_bytes = 128;
@@ -1870,7 +1870,7 @@ test "manifest spawn can run app with no ram object storage" {
 }
 
 test "manifest declares app private storage capability and requires storage grant" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [128]u8 = undefined;
@@ -1914,7 +1914,7 @@ test "manifest declares app private storage capability and requires storage gran
 }
 
 test "app proves app private storage seal and open capability" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
@@ -1977,7 +1977,7 @@ test "app proves app private storage seal and open capability" {
 }
 
 test "native runtime manifest requires edgerun runtime signature" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
@@ -2029,7 +2029,7 @@ test "native runtime manifest requires edgerun runtime signature" {
 }
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 2048;
@@ -2296,7 +2296,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
 }
 
 test "minimum containment memory storage and reclaim laws" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const child_memory_bytes = 4096;
     const parent_memory_bytes = child_memory_bytes * 2;
@@ -2429,7 +2429,7 @@ test "minimum containment memory storage and reclaim laws" {
 }
 
 test "minimum containment child cannot write byte past 4kb allocation" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const child_memory_bytes = 4096;
     var memory_bytes: [child_memory_bytes]u8 = undefined;
@@ -2442,7 +2442,7 @@ test "minimum containment child cannot write byte past 4kb allocation" {
 }
 
 test "minimum containment rejects parent allocation id as child memory id" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 256;
@@ -2503,7 +2503,7 @@ test "minimum containment rejects parent allocation id as child memory id" {
 }
 
 test "minimum containment routes devices receipts and revoked handles" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1536;
@@ -2608,7 +2608,7 @@ test "minimum containment routes devices receipts and revoked handles" {
 }
 
 test "minimum containment work receipt records ticks used" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
@@ -2666,7 +2666,7 @@ test "minimum containment work receipt records ticks used" {
 }
 
 test "parent signs validated work receipt drafts" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
@@ -2823,7 +2823,7 @@ test "parent signs validated work receipt drafts" {
 }
 
 test "app creates its store from its host-owned memory slice" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var host_memory: [1024]u8 = undefined;
     var state_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
@@ -2853,7 +2853,7 @@ test "app creates its store from its host-owned memory slice" {
 }
 
 test "app storage requires seal envelope for private durable objects" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var host_memory: [2048]u8 = undefined;
     var unsealed_raw: [object.header_size + object.owner_size + 5]u8 = undefined;
@@ -2889,7 +2889,7 @@ test "app storage requires seal envelope for private durable objects" {
 }
 
 test "app shares owned memory read only for direct ui updates" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var producer_memory: [512]u8 = undefined;
     var ui_memory: [256]u8 = undefined;
@@ -2931,7 +2931,7 @@ test "app shares owned memory read only for direct ui updates" {
 }
 
 test "app publishes canonical ui component and renders from object storage" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var host_memory: [4096]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{4} ++ [_]u8{0} ** 31 };
@@ -2968,7 +2968,7 @@ test "app publishes canonical ui component and renders from object storage" {
 }
 
 test "app publishes stack ui as one canonical render object" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var host_memory: [8192]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{5} ++ [_]u8{0} ** 31 };
@@ -3004,7 +3004,7 @@ test "app publishes stack ui as one canonical render object" {
 }
 
 test "apps exchange identity routed envelopes through relay boundary" {
-    const std = @import("std");
+    const std = @import("er_std");
     const testing = std.testing;
     var source_memory: [256]u8 = undefined;
     var target_memory: [256]u8 = undefined;

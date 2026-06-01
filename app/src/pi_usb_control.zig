@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const bytes = @import("bytes.zig");
 
 pub const abi_version: u16 = 1;

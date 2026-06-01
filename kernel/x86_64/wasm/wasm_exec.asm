@@ -71,11 +71,7 @@ exec_decoded_fast_supported:
     ret
 
 exec_decoded_round_trace_supported:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_frame_push_regs rbx, r12, r13, r14
 
     mov     r8, [rel exec_decoded_index]
     mov     r9, [rel exec_decoded_end]
@@ -161,18 +157,10 @@ exec_decoded_round_trace_supported:
 .unsupported:
     er_err  ERROR_UNSUPPORTED
 .done:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14
 
 exec_decoded_round_trace_loop:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r15
+    er_frame_push_regs rbx, r12, r15
 
     mov     r8, [rel exec_decoded_index]
     imul    r8, DECODED_OP_SIZE
@@ -215,19 +203,10 @@ exec_decoded_round_trace_loop:
 .corrupt:
     er_err  ERROR_CORRUPT
 .done:
-    pop     r15
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r15
 
 exec_decoded_fast_loop:
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     xor     edx, edx                    ; cached TOS valid flag
     mov     r8, [rel exec_decoded_index]
     imul    r8, DECODED_OP_SIZE
@@ -330,14 +309,12 @@ exec_decoded_fast_loop:
 
     cmp     r14, [rel exec_local_count]
     jae     .fast_corrupt
-    test    edx, edx
-    jz      .fast_round_pop_stack
+    er_check_zero edx, .fast_round_pop_stack
     mov     eax, ebx
     jmp     .fast_round_have_input
 .fast_round_pop_stack:
     mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .fast_underflow
+    er_check_zero rax, .fast_underflow
     dec     rax
     mov     [rel exec_stack_len], rax
     mov     eax, [rel exec_stack + rax * 8]
@@ -402,8 +379,7 @@ exec_decoded_fast_loop:
     jmp     .fast_fuse_next
 
 .fast_i32_const:
-    test    edx, edx
-    jz      .fast_i32_const_push
+    er_check_zero edx, .fast_i32_const_push
     cmp     r8, r9
     jae     .fast_i32_const_push
     movzx   eax, byte [r8 + 8]
@@ -451,8 +427,7 @@ exec_decoded_fast_loop:
     add     r8, DECODED_OP_SIZE
     jmp     .fast_loop
 .fast_const_div_s:
-    test    ecx, ecx
-    jz      .fast_arithmetic_trap
+    er_check_zero ecx, .fast_arithmetic_trap
     cmp     ebx, 0x80000000
     jne     .fast_const_div_s_ok
     cmp     ecx, -1
@@ -466,8 +441,7 @@ exec_decoded_fast_loop:
     add     r8, DECODED_OP_SIZE
     jmp     .fast_loop
 .fast_const_rem_s:
-    test    ecx, ecx
-    jz      .fast_arithmetic_trap
+    er_check_zero ecx, .fast_arithmetic_trap
     cmp     ebx, 0x80000000
     jne     .fast_const_rem_s_ok
     cmp     ecx, -1
@@ -520,8 +494,7 @@ exec_decoded_fast_loop:
     mov     ecx, [r11 + 12]
     cmp     rcx, [rel exec_local_count]
     jae     .fast_corrupt
-    test    edx, edx
-    jz      .fast_local_get_push
+    er_check_zero edx, .fast_local_get_push
     cmp     r8, r9
     jae     .fast_local_get_push
     movzx   eax, byte [r8 + 8]
@@ -623,8 +596,7 @@ exec_decoded_fast_loop:
     call    .fast_peek_tos_qword
     jc      .fast_underflow
     mov     [rel exec_locals + rcx * 8], rax
-    test    edx, edx
-    jz      .fast_loop
+    er_check_zero edx, .fast_loop
     cmp     r8, r9
     jae     .fast_loop
     cmp     byte [r8 + 8], 0x20
@@ -708,8 +680,7 @@ exec_decoded_fast_loop:
 .fast_i32_div_s:
     call    .fast_pop_two_i32
     jc      .fast_underflow
-    test    ecx, ecx
-    jz      .fast_arithmetic_trap
+    er_check_zero ecx, .fast_arithmetic_trap
     cmp     eax, 0x80000000
     jne     .fast_i32_div_s_ok
     cmp     ecx, -1
@@ -723,8 +694,7 @@ exec_decoded_fast_loop:
 .fast_i32_rem_s:
     call    .fast_pop_two_i32
     jc      .fast_underflow
-    test    ecx, ecx
-    jz      .fast_arithmetic_trap
+    er_check_zero ecx, .fast_arithmetic_trap
     cmp     eax, 0x80000000
     jne     .fast_i32_rem_s_ok
     cmp     ecx, -1
@@ -788,11 +758,9 @@ exec_decoded_fast_loop:
     jmp     .fast_push_tos
 
 .fast_pop_two_i32:
-    test    edx, edx
-    jz      .pop_two_from_stack
+    er_check_zero edx, .pop_two_from_stack
     mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .pop_two_underflow
+    er_check_zero rax, .pop_two_underflow
     dec     rax
     mov     [rel exec_stack_len], rax
     mov     ecx, ebx
@@ -815,16 +783,14 @@ exec_decoded_fast_loop:
     ret
 
 .fast_pop_tos_qword:
-    test    edx, edx
-    jz      .pop_tos_stack
+    er_check_zero edx, .pop_tos_stack
     mov     rax, rbx
     xor     edx, edx
     clc
     ret
 .pop_tos_stack:
     mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .pop_tos_underflow
+    er_check_zero rax, .pop_tos_underflow
     dec     rax
     mov     [rel exec_stack_len], rax
     mov     rax, [rel exec_stack + rax * 8]
@@ -839,23 +805,20 @@ exec_decoded_fast_loop:
     ret
 
 .fast_peek_tos_qword:
-    test    edx, edx
-    jz      .peek_tos_stack
+    er_check_zero edx, .peek_tos_stack
     mov     rax, rbx
     clc
     ret
 .peek_tos_stack:
     mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .pop_tos_underflow
+    er_check_zero rax, .pop_tos_underflow
     dec     rax
     mov     rax, [rel exec_stack + rax * 8]
     clc
     ret
 
 .fast_push_tos:
-    test    edx, edx
-    jz      .store_tos
+    er_check_zero edx, .store_tos
     mov     rcx, [rel exec_stack_len]
     cmp     rcx, MAX_STACK
     jae     .fast_overflow
@@ -868,8 +831,7 @@ exec_decoded_fast_loop:
 
 .fast_return:
     mov     rcx, [rel exec_result_count]
-    test    rcx, rcx
-    jz      .fast_ok
+    er_check_zero rcx, .fast_ok
     cmp     rcx, 1
     jne     .fast_unsupported
     call    .fast_pop_tos_qword
@@ -893,13 +855,7 @@ exec_decoded_fast_loop:
 .fast_unsupported:
     er_err  ERROR_UNSUPPORTED
 .fast_done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Main instruction dispatch loop

@@ -657,6 +657,178 @@ er_fn er_vp8_decode_key_frame
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
+; er_vp8_decode_frame_with_reference(data, len, width, height, previous_yuv, current_yuv,
+;                                    current_yuv_cap, out_rgba, out_pixel_cap)
+; -> eax=pixels decoded, rdx=error
+; Decodes key frames through the full key path and inter frames through the reference path.
+er_fn er_vp8_decode_frame_with_reference
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc VP8_DECODE_STACK_TOTAL
+    test    rdi, rdi
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    test    r9, r9
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     [rsp + VP8_DECODE_STACK_WIDTH], edx
+    mov     [rsp + VP8_DECODE_STACK_HEIGHT], ecx
+    mov     [rsp + VP8_DECODE_STACK_LEFT_Y], r8
+    mov     [rsp + VP8_DECODE_STACK_YUV], r9
+    mov     rax, [rsp + VP8_DECODE_STACK_TOTAL + 56]
+    mov     [rsp + VP8_DECODE_STACK_OUT], rax
+    mov     rax, [rsp + VP8_DECODE_STACK_TOTAL + 48]
+    mov     [rsp + VP8_DECODE_STACK_YUV_CAP], rax
+    mov     rax, [rsp + VP8_DECODE_STACK_TOTAL + 64]
+    mov     [rsp + VP8_DECODE_STACK_OUT_CAP], rax
+    lea     rdx, [rsp + VP8_DECODE_STACK_PAYLOAD]
+    call    er_vp8_parse_frame_tag
+    test    edx, edx
+    jnz     .done_decode_reference
+    cmp     byte [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_TAG_DESC_FRAME_TYPE], VP8_FRAME_TYPE_KEY
+    jne     .inter_frame
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     rdx, [rsp + VP8_DECODE_STACK_YUV]
+    mov     rcx, [rsp + VP8_DECODE_STACK_YUV_CAP]
+    mov     r8, [rsp + VP8_DECODE_STACK_OUT]
+    mov     r9, [rsp + VP8_DECODE_STACK_OUT_CAP]
+    call    er_vp8_decode_key_frame
+    jmp     .done_decode_reference
+.inter_frame:
+    cmp     dword [rsp + VP8_DECODE_STACK_WIDTH], 0
+    je      .invalid_param
+    cmp     dword [rsp + VP8_DECODE_STACK_HEIGHT], 0
+    je      .invalid_param
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    call    er_vp8_macroblock_dimension
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     [rsp + VP8_DECODE_STACK_MB_WIDTH], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    call    er_vp8_macroblock_dimension
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     [rsp + VP8_DECODE_STACK_MB_HEIGHT], eax
+    mov     eax, [rsp + VP8_DECODE_STACK_WIDTH]
+    imul    eax, [rsp + VP8_DECODE_STACK_HEIGHT]
+    jc      .invalid_param
+    mov     [rsp + VP8_DECODE_STACK_PIXEL_COUNT], eax
+    cmp     [rsp + VP8_DECODE_STACK_OUT_CAP], rax
+    jb      .no_space
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    call    er_vp8_chroma_dimension
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_WIDTH], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    call    er_vp8_chroma_dimension
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT], eax
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    imul    eax, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    jc      .invalid_param
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_COUNT], eax
+    mov     ecx, eax
+    shl     ecx, 1
+    add     ecx, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    jc      .invalid_param
+    cmp     [rsp + VP8_DECODE_STACK_YUV_CAP], rcx
+    jb      .no_space
+    lea     rdx, [rsp + VP8_DECODE_STACK_PAYLOAD]
+    mov     rdi, r12
+    mov     esi, r13d
+    call    er_vp8_parse_inter_frame_payload
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_INTER_PAYLOAD_FIRST_OFFSET]
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_INTER_PAYLOAD_FIRST_LEN]
+    lea     rdx, [rsp + VP8_DECODE_STACK_COEFF_PROBS]
+    lea     rcx, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    call    er_vp8_parse_compressed_inter_frame_header
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_INTER_PAYLOAD_TOKEN_OFFSET]
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_INTER_PAYLOAD_TOKEN_LEN]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT]
+    lea     rcx, [rsp + VP8_DECODE_STACK_TOKEN_PARTITIONS]
+    call    er_vp8_parse_token_partitions
+    test    edx, edx
+    jnz     .done_decode_reference
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_MODES]
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
+    call    er_vp8_memset
+    mov     dword [rsp + VP8_DECODE_STACK_MB_Y], 0
+.inter_header_row_loop:
+    mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
+    cmp     eax, [rsp + VP8_DECODE_STACK_MB_HEIGHT]
+    jae     .copy_reference_yuv
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_MODES]
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
+    mov     dword [rsp + VP8_DECODE_STACK_MB_X], 0
+.inter_header_mb_loop:
+    mov     eax, [rsp + VP8_DECODE_STACK_MB_X]
+    cmp     eax, [rsp + VP8_DECODE_STACK_MB_WIDTH]
+    jae     .next_inter_header_row
+    lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOP_MODES]
+    lea     rcx, [rsp + VP8_DECODE_STACK_LEFT_MODES]
+    lea     r8, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    call    er_vp8_read_inter_macroblock_header
+    test    edx, edx
+    jnz     .done_decode_reference
+    cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    je      .unsupported
+    inc     dword [rsp + VP8_DECODE_STACK_MB_X]
+    jmp     .inter_header_mb_loop
+.next_inter_header_row:
+    inc     dword [rsp + VP8_DECODE_STACK_MB_Y]
+    jmp     .inter_header_row_loop
+.copy_reference_yuv:
+    mov     rdi, [rsp + VP8_DECODE_STACK_YUV]
+    mov     rsi, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     edx, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    mov     ecx, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     edx, [rdx + rcx * 2]
+    call    er_vp8_memcpy
+    test    edx, edx
+    jnz     .done_decode_reference
+    mov     rdi, [rsp + VP8_DECODE_STACK_YUV]
+    mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    lea     rsi, [rdi + rax]
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     rdx, [rsi + rax]
+    mov     ecx, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     r8d, [rsp + VP8_DECODE_STACK_HEIGHT]
+    mov     r9d, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    push    qword [rsp + VP8_DECODE_STACK_OUT]
+    call    er_vp8_write_frame_rgba
+    add     rsp, 8
+    jmp     .done_decode_reference
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done_decode_reference
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+    jmp     .done_decode_reference
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done_decode_reference:
+    er_stack_free VP8_DECODE_STACK_TOTAL
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
 ; er_vp8_bool_reader_init(buf, len, reader) -> eax=VP8_BOOL_READER_SIZE, rdx=error
 ; rdi=buf, esi=len, rdx=reader
 er_fn er_vp8_bool_reader_init
@@ -1619,6 +1791,179 @@ er_fn er_vp8_parse_compressed_key_frame_header
     er_pop  rbx, r12, r13, r14
     er_ret
 
+; er_vp8_parse_compressed_inter_frame_header(first_partition, len, coeff_probs, desc)
+; -> eax=VP8_COMPRESSED_HEADER_SIZE, rdx=error
+; rdi=first_partition, esi=len, rdx=coeff_probs[1056], rcx=desc.
+er_fn er_vp8_parse_compressed_inter_frame_header
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdx
+    mov     r13, rcx
+    mov     rdx, r13
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     r14, r13
+    mov     rdi, r14
+    lea     rsi, [r13 + VP8_COMPRESSED_HEADER_SEGMENT]
+    call    er_vp8_parse_segmentation_header
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     rdi, r14
+    lea     rsi, [r13 + VP8_COMPRESSED_HEADER_LOOP_FILTER]
+    call    er_vp8_parse_loop_filter_header
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     rdi, r14
+    mov     esi, 2
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     edi, eax
+    call    er_vp8_token_partition_count
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_TOKEN_COUNT], al
+    mov     rdi, r14
+    lea     rsi, [r13 + VP8_COMPRESSED_HEADER_QUANT]
+    call    er_vp8_parse_quant_indices
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     rdi, r14
+    lea     rsi, [r13 + VP8_COMPRESSED_HEADER_REFERENCE]
+    call    er_vp8_parse_inter_reference_header
+    test    edx, edx
+    jnz     .done_compressed_inter
+    movzx   eax, byte [r13 + VP8_COMPRESSED_HEADER_REFERENCE + VP8_REFERENCE_REFRESH_ENTROPY]
+    mov     [r13 + VP8_COMPRESSED_HEADER_REFRESH_ENTROPY], al
+    mov     rdi, r12
+    call    er_vp8_copy_default_coeff_probabilities
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     rdi, r14
+    mov     rsi, r12
+    call    er_vp8_parse_token_probability_updates
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_TOKEN_UPDATES], eax
+    mov     rdi, r14
+    call    er_vp8_bool_read_flag
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_USE_SKIP], al
+    mov     byte [r13 + VP8_COMPRESSED_HEADER_SKIP_PROB], 0
+    test    eax, eax
+    jz      .read_inter_probs
+    mov     rdi, r14
+    mov     esi, VP8_SKIP_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_SKIP_PROB], al
+.read_inter_probs:
+    mov     rdi, r14
+    mov     esi, VP8_INTER_REFERENCE_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_PROB_INTRA], al
+    mov     rdi, r14
+    mov     esi, VP8_INTER_REFERENCE_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_PROB_LAST], al
+    mov     rdi, r14
+    mov     esi, VP8_INTER_REFERENCE_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_PROB_GOLDEN], al
+    mov     dword [r13 + VP8_COMPRESSED_HEADER_INTRA16_PROBS], 0x258c5670
+    mov     dword [r13 + VP8_COMPRESSED_HEADER_CHROMA_PROBS], 0x00cc65a2
+    lea     rdi, [r13 + VP8_COMPRESSED_HEADER_MV_PROBS]
+    lea     rsi, [rel vp8_motion_vector_default_probabilities]
+    mov     ecx, VP8_MV_COMPONENT_COUNT * VP8_MV_PROBABILITY_COUNT
+    rep     movsb
+    mov     rdi, r14
+    call    er_vp8_bool_read_flag
+    test    edx, edx
+    jnz     .done_compressed_inter
+    test    eax, eax
+    jz      .maybe_chroma_updates
+    xor     ebx, ebx
+.intra16_update_loop:
+    cmp     ebx, VP8_INTER_INTRA16_PROB_COUNT
+    jae     .maybe_chroma_updates
+    mov     rdi, r14
+    mov     esi, VP8_INTER_REFERENCE_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_INTRA16_PROBS + rbx], al
+    inc     ebx
+    jmp     .intra16_update_loop
+.maybe_chroma_updates:
+    mov     rdi, r14
+    call    er_vp8_bool_read_flag
+    test    edx, edx
+    jnz     .done_compressed_inter
+    test    eax, eax
+    jz      .mv_updates
+    xor     ebx, ebx
+.chroma_update_loop:
+    cmp     ebx, VP8_INTER_CHROMA_PROB_COUNT
+    jae     .mv_updates
+    mov     rdi, r14
+    mov     esi, VP8_INTER_REFERENCE_PROBABILITY_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_CHROMA_PROBS + rbx], al
+    inc     ebx
+    jmp     .chroma_update_loop
+.mv_updates:
+    xor     r15d, r15d
+.mv_update_loop:
+    cmp     r15d, VP8_MV_COMPONENT_COUNT * VP8_MV_PROBABILITY_COUNT
+    jae     .ok
+    mov     rdi, r14
+    mov     eax, r15d
+    movzx   esi, byte [rel vp8_motion_vector_update_probabilities + rax]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_compressed_inter
+    test    eax, eax
+    jz      .next_mv_update
+    mov     rdi, r14
+    mov     esi, VP8_MOTION_VECTOR_UPDATE_LITERAL_BITS
+    call    er_vp8_bool_read_literal
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     edi, eax
+    call    er_vp8_updated_motion_vector_probability
+    test    edx, edx
+    jnz     .done_compressed_inter
+    mov     [r13 + VP8_COMPRESSED_HEADER_MV_PROBS + r15], al
+.next_mv_update:
+    inc     r15d
+    jmp     .mv_update_loop
+.ok:
+    mov     eax, VP8_COMPRESSED_HEADER_SIZE
+    er_ok
+    jmp     .done_compressed_inter
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_compressed_inter:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
 ; er_vp8_read_key_macroblock_header(compressed_header, mb_x, top_modes, left_modes, out)
 ; -> eax=VP8_MACROBLOCK_HEADER_SIZE, rdx=error
 ; top_modes is VP8_MAX_LUMA_TOKEN_COLUMNS bytes, left_modes is 4 bytes.
@@ -1781,6 +2126,305 @@ er_fn er_vp8_read_key_macroblock_header
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
 .done_key_mb:
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_read_reference_name(reader, compressed_header) -> eax=reference name, rdx=error
+; rdi=reader, rsi=compressed_header.
+er_fn er_vp8_read_reference_name
+    er_push r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    movzx   esi, byte [r13 + VP8_COMPRESSED_HEADER_PROB_LAST]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_reference_name
+    test    eax, eax
+    jnz     .golden_or_alternate
+    mov     eax, VP8_REFERENCE_NAME_LAST
+    er_ok
+    jmp     .done_reference_name
+.golden_or_alternate:
+    mov     rdi, r12
+    movzx   esi, byte [r13 + VP8_COMPRESSED_HEADER_PROB_GOLDEN]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_reference_name
+    test    eax, eax
+    jnz     .alternate
+    mov     eax, VP8_REFERENCE_NAME_GOLDEN
+    er_ok
+    jmp     .done_reference_name
+.alternate:
+    mov     eax, VP8_REFERENCE_NAME_ALTERNATE
+    er_ok
+    jmp     .done_reference_name
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_reference_name:
+    er_pop  r12, r13
+    er_ret
+
+; er_vp8_read_inter_prediction(reader, compressed_header, context_count, out)
+; -> eax=prediction enum, rdx=error. out receives VP8_MOTION_VECTOR_SIZE for motion modes.
+er_fn er_vp8_read_inter_prediction
+    er_push rbx, r12, r13, r14
+    er_stack_alloc 8
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     ebx, edx
+    mov     r14, rcx
+    mov     edi, ebx
+    xor     esi, esi
+    call    er_vp8_inter_mode_context_probability
+    test    edx, edx
+    jnz     .done_prediction
+    mov     rdi, r12
+    mov     esi, eax
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_prediction
+    test    eax, eax
+    jnz     .not_zero
+    mov     word [r14 + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [r14 + VP8_MOTION_VECTOR_COL], 0
+    mov     eax, VP8_MACROBLOCK_PREDICTION_INTER_ZERO
+    er_ok
+    jmp     .done_prediction
+.not_zero:
+    mov     edi, ebx
+    mov     esi, 1
+    call    er_vp8_inter_mode_context_probability
+    test    edx, edx
+    jnz     .done_prediction
+    mov     rdi, r12
+    mov     esi, eax
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_prediction
+    test    eax, eax
+    jnz     .not_nearest
+    mov     word [r14 + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [r14 + VP8_MOTION_VECTOR_COL], 0
+    mov     eax, VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    er_ok
+    jmp     .done_prediction
+.not_nearest:
+    mov     edi, ebx
+    mov     esi, 2
+    call    er_vp8_inter_mode_context_probability
+    test    edx, edx
+    jnz     .done_prediction
+    mov     rdi, r12
+    mov     esi, eax
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_prediction
+    test    eax, eax
+    jnz     .not_near
+    mov     word [r14 + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [r14 + VP8_MOTION_VECTOR_COL], 0
+    mov     eax, VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    er_ok
+    jmp     .done_prediction
+.not_near:
+    mov     edi, ebx
+    mov     esi, 3
+    call    er_vp8_inter_mode_context_probability
+    test    edx, edx
+    jnz     .done_prediction
+    mov     rdi, r12
+    mov     esi, eax
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_prediction
+    test    eax, eax
+    jnz     .split
+    mov     rdi, r12
+    lea     rsi, [r13 + VP8_COMPRESSED_HEADER_MV_PROBS]
+    mov     rdx, r14
+    call    er_vp8_read_motion_vector
+    test    edx, edx
+    jnz     .done_prediction
+    mov     eax, VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    er_ok
+    jmp     .done_prediction
+.split:
+    mov     eax, VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    er_ok
+    jmp     .done_prediction
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_prediction:
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_vp8_read_inter_macroblock_header(compressed_header, mb_x, top_modes, left_modes, out)
+; -> eax=VP8_MACROBLOCK_HEADER_SIZE, rdx=error
+er_fn er_vp8_read_inter_macroblock_header
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 8
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     [rsp], esi
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 0
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_SKIP], 0
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_REFERENCE], VP8_REFERENCE_NAME_LAST
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTRA
+    mov     word [r15 + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [r15 + VP8_MACROBLOCK_HEADER_MOTION_VECTOR + VP8_MOTION_VECTOR_COL], 0
+    cmp     byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
+    je      .skip_segment_id
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_inter_mb
+    test    eax, eax
+    jnz     .segment_high
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES + 1]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+    jmp     .skip_segment_id
+.segment_high:
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES + 2]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_inter_mb
+    add     al, 2
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+.skip_segment_id:
+    cmp     byte [r12 + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    je      .read_intra_or_inter
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SKIP_PROB]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SKIP], al
+.read_intra_or_inter:
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_PROB_INTRA]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_inter_mb
+    test    eax, eax
+    jz      .read_intra_modes
+    mov     rdi, r12
+    mov     rsi, r12
+    call    er_vp8_read_reference_name
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_REFERENCE], al
+    mov     rdi, r12
+    mov     rsi, r12
+    xor     edx, edx
+    lea     rcx, [r15 + VP8_MACROBLOCK_HEADER_MOTION_VECTOR]
+    call    er_vp8_read_inter_prediction
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_PREDICTION], al
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_DC
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_DC
+    xor     ecx, ecx
+.fill_inter_modes:
+    cmp     ecx, VP8_Y_BLOCK_COUNT
+    jae     .ok
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rcx], VP8_INTRA4_MODE_DC
+    inc     ecx
+    jmp     .fill_inter_modes
+.read_intra_modes:
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTRA
+    mov     rdi, r12
+    lea     rsi, [r12 + VP8_COMPRESSED_HEADER_INTRA16_PROBS]
+    call    er_vp8_read_inter_intra16_mode
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_LUMA_MODE], al
+    cmp     eax, VP8_LUMA_MODE_B_PRED
+    je      .read_inter_intra4_modes
+    mov     edi, eax
+    call    er_vp8_luma_mode_intra4_mode
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     ebx, eax
+    xor     ecx, ecx
+.fill_intra16_modes:
+    cmp     ecx, VP8_Y_BLOCK_COUNT
+    jae     .read_inter_chroma
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rcx], bl
+    inc     ecx
+    jmp     .fill_intra16_modes
+.read_inter_intra4_modes:
+    mov     r10d, [rsp]
+    shl     r10d, 2
+    xor     ebx, ebx
+.intra4_y_loop:
+    cmp     ebx, VP8_BLOCK_SIZE
+    jae     .read_inter_chroma
+    xor     ecx, ecx
+.intra4_x_loop:
+    cmp     ecx, VP8_BLOCK_SIZE
+    jae     .next_intra4_y
+    mov     rdi, r12
+    lea     rsi, [rel vp8_inter_intra4_probabilities]
+    push    rcx
+    call    er_vp8_read_intra4_mode
+    pop     rcx
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     edx, ebx
+    shl     edx, 2
+    add     edx, ecx
+    mov     [r15 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rdx], al
+    inc     ecx
+    jmp     .intra4_x_loop
+.next_intra4_y:
+    inc     ebx
+    jmp     .intra4_y_loop
+.read_inter_chroma:
+    mov     rdi, r12
+    lea     rsi, [r12 + VP8_COMPRESSED_HEADER_CHROMA_PROBS]
+    call    er_vp8_read_inter_chroma_mode
+    test    edx, edx
+    jnz     .done_inter_mb
+    mov     [r15 + VP8_MACROBLOCK_HEADER_CHROMA_MODE], al
+.ok:
+    mov     eax, VP8_MACROBLOCK_HEADER_SIZE
+    er_ok
+    jmp     .done_inter_mb
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_inter_mb:
     er_stack_free 8
     er_pop  rbx, r12, r13, r14, r15
     er_ret
@@ -7415,6 +8059,14 @@ vp8_split_mv_partitions:
     db 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1
     db 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3
     db 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+vp8_motion_vector_default_probabilities:
+    db 162, 128, 225, 146, 172, 147, 214, 39, 156, 128, 129, 132, 75, 145, 178, 206, 239, 254, 254
+    db 164, 128, 204, 170, 119, 235, 140, 230, 228, 128, 130, 130, 74, 148, 180, 203, 236, 254, 254
+vp8_motion_vector_update_probabilities:
+    db 237, 246, 253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 250, 250, 252, 254, 254
+    db 231, 243, 245, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 251, 251, 254, 254, 254
+vp8_inter_intra4_probabilities:
+    db 120, 90, 79, 133, 87, 85, 80, 111, 151
 vp8_intra4_keyframe_probabilities:
     db 231, 120, 48,  89,  115, 113, 120, 152, 112, 152, 179, 64,  126, 170, 118, 46,  70,  95
     db 175, 69,  143, 80,  85,  82,  72,  155, 103, 56,  58,  10,  171, 218, 189, 17,  13,  152

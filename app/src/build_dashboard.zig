@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const mem = std.mem;
 const common = @import("ui/component_common.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");

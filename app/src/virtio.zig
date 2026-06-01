@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 
 pub const vendor_id: u16 = 0x1af4;
 pub const modern_device_id_gpu: u16 = 0x1050;

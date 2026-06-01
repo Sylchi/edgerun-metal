@@ -112,12 +112,31 @@
     %endrep
 %endm
 
+; Push frame pointer, set it, then save registers.
+%macro er_frame_push_regs 1-*
+    push    rbp
+    mov     rbp, rsp
+    %rep %0
+        push    %1
+        %rotate 1
+    %endrep
+%endm
+
 ; Pop callee-saved registers (reverse order)
 %macro er_pop 1-*
     %rep %0
         %rotate -1
         pop     %1
     %endrep
+%endm
+
+; Restore registers and return.
+%macro er_pop_ret 1-*
+    %rep %0
+        %rotate -1
+        pop     %1
+    %endrep
+    ret
 %endm
 
 ; Push all callee-saved GPRs
@@ -143,6 +162,42 @@
 ; Align RSP to 16 bytes
 %macro er_align_stack 0
     and     rsp, -16
+%endm
+
+; ------------------------------------------------------------------
+; Indexed fixed-size struct field helpers
+; ------------------------------------------------------------------
+; These preserve r10 while using it as the address scratch register.
+%macro er_load_struct_qword 5
+    push    r10
+    mov     r10, %3
+    imul    r10, %4
+    mov     %1, qword [%2 + r10 + %5]
+    pop     r10
+%endm
+
+%macro er_load_struct_byte 5
+    push    r10
+    mov     r10, %3
+    imul    r10, %4
+    mov     %1, byte [%2 + r10 + %5]
+    pop     r10
+%endm
+
+%macro er_store_struct_qword 5
+    push    r10
+    mov     r10, %2
+    imul    r10, %3
+    mov     qword [%1 + r10 + %4], %5
+    pop     r10
+%endm
+
+%macro er_store_struct_byte 5
+    push    r10
+    mov     r10, %2
+    imul    r10, %3
+    mov     byte [%1 + r10 + %4], %5
+    pop     r10
 %endm
 
 ; ------------------------------------------------------------------

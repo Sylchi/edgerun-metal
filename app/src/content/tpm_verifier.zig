@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("er_std");
 const tpm = @import("../tpm.zig");
 const tls_tpm = @import("../tls_tpm.zig");
 
@@ -194,7 +194,7 @@ fn testSignature() Signature {
 }
 
 test "tpm verifier hashes canonical bytes and verifies p256 signature" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     var executor = RecordingExecutor{ .expected_data = "canonical-transition" };
     const verifier = Verifier(RecordingExecutor).init(&executor);
 
@@ -205,7 +205,7 @@ test "tpm verifier hashes canonical bytes and verifies p256 signature" {
 }
 
 test "tpm verifier rejects empty canonical bytes" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     var executor = RecordingExecutor{ .expected_data = "" };
     const verifier = Verifier(RecordingExecutor).init(&executor);
 
@@ -214,7 +214,7 @@ test "tpm verifier rejects empty canonical bytes" {
 }
 
 test "tpm verifier flushes loaded handles after failed verification" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     var executor = RecordingExecutor{
         .expected_data = "canonical-transition",
         .verify_ok = false,
@@ -226,7 +226,7 @@ test "tpm verifier flushes loaded handles after failed verification" {
 }
 
 test "tpm verifier treats flush failure as fatal" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     var executor = RecordingExecutor{
         .expected_data = "canonical-transition",
         .flush_ok = false,
@@ -238,7 +238,7 @@ test "tpm verifier treats flush failure as fatal" {
 }
 
 test "software verifier hashes and verifies p256 signatures without tpm" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     const EcdsaP256Sha256 = SoftwareExecutor.EcdsaP256Sha256;
     const secret_key = try EcdsaP256Sha256.SecretKey.fromBytes([_]u8{1} ** EcdsaP256Sha256.SecretKey.encoded_length);
     const key_pair = try EcdsaP256Sha256.KeyPair.fromSecretKey(secret_key);
@@ -265,7 +265,7 @@ test "software verifier hashes and verifies p256 signatures without tpm" {
 }
 
 test "software verifier rejects bad p256 signatures without installing fallback behavior" {
-    const testing = @import("std").testing;
+    const testing = @import("er_std").testing;
     const EcdsaP256Sha256 = SoftwareExecutor.EcdsaP256Sha256;
     const secret_key = try EcdsaP256Sha256.SecretKey.fromBytes([_]u8{2} ** EcdsaP256Sha256.SecretKey.encoded_length);
     const key_pair = try EcdsaP256Sha256.KeyPair.fromSecretKey(secret_key);

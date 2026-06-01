@@ -79,11 +79,7 @@ SECTION .text
 ;   rdx = 0 on success, error code on response
 ; ==================================================================
 er_fn er_http_get
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12d, edi           ; dst_ip
     mov     r13w, si            ; dst_port
@@ -131,11 +127,7 @@ er_fn er_http_get
     xor     eax, eax
     er_err  ERROR_HTTP_TIMEOUT
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
     ; ── Step 3: Build request ────────────────────────────────────
@@ -287,8 +279,7 @@ er_fn er_http_get
     lea     rdi, [http_resp_buf]
     mov     esi, r12d
     call    _http_find_body_start
-    test    rax, rax
-    jz      .close_ret_status          ; no body, just status
+    er_check_zero rax, .close_ret_status
 
     mov     r14, rax                   ; body start pointer
 
@@ -299,8 +290,7 @@ er_fn er_http_get
     mov     r15d, eax                  ; content-length or 0
 
     ; If Content-Length found, cap at that. Otherwise use remaining buffer.
-    test    r15d, r15d
-    jnz     .have_clen
+    er_check_nonzero r15d, .have_clen
     ; No Content-Length: use rest of buffer
     lea     rax, [http_resp_buf + r12]
     sub     rax, r14
@@ -346,11 +336,7 @@ er_fn er_http_get
     mov     eax, r13d                  ; HTTP status code
     er_ok
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .close_fail:
@@ -359,22 +345,14 @@ er_fn er_http_get
     xor     eax, eax
     er_err  ERROR_HTTP_CLOSED
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .fail_connect:
     xor     eax, eax
     er_err  ERROR_HTTP_NORESP
     add     rsp, 32
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -386,8 +364,7 @@ er_fn er_http_get
 ; following it. Returns 0 if not found or invalid.
 ; ==================================================================
 _http_parse_status_code:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     rbx, rdi            ; buffer
     mov     r12d, esi           ; length
@@ -442,15 +419,13 @@ _http_parse_status_code:
     add     eax, edx
 
 .digit3_done:
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
 .not_found:
     xor     eax, eax
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
@@ -462,8 +437,7 @@ _http_parse_status_code:
 ; Returns pointer to body start, or 0 if headers incomplete.
 ; ==================================================================
 _http_find_body_start:
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     rbx, rdi
     mov     r12d, esi
@@ -496,8 +470,7 @@ _http_find_body_start:
 
     ; Found \r\n\r\n at offset ecx
     lea     rax, [rbx + rcx + 4]
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
@@ -507,8 +480,7 @@ _http_find_body_start:
 
 .no_body:
     xor     eax, eax
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ok
     er_ret
 
@@ -521,9 +493,7 @@ _http_find_body_start:
 ; the numeric value. Returns 0 if header not found.
 ; ==================================================================
 _http_find_content_length:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     rbx, rdi
     mov     r12d, esi
@@ -620,9 +590,7 @@ _http_find_content_length:
 
 .parse_done:
     pop     rcx                     ; discard saved position
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -633,9 +601,7 @@ _http_find_content_length:
 
 .not_found:
     xor     eax, eax
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -674,10 +640,7 @@ er_fn er_http_find_content_length
 ; Returns 0 if header not found.
 ; ==================================================================
 _http_find_content_type:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     rbx, rdi
     mov     r12d, esi
@@ -758,15 +721,11 @@ _http_find_content_type:
 
 .val_done:
     ; Write value length
-    test    r14, r14
-    jz      .ret_ok
+    er_check_zero r14, .ret_ok
     mov     [r14], edx
 
 .ret_ok:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ok
     er_ret
 
@@ -777,15 +736,11 @@ _http_find_content_type:
 
 .not_found:
     xor     eax, eax
-    test    r14, r14
-    jz      .ret_nf
+    er_check_zero r14, .ret_nf
     mov     dword [r14], 0
 
 .ret_nf:
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ok
     er_ret
 
@@ -806,17 +761,14 @@ er_fn er_http_find_content_type
 ; Returns 1 if Content-Type is text/event-stream, 0 otherwise.
 ; ==================================================================
 er_fn er_http_is_sse
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     ; Allocate space for value_len on stack
     sub     rsp, 4
     mov     rdx, rsp            ; value_len out
 
     call    _http_find_content_type
-    test    rax, rax
-    jz      .not_sse
+    er_check_zero rax, .not_sse
 
     mov     rbx, rax            ; value ptr
     mov     r12d, [rsp]         ; value len
@@ -855,18 +807,14 @@ er_fn er_http_is_sse
 .is_sse:
     mov     eax, 1
     add     rsp, 4
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
 .not_sse:
     xor     eax, eax
     add     rsp, 4
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ok
     er_ret
 
@@ -886,11 +834,7 @@ er_fn er_http_is_sse
 ; blank line).  Returns 0 if offset >= body_len.
 ; ==================================================================
 _http_sse_parse_event:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     rbx, rdi            ; body
     mov     r12d, esi           ; body_len
@@ -1086,8 +1030,7 @@ _http_sse_parse_event:
     mov     ecx, r8d
     mov     edx, r9d
 .parse_retry:
-    test    edx, edx
-    jz      .retry_done
+    er_check_zero edx, .retry_done
     movzx   r11d, byte [rbx + rcx]
     lea     r11d, [r11d - '0']
     cmp     r11d, 9
@@ -1142,21 +1085,13 @@ _http_sse_parse_event:
 
 .event_done:
     mov     eax, r13d
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 
 .past_end:
     xor     eax, eax
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 

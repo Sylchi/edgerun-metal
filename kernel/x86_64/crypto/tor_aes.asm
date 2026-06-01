@@ -39,11 +39,7 @@ SECTION .text
 ; void _aes_key_expand(const u8 *key[16], u8 *round_keys[176])
 ; ==================================================================
 _aes_key_expand:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; key
     mov     r13, rsi        ; round_keys buffer
@@ -134,23 +130,14 @@ _aes_key_expand:
     cmp     ecx, 10
     jb      .expand_loop
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _aes_key_expand_256 — expand 256-bit key to 15 round keys
 ; void _aes_key_expand_256(const u8 *key[32], u8 *round_keys[240])
 ; ==================================================================
 _aes_key_expand_256:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; key
     mov     r13, rsi        ; round_keys buffer
@@ -227,23 +214,14 @@ _aes_key_expand_256:
     jmp     .expand_loop
 
 .done:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; _aes_encrypt_block — encrypt one 16-byte block
 ; void _aes_encrypt_block(u8 *block[16], const u8 *round_keys, u32 rounds)
 ; ==================================================================
 _aes_encrypt_block:
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; block
     mov     r13, rsi        ; round_keys buffer
@@ -484,11 +462,7 @@ _aes_encrypt_block:
     ;       3*x = xtime(x) ^ x
     ;
     ; Uses r8-r15 as scratch; r12/r13/r14/r15 saved on stack and restored after.
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     rsi, r12        ; rsi = state pointer (safe for reading)
 
@@ -583,11 +557,7 @@ _aes_encrypt_block:
     _MC_COL 8, 8
     _MC_COL 12, 12
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
 
 .add_key:
     ; AddRoundKey
@@ -607,12 +577,7 @@ _aes_encrypt_block:
     cmp     r14d, eax
     jl      .round_loop
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; er_tor_aes_ctr — AES-128-CTR encrypt/decrypt
@@ -623,11 +588,7 @@ _aes_encrypt_block:
 ; IV is incremented after each block.
 ; ==================================================================
 er_fn er_tor_aes_ctr
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; in
@@ -708,11 +669,7 @@ er_fn er_tor_aes_ctr
 
 .done:
     add     rsp, 224
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret
 
@@ -725,11 +682,7 @@ er_fn er_tor_aes_ctr
 ; IV is incremented after each block.
 ; ==================================================================
 er_fn er_tor_aes256_ctr
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi        ; out
     mov     r13, rsi        ; in
@@ -800,10 +753,6 @@ er_fn er_tor_aes256_ctr
 
 .done:
     add     rsp, 288
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ok
     er_ret

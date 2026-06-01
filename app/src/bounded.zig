@@ -94,25 +94,29 @@ pub fn SliceList(comptime T: type) type {
 }
 
 test "fixed list appends without allocation" {
-    const std = @import("std");
-    const testing = std.testing;
     var list = FixedList(u8, 2){};
-    try testing.expect(list.empty());
-    try testing.expect(list.append(7));
-    try testing.expect(list.append(8));
-    try testing.expect(!list.append(9));
-    try testing.expect(list.full());
-    try testing.expectEqualSlices(u8, &.{ 7, 8 }, list.slice());
+    if (!list.empty()) return error.TestExpectedTrue;
+    if (!list.append(7)) return error.TestExpectedTrue;
+    if (!list.append(8)) return error.TestExpectedTrue;
+    if (list.append(9)) return error.TestExpectedFalse;
+    if (!list.full()) return error.TestExpectedTrue;
+    if (!equalSlices(u8, &.{ 7, 8 }, list.slice())) return error.TestExpectedEqual;
 }
 
 test "slice list uses caller provided storage" {
-    const std = @import("std");
-    const testing = std.testing;
     var storage: [2]u16 = undefined;
     var list = SliceList(u16).init(&storage).?;
-    try testing.expect(list.append(11));
-    try testing.expect(list.append(12));
-    try testing.expect(!list.append(13));
-    try testing.expect(list.full());
-    try testing.expectEqual(@as(u16, 12), list.at(1).?);
+    if (!list.append(11)) return error.TestExpectedTrue;
+    if (!list.append(12)) return error.TestExpectedTrue;
+    if (list.append(13)) return error.TestExpectedFalse;
+    if (!list.full()) return error.TestExpectedTrue;
+    if (list.at(1).? != 12) return error.TestExpectedEqual;
+}
+
+fn equalSlices(comptime T: type, expected: []const T, actual: []const T) bool {
+    if (expected.len != actual.len) return false;
+    for (expected, actual) |expected_item, actual_item| {
+        if (expected_item != actual_item) return false;
+    }
+    return true;
 }

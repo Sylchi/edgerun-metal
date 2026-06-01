@@ -152,18 +152,16 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
 }
 
 test "kernel allocation id makes address ranges relative and bounded" {
-    const testing = @import("std").testing;
     var allocation_slots: [1]Allocation = undefined;
     var allocator = Allocator.init(&allocation_slots);
     try allocator.addAllocation(Allocation.init(chunk("alloc-a"), chunk("app-a"), 16));
 
-    try testing.expect(allocator.rangeValid(AddressRange.init(chunk("alloc-a"), 4, 8)));
-    try testing.expect(!allocator.rangeValid(AddressRange.init(chunk("alloc-a"), 12, 8)));
-    try testing.expect(!allocator.rangeValid(AddressRange.init(chunk("alloc-b"), 4, 8)));
+    if (!allocator.rangeValid(AddressRange.init(chunk("alloc-a"), 4, 8))) return error.TestExpectedTrue;
+    if (allocator.rangeValid(AddressRange.init(chunk("alloc-a"), 12, 8))) return error.TestExpectedFalse;
+    if (allocator.rangeValid(AddressRange.init(chunk("alloc-b"), 4, 8))) return error.TestExpectedFalse;
 }
 
 test "kernel creates time bounded memory views" {
-    const testing = @import("std").testing;
     var allocation_slots: [2]Allocation = undefined;
     var allocator = Allocator.init(&allocation_slots);
 
@@ -171,13 +169,12 @@ test "kernel creates time bounded memory views" {
     try allocator.addAllocation(Allocation.init(chunk("receiver-allocation"), chunk("receiver-app"), 64));
     const view = try allocator.createView(MemoryView.init(chunk("view-a"), AddressRange.init(chunk("sender-allocation"), 8, 12), chunk("receiver-app"), false, 10));
 
-    try testing.expect(allocator.canRead(view, chunk("receiver-app")));
-    try testing.expect(!allocator.canRead(view, chunk("other-app")));
-    try testing.expect(!allocator.canWrite(view, chunk("receiver-app")));
+    if (!allocator.canRead(view, chunk("receiver-app"))) return error.TestExpectedTrue;
+    if (allocator.canRead(view, chunk("other-app"))) return error.TestExpectedFalse;
+    if (allocator.canWrite(view, chunk("receiver-app"))) return error.TestExpectedFalse;
 }
 
 test "kernel rejects expired and out of bounds memory views" {
-    const testing = @import("std").testing;
     var allocation_slots: [1]Allocation = undefined;
     var allocator = Allocator.init(&allocation_slots);
 
@@ -185,20 +182,27 @@ test "kernel rejects expired and out of bounds memory views" {
     try allocator.advance(2);
 
     const expired = MemoryView.init(chunk("view-expired"), AddressRange.init(chunk("sender-allocation"), 0, 4), chunk("receiver-app"), false, 1);
-    try testing.expectError(error.Expired, allocator.createView(expired));
+    if (allocator.createView(expired)) |_| return error.TestExpectedError else |err| {
+        if (err != error.Expired) return err;
+    }
 
     const out_of_bounds = MemoryView.init(chunk("view-oob"), AddressRange.init(chunk("sender-allocation"), 60, 8), chunk("receiver-app"), false, 4);
-    try testing.expectError(error.OutOfBounds, allocator.createView(out_of_bounds));
+    if (allocator.createView(out_of_bounds)) |_| return error.TestExpectedError else |err| {
+        if (err != error.OutOfBounds) return err;
+    }
 }
 
 test "kernel rejects duplicate allocation ids and unknown allocation views" {
-    const testing = @import("std").testing;
     var allocation_slots: [2]Allocation = undefined;
     var allocator = Allocator.init(&allocation_slots);
 
     try allocator.addAllocation(Allocation.init(chunk("sender-allocation"), chunk("sender-app"), 64));
-    try testing.expectError(error.Duplicate, allocator.addAllocation(Allocation.init(chunk("sender-allocation"), chunk("other-app"), 64)));
+    if (allocator.addAllocation(Allocation.init(chunk("sender-allocation"), chunk("other-app"), 64))) return error.TestExpectedError else |err| {
+        if (err != error.Duplicate) return err;
+    }
 
     const unknown = MemoryView.init(chunk("view-unknown"), AddressRange.init(chunk("missing-allocation"), 0, 4), chunk("receiver-app"), false, 10);
-    try testing.expectError(error.OutOfBounds, allocator.createView(unknown));
+    if (allocator.createView(unknown)) |_| return error.TestExpectedError else |err| {
+        if (err != error.OutOfBounds) return err;
+    }
 }

@@ -149,24 +149,21 @@ er_fn er_tls_init
 ; ==================================================================
 global er_tls_random32
 er_fn er_tls_random32
-    test    rdi, rdi
-    jz      .fail
+    er_check_zero rdi, .fail
     push    rbx
     mov     rbx, rdi
 
     mov     rdi, tls_tpm_cmd
     mov     esi, TLS_RANDOM_LEN
     call    er_tpm_get_random
-    test    rax, rax
-    jz      .fail_pop
+    er_check_zero rax, .fail_pop
 
     mov     rdi, tls_tpm_cmd
     mov     esi, 12
     mov     rdx, tls_tpm_rsp
     mov     ecx, 96
     call    er_tpm_crb_transfer
-    test    eax, eax
-    jz      .fail_pop
+    er_check_zero eax, .fail_pop
 
     mov     rdi, tls_tpm_rsp
     mov     esi, eax
@@ -195,17 +192,13 @@ er_fn er_tls_random32
 ; ==================================================================
 global er_tls_client_hello_build
 er_fn er_tls_client_hello_build
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
 
-    test    r12, r12
-    jz      .bad_param
+    er_check_zero r12, .bad_param
     cmp     r13d, TLS_CLIENT_HELLO_RECORD_LEN
     jb      .bad_param
 
@@ -235,8 +228,7 @@ er_fn er_tls_client_hello_build
     lea     rdx, [rel tls_x25519_basepoint]
     call    er_tor_curve25519_scalar_mult
 
-    test    r14, r14
-    jz      .build
+    er_check_zero r14, .build
     mov     rdi, r14
     lea     rsi, [tls_client_private]
     mov     edx, TLS_X25519_KEY_LEN
@@ -319,27 +311,18 @@ er_fn er_tls_client_hello_build
 
     mov     eax, TLS_CLIENT_HELLO_RECORD_LEN
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .bad_param:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -349,20 +332,14 @@ er_fn er_tls_client_hello_build
 ; ==================================================================
 global er_tls_server_hello_parse
 er_fn er_tls_server_hello_parse
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13d, esi
     mov     r14, rdx
 
-    test    r12, r12
-    jz      .bad_record
-    test    r14, r14
-    jz      .bad_record
+    er_check_zero r12, .bad_record
+    er_check_zero r14, .bad_record
     cmp     r13d, TLS_RECORD_HEADER_LEN + TLS_HANDSHAKE_HEADER_LEN + 38
     jb      .bad_record
 
@@ -485,22 +462,14 @@ er_fn er_tls_server_hello_parse
     jne     .bad_handshake
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_handshake:
 .bad_record:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -535,12 +504,9 @@ er_fn er_tls_shared_secret_from_server_hello
 ; ==================================================================
 global er_tls_hkdf_extract
 er_fn er_tls_hkdf_extract
-    test    rdx, rdx
-    jz      .bad
-    test    r8, r8
-    jz      .bad
-    test    rdi, rdi
-    jnz     .have_salt
+    er_check_zero rdx, .bad
+    er_check_zero r8, .bad
+    er_check_nonzero rdi, .have_salt
     lea     rdi, [rel tls_zero_secret]
     mov     esi, TLS_RANDOM_LEN
 .have_salt:
@@ -566,11 +532,7 @@ er_fn er_tls_hkdf_extract
 ; ==================================================================
 global er_tls_hkdf_expand_label
 er_fn er_tls_hkdf_expand_label
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -579,20 +541,16 @@ er_fn er_tls_hkdf_expand_label
     mov     ebx, r8d
     mov     [tls_hkdf_out_ptr], r9
 
-    test    r12, r12
-    jz      .bad_label
-    test    r13, r13
-    jz      .bad_label
+    er_check_zero r12, .bad_label
+    er_check_zero r13, .bad_label
     cmp     qword [tls_hkdf_out_ptr], 0
     jz      .bad_label
     cmp     r14d, TLS_HKDF_LABEL_MAX_LEN
     ja      .bad_label
     cmp     ebx, TLS_HKDF_CONTEXT_MAX_LEN
     ja      .bad_label
-    test    ebx, ebx
-    jz      .context_ok
-    test    r15, r15
-    jz      .bad_label
+    er_check_zero ebx, .context_ok
+    er_check_zero r15, .bad_label
 .context_ok:
     mov     r11d, TLS_RANDOM_LEN
     cmp     r14d, tls_label_key_len
@@ -630,8 +588,7 @@ er_fn er_tls_hkdf_expand_label
     lea     r10d, [r14d + TLS_HKDF_LABEL_PREFIX_LEN + 3]
     mov     [tls_hkdf_info + r10], bl
     inc     r10d
-    test    ebx, ebx
-    jz      .copy_done
+    er_check_zero ebx, .copy_done
     lea     rdi, [tls_hkdf_info + r10]
     mov     rsi, r15
     mov     edx, ebx
@@ -656,30 +613,18 @@ er_fn er_tls_hkdf_expand_label
     jne     .fail_label
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 .bad_label:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail_label:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -698,8 +643,7 @@ _tls_gcm_shift_v:
     mov     r8d, eax
     and     r8d, 1
     shr     al, 1
-    test    edx, edx
-    jz      .no_carry
+    er_check_zero edx, .no_carry
     or      al, 0x80
 .no_carry:
     mov     [tls_gcm_v + rcx], al
@@ -707,8 +651,7 @@ _tls_gcm_shift_v:
     inc     ecx
     jmp     .shift_loop
 .shift_done:
-    test    ebx, ebx
-    jz      .done
+    er_check_zero ebx, .done
     xor     byte [tls_gcm_v], 0xE1
 .done:
     pop     rbx
@@ -718,9 +661,7 @@ _tls_gcm_shift_v:
 ; _tls_gcm_mul — GF(2^128) multiply X by H into X.
 ; ==================================================================
 _tls_gcm_mul:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     lea     rdi, [tls_gcm_z]
     xor     esi, esi
@@ -760,24 +701,18 @@ _tls_gcm_mul:
     lea     rsi, [tls_gcm_z]
     mov     edx, TLS_GCM_BLOCK_LEN
     call    er_memcpy
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; _tls_gcm_absorb — GHASH absorb bytes at rsi, edx=len.
 ; ==================================================================
 _tls_gcm_absorb:
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rsi
     mov     r13d, edx
 .block_loop:
-    test    r13d, r13d
-    jz      .done
+    er_check_zero r13d, .done
     lea     rdi, [tls_gcm_block]
     xor     esi, esi
     mov     edx, TLS_GCM_BLOCK_LEN
@@ -805,10 +740,7 @@ _tls_gcm_absorb:
     sub     r13d, ebx
     jmp     .block_loop
 .done:
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12, r13
 
 ; ==================================================================
 ; er_tls_aes128_gcm_encrypt
@@ -817,11 +749,7 @@ _tls_gcm_absorb:
 ; ==================================================================
 global er_tls_aes128_gcm_encrypt
 er_fn er_tls_aes128_gcm_encrypt
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -834,20 +762,13 @@ er_fn er_tls_aes128_gcm_encrypt
     mov     [tls_gcm_key_ptr], r10
     mov     [tls_gcm_iv_ptr], r11
     mov     [tls_gcm_tag_ptr], r9
-    test    r12, r12
-    jz      .bad_gcm
-    test    r13, r13
-    jz      .bad_gcm
-    test    r10, r10
-    jz      .bad_gcm
-    test    r11, r11
-    jz      .bad_gcm
-    test    r9, r9
-    jz      .bad_gcm
-    test    ebx, ebx
-    jz      .aad_ok
-    test    r15, r15
-    jz      .bad_gcm
+    er_check_zero r12, .bad_gcm
+    er_check_zero r13, .bad_gcm
+    er_check_zero r10, .bad_gcm
+    er_check_zero r11, .bad_gcm
+    er_check_zero r9, .bad_gcm
+    er_check_zero ebx, .aad_ok
+    er_check_zero r15, .bad_gcm
 .aad_ok:
     ; H = AES_K(0^128)
     lea     rdi, [tls_gcm_h]
@@ -937,20 +858,12 @@ er_fn er_tls_aes128_gcm_encrypt
 .ok_gcm:
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .bad_gcm:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -960,11 +873,7 @@ er_fn er_tls_aes128_gcm_encrypt
 ; ==================================================================
 global er_tls_aes128_gcm_decrypt
 er_fn er_tls_aes128_gcm_decrypt
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -977,20 +886,13 @@ er_fn er_tls_aes128_gcm_decrypt
     mov     [tls_gcm_key_ptr], r10
     mov     [tls_gcm_iv_ptr], r11
     mov     [tls_gcm_tag_ptr], r9
-    test    r12, r12
-    jz      .bad_gcm_dec
-    test    r13, r13
-    jz      .bad_gcm_dec
-    test    r10, r10
-    jz      .bad_gcm_dec
-    test    r11, r11
-    jz      .bad_gcm_dec
-    test    r9, r9
-    jz      .bad_gcm_dec
-    test    ebx, ebx
-    jz      .aad_ok_dec
-    test    r15, r15
-    jz      .bad_gcm_dec
+    er_check_zero r12, .bad_gcm_dec
+    er_check_zero r13, .bad_gcm_dec
+    er_check_zero r10, .bad_gcm_dec
+    er_check_zero r11, .bad_gcm_dec
+    er_check_zero r9, .bad_gcm_dec
+    er_check_zero ebx, .aad_ok_dec
+    er_check_zero r15, .bad_gcm_dec
 .aad_ok_dec:
     ; H = AES_K(0^128)
     lea     rdi, [tls_gcm_h]
@@ -1074,8 +976,7 @@ er_fn er_tls_aes128_gcm_decrypt
     inc     ecx
     jmp     .cmp_tag_dec
 .cmp_done_dec:
-    test    al, al
-    jnz     .auth_fail_dec
+    er_check_nonzero al, .auth_fail_dec
 
     ; Decrypt with inc32(J0).
     lea     rdi, [tls_gcm_ctr]
@@ -1091,29 +992,17 @@ er_fn er_tls_aes128_gcm_decrypt
     call    er_tor_aes_ctr
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .auth_fail_dec:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .bad_gcm_dec:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1121,8 +1010,7 @@ er_fn er_tls_aes128_gcm_decrypt
 ; rdi=out[12], rsi=iv[12], rdx=seq_ptr
 ; ==================================================================
 _tls_make_nonce:
-    push    rbx
-    push    r12
+    er_push rbx, r12
     mov     r12, rdi
     mov     rbx, rdx
     mov     edx, TLS_GCM_IV_LEN
@@ -1130,9 +1018,7 @@ _tls_make_nonce:
     mov     rax, [rbx]
     bswap   rax
     xor     qword [r12 + 4], rax
-    pop     r12
-    pop     rbx
-    ret
+    er_pop_ret rbx, r12
 
 ; ==================================================================
 ; er_tls_record_encrypt
@@ -1141,11 +1027,7 @@ _tls_make_nonce:
 ; ==================================================================
 global er_tls_record_encrypt
 er_fn er_tls_record_encrypt
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -1155,16 +1037,11 @@ er_fn er_tls_record_encrypt
     mov     r10, r9
     mov     r11, [rsp + 48]
     mov     [tls_record_seq_ptr], r11
-    test    r12, r12
-    jz      .bad_rec_enc
-    test    r13, r13
-    jz      .bad_rec_enc
-    test    r15, r15
-    jz      .bad_rec_enc
-    test    r10, r10
-    jz      .bad_rec_enc
-    test    r11, r11
-    jz      .bad_rec_enc
+    er_check_zero r12, .bad_rec_enc
+    er_check_zero r13, .bad_rec_enc
+    er_check_zero r15, .bad_rec_enc
+    er_check_zero r10, .bad_rec_enc
+    er_check_zero r11, .bad_rec_enc
     cmp     r14d, TLS_PLAINTEXT_MAX
     ja      .bad_rec_enc
     mov     eax, ebx
@@ -1212,29 +1089,17 @@ er_fn er_tls_record_encrypt
     inc     qword [r11]
     lea     eax, [r14d + TLS_RECORD_OVERHEAD]
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .bad_rec_enc:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail_rec_enc:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1244,11 +1109,7 @@ er_fn er_tls_record_encrypt
 ; ==================================================================
 global er_tls_record_decrypt
 er_fn er_tls_record_decrypt
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     r12, rdi
     mov     r13, rsi
@@ -1257,16 +1118,11 @@ er_fn er_tls_record_decrypt
     mov     r10, r9
     mov     r11, [rsp + 48]
     mov     [tls_record_seq_ptr], r11
-    test    r12, r12
-    jz      .bad_rec_dec
-    test    r13, r13
-    jz      .bad_rec_dec
-    test    r15, r15
-    jz      .bad_rec_dec
-    test    r10, r10
-    jz      .bad_rec_dec
-    test    r11, r11
-    jz      .bad_rec_dec
+    er_check_zero r12, .bad_rec_dec
+    er_check_zero r13, .bad_rec_dec
+    er_check_zero r15, .bad_rec_dec
+    er_check_zero r10, .bad_rec_dec
+    er_check_zero r11, .bad_rec_dec
     cmp     r14d, TLS_RECORD_OVERHEAD
     jb      .bad_rec_dec
     cmp     r14d, TLS_RX_RECORD_MAX
@@ -1309,12 +1165,10 @@ er_fn er_tls_record_decrypt
 
     mov     ecx, ebx
 .scan_type_dec:
-    test    ecx, ecx
-    jz      .bad_rec_dec
+    er_check_zero ecx, .bad_rec_dec
     dec     ecx
     movzx   edx, byte [r12 + rcx]
-    test    edx, edx
-    jz      .scan_type_dec
+    er_check_zero edx, .scan_type_dec
     cmp     edx, TLS_RECORD_HANDSHAKE
     je      .type_ok_dec
     cmp     edx, TLS_RECORD_APPLICATION_DATA
@@ -1326,29 +1180,17 @@ er_fn er_tls_record_decrypt
     mov     eax, ecx
     mov     ecx, r8d
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .bad_rec_dec:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .fail_rec_dec:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; ==================================================================
@@ -1384,17 +1226,13 @@ er_fn er_tls_server_hs_record_decrypt
 ; ==================================================================
 global er_tls_transcript_hash_ch_sh
 er_fn er_tls_transcript_hash_ch_sh
-    push    rbx
-    push    r12
-    push    r13
+    er_push rbx, r12, r13
 
     mov     r12, rdi
     mov     r13d, esi
     mov     rbx, rdx
-    test    r12, r12
-    jz      .bad_hash
-    test    rbx, rbx
-    jz      .bad_hash
+    er_check_zero r12, .bad_hash
+    er_check_zero rbx, .bad_hash
     cmp     r13d, TLS_RECORD_HEADER_LEN + TLS_HANDSHAKE_HEADER_LEN
     jb      .bad_hash
     cmp     r13d, TLS_RX_RECORD_MAX
@@ -1427,24 +1265,18 @@ er_fn er_tls_transcript_hash_ch_sh
 
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 .bad_hash:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 .fail_hash:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13
     er_ret
 
 ; ==================================================================
@@ -1453,13 +1285,11 @@ er_fn er_tls_transcript_hash_ch_sh
 ; ==================================================================
 global er_tls_transcript_append
 er_fn er_tls_transcript_append
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi
     mov     ebx, esi
-    test    r12, r12
-    jz      .bad_append
+    er_check_zero r12, .bad_append
     cmp     ebx, TLS_HANDSHAKE_HEADER_LEN
     jb      .bad_append
     movzx   eax, byte [r12 + 1]
@@ -1485,14 +1315,12 @@ er_fn er_tls_transcript_append
     add     [tls_transcript_len], ebx
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .bad_append:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -1501,8 +1329,7 @@ er_fn er_tls_transcript_append
 ; ==================================================================
 global er_tls_transcript_hash_current
 er_fn er_tls_transcript_hash_current
-    test    rdi, rdi
-    jz      .bad_current_hash
+    er_check_zero rdi, .bad_current_hash
     lea     rdx, [rdi]
     lea     rdi, [tls_transcript]
     mov     esi, [tls_transcript_len]
@@ -1528,13 +1355,11 @@ er_fn er_tls_transcript_hash_current
 ; ==================================================================
 global er_tls_server_finished_verify
 er_fn er_tls_server_finished_verify
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi
     mov     ebx, esi
-    test    r12, r12
-    jz      .bad_finished
+    er_check_zero r12, .bad_finished
     cmp     ebx, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
     jne     .bad_finished
     cmp     byte [r12], TLS_HANDSHAKE_FINISHED
@@ -1581,8 +1406,7 @@ er_fn er_tls_server_finished_verify
     inc     ecx
     jmp     .cmp_finished
 .cmp_finished_done:
-    test    al, al
-    jnz     .fail_finished
+    er_check_nonzero al, .fail_finished
 
     mov     rdi, r12
     mov     esi, ebx
@@ -1591,20 +1415,17 @@ er_fn er_tls_server_finished_verify
     js      .fail_finished
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .bad_finished:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 .fail_finished:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -1614,16 +1435,12 @@ er_fn er_tls_server_finished_verify
 ; ==================================================================
 global er_tls_process_server_hs_plain
 er_fn er_tls_process_server_hs_plain
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     r12, rdi
     mov     ebx, esi
     xor     r13d, r13d
-    test    r12, r12
-    jz      .bad_process
+    er_check_zero r12, .bad_process
     cmp     ebx, TLS_HANDSHAKE_HEADER_LEN
     jb      .bad_process
 .process_loop:
@@ -1679,35 +1496,23 @@ er_fn er_tls_process_server_hs_plain
     js      .fail_process
     mov     eax, 1
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 .need_more:
     xor     eax, eax
     er_ok
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .bad_process:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .fail_process:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; ==================================================================
@@ -1720,8 +1525,7 @@ global er_tls_client_finished_record_build
 er_fn er_tls_client_finished_record_build
     push    rbx
     mov     rbx, rdi
-    test    rbx, rbx
-    jz      .bad_client_finished
+    er_check_zero rbx, .bad_client_finished
 
     lea     rdi, [tls_client_hs_traffic_secret]
     lea     rsi, [rel tls_label_finished]
@@ -1916,8 +1720,7 @@ er_fn er_tls_derive_application_secrets
 ; ==================================================================
 global er_tls_derive_handshake_secrets
 er_fn er_tls_derive_handshake_secrets
-    push    rbx
-    push    r12
+    er_push rbx, r12
 
     mov     r12, rdi
     mov     ebx, esi
@@ -2046,15 +1849,13 @@ er_fn er_tls_derive_handshake_secrets
 
     xor     eax, eax
     er_ok
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 .fail_derive:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12
     er_ret
 
 ; ==================================================================
@@ -2110,8 +1911,7 @@ _tls_recv_record_into_rx:
     test    eax, eax
     js      .fail
     mov     eax, [tls_rx_len]
-    test    eax, eax
-    jz      .poll_body
+    er_check_zero eax, .poll_body
     add     [tls_rx_have], eax
     mov     eax, [tls_rx_need]
     cmp     [tls_rx_have], eax
@@ -2357,8 +2157,7 @@ _tls_recv_app_record_into_plain:
     test    eax, eax
     js      .fail
     mov     eax, [tls_rx_len]
-    test    eax, eax
-    jz      .poll_body
+    er_check_zero eax, .poll_body
     add     [tls_rx_have], eax
     mov     eax, [tls_rx_need]
     cmp     [tls_rx_have], eax
@@ -2413,10 +2212,7 @@ _tls_recv_app_record_into_plain:
 ; ==================================================================
 global er_tls_send
 er_fn er_tls_send
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
+    er_push rbx, r12, r13, r14
 
     mov     ebx, edi
     mov     r12, rsi
@@ -2440,35 +2236,22 @@ er_fn er_tls_send
     lea     rsi, [tls_rx_record]
     mov     edx, r14d
     call    er_tcp_send
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .closed:
     mov     eax, -1
     er_err  ERROR_TLS_CLOSED
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 .record_fail:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 global er_tls_recv
 er_fn er_tls_recv
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, r12, r13, r14, r15
 
     mov     ebx, edi
     mov     r12, rsi
@@ -2478,8 +2261,7 @@ er_fn er_tls_recv
 
     mov     r14d, [r13]     ; requested bytes
     xor     r15d, r15d      ; copied bytes
-    test    r14d, r14d
-    jz      .done
+    er_check_zero r14d, .done
 
 .copy_loop:
     mov     eax, [tls_plain_len]
@@ -2518,27 +2300,15 @@ er_fn er_tls_recv
     mov     [r13], r15d
     xor     eax, eax
     er_ok
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .closed:
     mov     eax, -1
     er_err  ERROR_TLS_CLOSED
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 .recv_fail:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    er_pop  rbx, r12, r13, r14, r15
     er_ret

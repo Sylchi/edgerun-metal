@@ -13,6 +13,7 @@ extern er_vp8_parse_key_frame_header
 extern er_vp8_parse_key_frame_payload
 extern er_vp8_parse_inter_frame_payload
 extern er_vp8_decode_key_frame
+extern er_vp8_decode_frame_with_reference
 extern er_vp8_bool_reader_init
 extern er_vp8_bool_read
 extern er_vp8_bool_read_flag
@@ -31,7 +32,11 @@ extern er_vp8_build_dequant
 extern er_vp8_parse_segmentation_header
 extern er_vp8_parse_loop_filter_header
 extern er_vp8_parse_compressed_key_frame_header
+extern er_vp8_parse_compressed_inter_frame_header
 extern er_vp8_read_key_macroblock_header
+extern er_vp8_read_reference_name
+extern er_vp8_read_inter_prediction
+extern er_vp8_read_inter_macroblock_header
 extern er_vp8_luma_mode_intra4_mode
 extern er_vp8_memset
 extern er_vp8_read_reference_copy
@@ -149,6 +154,8 @@ VP8_TEST_WIDE_GRAY_WIDTH            equ 32
 VP8_TEST_WIDE_GRAY_HEIGHT           equ 16
 VP8_TEST_WIDE_GRAY_PIXELS           equ VP8_TEST_WIDE_GRAY_WIDTH * VP8_TEST_WIDE_GRAY_HEIGHT
 VP8_TEST_WIDE_GRAY_YUV_BYTES        equ VP8_TEST_WIDE_GRAY_PIXELS + 2 * ((VP8_TEST_WIDE_GRAY_WIDTH / 2) * (VP8_TEST_WIDE_GRAY_HEIGHT / 2))
+VP8_TEST_INTER_DECODE_FIRST_LEN      equ VP8_TEST_KEY_FIRST_PARTITION_LEN
+VP8_TEST_INTER_DECODE_LEN            equ VP8_FRAME_TAG_SIZE + VP8_TEST_INTER_DECODE_FIRST_LEN + VP8_BOOL_INITIAL_BYTES
 VP8_TEST_LUMA_CLIP_FIRST            equ 16 * VP8_TEST_FRAME_WIDTH + 16
 VP8_TEST_LUMA_CLIP_LAST             equ 17 * VP8_TEST_FRAME_WIDTH + 19
 VP8_TEST_LUMA_CLIP_BEFORE           equ VP8_TEST_LUMA_CLIP_FIRST - 1
@@ -198,6 +205,7 @@ intra4_left:     resb VP8_BLOCK_SIZE
 top_modes:       resb VP8_MAX_LUMA_TOKEN_COLUMNS
 left_modes:      resb VP8_BLOCK_SIZE
 residual_context: resb VP8_RESIDUAL_CONTEXT_SIZE
+inter_decode_frame: resb VP8_TEST_INTER_DECODE_LEN
 
 SECTION .data
 key_tag:        db 0x30, 0x00, 0x00
@@ -469,7 +477,7 @@ _start:
     cmp     dword [rel key_payload + VP8_KEY_PAYLOAD_TOKEN_LEN], VP8_TEST_PAYLOAD_TOKEN_LEN
     jne     .fail_payload
     inc     qword [rel passed]
-    jmp     .decode_gray_payload
+    jmp     .inter_payload
 .fail_payload:
     inc     qword [rel failed]
 
@@ -512,8 +520,41 @@ _start:
     cmp     dword [rel gray_rgba + 12], 0xff7e7e7e
     jne     .fail_decode_gray_payload
     inc     qword [rel passed]
-    jmp     .decode_wide_gray_payload
+    jmp     .decode_inter_reference_payload
 .fail_decode_gray_payload:
+    inc     qword [rel failed]
+
+.decode_inter_reference_payload:
+    mov     rdi, inter_decode_frame
+    mov     esi, VP8_TEST_INTER_DECODE_LEN
+    xor     edx, edx
+    call    er_vp8_memset
+    mov     rdi, inter_decode_frame
+    mov     esi, VP8_FRAME_TAG_SIZE
+    mov     edx, VP8_TEST_INTER_DECODE_FIRST_LEN
+    call    er_vp8_write_visible_inter_frame_tag
+    mov     rdi, inter_decode_frame
+    mov     esi, VP8_TEST_INTER_DECODE_LEN
+    mov     edx, 2
+    mov     ecx, 2
+    mov     r8, gray_yuv
+    mov     r9, wide_gray_yuv
+    push    4
+    push    gray_rgba
+    push    VP8_TEST_GRAY_YUV_BYTES
+    call    er_vp8_decode_frame_with_reference
+    add     rsp, 24
+    cmp     eax, 4
+    jne     .fail_decode_inter_reference_payload
+    test    edx, edx
+    jnz     .fail_decode_inter_reference_payload
+    cmp     dword [rel gray_rgba], 0xff7e7e7e
+    jne     .fail_decode_inter_reference_payload
+    cmp     dword [rel gray_rgba + 12], 0xff7e7e7e
+    jne     .fail_decode_inter_reference_payload
+    inc     qword [rel passed]
+    jmp     .decode_wide_gray_payload
+.fail_decode_inter_reference_payload:
     inc     qword [rel failed]
 
 .decode_wide_gray_payload:
@@ -1249,8 +1290,97 @@ _start:
     cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_TRUE_MOTION
     jne     .fail_compressed_key_header
     inc     qword [rel passed]
-    jmp     .key_bpred_header
+    jmp     .compressed_inter_header
 .fail_compressed_key_header:
+    inc     qword [rel failed]
+
+.compressed_inter_header:
+    mov     rdi, first_partition_zero
+    mov     esi, VP8_TEST_KEY_FIRST_PARTITION_LEN
+    mov     rdx, token_probabilities
+    mov     rcx, compressed_header
+    call    er_vp8_parse_compressed_inter_frame_header
+    cmp     eax, VP8_COMPRESSED_HEADER_SIZE
+    jne     .fail_compressed_inter_header
+    test    edx, edx
+    jnz     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_TOKEN_COUNT], 1
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_REFERENCE + VP8_REFERENCE_REFRESH_LAST], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_REFERENCE + VP8_REFERENCE_REFRESH_GOLDEN], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_REFERENCE + VP8_REFERENCE_REFRESH_ALTERNATE], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_REFRESH_ENTROPY], 0
+    jne     .fail_compressed_inter_header
+    cmp     dword [rel compressed_header + VP8_COMPRESSED_HEADER_TOKEN_UPDATES], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_PROB_INTRA], 0
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS], 112
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS + 3], 37
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_CHROMA_PROBS], 162
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_CHROMA_PROBS + 2], 204
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_MV_PROBS], 162
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_MV_PROBS + VP8_MV_PROBABILITY_COUNT], 164
+    jne     .fail_compressed_inter_header
+    cmp     byte [rel token_probabilities], 128
+    jne     .fail_compressed_inter_header
+    inc     qword [rel passed]
+    jmp     .inter_macroblock_header
+.fail_compressed_inter_header:
+    inc     qword [rel failed]
+
+.inter_macroblock_header:
+    mov     rdi, mode_full
+    mov     esi, VP8_BOOL_INITIAL_BYTES
+    mov     rdx, compressed_header
+    call    er_vp8_bool_reader_init
+    cmp     eax, VP8_BOOL_READER_SIZE
+    jne     .fail_inter_macroblock_header
+    test    edx, edx
+    jnz     .fail_inter_macroblock_header
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_PROB_INTRA], 128
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_PROB_LAST], 128
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_PROB_GOLDEN], 128
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS], 112
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS + 1], 86
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS + 2], 140
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_INTRA16_PROBS + 3], 37
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_CHROMA_PROBS], 162
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_CHROMA_PROBS + 1], 101
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_CHROMA_PROBS + 2], 204
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     rdx, top_modes
+    mov     rcx, left_modes
+    mov     r8, macroblock_header
+    call    er_vp8_read_inter_macroblock_header
+    cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
+    jne     .fail_inter_macroblock_header
+    test    edx, edx
+    jnz     .fail_inter_macroblock_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_REFERENCE], VP8_REFERENCE_NAME_ALTERNATE
+    jne     .fail_inter_macroblock_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    jne     .fail_inter_macroblock_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_DC
+    jne     .fail_inter_macroblock_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_DC
+    jne     .fail_inter_macroblock_header
+    inc     qword [rel passed]
+    jmp     .key_bpred_header
+.fail_inter_macroblock_header:
     inc     qword [rel failed]
 
 .key_bpred_header:
@@ -2388,7 +2518,7 @@ _start:
     cmp     byte [rel token_probabilities + 266], 237
     jne     .fail_coeff_default_probability
     inc     qword [rel passed]
-    jmp     .coeff_update_probability
+    jmp     .large_coeff_value
 .fail_coeff_default_probability:
     inc     qword [rel failed]
 
@@ -2432,7 +2562,7 @@ _start:
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_large_coeff_value
     inc     qword [rel passed]
-    jmp     .coeff_update_probability
+    jmp     .coeff_block_decode
 .fail_large_coeff_value:
     inc     qword [rel failed]
 

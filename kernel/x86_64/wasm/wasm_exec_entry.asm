@@ -5,12 +5,7 @@
 ; rdx = args count
 ; =================================================================+
 er_fn er_fn_exec
-    er_frame_push
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_frame_push_regs rbx, r12, r13, r14, r15
     sub     rsp, 8
 
     mov     r12, rdi        ; function_index
@@ -34,8 +29,7 @@ er_fn er_fn_exec
     ; Defined function
     mov     rdi, r12               ; pass absolute function_index
     call    er_wasm_code_index_for_function
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
 
     mov     r15, rax               ; code_index
 
@@ -60,8 +54,7 @@ er_fn er_fn_exec
     ; Get function type (pass absolute function_index)
     mov     rdi, r12
     call    er_wasm_type_index_for_function
-    test    rdx, rdx
-    jnz     .error
+    er_check_nonzero rdx, .error
     ; Store type info for result handling
     mov     [exec_type_index], rax
 
@@ -127,8 +120,7 @@ er_fn er_fn_exec
     mov     rax, [exec_decoded_end]
     mov     [exec_fast_cache_end], rax
     call    exec_decoded_round_trace_supported
-    test    rdx, rdx
-    jnz     .fast_check_supported
+    er_check_nonzero rdx, .fast_check_supported
     mov     qword [exec_fast_cache_state], 3
 .dispatch_trace:
     call    exec_decoded_round_trace_loop
@@ -136,8 +128,7 @@ er_fn er_fn_exec
 
 .fast_check_supported:
     call    exec_decoded_fast_supported
-    test    rdx, rdx
-    jnz     .fast_mark_unsupported
+    er_check_nonzero rdx, .fast_mark_unsupported
     mov     qword [exec_fast_cache_state], 1
 .dispatch_fast:
     call    exec_decoded_fast_loop
@@ -189,22 +180,14 @@ er_fn er_fn_exec
     mov     rdx, r14
 .done_no_frame:
     add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    pop     rbp
-    ret
+    er_pop_ret rbp, rbx, r12, r13, r14, r15
 
 ; ==================================================================
 ; Imported function dispatch
 ; rdi = function_index (absolute, < import_count)
 ; =================================================================+
 er_wasm_call_imported:
-    er_frame_push
-    push    r15
-    push    r14
+    er_frame_push_regs r15, r14
 
     mov     r10, rdi
     imul    r10, IMPORTED_FUNC_SIZE
@@ -241,10 +224,7 @@ er_wasm_call_imported:
 
     ; >2 args not supported yet
     er_err  ERROR_UNSUPPORTED
-    pop     r14
-    pop     r15
-    pop     rbp
-    ret
+    er_pop_ret rbp, r15, r14
 
 .import_two_args:
     call    exec_stack_pop
@@ -261,29 +241,19 @@ er_wasm_call_imported:
     call    r15
 
     ; Push result(s) to eval stack
-    test    rcx, rcx        ; result_count
-    jz      .import_no_result
+    er_check_zero rcx, .import_no_result
     mov     rdi, rax
     call    exec_stack_push
     jc      .import_overflow
 
 .import_no_result:
     xor     edx, edx        ; ERROR_SUCCESS
-    pop     r14
-    pop     r15
-    pop     rbp
-    ret
+    er_pop_ret rbp, r15, r14
 
 .import_underflow:
     er_err  ERROR_STACK_UNDERFLOW
-    pop     r14
-    pop     r15
-    pop     rbp
-    ret
+    er_pop_ret rbp, r15, r14
 
 .import_overflow:
     er_err  ERROR_STACK_OVERFLOW
-    pop     r14
-    pop     r15
-    pop     rbp
-    ret
+    er_pop_ret rbp, r15, r14

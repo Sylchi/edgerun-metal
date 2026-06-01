@@ -159,29 +159,25 @@ fn testIdentities(epoch: clock.Stamp) TestIdentities {
 }
 
 test "intent receipt binds user device actor subject and consequence" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
 
     const receipt = admit(ids.user, ids.device, ids.parent, ids.child, .spawn_app, .delegates_resources, epoch, requestId("spawn preview").?).?;
 
-    try testing.expect(receipt.valid());
-    try testing.expect(receipt.permits(ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
-    try testing.expect(!receipt.permits(ids.child.id, ids.parent.id, .spawn_app, .delegates_resources));
-    try testing.expect(bytes.nonzero(&receipt.id().?));
+    if (!receipt.valid()) return error.TestExpectedTrue;
+    if (!receipt.permits(ids.parent.id, ids.child.id, .spawn_app, .delegates_resources)) return error.TestExpectedTrue;
+    if (receipt.permits(ids.child.id, ids.parent.id, .spawn_app, .delegates_resources)) return error.TestExpectedFalse;
+    if (!bytes.nonzero(&receipt.id().?)) return error.TestExpectedTrue;
 }
 
 test "intent receipt rejects replay outside admission window" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const ids = testIdentities(.{ .keeper = keeper });
     const start = clock.Stamp{ .keeper = keeper, .tick = 10 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 20 };
     const receipt = admitWindow(ids.user, ids.device, ids.parent, ids.child, .spawn_app, .delegates_resources, start, start, end, requestId("spawn window").?).?;
 
-    try testing.expect(receipt.permitsAt(.{ .keeper = keeper, .tick = 15 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
-    try testing.expect(!receipt.permitsAt(.{ .keeper = keeper, .tick = 21 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
+    if (!receipt.permitsAt(.{ .keeper = keeper, .tick = 15 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources)) return error.TestExpectedTrue;
+    if (receipt.permitsAt(.{ .keeper = keeper, .tick = 21 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources)) return error.TestExpectedFalse;
 }
