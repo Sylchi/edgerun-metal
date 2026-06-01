@@ -1,5 +1,6 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
+const geometry = @import("../geometry.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
 const object = @import("../../object.zig");
@@ -42,7 +43,7 @@ pub const Slider = struct {
             bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));
         const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
         try renderTrack(scene, track, clamped, options);
-        const thumb_center = std.math.clamp(track.x + track.w * clamped, track.x + slider_thumb_size * 0.5, track.x + track.w - slider_thumb_size * 0.5);
+        const thumb_center = geometry.clamp(track.x + track.w * clamped, track.x + slider_thumb_size * 0.5, track.x + track.w - slider_thumb_size * 0.5);
         const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
         try scene.pushRect(thumb.insetUniform(-slider_thumb_shadow_inset), slider_thumb_shadow, .shadow, slider_thumb_size * 0.5, slider_thumb_shadow_size);
         try scene.pushRect(thumb, options.style.panel, .fill, slider_thumb_size * 0.5, 0.0);

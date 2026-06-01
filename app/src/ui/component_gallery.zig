@@ -289,7 +289,18 @@ pub fn previewHitForIndexForTest(index: usize) u32 {
 
 pub fn sourcePathForIndex(index: usize, out: []u8) ?[]const u8 {
     if (index >= component_catalog.len) return null;
-    return std.fmt.bufPrint(out, "src/ui/components/{s}.zig", .{component_catalog[index].source_component}) catch null;
+    return sourcePath(out, component_catalog[index].source_component);
+}
+
+fn sourcePath(out: []u8, component_name: []const u8) ?[]const u8 {
+    const prefix = "src/ui/components/";
+    const suffix = ".zig";
+    const len = prefix.len + component_name.len + suffix.len;
+    if (out.len < len) return null;
+    @memcpy(out[0..prefix.len], prefix);
+    @memcpy(out[prefix.len..][0..component_name.len], component_name);
+    @memcpy(out[prefix.len + component_name.len ..][0..suffix.len], suffix);
+    return out[0..len];
 }
 
 fn indexByPreviewIdBase(hit_id: u32, base: u32) ?usize {
@@ -801,7 +812,7 @@ fn validateCanonicalPreview(component: component_union.Component) GalleryError!v
     var decoded_ui_raw: [canonical_ui_buffer_size]u8 = undefined;
     var decoded_object_raw: [canonical_object_buffer_size]u8 = undefined;
     const recanonical = decoded.toObject(&decoded_ui_raw, &decoded_object_raw, galleryEpoch()) orelse return error.NoSpace;
-    if (!std.mem.eql(u8, canonical, recanonical)) return error.Corrupt;
+    if (!bytes.eql(canonical, recanonical)) return error.Corrupt;
 }
 
 fn componentStyle() ui.Style {

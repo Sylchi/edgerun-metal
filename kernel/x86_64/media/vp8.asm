@@ -347,6 +347,10 @@ er_fn er_vp8_decode_key_frame
     mov     esi, VP8_PLANE_EDGE_DEFAULT
     mov     edx, VP8_MAX_CHROMA_EDGE
     call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_MODES]
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
+    call    er_vp8_memset
     mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_LEN]
@@ -381,6 +385,10 @@ er_fn er_vp8_decode_key_frame
     mov     esi, VP8_PLANE_LEFT_DEFAULT
     mov     edx, VP8_CHROMA_BLOCK_SIZE
     call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_MODES]
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
     mov     dword [rsp + VP8_DECODE_STACK_MB_X], 0
 .decode_mb_loop:
     mov     eax, [rsp + VP8_DECODE_STACK_MB_X]
@@ -388,7 +396,9 @@ er_fn er_vp8_decode_key_frame
     jae     .next_decode_row
     lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED]
     mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
-    lea     rdx, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOP_MODES]
+    lea     rcx, [rsp + VP8_DECODE_STACK_LEFT_MODES]
+    lea     r8, [rsp + VP8_DECODE_STACK_MB_HEADER]
     call    er_vp8_read_key_macroblock_header
     test    edx, edx
     jnz     .done_decode
@@ -1502,21 +1512,28 @@ er_fn er_vp8_parse_compressed_key_frame_header
     er_pop  rbx, r12, r13, r14
     er_ret
 
-; er_vp8_read_key_macroblock_header(compressed_header, mb_x, out)
+; er_vp8_read_key_macroblock_header(compressed_header, mb_x, top_modes, left_modes, out)
 ; -> eax=VP8_MACROBLOCK_HEADER_SIZE, rdx=error
-; Supports key-frame intra16 macroblock headers. B_PRED macroblock headers need
-; keyframe intra4 probability tables and return ERROR_UNSUPPORTED here.
-; rdi=compressed_header, esi=mb_x, rdx=out.
+; top_modes is VP8_MAX_LUMA_TOKEN_COLUMNS bytes, left_modes is 4 bytes.
+; rdi=compressed_header, esi=mb_x, rdx=top_modes, rcx=left_modes, r8=out.
 er_fn er_vp8_read_key_macroblock_header
-    er_push rbx, r12, r13
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 8
     test    rdi, rdi
     jz      .invalid_param
     test    rdx, rdx
     jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
     mov     r12, rdi
     mov     r13, rdx
-    mov     byte [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 0
-    mov     byte [r13 + VP8_MACROBLOCK_HEADER_SKIP], 0
+    mov     r14, rcx
+    mov     r15, r8
+    mov     [rsp], esi
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 0
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_SKIP], 0
     cmp     byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
     je      .skip_segment_id
     mov     rdi, r12
@@ -1531,7 +1548,7 @@ er_fn er_vp8_read_key_macroblock_header
     call    er_vp8_bool_read
     test    edx, edx
     jnz     .done_key_mb
-    mov     [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
     jmp     .skip_segment_id
 .segment_high:
     mov     rdi, r12
@@ -1540,7 +1557,7 @@ er_fn er_vp8_read_key_macroblock_header
     test    edx, edx
     jnz     .done_key_mb
     add     al, 2
-    mov     [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
 .skip_segment_id:
     cmp     byte [r12 + VP8_COMPRESSED_HEADER_USE_SKIP], 0
     je      .read_luma_selector
@@ -1549,7 +1566,7 @@ er_fn er_vp8_read_key_macroblock_header
     call    er_vp8_bool_read
     test    edx, edx
     jnz     .done_key_mb
-    mov     [r13 + VP8_MACROBLOCK_HEADER_SKIP], al
+    mov     [r15 + VP8_MACROBLOCK_HEADER_SKIP], al
 .read_luma_selector:
     mov     rdi, r12
     mov     esi, 145
@@ -1557,37 +1574,138 @@ er_fn er_vp8_read_key_macroblock_header
     test    edx, edx
     jnz     .done_key_mb
     test    eax, eax
-    jz      .unsupported
+    jz      .read_intra4_modes
     mov     rdi, r12
     call    er_vp8_read_intra16_mode
     test    edx, edx
     jnz     .done_key_mb
-    mov     [r13 + VP8_MACROBLOCK_HEADER_LUMA_MODE], al
+    mov     [r15 + VP8_MACROBLOCK_HEADER_LUMA_MODE], al
+    mov     edi, eax
+    call    er_vp8_luma_mode_intra4_mode
+    test    edx, edx
+    jnz     .done_key_mb
+    mov     ebx, eax
+    xor     ecx, ecx
+.fill_intra16_modes:
+    cmp     ecx, VP8_Y_BLOCK_COUNT
+    jae     .update_intra16_state
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rcx], bl
+    inc     ecx
+    jmp     .fill_intra16_modes
+.update_intra16_state:
+    mov     eax, [rsp]
+    shl     eax, 2
+    xor     ecx, ecx
+.update_intra16_top:
+    cmp     ecx, VP8_BLOCK_SIZE
+    jae     .update_intra16_left
+    lea     r11, [r13 + rax]
+    mov     [r11 + rcx], bl
+    inc     ecx
+    jmp     .update_intra16_top
+.update_intra16_left:
+    xor     ecx, ecx
+.update_intra16_left_loop:
+    cmp     ecx, VP8_BLOCK_SIZE
+    jae     .read_chroma
+    mov     [r14 + rcx], bl
+    inc     ecx
+    jmp     .update_intra16_left_loop
+
+.read_intra4_modes:
+    mov     byte [r15 + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_B_PRED
+    mov     r10d, [rsp]
+    shl     r10d, 2
+    xor     ebx, ebx
+.intra4_y_loop:
+    cmp     ebx, VP8_BLOCK_SIZE
+    jae     .read_chroma
+    xor     ecx, ecx
+.intra4_x_loop:
+    cmp     ecx, VP8_BLOCK_SIZE
+    jae     .next_intra4_y
+    lea     r11, [r13 + r10]
+    movzx   eax, byte [r11 + rcx]
+    cmp     eax, VP8_INTRA4_MODE_HORIZONTAL_UP
+    ja      .corrupt
+    imul    eax, VP8_INTRA4_MODE_COUNT
+    movzx   edx, byte [r14 + rbx]
+    cmp     edx, VP8_INTRA4_MODE_HORIZONTAL_UP
+    ja      .corrupt
+    add     eax, edx
+    imul    eax, VP8_INTRA4_PROB_COUNT
+    lea     rsi, [rel vp8_intra4_keyframe_probabilities + rax]
+    mov     rdi, r12
+    push    rcx
+    push    r10
+    call    er_vp8_read_intra4_mode
+    pop     r10
+    pop     rcx
+    test    edx, edx
+    jnz     .done_key_mb
+    mov     edx, ebx
+    shl     edx, 2
+    add     edx, ecx
+    mov     [r15 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rdx], al
+    lea     r11, [r13 + r10]
+    mov     [r11 + rcx], al
+    mov     [r14 + rbx], al
+    inc     ecx
+    jmp     .intra4_x_loop
+.next_intra4_y:
+    inc     ebx
+    jmp     .intra4_y_loop
+
+.read_chroma:
     mov     rdi, r12
     call    er_vp8_read_chroma_mode
     test    edx, edx
     jnz     .done_key_mb
-    mov     [r13 + VP8_MACROBLOCK_HEADER_CHROMA_MODE], al
-    xor     ebx, ebx
-.clear_intra4_modes:
-    cmp     ebx, VP8_Y_BLOCK_COUNT
-    jae     .ok
-    mov     byte [r13 + VP8_MACROBLOCK_HEADER_INTRA4_MODES + rbx], VP8_INTRA4_MODE_DC
-    inc     ebx
-    jmp     .clear_intra4_modes
+    mov     [r15 + VP8_MACROBLOCK_HEADER_CHROMA_MODE], al
 .ok:
     mov     eax, VP8_MACROBLOCK_HEADER_SIZE
     er_ok
     jmp     .done_key_mb
-.unsupported:
+.corrupt:
     xor     eax, eax
-    er_err  ERROR_UNSUPPORTED
+    er_err  ERROR_CORRUPT
     jmp     .done_key_mb
 .invalid_param:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
 .done_key_mb:
-    er_pop  rbx, r12, r13
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_luma_mode_intra4_mode(luma_mode) -> eax=VP8_INTRA4_MODE_*, rdx=error
+er_fn er_vp8_luma_mode_intra4_mode
+    cmp     edi, VP8_LUMA_MODE_DC
+    je      .dc
+    cmp     edi, VP8_LUMA_MODE_VERTICAL
+    je      .vertical
+    cmp     edi, VP8_LUMA_MODE_HORIZONTAL
+    je      .horizontal
+    cmp     edi, VP8_LUMA_MODE_TRUE_MOTION
+    je      .true_motion
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.dc:
+    mov     eax, VP8_INTRA4_MODE_DC
+    er_ok
+    er_ret
+.vertical:
+    mov     eax, VP8_INTRA4_MODE_VERTICAL
+    er_ok
+    er_ret
+.horizontal:
+    mov     eax, VP8_INTRA4_MODE_HORIZONTAL
+    er_ok
+    er_ret
+.true_motion:
+    mov     eax, VP8_INTRA4_MODE_TRUE_MOTION
+    er_ok
     er_ret
 
 ; er_vp8_read_intra16_mode(reader) -> eax=VP8_LUMA_MODE_*, rdx=error
@@ -6764,7 +6882,270 @@ er_fn er_vp8_read_motion_vector
     er_pop  rbx, r12, r13, r14
     er_ret
 
+; er_vp8_same_motion_vector(left, right) -> eax=1 if equal, eax=0 otherwise, rdx=error
+; left/right point to VP8_MOTION_VECTOR_SIZE records.
+er_fn er_vp8_same_motion_vector
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    movzx   eax, word [rdi + VP8_MOTION_VECTOR_ROW]
+    cmp     ax, [rsi + VP8_MOTION_VECTOR_ROW]
+    jne     .not_equal
+    movzx   eax, word [rdi + VP8_MOTION_VECTOR_COL]
+    cmp     ax, [rsi + VP8_MOTION_VECTOR_COL]
+    jne     .not_equal
+    mov     eax, 1
+    er_ok
+    er_ret
+.not_equal:
+    xor     eax, eax
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_add_motion_vector(left, right, out) -> eax=VP8_MOTION_VECTOR_SIZE, rdx=error
+er_fn er_vp8_add_motion_vector
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    movsx   eax, word [rdi + VP8_MOTION_VECTOR_ROW]
+    movsx   ecx, word [rsi + VP8_MOTION_VECTOR_ROW]
+    add     eax, ecx
+    jo      .invalid_param
+    cmp     eax, 32767
+    jg      .invalid_param
+    cmp     eax, -32768
+    jl      .invalid_param
+    mov     [rdx + VP8_MOTION_VECTOR_ROW], ax
+    movsx   eax, word [rdi + VP8_MOTION_VECTOR_COL]
+    movsx   ecx, word [rsi + VP8_MOTION_VECTOR_COL]
+    add     eax, ecx
+    jo      .invalid_param
+    cmp     eax, 32767
+    jg      .invalid_param
+    cmp     eax, -32768
+    jl      .invalid_param
+    mov     [rdx + VP8_MOTION_VECTOR_COL], ax
+    mov     eax, VP8_MOTION_VECTOR_SIZE
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_sub_motion_context(left, above) -> eax=context, rdx=error
+; left/above point to VP8_MOTION_VECTOR_SIZE records.
+er_fn er_vp8_sub_motion_context
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    movsx   eax, word [rdi + VP8_MOTION_VECTOR_ROW]
+    or      ax, [rdi + VP8_MOTION_VECTOR_COL]
+    sete    r8b
+    movsx   eax, word [rsi + VP8_MOTION_VECTOR_ROW]
+    or      ax, [rsi + VP8_MOTION_VECTOR_COL]
+    sete    r9b
+    test    r8b, r8b
+    jz      .left_nonzero
+    test    r9b, r9b
+    jz      .left_zero
+    mov     eax, VP8_SUB_MV_CONTEXT_LEFT_ABOVE_ZERO
+    er_ok
+    er_ret
+.left_zero:
+    mov     eax, VP8_SUB_MV_CONTEXT_LEFT_ZERO
+    er_ok
+    er_ret
+.left_nonzero:
+    test    r9b, r9b
+    jz      .compare_vectors
+    mov     eax, VP8_SUB_MV_CONTEXT_ABOVE_ZERO
+    er_ok
+    er_ret
+.compare_vectors:
+    movzx   eax, word [rdi + VP8_MOTION_VECTOR_ROW]
+    cmp     ax, [rsi + VP8_MOTION_VECTOR_ROW]
+    jne     .differs
+    movzx   eax, word [rdi + VP8_MOTION_VECTOR_COL]
+    cmp     ax, [rsi + VP8_MOTION_VECTOR_COL]
+    jne     .differs
+    mov     eax, VP8_SUB_MV_CONTEXT_LEFT_EQUALS_ABOVE
+    er_ok
+    er_ret
+.differs:
+    mov     eax, VP8_SUB_MV_CONTEXT_LEFT_DIFFERS_ABOVE
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_inter_mode_context_probability(count, index) -> eax=probability, rdx=error
+er_fn er_vp8_inter_mode_context_probability
+    cmp     esi, VP8_INTER_MODE_PROBABILITY_COUNT
+    jae     .invalid_param
+    mov     eax, edi
+    cmp     eax, VP8_INTER_MODE_CONTEXT_COUNT
+    jb      .context_ready
+    mov     eax, VP8_INTER_MODE_CONTEXT_COUNT - 1
+.context_ready:
+    imul    eax, VP8_INTER_MODE_PROBABILITY_COUNT
+    add     eax, esi
+    movzx   eax, byte [rel vp8_inter_mode_context_probabilities + rax]
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_split_mv_partition(index, out) -> eax=VP8_Y_BLOCK_COUNT, rdx=error
+; out receives 16 one-byte partition ids.
+er_fn er_vp8_split_mv_partition
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     edi, VP8_SPLIT_MV_PARTITION_COUNT
+    jae     .invalid_param
+    mov     eax, edi
+    shl     eax, 4
+    lea     rdi, [rel vp8_split_mv_partitions + rax]
+    mov     rdx, rsi
+    mov     ecx, VP8_Y_BLOCK_COUNT
+.copy_loop:
+    test    ecx, ecx
+    jz      .ok
+    mov     al, [rdi]
+    mov     [rdx], al
+    inc     rdi
+    inc     rdx
+    dec     ecx
+    jmp     .copy_loop
+.ok:
+    mov     eax, VP8_Y_BLOCK_COUNT
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_read_split_mv_partition(reader) -> eax=partition index, rdx=error
+er_fn er_vp8_read_split_mv_partition
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     esi, VP8_SPLIT_MV_PROBABILITY_0
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jnz     .read_second
+    mov     eax, 3
+    er_ok
+    jmp     .done
+.read_second:
+    mov     esi, VP8_SPLIT_MV_PROBABILITY_1
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jnz     .read_third
+    mov     eax, 2
+    er_ok
+    jmp     .done
+.read_third:
+    mov     esi, VP8_SPLIT_MV_PROBABILITY_2
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .zero
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.zero:
+    xor     eax, eax
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_ret
+
 SECTION .rodata
+vp8_inter_mode_context_probabilities:
+    db 7, 1, 1, 143
+    db 14, 18, 14, 107
+    db 135, 64, 57, 68
+    db 60, 56, 128, 65
+    db 159, 134, 128, 34
+    db 234, 188, 128, 28
+vp8_split_mv_partitions:
+    db 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1
+    db 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1
+    db 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3
+    db 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+vp8_intra4_keyframe_probabilities:
+    db 231, 120, 48,  89,  115, 113, 120, 152, 112, 152, 179, 64,  126, 170, 118, 46,  70,  95
+    db 175, 69,  143, 80,  85,  82,  72,  155, 103, 56,  58,  10,  171, 218, 189, 17,  13,  152
+    db 144, 71,  10,  38,  171, 213, 144, 34,  26,  114, 26,  17,  163, 44,  195, 21,  10,  173
+    db 121, 24,  80,  195, 26,  62,  44,  64,  85,  170, 46,  55,  19,  136, 160, 33,  206, 71
+    db 63,  20,  8,   114, 114, 208, 12,  9,   226, 81,  40,  11,  96,  182, 84,  29,  16,  36
+    db 134, 183, 89,  137, 98,  101, 106, 165, 148, 72,  187, 100, 130, 157, 111, 32,  75,  80
+    db 66,  102, 167, 99,  74,  62,  40,  234, 128, 41,  53,  9,   178, 241, 141, 26,  8,   107
+    db 104, 79,  12,  27,  217, 255, 87,  17,  7,   74,  43,  26,  146, 73,  166, 49,  23,  157
+    db 65,  38,  105, 160, 51,  52,  31,  115, 128, 87,  68,  71,  44,  114, 51,  15,  186, 23
+    db 47,  41,  14,  110, 182, 183, 21,  17,  194, 66,  45,  25,  102, 197, 189, 23,  18,  22
+    db 88,  88,  147, 150, 42,  46,  45,  196, 205, 43,  97,  183, 117, 85,  38,  35,  179, 61
+    db 39,  53,  200, 87,  26,  21,  43,  232, 171, 56,  34,  51,  104, 114, 102, 29,  93,  77
+    db 107, 54,  32,  26,  51,  1,   81,  43,  31,  39,  28,  85,  171, 58,  165, 90,  98,  64
+    db 34,  22,  116, 206, 23,  34,  43,  166, 73,  68,  25,  106, 22,  64,  171, 36,  225, 114
+    db 34,  19,  21,  102, 132, 188, 16,  76,  124, 62,  18,  78,  95,  85,  57,  50,  48,  51
+    db 193, 101, 35,  159, 215, 111, 89,  46,  111, 60,  148, 31,  172, 219, 228, 21,  18,  111
+    db 112, 113, 77,  85,  179, 255, 38,  120, 114, 40,  42,  1,   196, 245, 209, 10,  25,  109
+    db 100, 80,  8,   43,  154, 1,   51,  26,  71,  88,  43,  29,  140, 166, 213, 37,  43,  154
+    db 61,  63,  30,  155, 67,  45,  68,  1,   209, 142, 78,  78,  16,  255, 128, 34,  197, 171
+    db 41,  40,  5,   102, 211, 183, 4,   1,   221, 51,  50,  17,  168, 209, 192, 23,  25,  82
+    db 125, 98,  42,  88,  104, 85,  117, 175, 82,  95,  84,  53,  89,  128, 100, 113, 101, 45
+    db 75,  79,  123, 47,  51,  128, 81,  171, 1,   57,  17,  5,   71,  102, 57,  53,  41,  49
+    db 115, 21,  2,   10,  102, 255, 166, 23,  6,   38,  33,  13,  121, 57,  73,  26,  1,   85
+    db 41,  10,  67,  138, 77,  110, 90,  47,  114, 101, 29,  16,  10,  85,  128, 101, 196, 26
+    db 57,  18,  10,  102, 102, 213, 34,  20,  43,  117, 20,  15,  36,  163, 128, 68,  1,   26
+    db 138, 31,  36,  171, 27,  166, 38,  44,  229, 67,  87,  58,  169, 82,  115, 26,  59,  179
+    db 63,  59,  90,  180, 59,  166, 93,  73,  154, 40,  40,  21,  116, 143, 209, 34,  39,  175
+    db 57,  46,  22,  24,  128, 1,   54,  17,  37,  47,  15,  16,  183, 34,  223, 49,  45,  183
+    db 46,  17,  33,  183, 6,   98,  15,  32,  183, 65,  32,  73,  115, 28,  128, 23,  128, 205
+    db 40,  3,   9,   115, 51,  192, 18,  6,   223, 87,  37,  9,   115, 59,  77,  64,  21,  47
+    db 104, 55,  44,  218, 9,   54,  53,  130, 226, 64,  90,  70,  205, 40,  41,  23,  26,  57
+    db 54,  57,  112, 184, 5,   41,  38,  166, 213, 30,  34,  26,  133, 152, 116, 10,  32,  134
+    db 75,  32,  12,  51,  192, 255, 160, 43,  51,  39,  19,  53,  221, 26,  114, 32,  73,  255
+    db 31,  9,   65,  234, 2,   15,  1,   118, 73,  88,  31,  35,  67,  102, 85,  55,  186, 85
+    db 56,  21,  23,  111, 59,  205, 45,  37,  192, 55,  38,  70,  124, 73,  102, 1,   34,  98
+    db 102, 61,  71,  37,  34,  53,  31,  243, 192, 69,  60,  71,  38,  73,  119, 28,  222, 37
+    db 68,  45,  128, 34,  1,   47,  11,  245, 171, 62,  17,  19,  70,  146, 85,  55,  62,  70
+    db 75,  15,  9,   9,   64,  255, 184, 119, 16,  37,  43,  37,  154, 100, 163, 85,  160, 1
+    db 63,  9,   92,  136, 28,  64,  32,  201, 85,  86,  6,   28,  5,   64,  255, 25,  248, 1
+    db 56,  8,   17,  132, 137, 255, 55,  116, 128, 58,  15,  20,  82,  135, 57,  26,  121, 40
+    db 164, 50,  31,  137, 154, 133, 25,  35,  218, 51,  103, 44,  131, 131, 123, 31,  6,   158
+    db 86,  40,  64,  135, 148, 224, 45,  183, 128, 22,  26,  17,  131, 240, 154, 14,  1,   209
+    db 83,  12,  13,  54,  192, 255, 68,  47,  28,  45,  16,  21,  91,  64,  222, 7,   1,   197
+    db 56,  21,  39,  155, 60,  138, 23,  102, 213, 85,  26,  85,  85,  128, 128, 32,  146, 171
+    db 18,  11,  7,   63,  144, 171, 4,   4,   246, 35,  27,  10,  146, 174, 171, 12,  26,  128
+    db 190, 80,  35,  99,  180, 80,  126, 54,  45,  85,  126, 47,  87,  176, 51,  41,  20,  32
+    db 101, 75,  128, 139, 118, 146, 116, 128, 85,  56,  41,  15,  176, 236, 85,  37,  9,   62
+    db 146, 36,  19,  30,  171, 255, 97,  27,  20,  71,  30,  17,  119, 118, 255, 17,  18,  138
+    db 101, 38,  60,  138, 55,  70,  43,  26,  142, 138, 45,  61,  62,  219, 1,   81,  188, 64
+    db 32,  41,  20,  117, 151, 142, 20,  21,  163, 112, 19,  12,  61,  195, 128, 48,  4,   24
 vp8_dc_quant:
     dw 4, 5, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 15, 16, 17, 17
     dw 18, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 27, 28

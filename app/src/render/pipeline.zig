@@ -149,13 +149,13 @@ fn packTextCommand(buffers: renderer_ir.Buffers, text_command: anytype, overlay:
     var previous: ?u21 = null;
     var index: usize = 0;
     while (index < text_command.value.len) {
-        const cp_len = std.unicode.utf8ByteSequenceLength(text_command.value[index]) catch {
+        const cp_len = ui.utf8ByteSequenceLength(text_command.value[index]) orelse {
             index += 1;
             continue;
         };
         const end = index + cp_len;
         if (end > text_command.value.len) break;
-        const codepoint = std.unicode.utf8Decode(text_command.value[index..end]) catch {
+        const codepoint = ui.utf8Decode(text_command.value[index..end]) orelse {
             index = end;
             continue;
         };
@@ -183,13 +183,13 @@ fn vectorTextWidth(font_body: font_vector.Body, value: []const u8, scale: f32) f
     var previous: ?u21 = null;
     var index: usize = 0;
     while (index < value.len) {
-        const cp_len = std.unicode.utf8ByteSequenceLength(value[index]) catch {
+        const cp_len = ui.utf8ByteSequenceLength(value[index]) orelse {
             index += 1;
             continue;
         };
         const end = index + cp_len;
         if (end > value.len) break;
-        const codepoint = std.unicode.utf8Decode(value[index..end]) catch {
+        const codepoint = ui.utf8Decode(value[index..end]) orelse {
             index = end;
             continue;
         };

@@ -31,6 +31,8 @@ extern er_vp8_parse_segmentation_header
 extern er_vp8_parse_loop_filter_header
 extern er_vp8_parse_compressed_key_frame_header
 extern er_vp8_read_key_macroblock_header
+extern er_vp8_luma_mode_intra4_mode
+extern er_vp8_memset
 extern er_vp8_read_reference_copy
 extern er_vp8_parse_inter_reference_header
 extern er_vp8_read_intra16_mode
@@ -116,6 +118,12 @@ extern er_vp8_read_small_motion_vector_component
 extern er_vp8_read_long_motion_vector_component
 extern er_vp8_read_motion_vector_component
 extern er_vp8_read_motion_vector
+extern er_vp8_same_motion_vector
+extern er_vp8_add_motion_vector
+extern er_vp8_sub_motion_context
+extern er_vp8_inter_mode_context_probability
+extern er_vp8_split_mv_partition
+extern er_vp8_read_split_mv_partition
 
 VP8_TEST_KEY_FIRST_PARTITION_LEN    equ 160
 VP8_TEST_INTER_FIRST_PARTITION_LEN  equ 19
@@ -158,6 +166,8 @@ segment_desc:   resb VP8_SEGMENT_HEADER_SIZE
 loop_filter:    resb VP8_LOOP_FILTER_HEADER_SIZE
 reference:      resb VP8_REFERENCE_HEADER_SIZE
 motion_vector:  resb VP8_MOTION_VECTOR_SIZE
+motion_vector_other: resb VP8_MOTION_VECTOR_SIZE
+split_partition: resb VP8_Y_BLOCK_COUNT
 subpixel_taps:  resb VP8_SUBPIXEL_FILTER_TAP_COUNT
 token_probabilities: resb VP8_COEFF_UPDATE_PROBABILITY_COUNT
 compressed_header: resb VP8_COMPRESSED_HEADER_SIZE
@@ -182,6 +192,8 @@ edges:           resb VP8_EDGES_SIZE_16
 intra4_top:      resb VP8_BLOCK_SIZE * 2
 intra4_edge:     resb VP8_INTRA4_EDGE_SIZE
 intra4_left:     resb VP8_BLOCK_SIZE
+top_modes:       resb VP8_MAX_LUMA_TOKEN_COLUMNS
+left_modes:      resb VP8_BLOCK_SIZE
 
 SECTION .data
 key_tag:        db 0x30, 0x00, 0x00
@@ -213,6 +225,7 @@ mode_i16_vertical: db 0x80, 0x00
 mode_i16_horizontal: db 0xc0, 0x00
 mode_chroma_vertical: db 0xa0, 0x00
 mode_chroma_horizontal: db 0xc0, 0x00
+mode_bpred_dc:   db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 inter_intra16_probs: db 112, 86, 140, 37
 inter_chroma_probs: db 162, 101, 204
 inter_intra4_probs: db 120, 90, 79, 133, 87, 85, 80, 111, 151
@@ -1184,9 +1197,19 @@ _start:
     jnz     .fail_compressed_key_header
     mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
     mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    mov     rdi, top_modes
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
+    call    er_vp8_memset
+    mov     rdi, left_modes
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
     mov     rdi, compressed_header
     xor     esi, esi
-    mov     rdx, macroblock_header
+    mov     rdx, top_modes
+    mov     rcx, left_modes
+    mov     r8, macroblock_header
     call    er_vp8_read_key_macroblock_header
     cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
     jne     .fail_compressed_key_header
@@ -1199,8 +1222,72 @@ _start:
     cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_TRUE_MOTION
     jne     .fail_compressed_key_header
     inc     qword [rel passed]
-    jmp     .reference_zero
+    jmp     .key_bpred_header
 .fail_compressed_key_header:
+    inc     qword [rel failed]
+
+.key_bpred_header:
+    mov     rdi, mode_bpred_dc
+    mov     esi, 6
+    mov     rdx, compressed_header
+    call    er_vp8_bool_reader_init
+    cmp     eax, VP8_BOOL_READER_SIZE
+    jne     .fail_key_bpred_header
+    test    edx, edx
+    jnz     .fail_key_bpred_header
+    mov     rdi, top_modes
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
+    call    er_vp8_memset
+    mov     rdi, left_modes
+    mov     esi, VP8_INTRA4_MODE_DC
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     rdx, top_modes
+    mov     rcx, left_modes
+    mov     r8, macroblock_header
+    call    er_vp8_read_key_macroblock_header
+    cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
+    jne     .fail_key_bpred_header
+    test    edx, edx
+    jnz     .fail_key_bpred_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_B_PRED
+    jne     .fail_key_bpred_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_DC
+    jne     .fail_key_bpred_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_INTRA4_MODES], VP8_INTRA4_MODE_DC
+    jne     .fail_key_bpred_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_INTRA4_MODES + VP8_Y_BLOCK_COUNT - 1], VP8_INTRA4_MODE_DC
+    jne     .fail_key_bpred_header
+    cmp     byte [rel top_modes], VP8_INTRA4_MODE_DC
+    jne     .fail_key_bpred_header
+    cmp     byte [rel left_modes + VP8_BLOCK_SIZE - 1], VP8_INTRA4_MODE_DC
+    jne     .fail_key_bpred_header
+    inc     qword [rel passed]
+    jmp     .luma_mode_to_intra4
+.fail_key_bpred_header:
+    inc     qword [rel failed]
+
+.luma_mode_to_intra4:
+    mov     edi, VP8_LUMA_MODE_VERTICAL
+    call    er_vp8_luma_mode_intra4_mode
+    cmp     eax, VP8_INTRA4_MODE_VERTICAL
+    jne     .fail_luma_mode_to_intra4
+    test    edx, edx
+    jnz     .fail_luma_mode_to_intra4
+    mov     edi, VP8_LUMA_MODE_HORIZONTAL
+    call    er_vp8_luma_mode_intra4_mode
+    cmp     eax, VP8_INTRA4_MODE_HORIZONTAL
+    jne     .fail_luma_mode_to_intra4
+    test    edx, edx
+    jnz     .fail_luma_mode_to_intra4
+    inc     qword [rel passed]
+    jmp     .reference_zero
+.fail_luma_mode_to_intra4:
     inc     qword [rel failed]
 
 .reference_zero:
@@ -3397,8 +3484,175 @@ _start:
     cmp     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 0
     jne     .fail_motion_vector_pair
     inc     qword [rel passed]
-    jmp     .done
+    jmp     .motion_vector_helpers
 .fail_motion_vector_pair:
+    inc     qword [rel failed]
+
+.motion_vector_helpers:
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], -4
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 8
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], 2
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], -1
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    mov     rdx, motion_vector_other
+    call    er_vp8_add_motion_vector
+    cmp     eax, VP8_MOTION_VECTOR_SIZE
+    jne     .fail_motion_vector_helpers
+    test    edx, edx
+    jnz     .fail_motion_vector_helpers
+    cmp     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], -2
+    jne     .fail_motion_vector_helpers
+    cmp     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 7
+    jne     .fail_motion_vector_helpers
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_same_motion_vector
+    test    eax, eax
+    jnz     .fail_motion_vector_helpers
+    test    edx, edx
+    jnz     .fail_motion_vector_helpers
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], -4
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 8
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_same_motion_vector
+    cmp     eax, 1
+    jne     .fail_motion_vector_helpers
+    test    edx, edx
+    jnz     .fail_motion_vector_helpers
+    inc     qword [rel passed]
+    jmp     .sub_motion_context
+.fail_motion_vector_helpers:
+    inc     qword [rel failed]
+
+.sub_motion_context:
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 0
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 0
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_sub_motion_context
+    cmp     eax, VP8_SUB_MV_CONTEXT_LEFT_ABOVE_ZERO
+    jne     .fail_sub_motion_context
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 4
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_sub_motion_context
+    cmp     eax, VP8_SUB_MV_CONTEXT_LEFT_ZERO
+    jne     .fail_sub_motion_context
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], -4
+    mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 0
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], 0
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 0
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_sub_motion_context
+    cmp     eax, VP8_SUB_MV_CONTEXT_ABOVE_ZERO
+    jne     .fail_sub_motion_context
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_ROW], -4
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_sub_motion_context
+    cmp     eax, VP8_SUB_MV_CONTEXT_LEFT_EQUALS_ABOVE
+    jne     .fail_sub_motion_context
+    mov     word [rel motion_vector_other + VP8_MOTION_VECTOR_COL], 4
+    mov     rdi, motion_vector
+    mov     rsi, motion_vector_other
+    call    er_vp8_sub_motion_context
+    cmp     eax, VP8_SUB_MV_CONTEXT_LEFT_DIFFERS_ABOVE
+    jne     .fail_sub_motion_context
+    inc     qword [rel passed]
+    jmp     .inter_mode_context_probability
+.fail_sub_motion_context:
+    inc     qword [rel failed]
+
+.inter_mode_context_probability:
+    mov     edi, 0
+    mov     esi, 0
+    call    er_vp8_inter_mode_context_probability
+    cmp     eax, 7
+    jne     .fail_inter_mode_context_probability
+    test    edx, edx
+    jnz     .fail_inter_mode_context_probability
+    mov     edi, 2
+    mov     esi, 3
+    call    er_vp8_inter_mode_context_probability
+    cmp     eax, 68
+    jne     .fail_inter_mode_context_probability
+    mov     edi, 99
+    mov     esi, 0
+    call    er_vp8_inter_mode_context_probability
+    cmp     eax, 234
+    jne     .fail_inter_mode_context_probability
+    mov     edi, 0
+    mov     esi, VP8_INTER_MODE_PROBABILITY_COUNT
+    call    er_vp8_inter_mode_context_probability
+    test    eax, eax
+    jnz     .fail_inter_mode_context_probability
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_inter_mode_context_probability
+    inc     qword [rel passed]
+    jmp     .split_mv_partition
+.fail_inter_mode_context_probability:
+    inc     qword [rel failed]
+
+.split_mv_partition:
+    mov     edi, 0
+    mov     rsi, split_partition
+    call    er_vp8_split_mv_partition
+    cmp     eax, VP8_Y_BLOCK_COUNT
+    jne     .fail_split_mv_partition
+    test    edx, edx
+    jnz     .fail_split_mv_partition
+    cmp     byte [rel split_partition], 0
+    jne     .fail_split_mv_partition
+    cmp     byte [rel split_partition + 7], 0
+    jne     .fail_split_mv_partition
+    cmp     byte [rel split_partition + 8], 1
+    jne     .fail_split_mv_partition
+    mov     edi, 3
+    mov     rsi, split_partition
+    call    er_vp8_split_mv_partition
+    cmp     byte [rel split_partition + 15], 15
+    jne     .fail_split_mv_partition
+    mov     edi, VP8_SPLIT_MV_PARTITION_COUNT
+    mov     rsi, split_partition
+    call    er_vp8_split_mv_partition
+    test    eax, eax
+    jnz     .fail_split_mv_partition
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_split_mv_partition
+    inc     qword [rel passed]
+    jmp     .read_split_mv_partition
+.fail_split_mv_partition:
+    inc     qword [rel failed]
+
+.read_split_mv_partition:
+    mov     rdi, mode_zero
+    mov     esi, VP8_BOOL_INITIAL_BYTES
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    mov     rdi, bool_reader
+    call    er_vp8_read_split_mv_partition
+    cmp     eax, 3
+    jne     .fail_read_split_mv_partition
+    test    edx, edx
+    jnz     .fail_read_split_mv_partition
+    mov     rdi, mode_full
+    mov     esi, VP8_BOOL_INITIAL_BYTES
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    mov     rdi, bool_reader
+    call    er_vp8_read_split_mv_partition
+    cmp     eax, 1
+    jne     .fail_read_split_mv_partition
+    test    edx, edx
+    jnz     .fail_read_split_mv_partition
+    inc     qword [rel passed]
+    jmp     .done
+.fail_read_split_mv_partition:
     inc     qword [rel failed]
 
 .done:

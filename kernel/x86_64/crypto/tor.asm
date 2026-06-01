@@ -35,6 +35,8 @@ extern er_tor_hs_parse_introduce_plaintext
 extern er_tor_hs_send_rendezvous1
 extern er_tor_ntor_keygen
 extern er_tcp_recv
+extern er_tls_recv
+extern er_local_cell_send_to_slot
 extern er_ed25519_sign
 extern er_ed25519_blind_sign
 
@@ -3298,6 +3300,8 @@ er_fn er_tor_test_fetch
     movzx   edx, byte [tor_80]        ; port 80
     lea     rcx, [tor_stream_id_app]  ; out stream_id
     call    er_tor_open_stream
+    test    eax, eax
+    js      .stream_fail
 
     ; Send RELAY_DATA with static HTTP request
     ; Use a pre-built GET request in tor_test_buf
@@ -3312,9 +3316,18 @@ er_fn er_tor_test_fetch
     mov     rcx, tor_test_buf
     mov     r8d, 64
     call    er_tor_send_relay
+    test    eax, eax
+    js      .stream_fail
 
     xor     eax, eax
     er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+
+.stream_fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_STREAM_FAIL
     pop     r12
     pop     rbx
     er_ret
@@ -3369,22 +3382,32 @@ er_fn er_tor_poll
     cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
     jne     .done
 
-    ; Try to receive a cell (non-blocking via TCP recv)
+    ; Try to receive one encrypted fixed cell.
     mov     edi, [tor_conn_id]
     mov     rsi, tor_rx_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], TOR_CELL_LEN
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .done
 
-    ; Check if any data was received
-    cmp     dword [tor_recv_len], 0
-    je      .done
+    cmp     dword [tor_recv_len], TOR_CELL_LEN
+    jne     .done
 
     ; Parse received cell
     mov     r12d, [tor_rx_cell]        ; circ_id (4 bytes, v4+)
     movzx   r13d, byte [tor_rx_cell + 4] ; cmd
+    test    r12d, r12d
+    jz      .dispatch_tor_cell
+
+    cmp     r13b, LOCAL_CELL_DATA
+    je      .handle_local_cell
+    cmp     r13b, LOCAL_CELL_OPEN
+    je      .handle_local_cell
+    cmp     r13b, LOCAL_CELL_CLOSE
+    je      .handle_local_cell
+
+.dispatch_tor_cell:
 
     ; Dispatch based on command
     cmp     r13b, TOR_CELL_RELAY
@@ -3397,6 +3420,12 @@ er_fn er_tor_poll
     je      .done
 
     ; Unknown cell, ignore
+	jmp     .done
+
+.handle_local_cell:
+    mov     edi, r12d
+    mov     rsi, tor_rx_cell
+    call    er_local_cell_send_to_slot
     jmp     .done
 
 .handle_relay:
@@ -3435,29 +3464,8 @@ er_fn er_tor_poll
     jmp     .done
 
 .handle_data:
-    ; Copy relay data to stream buffer
-    movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
-    xchg    cl, ch
-
-.print_data:
-    ; Print received data length
-    push    rcx
-    lea     rsi, [rel str_tor_stream]
-    mov     edi, COM1_PORT
-    call    er_serial_puts
-    mov     edi, COM1_PORT
-    movzx   esi, r14w
-    call    er_serial_puthex32
-    lea     rsi, [rel str_tor_arrow]
-    mov     edi, COM1_PORT
-    call    er_serial_puts
-    pop     rcx
-    mov     edi, COM1_PORT
-    mov     esi, ecx
-    call    er_serial_puthex32
-    lea     rsi, [rel str_tor_ok_format]
-    mov     edi, COM1_PORT
-    call    er_serial_puts
+    ; Stream data is consumed by explicit er_tor_recv_relay callers.
+    jmp     .done
 
 .done:
     pop     r15

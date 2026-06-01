@@ -1,6 +1,7 @@
 const std = @import("std");
 const math = @import("../math.zig");
 const bytes_mod = @import("../bytes.zig");
+const media_common = @import("common.zig");
 const audio_common = @import("audio_common.zig");
 
 pub const Error = audio_common.Error;
@@ -329,7 +330,7 @@ fn webmPacketFromBlock(header: Header, packet_index: usize, block: WebmBlock, cl
 
 fn readWebmBlock(payload: []const u8) Error!WebmBlock {
     const track = try readEbmlVint(payload, 0, true);
-    const header_size = std.math.add(usize, track.size, 3) catch return error.BadAudio;
+    const header_size = media_common.checkedAdd(track.size, 3) catch return error.BadAudio;
     if (payload.len < header_size) return error.BadAudio;
     const timecode_index = track.size;
     const relative_timecode = readSignedI16Be(payload[timecode_index..][0..2]);
@@ -344,7 +345,7 @@ fn readWebmBlock(payload: []const u8) Error!WebmBlock {
 
 fn applyWebmRelativeTimecode(cluster_timecode: u64, relative_timecode: i16) Error!u64 {
     if (relative_timecode >= 0) {
-        return std.math.add(u64, cluster_timecode, @intCast(relative_timecode)) catch error.BadAudio;
+        return checkedAddU64(cluster_timecode, @intCast(relative_timecode)) orelse error.BadAudio;
     }
     const delta: u16 = @intCast(-relative_timecode);
     if (cluster_timecode < delta) return error.BadAudio;
@@ -352,17 +353,21 @@ fn applyWebmRelativeTimecode(cluster_timecode: u64, relative_timecode: i16) Erro
 }
 
 fn readSignedI16Be(bytes: []const u8) i16 {
-    std.debug.assert(bytes.len == 2);
     const unsigned = (@as(u16, bytes[0]) << 8) | @as(u16, bytes[1]);
     return @bitCast(unsigned);
+}
+
+fn checkedAddU64(a: u64, b: u64) ?u64 {
+    const sum = a +% b;
+    return if (sum < a) null else sum;
 }
 
 fn readEbmlElement(bytes: []const u8, cursor: usize) Error!Element {
     const id = try readEbmlId(bytes, cursor);
     const size = try readEbmlVint(bytes, cursor + id.size, true);
     if (size.value > ~@as(usize, 0)) return error.BadAudio;
-    const payload_start = std.math.add(usize, cursor + id.size, size.size) catch return error.BadAudio;
-    const payload_end = std.math.add(usize, payload_start, @as(usize, @intCast(size.value))) catch return error.BadAudio;
+    const payload_start = media_common.checkedAdd(cursor + id.size, size.size) catch return error.BadAudio;
+    const payload_end = media_common.checkedAdd(payload_start, @as(usize, @intCast(size.value))) catch return error.BadAudio;
     if (payload_end > bytes.len) return error.BadAudio;
     return .{
         .id = id.value,
@@ -427,7 +432,7 @@ fn readEbmlFloat(payload: []const u8) Error!f64 {
 }
 
 fn readU32Be(bytes: []const u8) u32 {
-    std.debug.assert(bytes.len == 4);
+    if (bytes.len != @sizeOf(u32)) @trap();
     return (@as(u32, bytes[0]) << 24) |
         (@as(u32, bytes[1]) << 16) |
         (@as(u32, bytes[2]) << 8) |
@@ -435,7 +440,7 @@ fn readU32Be(bytes: []const u8) u32 {
 }
 
 fn readU64Be(bytes: []const u8) u64 {
-    std.debug.assert(bytes.len == 8);
+    if (bytes.len != @sizeOf(u64)) @trap();
     var value: u64 = 0;
     for (bytes) |byte| {
         value = (value << 8) | byte;

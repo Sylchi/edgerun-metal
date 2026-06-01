@@ -115,7 +115,8 @@ pub fn max(a: f32, b: f32) f32 {
 }
 
 pub fn finite(value: f32) bool {
-    return std.math.isFinite(value);
+    const bits: u32 = @bitCast(value);
+    return (bits & 0x7f80_0000) != 0x7f80_0000;
 }
 
 test "rect helpers match the C primitive bounds semantics" {

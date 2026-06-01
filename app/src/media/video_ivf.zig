@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes_mod = @import("../bytes.zig");
 const media_common = @import("common.zig");
 const video_common = @import("video_common.zig");
@@ -71,7 +70,7 @@ pub fn readFrameRecord(bytes: []const u8, header: Header, cursor: usize, index: 
     const frame_size: usize = media_common.readU32Le(bytes[cursor + frame_size_index ..][0..4]);
     const timestamp = media_common.readU64Le(bytes[cursor + frame_timestamp_index ..][0..8]);
     const payload_start = cursor + frame_header_size;
-    const payload_end = std.math.add(usize, payload_start, frame_size) catch return error.BadVideo;
+    const payload_end = media_common.checkedAdd(payload_start, frame_size) catch return error.BadVideo;
     if (payload_end > bytes.len) return error.BadVideo;
     return .{
         .frame = .{

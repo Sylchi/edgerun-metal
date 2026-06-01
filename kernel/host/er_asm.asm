@@ -1,5 +1,5 @@
 ; EdgeRun owned assembler front-end - x86_64 Linux userspace assembly.
-; Current milestone: parse source shape and emit one minimal ELF64 object subset.
+; Current milestone: parse source shape and emit a deterministic flat x86_64 byte stream.
 
 %include "x86_64/macros.inc"
 
@@ -16,24 +16,8 @@ O_CREAT         equ 64
 O_TRUNC         equ 512
 FILE_MODE_0644  equ 420
 ER_ASM_BUF_SIZE equ 1048576
-ER_ASM_TEXT_OFF equ 64
 ER_ASM_TEXT_CAP equ 8192
-ER_ASM_SYMTAB_OFF equ ER_ASM_TEXT_OFF + ER_ASM_TEXT_CAP
-ER_ASM_SYMTAB_CAP equ 4096
-ER_ASM_SYMTAB_ENTRY_SIZE equ 24
-ER_ASM_STRTAB_OFF equ ER_ASM_SYMTAB_OFF + ER_ASM_SYMTAB_CAP
-ER_ASM_STRTAB_CAP equ 4096
-ER_ASM_RELA_OFF equ ER_ASM_STRTAB_OFF + ER_ASM_STRTAB_CAP
-ER_ASM_RELA_CAP equ 4096
-ER_ASM_RELA_ENTRY_SIZE equ 24
-ER_ASM_SHSTRTAB_OFF equ ER_ASM_RELA_OFF + ER_ASM_RELA_CAP
-ER_ASM_SHDR_OFF equ ER_ASM_SHSTRTAB_OFF + 48
-ER_ASM_OBJ_SIZE equ ER_ASM_SHDR_OFF + 384
 ER_ASM_SYM_NAME_CAP equ 30
-ER_ASM_TEXT_SH_SIZE_OFF equ ER_ASM_SHDR_OFF + 64 + 32
-ER_ASM_SYMTAB_SH_SIZE_OFF equ ER_ASM_SHDR_OFF + 128 + 32
-ER_ASM_STRTAB_SH_SIZE_OFF equ ER_ASM_SHDR_OFF + 192 + 32
-ER_ASM_RELA_SH_SIZE_OFF equ ER_ASM_SHDR_OFF + 256 + 32
 ER_ASM_EQU_CAP equ 256
 ER_ASM_INCLUDE_CAP equ 4
 ER_ASM_GLOBAL_CAP equ 256
@@ -56,7 +40,6 @@ U32_DIV16 equ 268435455
 SECTION .bss
 source_buf:     resb ER_ASM_BUF_SIZE
 include_buf:    resb ER_ASM_BUF_SIZE
-object_buf:     resb ER_ASM_OBJ_SIZE
 text_buf:       resb ER_ASM_TEXT_CAP
 output_path:    resq 1
 source_path:    resq 1
@@ -142,7 +125,7 @@ _start:
     test    eax, eax
     jz      .unsupported
     mov     rdi, [rel output_path]
-    call    emit_exit_object
+    call    emit_flat_binary
     test    eax, eax
     jnz     .fail
     xor     edi, edi

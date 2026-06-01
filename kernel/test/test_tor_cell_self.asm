@@ -1,6 +1,7 @@
 ; EdgeRun Tor cell helper self-test.
 
 %include "x86_64/macros.inc"
+%include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/tor_constants.inc"
 %include "x86_64/net/net_constants.inc"
 %include "test/test_macros.inc"
@@ -9,6 +10,9 @@ extern er_tor_build_extend2_body
 extern er_tor_cell_init
 extern er_tor_circuit_create
 extern er_tor_link_handshake
+extern er_tor_open_stream
+extern er_tor_recv_relay
+extern er_tor_send_relay
 
 TEST_DATA_PASSED_FAILED
 node_id:
@@ -38,12 +42,14 @@ body: resb 119
 created2_cell: resb TOR_CELL_LEN
 sent_create2_cell: resb TOR_CELL_LEN
 out_circ_id: resd 1
+opened_stream_id: resw 1
 tls_recv_mode: resd 1
 tls_recv_step: resd 1
 link_bad_certs: resd 1
 link_duplicate_certs: resd 1
 link_with_vpadding: resd 1
 link_bad_netinfo: resd 1
+oversized_relay_body: resb TOR_HS_RELAY_DATA_MAX + 1
 
 SECTION .text
 global _start
@@ -93,6 +99,34 @@ _start:
     ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + 1], 2
     ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + 2], 0
     ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + 3], 84
+
+    mov     dword [rel sent_create2_cell + TOR_CELL_CIRC_ID], 0
+    mov     byte [rel sent_create2_cell + TOR_CELL_CMD], 0
+    mov     word [rel opened_stream_id], 0
+    mov     edi, 1
+    mov     esi, 0x04030201
+    mov     edx, 80
+    lea     rcx, [rel opened_stream_id]
+    call    er_tor_open_stream
+    ASSERT_EQ eax, 0
+    ASSERT_RDX 0
+    ASSERT_EQ word [rel opened_stream_id], 1
+    ASSERT_EQ dword [rel sent_create2_cell + TOR_CELL_CIRC_ID], 1
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_CMD], TOR_CELL_RELAY
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_CMD], TOR_RELAY_BEGIN
+    ASSERT_EQ word [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID], 1
+    ASSERT_EQ word [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN], 0x0b00
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET], '1'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 1], '.'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 2], '2'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 3], '.'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 4], '3'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 5], '.'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 6], '4'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 7], ':'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 8], '8'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 9], '0'
+    ASSERT_EQ byte [rel sent_create2_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DATA_OFFSET + 10], 0
 
     call    er_tor_cell_init
     mov     dword [rel created2_cell + TOR_CELL_CIRC_ID], 2
@@ -178,6 +212,33 @@ _start:
     ASSERT_EQ eax, 0
     ASSERT_RDX 0
 
+    mov     edi, 1
+    xor     esi, esi
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [rel oversized_relay_body]
+    mov     r8d, TOR_HS_RELAY_DATA_MAX + 1
+    call    er_tor_send_relay
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_TOR_PROTOCOL_ERR
+
+    mov     edi, 1
+    xor     esi, esi
+    mov     edx, TOR_RELAY_DATA
+    xor     ecx, ecx
+    xor     r8d, r8d
+    call    er_tor_send_relay
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_TOR_PROTOCOL_ERR
+
+    mov     edi, 1
+    xor     esi, esi
+    xor     edx, edx
+    xor     ecx, ecx
+    xor     r8d, r8d
+    call    er_tor_recv_relay
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_INVALID_PARAM
+
     TEST_EXIT_FAILED
 
 global er_memcpy
@@ -237,8 +298,11 @@ er_tor_ntor_client_handshake:
 er_tor_ntor_client_process:
 er_tor_curve25519_scalar_mult:
 er_tor_aes_ctr:
-er_tor_sha256:
     xor     eax, eax
+    ret
+
+er_tor_sha256:
+    mov     eax, 32
     ret
 
 er_tcp_get_state:

@@ -41,6 +41,7 @@ tcp_seg_buf: resb 1500
 tcp_seg_len: resd 1
 
 ; Temp storage for incoming segment payload pointer (saved during connection lookup)
+tcp_in_hdr_ptr: resq 1
 tcp_in_payload_ptr: resq 1
 
 ; TPM command/response buffers for ISN generation
@@ -177,12 +178,6 @@ er_fn er_tcp_connect
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .tpm_fail
-    ; Debug: got transfer
-    push    rax
-    mov     edi, 0x3f8
-    mov     esi, 'X'
-    call    er_serial_putchar
-    pop     rax
 
     mov     rdi, tpm_isn_rsp
     mov     esi, eax
@@ -191,10 +186,6 @@ er_fn er_tcp_connect
     call    er_tpm_parse_get_random
     test    rax, rax
     jz      .tpm_fail
-    ; Debug: got parse
-    mov     edi, 0x3f8
-    mov     esi, 'P'
-    call    er_serial_putchar
 
     ; Recalculate connection pointer (r8 may be clobbered by TPM calls)
     mov     eax, ebx
@@ -600,6 +591,7 @@ er_fn er_tcp_recv
     push    rbx
     push    r12
     push    r13
+    push    r14
 
     mov     r12d, edi       ; conn_id
     mov     r13, rsi        ; buf
@@ -673,17 +665,8 @@ er_fn er_tcp_recv
     call    er_memcpy
 
 .done_copy:
-    ; Update rcv_nxt (acknowledge data)
-    mov     eax, [rbx + TCP_CONN_RCV_NXT]
-    add     eax, ecx
-    mov     [rbx + TCP_CONN_RCV_NXT], eax
-
     ; Update stored length
     mov     [r14], ecx
-
-    ; Send ACK
-    mov     rdi, rbx
-    call    _tcp_send_ack
 
     xor     eax, eax
     er_ok
@@ -777,6 +760,7 @@ er_fn er_tcp_close
 
 .fail:
     mov     eax, -1
+    er_err  ERROR_IO
     pop     rbx
     er_ret
 ; ==================================================================
@@ -836,7 +820,14 @@ _tcp_send_ack:
     lea     rdx, [tcp_seg_buf]
     mov     ecx, TCP_HDR_LEN
     call    er_ip_send
+    test    eax, eax
+    js      .fail
 
+    xor     eax, eax
+    pop     r12
+    ret
+.fail:
+    mov     eax, -1
     pop     r12
     ret
 
@@ -895,12 +886,18 @@ _tcp_send_fin:
     lea     rdx, [tcp_seg_buf]
     mov     ecx, TCP_HDR_LEN
     call    er_ip_send
+    test    eax, eax
+    js      .fail
 
     ; FIN consumes one sequence number
     mov     eax, [r12 + TCP_CONN_SND_NXT]
     inc     eax
     mov     [r12 + TCP_CONN_SND_NXT], eax
 
+    pop     r12
+    ret
+.fail:
+    mov     eax, -1
     pop     r12
     ret
 
@@ -931,6 +928,7 @@ er_fn er_tcp_handle
     ; Compute TCP segment length
     mov     ecx, r13d
     sub     ecx, 20         ; minus IP header
+    mov     [tcp_seg_len], ecx
     sub     ecx, eax        ; minus TCP header options
     js      .done
     mov     r14d, ecx       ; TCP payload length
@@ -961,7 +959,9 @@ er_fn er_tcp_handle
 
     ; Save TCP payload pointer before find_conn loop clobbers rbx/r12
     ; rbx = TCP header, rax = TCP header length (from data offset)
+    mov     [tcp_in_hdr_ptr], rbx
     lea     r13, [rbx + rax]        ; r13 reused: IP total len → payload ptr
+    mov     [tcp_in_payload_ptr], r13
 
     mov     edx, [r12 + IP_DST]     ; destination IP in packet
     mov     edi, [r12 + IP_SRC]     ; source IP in packet
@@ -1000,6 +1000,21 @@ er_fn er_tcp_handle
 
     ; Found connection!
     mov     r12, rsi        ; conn pointer
+    mov     rdi, r12
+    mov     rsi, [tcp_in_hdr_ptr]
+    mov     edx, [tcp_seg_len]
+    call    _tcp_compute_checksum
+    test    ax, ax
+    jnz     .done
+    mov     rbx, [tcp_in_hdr_ptr]
+    mov     r8d, [rbx + TCP_SEQ_NUM]
+    bswap   r8d
+    mov     r9d, [rbx + TCP_ACK_NUM]
+    bswap   r9d
+    movzx   r10d, byte [rbx + TCP_FLAGS]
+    movzx   r11d, word [rbx + TCP_WINDOW]
+    rol     r11w, 8
+    mov     r13, [tcp_in_payload_ptr]
     jmp     .handle_seg
 
 .next_conn:
@@ -1078,10 +1093,12 @@ er_fn er_tcp_handle
     jmp     .done
 
 .fin_established:
+    cmp     r8d, [r12 + TCP_CONN_RCV_NXT]
+    jne     .done
     mov     dword [r12 + TCP_CONN_STATE], TCP_CLOSE_WAIT
 
     ; Update rcv_nxt for FIN
-    mov     eax, [r12 + TCP_CONN_RCV_NXT]
+    mov     eax, r8d
     inc     eax
     mov     [r12 + TCP_CONN_RCV_NXT], eax
 
@@ -1091,11 +1108,13 @@ er_fn er_tcp_handle
     jmp     .done
 
 .fin_fin_wait_1:
+    cmp     r8d, [r12 + TCP_CONN_RCV_NXT]
+    jne     .done
     ; Our FIN and their FIN crossed
     mov     dword [r12 + TCP_CONN_STATE], TCP_TIME_WAIT
 
     ; Update rcv_nxt for FIN
-    mov     eax, [r12 + TCP_CONN_RCV_NXT]
+    mov     eax, r8d
     inc     eax
     mov     [r12 + TCP_CONN_RCV_NXT], eax
 
@@ -1143,6 +1162,8 @@ er_fn er_tcp_handle
     ; Process data payload if present
     cmp     r14d, 0
     je      .ack_only
+    cmp     r8d, [r12 + TCP_CONN_RCV_NXT]
+    jne     .ack_only
 
     ; Check if payload fits in rx buffer
     mov     eax, [r12 + TCP_CONN_RX_LEN]

@@ -1,6 +1,5 @@
-const std = @import("std");
-
 const common = @import("../component_common.zig");
+const geometry = @import("../geometry.zig");
 const interaction = @import("../interaction.zig");
 const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
@@ -443,8 +442,8 @@ pub fn composeBar(view: anytype, bounds: ui.Rect, props: ComposeBarProps) (ui.Re
 
 pub fn contextActionPanel(view: anytype, container: ui.Rect, props: ContextActionPanelProps) (ui.RenderError || interaction.Error)!void {
     const mark = view.overlayMark();
-    const x = std.math.clamp(props.x, container.x + 8.0, container.x + container.w - props.w - 8.0);
-    const y = std.math.clamp(props.y, container.y + 8.0, container.y + container.h - props.h - 8.0);
+    const x = geometry.clamp(props.x, container.x + 8.0, container.x + container.w - props.w - 8.0);
+    const y = geometry.clamp(props.y, container.y + 8.0, container.y + container.h - props.h - 8.0);
     const panel_bounds = ui.Rect.init(x, y, props.w, props.h);
     _ = try floatingPanel(view, panel_bounds, .{
         .fill = props.fill,

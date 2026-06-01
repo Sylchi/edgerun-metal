@@ -58,45 +58,34 @@ pub const BoundedArena = struct {
 
     pub fn allocSlice(self: *BoundedArena, comptime T: type, count: usize) ?[]T {
         if (count == 0) return null;
-        const bounded_allocator = self.allocator();
-        return bounded_allocator.alloc(T, count) catch null;
-    }
-
-    pub fn allocator(self: *BoundedArena) std.mem.Allocator {
-        return .{
-            .ptr = self,
-            .vtable = &vtable,
-        };
-    }
-
-    fn rawAlloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
-        const self: *BoundedArena = @ptrCast(@alignCast(ctx));
-        const align_bytes = @max(alignment.toByteUnits(), 1);
+        const align_bytes = @max(@alignOf(T), 1);
         const base_addr = @intFromPtr(self.region.base.ptr);
-        const aligned_addr = std.mem.alignForward(usize, base_addr, align_bytes);
+        const aligned_addr = alignForward(base_addr, align_bytes);
         const prefix = aligned_addr - base_addr;
-        const total = prefix + len;
-        const allocation = self.region.takePrefix(total) orelse return null;
-        return allocation.base[prefix..].ptr;
+        const byte_len = @sizeOf(T) * count;
+        const allocation = self.region.takePrefix(prefix + byte_len) orelse return null;
+        const bytes = allocation.base[prefix..][0..byte_len];
+        const aligned: []align(@alignOf(T)) u8 = @alignCast(bytes);
+        return @as([*]T, @ptrCast(aligned.ptr))[0..count];
     }
 
-    fn rawResize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
-        return false;
+    pub fn allocator(self: *BoundedArena) BoundedAllocator {
+        return .{ .arena = self };
     }
-
-    fn rawRemap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
-        return null;
-    }
-
-    fn rawFree(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
-
-    const vtable = std.mem.Allocator.VTable{
-        .alloc = rawAlloc,
-        .resize = rawResize,
-        .remap = rawRemap,
-        .free = rawFree,
-    };
 };
+
+pub const BoundedAllocator = struct {
+    arena: *BoundedArena,
+
+    pub fn alloc(self: BoundedAllocator, comptime T: type, count: usize) error{OutOfMemory}![]T {
+        return self.arena.allocSlice(T, count) orelse error.OutOfMemory;
+    }
+};
+
+fn alignForward(value: usize, alignment: usize) usize {
+    const mask = alignment - 1;
+    return (value + mask) & ~mask;
+}
 
 test "allocator cannot leave bounded region" {
     var memory: [32]u8 = undefined;
@@ -150,8 +139,12 @@ test "arena carves regions and typed slices from the same capability" {
     try std.testing.expectEqual(@as(usize, 32), region.len());
     try std.testing.expectEqual(@as(usize, 4), slots.len);
     try std.testing.expect(arena.remaining() <= 64);
-    try std.testing.expect(arena.owns(std.mem.sliceAsBytes(slots)));
-    try std.testing.expectEqual(@as(usize, 0), arena.offsetOf(std.mem.sliceAsBytes(slots)).?);
+    try std.testing.expect(arena.owns(sliceAsBytes(u64, slots)));
+    try std.testing.expectEqual(@as(usize, 0), arena.offsetOf(sliceAsBytes(u64, slots)).?);
+}
+
+fn sliceAsBytes(comptime T: type, value: []const T) []const u8 {
+    return @as([*]const u8, @ptrCast(value.ptr))[0 .. value.len * @sizeOf(T)];
 }
 
 test "region transfer seals earlier allocations out of shareable ownership" {

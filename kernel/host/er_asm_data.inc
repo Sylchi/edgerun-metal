@@ -4,7 +4,7 @@ arg_o: db "-o", 0
 arg_f: db "-f", 0
 arg_i: db "-I", 0
 msg_usage: db "usage: er_asm --parse-only <source.asm> | -f <fmt> [-I path] [-d name] [-D name] -o <out> <source.asm>", 10, 0
-msg_fail: db "er_asm: parse failed", 10, 0
+msg_fail: db "er_asm: assembly failed", 10, 0
 msg_unsupported: db "er_asm: unsupported source shape", 10, 0
 key_magic: db "er_asm_parse", 9, "1", 10, 0
 key_lines: db "lines", 0
@@ -340,98 +340,3 @@ tok_three_close: db "3]"
 tok_three_close_len equ $ - tok_three_close
 tok_rel_open: db "[rel"
 tok_rel_open_len equ $ - tok_rel_open
-align 8
-exit_object_start:
-    db 0x7f, "ELF", 2, 1, 1, 0
-    dq 0
-    dw 1
-    dw 62
-    dd 1
-    dq 0
-    dq 0
-    dq ER_ASM_SHDR_OFF
-    dd 0
-    dw 64
-    dw 0
-    dw 0
-    dw 64
-    dw 6
-    dw 5
-
-    times ER_ASM_TEXT_CAP db 0
-
-    times ER_ASM_SYMTAB_CAP db 0
-
-    times ER_ASM_STRTAB_CAP db 0
-
-    times ER_ASM_RELA_CAP db 0
-
-    db 0, ".text", 0, ".symtab", 0, ".strtab", 0, ".rela.text", 0, ".shstrtab", 0
-    times 4 db 0
-
-    dd 0
-    dd 0
-    dq 0
-    dq 0
-    dq 0
-    dq 0
-    dd 0
-    dd 0
-    dq 0
-    dq 0
-
-    dd 1
-    dd 1
-    dq 6
-    dq 0
-    dq ER_ASM_TEXT_OFF
-    dq 0
-    dd 0
-    dd 0
-    dq 1
-    dq 0
-
-    dd 7
-    dd 2
-    dq 0
-    dq 0
-    dq ER_ASM_SYMTAB_OFF
-    dq ER_ASM_SYMTAB_CAP
-    dd 3
-    dd 1
-    dq 8
-    dq 24
-
-    dd 15
-    dd 3
-    dq 0
-    dq 0
-    dq ER_ASM_STRTAB_OFF
-    dq ER_ASM_STRTAB_CAP
-    dd 0
-    dd 0
-    dq 1
-    dq 0
-
-    dd 23
-    dd 4
-    dq 0
-    dq 0
-    dq ER_ASM_RELA_OFF
-    dq ER_ASM_RELA_CAP
-    dd 2
-    dd 1
-    dq 8
-    dq 24
-
-    dd 34
-    dd 3
-    dq 0
-    dq 0
-    dq ER_ASM_SHSTRTAB_OFF
-    dq 44
-    dd 0
-    dd 0
-    dq 1
-    dq 0
-exit_object_end:

@@ -499,7 +499,10 @@ er_fn er_route_send
     push    r12
     push    r13
 
+    mov     r13, rdi        ; destination hash
     mov     r12, rsi        ; cell
+    test    r12, r12
+    jz      .bad_param
 
     call    _local_route_hash_valid
     test    edx, edx
@@ -507,7 +510,7 @@ er_fn er_route_send
 
     call    _local_route_find_by_hash
     test    edx, edx
-    jnz     .send_tor
+    jnz     .send_tor_unknown
 
     mov     ebx, eax        ; slot_id
     mov     edi, ebx
@@ -530,7 +533,16 @@ er_fn er_route_send
     pop     rbx
     er_ret
 
+.send_tor_unknown:
+    mov     rdi, r13
+    call    er_route_register_relay
+    test    edx, edx
+    jnz     .tor_fail
+    mov     ebx, eax
+    jmp     .send_tor
+
 .send_tor:
+    mov     [r12 + LOCAL_CELL_CIRC_ID], ebx
     mov     rdi, r12
     call    er_tor_send_cell
     test    eax, eax
@@ -559,6 +571,14 @@ er_fn er_route_send
     er_ret
 
 .bad:
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_param:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
     pop     r13
     pop     r12
     pop     rbx

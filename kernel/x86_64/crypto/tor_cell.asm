@@ -1321,6 +1321,8 @@ er_tor_relay_crypt:
     lea     rcx, [rax + TOR_CIRC_HOP_FWD_KEY]
     lea     r8,  [rax + TOR_CIRC_HOP_FWD_IV]
     call    .crypt_payload
+    test    eax, eax
+    js      .bad
     test    r15d, r15d
     jz      .done
     dec     r15d
@@ -1328,6 +1330,8 @@ er_tor_relay_crypt:
 
 .backward_loop:
     ; Incoming relay cells are decrypted from guard toward endpoint.
+    cmp     dword [rbx + TOR_CIRC_N_HOPS], 0
+    je      .bad
     xor     r15d, r15d
 .backward_next:
     cmp     r15d, [rbx + TOR_CIRC_N_HOPS]
@@ -1340,6 +1344,8 @@ er_tor_relay_crypt:
     lea     rcx, [rax + TOR_CIRC_HOP_BWD_KEY]
     lea     r8,  [rax + TOR_CIRC_HOP_BWD_IV]
     call    .crypt_payload
+    test    eax, eax
+    js      .bad
     inc     r15d
     jmp     .backward_next
 
@@ -1352,7 +1358,17 @@ er_tor_relay_crypt:
     ; rcx = key ptr, r8 = iv ptr
     jmp     er_tor_aes_ctr
 .done:
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
 .bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
     pop     r15
     pop     r14
     pop     r13
@@ -1532,6 +1548,14 @@ _tor_send_relay_cmd:
     mov     r15, rcx        ; data
     mov     ebx, r8d        ; data_len
 
+    cmp     ebx, TOR_HS_RELAY_DATA_MAX
+    ja      .bad_relay_body
+    test    ebx, ebx
+    jz      .relay_body_ok
+    test    r15, r15
+    jz      .bad_relay_body
+.relay_body_ok:
+
     ; Build relay cell in tor_tx_cell
     mov     rdi, tor_tx_cell
     xor     eax, eax
@@ -1571,11 +1595,11 @@ _tor_send_relay_cmd:
     mov     edi, r12d
     call    _tor_circ_ptr
     test    rax, rax
-    jz      .no_digest
+    jz      .digest_fail
     mov     rdi, rax
     call    _tor_endpoint_hop_ptr
     test    rax, rax
-    jz      .no_digest
+    jz      .digest_fail
 
     ; Build input at tor_digest_buf: forward_digest[32] || cell_payload[509]
     ; Cell payload = bytes 5..513 of tor_tx_cell (509 bytes including relay header)
@@ -1595,7 +1619,7 @@ _tor_send_relay_cmd:
     lea     rdx, [tor_digest_buf + 541] ; output (32 bytes)
     call    er_tor_sha256
     test    eax, eax
-    jz      .no_digest
+    jz      .digest_fail
 
     ; Write first 4 bytes of new digest into cell's digest field
     mov     eax, [tor_digest_buf + 541]
@@ -1605,22 +1629,24 @@ _tor_send_relay_cmd:
     mov     edi, r12d
     call    _tor_circ_ptr
     test    rax, rax
-    jz      .no_digest
+    jz      .digest_fail
     mov     rdi, rax
     call    _tor_endpoint_hop_ptr
     test    rax, rax
-    jz      .no_digest
+    jz      .digest_fail
     lea     rdi, [rax + TOR_CIRC_HOP_FWD_DIGEST]
     lea     rsi, [tor_digest_buf + 541]
     mov     edx, 32
     call    er_memcpy
 
-.no_digest:
+.digest_done:
     ; Encrypt cell payload with circuit's forward key
     mov     edi, tor_tx_cell
     mov     esi, r12d       ; circ_id
     xor     edx, edx        ; forward direction
     call    er_tor_relay_crypt
+    test    eax, eax
+    js      .send_fail
 
     ; Send over TCP
     mov     edi, [tor_conn_id]
@@ -1651,6 +1677,28 @@ _tor_send_relay_cmd:
     pop     rbx
     er_ret
 
+.digest_fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 8
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_relay_body:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 8
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
 er_fn er_tor_recv_relay
     push    rbx
     push    r12
@@ -1662,7 +1710,13 @@ er_fn er_tor_recv_relay
     mov     r13, rsi        ; out_stream_id
     mov     r14, rdx        ; out_cmd
     mov     r15, rcx        ; out_data
-    ; r8 = out_data_len
+    mov     rbx, r8         ; out_data_len
+    test    r13, r13
+    jz      .bad_arg
+    test    r14, r14
+    jz      .bad_arg
+    test    rbx, rbx
+    jz      .bad_arg
 
     ; Read cell from TCP
     mov     edi, [tor_conn_id]
@@ -1672,17 +1726,26 @@ er_fn er_tor_recv_relay
     call    er_tls_recv
     test    eax, eax
     js      .fail
+    cmp     dword [tor_recv_len], TOR_CELL_LEN
+    jne     .proto_fail
 
     ; Verify circ_id matches
     mov     eax, [tor_rx_cell]
     cmp     eax, r12d
-    jne     .fail
+    jne     .proto_fail
+    cmp     byte [tor_rx_cell + TOR_CELL_CMD], TOR_CELL_RELAY
+    je      .relay_cmd_ok
+    cmp     byte [tor_rx_cell + TOR_CELL_CMD], TOR_CELL_RELAY_EARLY
+    jne     .proto_fail
+.relay_cmd_ok:
 
     ; Decrypt with circuit's backward key
     mov     edi, tor_rx_cell
     mov     esi, r12d
     mov     edx, 1           ; backward direction
     call    er_tor_relay_crypt
+    test    eax, eax
+    js      .proto_fail
 
     ; ============================================================
     ; Verify relay digest
@@ -1752,6 +1815,8 @@ er_fn er_tor_recv_relay
     jmp     .fail
 
 .digest_done:
+    cmp     word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_RECOGNIZED], 0
+    jne     .proto_fail
 
     ; Parse relay header
     movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID]
@@ -1762,13 +1827,17 @@ er_fn er_tor_recv_relay
 
     movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
     xchg    cl, ch
+    cmp     ecx, TOR_HS_RELAY_DATA_MAX
+    ja      .proto_fail
 
     ; Copy relay data to output
-    mov     [r8], ecx
+    mov     [rbx], ecx
 
     cmp     ecx, 0
     je      .done
 
+    test    r15, r15
+    jz      .bad_arg
     mov     rdi, r15        ; out_data
     lea     rsi, [tor_rx_cell + 16]  ; relay data
     mov     edx, ecx
@@ -1777,6 +1846,26 @@ er_fn er_tor_recv_relay
 .done:
     xor     eax, eax
     er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_arg:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.proto_fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
     pop     r15
     pop     r14
     pop     r13
@@ -1799,11 +1888,14 @@ er_fn er_tor_open_stream
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     r12d, edi       ; circ_id
     mov     r13d, esi       ; dst_ip
     mov     r14w, dx        ; dst_port
-    ; rcx = out_stream_id
+    mov     rbx, rcx        ; out_stream_id
+    test    rbx, rbx
+    jz      .bad_arg
 
     ; Allocate stream ID
     movzx   eax, word [tor_stream_next_id]
@@ -1812,12 +1904,7 @@ er_fn er_tor_open_stream
     mov     r15w, ax
     inc     word [tor_stream_next_id]
 
-    ; Build RELAY_BEGIN payload: target address
-    ; Format: "host:port\0" for the destination
-    ; For IPv4: "1.2.3.4:80\0"
-    ; For simplicity, we use a dotted-decimal format
-    ; Actually, for Tor, RELAY_BEGIN uses a hostname or IP string
-    ; We'll format the IP as a string
+    ; Build RELAY_BEGIN payload: IPv4 dotted-decimal address plus port.
 
     ; Build address string on stack
     sub     rsp, 64
@@ -1863,17 +1950,35 @@ er_fn er_tor_open_stream
 
     ; Calculate address string length
     sub     rdi, rsp
-    mov     r14d, edi       ; addr_str_len
+    mov     r10d, edi       ; addr_str_len
 
     ; Send RELAY_BEGIN
     mov     edi, r12d       ; circ_id
     movzx   esi, r15w       ; stream_id
     mov     edx, TOR_RELAY_BEGIN
     mov     rcx, rsp        ; data = stack buffer (address string)
-    mov     r8d, r14d       ; data_len = address string length
+    mov     r8d, r10d       ; data_len = address string length
     call    er_tor_send_relay
+    test    eax, eax
+    js      .send_failed
+
+    mov     [rbx], r15w
+
+    movzx   edi, r15w
+    call    _tor_stream_ptr
+    test    rax, rax
+    jz      .state_failed
+    mov     dword [rax + TOR_STREAM_STATE], TOR_STREAM_CONNECTING
+    mov     [rax + TOR_STREAM_CIRC_ID], r12d
+    mov     [rax + TOR_STREAM_ID], r15w
+    mov     [rax + TOR_STREAM_DST_IP], r13d
+    mov     [rax + TOR_STREAM_DST_PORT], r14w
+    mov     dword [rax + TOR_STREAM_RX_LEN], 0
+    xor     eax, eax
+    er_ok
 
     add     rsp, 64
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1883,6 +1988,39 @@ er_fn er_tor_open_stream
 .full:
     mov     eax, -1
     er_err  ERROR_BUSY
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_arg:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.send_failed:
+    dec     word [tor_stream_next_id]
+    add     rsp, 64
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.state_failed:
+    dec     word [tor_stream_next_id]
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    add     rsp, 64
+    pop     r15
     pop     r14
     pop     r13
     pop     r12

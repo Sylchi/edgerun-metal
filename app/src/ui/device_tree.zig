@@ -27,7 +27,7 @@ pub const DeviceTree = struct {
         @memcpy(arena_copy, codec_bytes);
 
         if (codec_bytes.len < codec.header_size) return error.Corrupt;
-        const node_count = std.mem.readInt(u16, codec_bytes[16..18], .little);
+        const node_count = bytes.load16(codec_bytes[16..18]) orelse return error.Corrupt;
 
         const nodes = region.allocSlice(ui.Node, node_count) orelse return error.OutOfMemory;
         const root = codec.decodeBytes(arena_copy, nodes) catch return error.Corrupt;

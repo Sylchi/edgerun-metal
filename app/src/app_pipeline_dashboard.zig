@@ -376,9 +376,9 @@ pub const State = struct {
     ) []const component.SemanticItem {
         const stage = stages[self.selected_stage];
         const path = fs_paths[self.selected_path];
-        const ram_value = std.fmt.bufPrint(ram_buf, "{d}%", .{@as(u32, @intFromFloat(@round(path.ram_fit * self.ram_budget * 100.0)))}) catch "RAM";
-        const tick_value = std.fmt.bufPrint(tick_buf, "{d}%", .{@as(u32, @intFromFloat(@round(self.tick_budget * 100.0)))}) catch "ticks";
-        const volatile_value = std.fmt.bufPrint(volatile_buf, "{d}%", .{@as(u32, @intFromFloat(@round(volatileRatio() * 100.0)))}) catch "volatile";
+        const ram_value = writePercent(ram_buf, @intFromFloat(@round(path.ram_fit * self.ram_budget * 100.0))) orelse "RAM";
+        const tick_value = writePercent(tick_buf, @intFromFloat(@round(self.tick_budget * 100.0))) orelse "ticks";
+        const volatile_value = writePercent(volatile_buf, @intFromFloat(@round(volatileRatio() * 100.0))) orelse "volatile";
         items.* = [_]component.SemanticItem{
             .{ .kind = .path, .label = shortPath(path.path), .value = path.size_label, .detail = path.role, .state = if (path.private) .private else .neutral, .importance = .primary, .progress = path.indexed, .accent = path.color() },
             .{ .kind = .resource, .label = "RAM fit", .value = ram_value, .detail = "selected path x grant", .state = if (path.ram_fit < 0.5) .warning else .good, .importance = .primary, .progress = path.ram_fit * self.ram_budget, .accent = if (path.ram_fit < 0.5) pipeline_reject else pipeline_ram },
@@ -456,6 +456,33 @@ fn volatileRatio() f32 {
         if (stage.is_volatile) count += 1.0;
     }
     return count / @as(f32, @floatFromInt(stage_count));
+}
+
+fn writePercent(out: []u8, value: u32) ?[]const u8 {
+    var digits: [16]u8 = undefined;
+    const raw = writeUnsigned(&digits, value) orelse return null;
+    if (out.len < raw.len + 1) return null;
+    @memcpy(out[0..raw.len], raw);
+    out[raw.len] = '%';
+    return out[0 .. raw.len + 1];
+}
+
+fn writeUnsigned(out: []u8, value: u32) ?[]const u8 {
+    if (out.len == 0) return null;
+    var scratch: [16]u8 = undefined;
+    var remaining = value;
+    var count: usize = 0;
+    while (remaining >= 10) {
+        scratch[count] = @intCast('0' + remaining % 10);
+        remaining /= 10;
+        count += 1;
+    }
+    scratch[count] = @intCast('0' + remaining);
+    count += 1;
+    if (count > out.len) return null;
+    var index: usize = 0;
+    while (index < count) : (index += 1) out[index] = scratch[count - 1 - index];
+    return out[0..count];
 }
 
 fn unitFromDrag(region: interaction.Region, drag: ?ui_runtime.DragValue) ?f32 {

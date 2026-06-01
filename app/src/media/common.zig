@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const Header = struct {
     width: usize,
     height: usize,
@@ -24,11 +22,13 @@ const ascii_lower_a: u8 = 'a';
 const ascii_lower_z: u8 = 'z';
 
 pub fn checkedAdd(a: usize, b: usize) DecodeError!usize {
-    return std.math.add(usize, a, b) catch error.PixelBudget;
+    const sum = a +% b;
+    return if (sum < a) error.PixelBudget else sum;
 }
 
 pub fn checkedMul(a: usize, b: usize) DecodeError!usize {
-    return std.math.mul(usize, a, b) catch error.PixelBudget;
+    if (a != 0 and b > max_usize / a) return error.PixelBudget;
+    return a * b;
 }
 
 pub fn pixelCount(header: Header) DecodeError!usize {
@@ -115,7 +115,10 @@ pub fn writeU24Le(bytes: *[3]u8, value: usize) void {
 }
 
 pub fn writeU16(bytes: *[2]u8, value: usize) void {
-    std.debug.assert(value <= 0xFFFF);
+    if (value > max_u16) @trap();
     bytes[0] = @intCast(value & 0xff);
     bytes[1] = @intCast((value >> 8) & 0xff);
 }
+
+const max_usize: usize = ~@as(usize, 0);
+const max_u16: usize = 0xffff;

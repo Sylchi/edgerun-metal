@@ -125,7 +125,7 @@ _start:
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
     EXPECT_EAX 0, .fail_case
-    EXPECT_DWORD [rel caps_out], UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT, .fail_case
+    EXPECT_DWORD [rel caps_out], UVC_CAP_IR_PRESENT, .fail_case
     TEST_CASE_PASS
 
     ; Test 4: malformed descriptor fails
@@ -154,7 +154,7 @@ _start:
     EXPECT_EAX 1, .fail_case
     TEST_CASE_PASS
 
-    ; Test 7: configured RGB stream starts and polls deterministic counters.
+    ; Test 7: configured RGB stream refuses to start until transfer support exists.
     xor     edi, edi
     mov     esi, 640
     mov     edx, 480
@@ -163,16 +163,16 @@ _start:
     EXPECT_EAX 0, .fail_case
     xor     edi, edi
     call    er_uvc_stream_start
-    EXPECT_EAX 0, .fail_case
-    cmp     edx, 0
+    EXPECT_EAX -1, .fail_case
+    cmp     edx, ERROR_NOT_IMPLEMENTED
     jne     .fail_case
     xor     edi, edi
     lea     rsi, [rel frames_out]
     lea     rdx, [rel errors_out]
     call    er_uvc_stream_poll
-    EXPECT_EAX 0, .fail_case
-    EXPECT_QWORD [rel frames_out], 0, .fail_case
-    EXPECT_QWORD [rel errors_out], 0, .fail_case
+    EXPECT_EAX -1, .fail_case
+    cmp     edx, ERROR_NOT_IMPLEMENTED
+    jne     .fail_case
     TEST_CASE_PASS
 
     ; Test 8: an attached but unconfigured IR stream is rejected explicitly.

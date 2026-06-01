@@ -106,6 +106,16 @@ pub const Requirements = struct {
             bytes.store32(out[24..28], @intFromEnum(self.access));
     }
 
+    pub fn eql(self: Requirements, other: Requirements) bool {
+        return self.durability == other.durability and
+            self.confidentiality == other.confidentiality and
+            self.portability == other.portability and
+            self.integrity == other.integrity and
+            self.lifetime == other.lifetime and
+            self.visibility == other.visibility and
+            self.access == other.access;
+    }
+
     pub fn decode(in: []const u8) Error!Requirements {
         if (in.len < requirements_size) return error.Corrupt;
         return .{

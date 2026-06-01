@@ -28,6 +28,8 @@ const jpeg_dc_class: u8 = 0;
 const jpeg_ac_class: u8 = 1;
 const jpeg_alpha_opaque: u8 = 255;
 const byte_bits: u4 = 8;
+const min_i16: i32 = -32768;
+const max_i16: i32 = 32767;
 
 const zigzag = [_]usize{
     0,  1,  8,  16, 9,  2,  3,  10,
@@ -560,8 +562,8 @@ fn ycbcrColor(y: i16, cb: i16, cr: i16) ui.Color {
 }
 
 fn clampI16(value: i32) i16 {
-    if (value < std.math.minInt(i16)) return std.math.minInt(i16);
-    if (value > std.math.maxInt(i16)) return std.math.maxInt(i16);
+    if (value < min_i16) return min_i16;
+    if (value > max_i16) return max_i16;
     return @intCast(value);
 }
 

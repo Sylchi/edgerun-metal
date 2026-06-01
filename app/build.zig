@@ -46,6 +46,12 @@ pub fn build(b: *std.Build) void {
         .description = "Run Zig clock tests",
     });
     _ = addZigTest(b, target, optimize, .{
+        .root = "src/crypto.zig",
+        .step = "crypto-test",
+        .description = "Run project crypto tests",
+        .default_step = test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/identity.zig",
         .step = "identity-test",
         .description = "Run Zig identity tests",
@@ -176,6 +182,13 @@ pub fn build(b: *std.Build) void {
         .root = "src/ui_codec_test.zig",
         .step = "ui-codec-test",
         .description = "Run Zig UI codec and stream tests",
+        .default_step = test_step,
+        .suite_step = ui_test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
+        .root = "src/svg_path_parser.zig",
+        .step = "svg-path-parser-test",
+        .description = "Run SVG path parser tests",
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
@@ -325,6 +338,7 @@ pub fn build(b: *std.Build) void {
     };
     const install_ui_wasm = b.addInstallArtifact(ui_wasm, .{});
     const ui_wasm_step = b.step("ui-components-wasm", "Build the standalone UI component library wasm");
+    ui_wasm_step.dependOn(&addNoStdProductionCheck(b).step);
     ui_wasm_step.dependOn(&install_ui_wasm.step);
 
     const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
@@ -409,6 +423,19 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| pi_usb_control.addArgs(args);
     const pi_usb_control_step = b.step("pi-usb-control", "Send Edgerun Pi USB control commands over Linux usbfs without external dependencies");
     pi_usb_control_step.dependOn(&pi_usb_control.step);
+}
+
+fn addNoStdProductionCheck(b: *std.Build) *std.Build.Step.Run {
+    const script =
+        \\failed=0
+        \\for f in src/arena.zig src/object.zig src/bytes.zig src/math.zig src/clock.zig src/crypto.zig src/boot_resource_map.zig src/pi_usb_control.zig src/app_encrypted_chat.zig src/app_pipeline_dashboard.zig src/content/kernel.zig src/content/resource_contract.zig src/content/resource_inventory.zig src/media/common.zig src/media/runtime_image.zig src/media/video_common.zig src/media/video_ivf.zig src/media/video_webm.zig src/media/audio_webm.zig src/media/jpeg.zig src/render/font.zig src/render/font_atlas_weighted.zig src/render/ir.zig src/render/pipeline.zig src/render/surface.zig src/shell/agent.zig src/shell/frame.zig src/svg_path_parser.zig src/ui/*.zig src/ui/layouts/*.zig src/ui/components/*.zig; do
+        \\  [ -f "$f" ] || continue
+        \\  case "$f" in */TestSupport.zig|*/ComponentApiTest.zig) continue ;; esac
+        \\  awk 'BEGIN { bad = 0; test_block = 0 } /^test "/ { test_block = 1 } !test_block && /std\./ && $0 !~ /std\.testing/ { print FILENAME ":" FNR ":" $0; bad = 1 } END { exit bad }' "$f" || failed=1
+        \\done
+        \\exit "$failed"
+    ;
+    return b.addSystemCommand(&.{ "sh", "-c", script });
 }
 
 fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.LazyPath, runtime_obj: ?std.Build.LazyPath) void {

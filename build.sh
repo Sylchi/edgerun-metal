@@ -376,22 +376,6 @@ build_test_self() {
 	build_test "$name" "${TEST_DIR}/${name}.asm" "$@"
 }
 
-build_test_er_asm_dep() {
-	local name="$1"; shift
-	local dep="$1"; shift
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local dep_obj="${ASM_BUILD}/${dep##*/}.er_asm.o"
-	local dep_src="${ASM_DIR}/${dep}.asm"
-	local bin="${ASM_BUILD}/${name%_self}"
-	cmd_er_asm >/dev/null
-	asm_x86_obj elf64 "$obj" "$src"
-	"${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$dep_obj" "$dep_src"
-	ld -nostdlib -static -o "$bin" "$obj" "$dep_obj" "$@"
-	echo "  LD  ${bin}"
-	"$bin"
-}
-
 build_test_single_dep_obj() {
 	local name="$1"; shift
 	local dep_obj_name="$1"; shift
@@ -412,11 +396,10 @@ build_test_stubbed() {
 	local stub="$1"; shift
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
-	local stub_obj="${ASM_BUILD}/${stub}.er_asm.o"
+	local stub_obj="${ASM_BUILD}/${stub}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
-	cmd_er_asm >/dev/null
 	asm_x86_obj elf64 "$obj" "$src"
-	"${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$stub_obj" "${TEST_DIR}/${stub}.asm"
+	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/${stub}.asm"
 	local extra_o=""
 	for dep; do
 		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
@@ -426,6 +409,52 @@ build_test_stubbed() {
 	ld -nostdlib -static -o "$bin" "$obj" $extra_o "$stub_obj"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+build_flat_kernel_test() {
+	local name="$1"; shift
+	local main_src="$1"; shift
+	local test_dir="${ASM_BUILD}/${name}_flat"
+	local kernel_bin="${test_dir}/kernel.bin"
+	local boot_bin="${test_dir}/boot_loader.bin"
+	local image="${test_dir}/kernel.img"
+	local entry_obj="${test_dir}/entry.o"
+	local main_obj="${test_dir}/main.o"
+	local runtime_obj="${test_dir}/runtime.o"
+	if [ -e "$test_dir" ] && [ ! -d "$test_dir" ]; then
+		rm -f "$test_dir"
+	fi
+	mkdir -p "$test_dir"
+	elf32 "${ASM_DIR}/entry.asm" "$entry_obj"
+	elf32 "$main_src" "$main_obj"
+	elf32 "${ASM_DIR}/rt/runtime.asm" "$runtime_obj"
+	local extra_o=""
+	for dep; do
+		local dep_obj="${test_dir}/${dep##*/}.o"
+		elf32 "${ASM_DIR}/${dep}.asm" "$dep_obj"
+		extra_o="$extra_o $dep_obj"
+	done
+	ld -m elf_i386 -T "${KERNEL_LD}" -o "$kernel_bin" "$entry_obj" "$main_obj" "$runtime_obj" $extra_o
+	test -s "$kernel_bin"
+	local bsize=$(stat -c '%s' "$kernel_bin")
+	local sectors=$(( (bsize + 511) / 512 ))
+	asm_x86_obj bin "$boot_bin" "${TEST_DIR}/test_x86_flat_boot.asm" -dKERNEL_SECTORS="${sectors}"
+	test -s "$boot_bin"
+	cp "$boot_bin" "$image"
+	truncate -s $(( (sectors + 1) * 512 )) "$image"
+	dd if="$kernel_bin" of="$image" bs=512 seek=1 conv=notrunc status=none
+	test -s "$image"
+	local qemu_log="${test_dir}/qemu.log"
+	local qemu_rc=0
+	timeout 10s qemu-system-x86_64 -cpu qemu64,+pdpe1gb -machine pc -display none -serial stdio -no-reboot \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+		-drive file="$image",format=raw,if=ide,index=0 -m 256 >"$qemu_log" 2>&1 || qemu_rc=$?
+	if [ "$qemu_rc" -ne 1 ]; then
+		cat "$qemu_log" >&2
+		echo "FAIL ${name}: qemu exit ${qemu_rc}" >&2
+		exit 1
+	fi
+	echo "PASS ${name}"
 }
 
 test_registry() {
@@ -439,7 +468,7 @@ test-x86-asm-warning-fatal|unit|build|yes|cmd_test_x86_asm_warning_fatal|Validat
 test-er-asm-parse|unit|build|yes|cmd_test_er_asm_parse|Run owned ASM assembler parser smoke test
 test-er-asm-cli|unit|build|yes|cmd_test_er_asm_cli|Validate owned assembler accepts x86 assembler CLI shape
 test-er-efiboot|unit|build|yes|cmd_test_er_efiboot|Validate owned EFI variable manager dry-run operations
-test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test with owned assembler runtime object
+test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype bare-metal flat-image test
 test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
 test-identity|unit|crypto|yes|cmd_test_identity|Run identity source test
 test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
@@ -805,7 +834,7 @@ cmd_er_asm() {
 
 cmd_er_asm_obj() {
  if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-  echo "usage: ./build.sh er-asm-obj <source.asm> [out.o]" >&2
+  echo "usage: ./build.sh er-asm-obj <source.asm> [out.bin]" >&2
   exit 1
  fi
  local src="$1"
@@ -818,9 +847,9 @@ cmd_er_asm_obj() {
  if [ -z "$out" ]; then
   mkdir -p "${BUILD_DIR}/er-asm"
   local base="${src##*/}"
-  out="${BUILD_DIR}/er-asm/${base%.asm}.o"
+  out="${BUILD_DIR}/er-asm/${base%.asm}.bin"
  fi
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "$src"
+ "${HOST_BUILD}/er_asm" -f flat -I kernel -o "$out" "$src"
  test -f "$out"
  printf 'er-asm-obj: %s -> %s\n' "$src" "$out"
 }
@@ -834,10 +863,10 @@ cmd_er_asm_all() {
  while IFS= read -r src; do
   total=$((total + 1))
   local rel="${src#kernel/}"
-  local obj="${BUILD_DIR}/er-asm/all/${rel%.asm}.o"
+  local obj="${BUILD_DIR}/er-asm/all/${rel%.asm}.bin"
   local err="${obj}.err"
   mkdir -p "${obj%/*}"
-  if "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$obj" "$src" 2>"$err"; then
+  if "${HOST_BUILD}/er_asm" -f flat -I kernel -o "$obj" "$src" 2>"$err"; then
    passed=$((passed + 1))
    rm -f "$err"
   else
@@ -904,8 +933,7 @@ cmd_test_er_asm_cli() {
  local src_return_fn="${ASM_BUILD}/er_asm_return_fn_probe.asm"
  local src_zero_fn="${ASM_BUILD}/er_asm_zero_fn_probe.asm"
  local src_identity_fn="${ASM_BUILD}/er_asm_identity_fn_probe.asm"
- local caller_src="${ASM_BUILD}/er_asm_return_caller.asm"
- local caller_obj="${ASM_BUILD}/er_asm_return_caller.o"
+ local src_local_call="${ASM_BUILD}/er_asm_local_call_probe.asm"
  local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
  local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
  local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
@@ -916,11 +944,9 @@ cmd_test_er_asm_cli() {
  local bad_hex_src="${ASM_BUILD}/er_asm_bad_hex_probe.asm"
  local bad_dup_equ_src="${ASM_BUILD}/er_asm_bad_dup_equ_probe.asm"
  local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
- local out="${ASM_BUILD}/er_asm_exit_probe.o"
- local bin="${ASM_BUILD}/er_asm_exit_probe"
- local bad="${ASM_BUILD}/er_asm_unsupported.o"
+ local out="${ASM_BUILD}/er_asm_exit_probe.bin"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
- local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$caller_src" "$caller_obj" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$bin" "$bad" "$log")
+ local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -929,49 +955,45 @@ cmd_test_er_asm_cli() {
  expect_er_asm_reject() {
   local reject_src="$1"
   local reject_label="$2"
-  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$reject_src" >"$log" 2>&1; then
+  if "${HOST_BUILD}/er_asm" -f flat -I kernel -o "$out" "$reject_src" >"$log" 2>&1; then
    cat "$log" >&2
    cleanup_er_asm_cli
    echo "FAIL er-asm-cli: ${reject_label} assembled" >&2
    exit 1
   fi
-  if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  if ! grep -E 'unsupported source shape|assembly failed' "$log" >/dev/null 2>&1; then
    cat "$log" >&2
    cleanup_er_asm_cli
    echo "FAIL er-asm-cli: ${reject_label} did not report cause" >&2
    exit 1
   fi
+  rm -f "$out" "$log"
  }
- expect_er_asm_status() {
-  local status_src="$1"
-  local expected_status="$2"
-  local status_label="$3"
+ expect_er_asm_bytes() {
+  local bytes_src="$1"
+  local expected_hex="$2"
+  local bytes_label="$3"
   shift 3
-  "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$status_src"
-  ld -nostdlib -static "$@" -o "$bin" "$out"
-  local status=0
-  "$bin" || status=$?
-  if [ "$status" -ne "$expected_status" ]; then
+  "${HOST_BUILD}/er_asm" -f flat "$@" -o "$out" "$bytes_src"
+  local actual_hex
+  actual_hex="$(od -An -tx1 -v "$out" | tr -d ' \n')"
+  if [ "$actual_hex" != "$expected_hex" ]; then
    cleanup_er_asm_cli
-   echo "FAIL er-asm-cli: ${status_label} status ${status}, expected ${expected_status}" >&2
+   echo "FAIL er-asm-cli: ${bytes_label} bytes ${actual_hex}, expected ${expected_hex}" >&2
    exit 1
   fi
-  rm -f "$out" "$bin"
+  rm -f "$out"
  }
- expect_linked_out_status() {
-  local expected_status="$1"
-  local status_label="$2"
-  shift 2
-  test -f "$out"
-  ld -nostdlib -static "$@" -o "$bin" "$out"
-  local status=0
-  "$bin" || status=$?
-  if [ "$status" -ne "$expected_status" ]; then
+ expect_er_asm_builds() {
+  local build_src="$1"
+  local build_label="$2"
+  "${HOST_BUILD}/er_asm" -f flat -I kernel -o "$out" "$build_src"
+  if [ ! -s "$out" ]; then
    cleanup_er_asm_cli
-   echo "FAIL er-asm-cli: ${status_label} status ${status}, expected ${expected_status}" >&2
+   echo "FAIL er-asm-cli: ${build_label} emitted empty flat binary" >&2
    exit 1
   fi
-  rm -f "$out" "$bin"
+  rm -f "$out"
  }
  mkdir -p "$inc_dir_a"
  mkdir -p "$inc_dir"
@@ -1087,16 +1109,15 @@ er_identity:
     mov     eax, edi
     ret
 EOF
- cat > "$caller_src" <<'EOF'
+ cat > "$src_local_call" <<'EOF'
 [BITS 64]
-extern er_const
 section .text
 global _start
 _start:
-    call    er_const
-    mov     edi, eax
-    mov     eax, 60
-    syscall
+    call    .done
+    ret
+.done:
+    ret
 EOF
  cat > "$bad_src" <<'EOF'
 [BITS 64]
@@ -1146,132 +1167,23 @@ _start:
     xor     edi, edi
     syscall
 EOF
- "${HOST_BUILD}/er_asm" -f elf64 -I "${ASM_DIR}" -DTEST_DEFINE -dTEST_FLAG -o "$out" "$src"
- ld -nostdlib -static -o "$bin" "$out"
- "$bin"
- rm -f "$out" "$bin"
- ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$out" "$src"
- ld -nostdlib -static -o "$bin" "$out"
- "$bin"
- rm -f "$out" "$bin"
- expect_er_asm_status "$src_status" 44 "generated exit"
- ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$out" "$src_include" -I "$inc_dir_a" -I "$inc_dir"
- expect_linked_out_status 45 "included exit"
- "${HOST_BUILD}/er_asm" -f elf64 "-I${inc_dir_a}" "-I${inc_dir}" -o "$out" "$src_include"
- expect_linked_out_status 45 "joined include flag"
- expect_er_asm_status "$src_local_include" 46 "local include"
- expect_er_asm_status "$src_char" 47 "char immediate"
- expect_er_asm_status "$src_64reg" 48 "64-bit register"
- expect_er_asm_status "$src_named" 49 "named global" -e ermain
- expect_er_asm_status "$src_long_named" 50 "long global" -e er_isdigit
- "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_return_fn"
- ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$caller_obj" "$caller_src"
- expect_linked_out_status 51 "return function" "$caller_obj"
- rm -f "$caller_obj"
- "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_zero_fn"
- cat > "$caller_src" <<'EOF'
-[BITS 64]
-extern er_zero
-section .text
-global _start
-_start:
-    call    er_zero
-    mov     edi, eax
-    mov     eax, 60
-    syscall
-EOF
- ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
- expect_linked_out_status 0 "zero function" "$caller_obj"
- rm -f "$caller_obj"
- "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_identity_fn"
- cat > "$caller_src" <<'EOF'
-[BITS 64]
-extern er_identity
-section .text
-global _start
-_start:
-    mov     edi, '4'
-    call    er_identity
-    mov     edi, eax
-    mov     eax, 60
-    syscall
-EOF
- ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
- expect_linked_out_status 52 "identity function" "$caller_obj"
- rm -f "$caller_obj"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/ctype.asm"
- test -f "$out"
- cat > "$caller_src" <<'EOF'
-[BITS 64]
-extern er_isdigit
-extern er_isalpha
-extern er_isspace
-extern er_tolower
-extern er_toupper
-section .text
-global _start
-_start:
-    mov     edi, '/'
-    call    er_isdigit
-    test    eax, eax
-    jnz     .bad
-    mov     edi, '5'
-    call    er_isdigit
-    test    eax, eax
-    jz      .bad
-    mov     edi, ':'
-    call    er_isdigit
-    test    eax, eax
-    jnz     .bad
-    mov     edi, 'Q'
-    call    er_isalpha
-    test    eax, eax
-    jz      .bad
-    mov     edi, ' '
-    call    er_isspace
-    test    eax, eax
-    jz      .bad
-    mov     edi, 'A'
-    call    er_tolower
-    cmp     eax, 'a'
-    jne     .bad
-    mov     edi, 'z'
-    call    er_toupper
-    cmp     eax, 'Z'
-    jne     .bad
-    mov     edi, '/'
-    call    er_toupper
-    cmp     eax, '/'
-    jne     .bad
-    xor     edi, edi
-    mov     eax, 60
-    syscall
-.bad:
-    mov     edi, 1
-    mov     eax, 60
-    syscall
-EOF
- ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
- expect_linked_out_status 0 "ctype object assembled by er_asm" "$caller_obj"
- rm -f "$caller_obj"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "kernel/driver/portio.asm"
- test -f "$out"
- rm -f "$out"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/wasm/test_table.asm"
- test -f "$out"
- nm "$out" | grep -q 'test_table_len'
- rm -f "$out"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/math_hash.asm"
- test -f "$out"
- nm "$out" | grep -q 'er_xorshift64'
- nm "$out" | grep -q 'er_crc32c'
- nm "$out" | grep -q 'er_fnv1a64'
- rm -f "$out"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/math_int.asm"
- test -f "$out"
- nm "$out" | grep -q 'er_abs_i32'
- nm "$out" | grep -q 'er_divmod_i32'
- rm -f "$out"
+ expect_er_asm_bytes "$src" "b83c00000031ff0f05" "generated exit" -I "${ASM_DIR}" -DTEST_DEFINE -dTEST_FLAG
+ expect_er_asm_bytes "$src_status" "b83c000000bf2c0100000f05" "generated status"
+ expect_er_asm_bytes "$src_include" "b83c000000bf2d0000000f05" "included exit" -I "$inc_dir_a" -I "$inc_dir"
+ expect_er_asm_bytes "$src_include" "b83c000000bf2d0000000f05" "joined include flag" "-I${inc_dir_a}" "-I${inc_dir}"
+ expect_er_asm_bytes "$src_local_include" "b83c000000bf2e0000000f05" "local include"
+ expect_er_asm_bytes "$src_char" "b83c000000bf2f0000000f05" "char immediate"
+ expect_er_asm_bytes "$src_64reg" "48c7c03c00000048c7c7300000000f05" "64-bit register"
+ expect_er_asm_bytes "$src_named" "b83c000000bf310000000f05" "named global"
+ expect_er_asm_bytes "$src_long_named" "b83c000000bf320000000f05" "long global"
+ expect_er_asm_bytes "$src_return_fn" "b833000000c3" "return function"
+ expect_er_asm_bytes "$src_zero_fn" "31c0c3" "zero function"
+ expect_er_asm_bytes "$src_identity_fn" "89f8c3" "identity function"
+ expect_er_asm_bytes "$src_local_call" "e801000000c3c3" "local call"
+ expect_er_asm_builds "${ASM_DIR}/rt/ctype.asm" "ctype flat binary"
+ expect_er_asm_builds "kernel/driver/portio.asm" "portio flat binary"
+ expect_er_asm_builds "${ASM_DIR}/wasm/test_table.asm" "test table flat binary"
+ expect_er_asm_builds "${ASM_DIR}/rt/math_hash.asm" "math hash flat binary"
  expect_er_asm_reject "$bad_hex_src" "out-of-range hex immediate"
  expect_er_asm_reject "$bad_dup_equ_src" "duplicate equ"
  expect_er_asm_reject "$bad_define_tail_src" "trailing define junk"
@@ -1559,7 +1471,7 @@ cmd_test_wasm_compiler() {
 }
 
 cmd_test_ctype() {
-	build_test_er_asm_dep "test_ctype_self" "rt/ctype"
+	build_flat_kernel_test "test_ctype" "${TEST_DIR}/test_ctype_kernel_main.asm" "rt/ctype"
 }
 
 cmd_test_clock() {
@@ -1700,11 +1612,10 @@ cmd_test_fe_mul() {
 	local src="${TEST_DIR}/test_fe_mul.asm"
 	local obj="${ASM_BUILD}/test_fe_mul.o"
  local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
- local stub_obj="${ASM_BUILD}/stubs_tor_ntor.er_asm.o"
+ local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
  local bin="${ASM_BUILD}/test_fe_mul"
- cmd_er_asm >/dev/null
  asm_x86_obj elf64 "$obj" "$src"
- "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$stub_obj" "$stub_src"
+ asm_x86_obj elf64 "$stub_obj" "$stub_src"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -1879,9 +1790,8 @@ build_x25519_test() {
 	local obj="${ASM_BUILD}/${name}.o"
  local stub_obj="${ASM_BUILD}/${stub_name}.o"
 	local bin="${ASM_BUILD}/${name}"
-	cmd_er_asm >/dev/null
 	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_x25519.asm"
-	"${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$stub_obj" "${TEST_DIR}/stubs_tor_ntor.asm"
+	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/stubs_tor_ntor.asm"
 	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
 	if [ ! -f "$tor_ntor_o" ]; then
 		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
@@ -2188,8 +2098,8 @@ EOF
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
   er-asm              Build owned x86 ASM assembler front-end
-  er-asm-obj SRC [O] Assemble one x86 source object with owned er_asm; no yasm fallback
-  er-asm-all          Try every x86 .asm source with owned er_asm; no yasm fallback
+  er-asm-obj SRC [O] Assemble one x86 source flat binary with owned er_asm; no yasm fallback
+  er-asm-all          Try every x86 .asm source as a flat binary with owned er_asm; no yasm fallback
   tor-hs-host         Build hosted hidden-service library smoke binary
   tor-live-host       Build hosted live Tor ORPort probe binary
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)

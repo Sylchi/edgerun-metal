@@ -16,9 +16,12 @@ extern er_tor_get_role
 extern er_tor_get_role_caps
 extern er_tor_set_guard_material
 extern er_tor_init
+extern er_tor_poll
 extern er_tor_hsdir_build_publish_header
 extern er_tor_hsdir_build_fetch_request
 extern er_local_cell_init
+extern er_local_route_register
+extern er_local_cell_recv
 extern er_route_register_relay
 extern er_route_send
 extern er_memcpy
@@ -80,6 +83,9 @@ hsdir_fetch_expected_len equ $ - hsdir_fetch_expected
 route_hash:
           db "tor-route-test-identity"
           times 32 - ($ - route_hash) db 0
+poll_hash:
+          db "tor-poll-local-delivery"
+          times 32 - ($ - poll_hash) db 0
 guard_fingerprint:
           db 0x01, 0x23, 0x45, 0x67, 0x89
           db 0xab, 0xcd, 0xef, 0x10, 0x32
@@ -97,6 +103,10 @@ req_buf:  resb 512
 iv_copy:  resb 16
 bench_buf: resb TOR_CELL_LEN
 route_cell: resb LOCAL_CELL_SIZE
+poll_incoming_cell: resb LOCAL_CELL_SIZE
+poll_out_cell: resb LOCAL_CELL_SIZE
+poll_slot: resd 1
+poll_recv_enabled: resd 1
 last_relay_circ: resd 1
 last_relay_stream: resd 1
 last_relay_cmd: resd 1
@@ -477,6 +487,29 @@ _start:
     call    er_tor_get_role_caps
     ASSERT_EQ eax, TOR_CAP_OR_RELAY | TOR_CAP_EXIT
 
+; ================================================================
+; Test 16: Tor poll delivers incoming EdgeRun fixed cells into local IPC.
+; ================================================================
+    TEST_DEBUG_LABEL "16"
+    lea     rdi, [rel poll_hash]
+    call    er_local_route_register
+    ASSERT_RDX 0
+    mov     [rel poll_slot], eax
+
+    mov     [rel poll_incoming_cell + LOCAL_CELL_CIRC_ID], eax
+    mov     byte [rel poll_incoming_cell + LOCAL_CELL_CMD], LOCAL_CELL_DATA
+    mov     dword [rel poll_incoming_cell + LOCAL_CELL_PAYLOAD + 2], 0x33445566
+    mov     dword [rel poll_recv_enabled], 1
+    call    er_tor_poll
+    ASSERT_RDX 0
+
+    mov     edi, [rel poll_slot]
+    lea     rsi, [rel poll_out_cell]
+    call    er_local_cell_recv
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel poll_out_cell + LOCAL_CELL_CMD], LOCAL_CELL_DATA
+    ASSERT_EQ dword [rel poll_out_cell + LOCAL_CELL_PAYLOAD + 2], 0x33445566
+
 %ifdef TOR_BENCH
 ; ================================================================
 ; Local crypto bench: AES-CTR one Tor cell and batched cells
@@ -628,6 +661,7 @@ global er_tor_hs_cert_build
 global er_tor_hs_cert_armor_ed25519
 global er_tor_ntor_keygen
 global er_tcp_recv
+global er_tls_recv
 global er_serial_puts
 global er_serial_putchar
 global er_serial_puthex32
@@ -675,6 +709,30 @@ er_tor_relay_crypt:
 _wasm_import_da_surface_register:
 _wasm_import_da_surface_update:
 _wasm_import_da_surface_unregister:
+    xor     eax, eax
+    er_ok
+    ret
+
+er_tls_recv:
+    cmp     dword [rel poll_recv_enabled], 1
+    je      .copy_poll_cell
+    mov     dword [rdx], 0
+    xor     eax, eax
+    er_ok
+    ret
+.copy_poll_cell:
+    mov     dword [rel poll_recv_enabled], 0
+    push    rdi
+    push    rsi
+    push    rdx
+    mov     rdi, rsi
+    lea     rsi, [rel poll_incoming_cell]
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memcpy
+    pop     rdx
+    mov     dword [rdx], LOCAL_CELL_SIZE
+    pop     rsi
+    pop     rdi
     xor     eax, eax
     er_ok
     ret

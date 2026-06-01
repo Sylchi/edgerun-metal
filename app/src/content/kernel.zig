@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("../bytes.zig");
 const data_chunk = @import("data_chunk.zig");
 
@@ -92,7 +91,7 @@ pub const Allocator = struct {
 
     pub fn advance(self: *Allocator, amount: u64) Error!void {
         if (amount == 0) return error.BadArgument;
-        self.clock_tick = std.math.add(u64, self.clock_tick, amount) catch return error.BadArgument;
+        self.clock_tick = checkedEnd(self.clock_tick, amount) orelse return error.BadArgument;
     }
 
     pub fn addAllocation(self: *Allocator, allocation: Allocation) Error!void {
@@ -136,7 +135,8 @@ pub const Allocator = struct {
 };
 
 fn checkedEnd(offset: u64, length: u64) ?u64 {
-    return std.math.add(u64, offset, length) catch null;
+    const end = offset +% length;
+    return if (end < offset) null else end;
 }
 
 fn nonempty(value: data_chunk.DataChunk) bool {

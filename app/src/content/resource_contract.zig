@@ -238,7 +238,8 @@ fn putU64(out: []u8, cursor: *usize, value: u64) data_chunk.Error!void {
 }
 
 fn checkedEnd(offset: u64, length: u64) ?u64 {
-    return @import("std").math.add(u64, offset, length) catch null;
+    const end = offset +% length;
+    return if (end < offset) null else end;
 }
 
 fn contractsConflict(left: Contract, right: Contract) bool {

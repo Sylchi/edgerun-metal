@@ -124,7 +124,7 @@ pub const State = struct {
         var local_buf: []const u8 = "";
         if (selected) |contact| {
             const remote = writeIdentityPreview(&self.route_buf, contact.id);
-            remote_buf = std.fmt.bufPrint(&self.remote_buf, "identity {s}", .{remote}) catch remote;
+            remote_buf = writePrefixed(&self.remote_buf, "identity ", remote) orelse remote;
             local_buf = "identity routed";
         }
         const shell = try app.workspaceSurface(bounds, .{
@@ -206,7 +206,7 @@ pub const State = struct {
         const list_y = if (bounds.h >= 620.0) import_y + 58.0 else bounds.y + 18.0;
         try self.renderMessages(app, ui.Rect.init(bounds.x, list_y, bounds.w, @max(1.0, compose_y - list_y)), selected.id);
 
-        const msg_text = std.fmt.bufPrint(&self.message_count_buf, "{d} messages", .{self.visibleMessageCount(selected.id)}) catch "messages";
+        const msg_text = writeMessageCount(&self.message_count_buf, self.visibleMessageCount(selected.id)) orelse "messages";
         try app.composeBar(ui.Rect.init(bounds.x, compose_y, bounds.w, compose_h), .{
             .actions = &.{
                 .{ .id = image_button_id, .label = "Image", .icon = .photo },
@@ -431,6 +431,46 @@ fn writeIdentityPreview(out: []u8, id: identity.Id) []const u8 {
         out[index * 2 + 1] = hexChar(id.bytes[index] & 0x0f);
     }
     return out[0 .. index * 2];
+}
+
+fn writePrefixed(out: []u8, prefix: []const u8, value: []const u8) ?[]const u8 {
+    const len = prefix.len + value.len;
+    if (out.len < len) return null;
+    @memcpy(out[0..prefix.len], prefix);
+    @memcpy(out[prefix.len..][0..value.len], value);
+    return out[0..len];
+}
+
+fn writeMessageCount(out: []u8, count: usize) ?[]const u8 {
+    var digits: [32]u8 = undefined;
+    const raw = writeUnsigned(&digits, count) orelse return null;
+    return writeSuffixed(out, raw, " messages");
+}
+
+fn writeSuffixed(out: []u8, value: []const u8, suffix: []const u8) ?[]const u8 {
+    const len = value.len + suffix.len;
+    if (out.len < len) return null;
+    @memcpy(out[0..value.len], value);
+    @memcpy(out[value.len..][0..suffix.len], suffix);
+    return out[0..len];
+}
+
+fn writeUnsigned(out: []u8, value: usize) ?[]const u8 {
+    if (out.len == 0) return null;
+    var scratch: [32]u8 = undefined;
+    var remaining = value;
+    var count: usize = 0;
+    while (remaining >= 10) {
+        scratch[count] = @intCast('0' + remaining % 10);
+        remaining /= 10;
+        count += 1;
+    }
+    scratch[count] = @intCast('0' + remaining);
+    count += 1;
+    if (count > out.len) return null;
+    var index: usize = 0;
+    while (index < count) : (index += 1) out[index] = scratch[count - 1 - index];
+    return out[0..count];
 }
 
 fn hexChar(value: u8) u8 {

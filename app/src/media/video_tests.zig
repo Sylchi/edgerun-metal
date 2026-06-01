@@ -264,7 +264,7 @@ test "ivf vp8 decoder reconstructs interframe residuals" {
     try expectTestWideLightFrame(&pixels);
 }
 
-test "ivf vp8 decoder reconstructs shifted interframes" {
+test "ivf vp8 decoder rejects shifted interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_shift_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterShiftFrame(&inter_payload);
     const first_record_size = ivf_container.frame_header_size + test_vp8_stripe_payload.len;
@@ -284,16 +284,10 @@ test "ivf vp8 decoder reconstructs shifted interframes" {
     var decoder = try Decoder.init(&ivf);
     var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
     var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestStripeFrame(&pixels, 0);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 52), second.timestamp);
-    try expectTestStripeFrame(&pixels, test_vp8_stripe_shift);
+    try std.testing.expectError(error.UnsupportedVideo, decoder.nextFrame(&pixels, &scratch));
 }
 
-test "ivf vp8 decoder reconstructs fractional-motion interframes" {
+test "ivf vp8 decoder rejects fractional-motion interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_fractional_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterFractionalFrame(&inter_payload);
     const first_record_size = ivf_container.frame_header_size + test_vp8_stripe_payload.len;
@@ -313,16 +307,10 @@ test "ivf vp8 decoder reconstructs fractional-motion interframes" {
     var decoder = try Decoder.init(&ivf);
     var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
     var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestStripeFrame(&pixels, 0);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 62), second.timestamp);
-    try expectTestStripeFractionalFrame(&pixels);
+    try std.testing.expectError(error.UnsupportedVideo, decoder.nextFrame(&pixels, &scratch));
 }
 
-test "ivf vp8 decoder applies loop filter to fractional-motion interframes" {
+test "ivf vp8 decoder rejects filtered fractional-motion interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_fractional_filtered_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterFractionalFilteredFrame(&inter_payload);
     const first_record_size = ivf_container.frame_header_size + test_vp8_stripe_payload.len;
@@ -342,13 +330,7 @@ test "ivf vp8 decoder applies loop filter to fractional-motion interframes" {
     var decoder = try Decoder.init(&ivf);
     var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
     var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestStripeFrame(&pixels, 0);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 72), second.timestamp);
-    try expectTestStripeFractionalFilteredFrame(&pixels);
+    try std.testing.expectError(error.UnsupportedVideo, decoder.nextFrame(&pixels, &scratch));
 }
 
 test "ivf header rejects unsupported codec explicitly" {
@@ -455,22 +437,22 @@ test "webm vp8 decoder reconstructs interframe residuals" {
     try expectWideWebmInterframe(inter_frame, expectTestWideLightFrame);
 }
 
-test "webm vp8 decoder reconstructs shifted interframes" {
+test "webm vp8 decoder rejects shifted interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_shift_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterShiftFrame(&inter_payload);
-    try expectStripeWebmInterframe(inter_frame, expectTestStripeShiftedFrame);
+    try expectStripeWebmUnsupportedInterframe(inter_frame);
 }
 
-test "webm vp8 decoder reconstructs fractional-motion interframes" {
+test "webm vp8 decoder rejects fractional-motion interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_fractional_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterFractionalFrame(&inter_payload);
-    try expectStripeWebmInterframe(inter_frame, expectTestStripeFractionalFrame);
+    try expectStripeWebmUnsupportedInterframe(inter_frame);
 }
 
-test "webm vp8 decoder applies loop filter to fractional-motion interframes" {
+test "webm vp8 decoder rejects filtered fractional-motion interframes owned by asm vp8" {
     var inter_payload: [test_vp8_inter_fractional_filtered_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterFractionalFilteredFrame(&inter_payload);
-    try expectStripeWebmInterframe(inter_frame, expectTestStripeFractionalFilteredFrame);
+    try expectStripeWebmUnsupportedInterframe(inter_frame);
 }
 
 fn expectWideWebmInterframe(second_payload: []const u8, expect_second: *const fn ([]const ui.Color) anyerror!void) !void {
@@ -517,6 +499,23 @@ fn expectStripeWebmInterframe(second_payload: []const u8, expect_second: *const 
     try std.testing.expectEqual(@as(usize, 1), second.index);
     try std.testing.expectEqual(@as(u64, 24), second.timestamp);
     try expect_second(&pixels);
+}
+
+fn expectStripeWebmUnsupportedInterframe(second_payload: []const u8) !void {
+    const webm = try buildTestWebmWithSizedPayloads(
+        std.testing.allocator,
+        test_vp8_stripe_width,
+        test_vp8_stripe_height,
+        &test_vp8_stripe_payload,
+        second_payload,
+        webm_container.codec_vp8,
+    );
+    defer std.testing.allocator.free(webm);
+
+    var decoder = try Decoder.init(webm);
+    var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
+    var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
+    try std.testing.expectError(error.UnsupportedVideo, decoder.nextFrame(&pixels, &scratch));
 }
 
 fn expectTestStripeShiftedFrame(pixels: []const ui.Color) !void {

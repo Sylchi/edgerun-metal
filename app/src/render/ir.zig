@@ -1,4 +1,5 @@
 const std = @import("std");
+const byte_utils = @import("../bytes.zig");
 const math = @import("../math.zig");
 const icon_vector = @import("../ui/icon_vector.zig");
 const icon_pack = @import("../ui/icon_pack.zig");
@@ -531,9 +532,8 @@ pub fn encodeBody(buffers: Buffers, out: []u8) void {
         .overlay_icon_floats = @intCast(buffers.overlay_icon_vertex_len.*),
         .overlay_icon_line_floats = @intCast(buffers.overlay_icon_line_vertex_len.*),
     };
-    const floats = std.mem.asBytes(&hdr);
-    @memcpy(out[0..floats.len], floats);
-    var pos: usize = floats.len;
+    writeHeader(out, hdr);
+    var pos: usize = body_header_size;
     for ([_][]const f32{
         buffers.liveRects(),
         buffers.liveTextVertices(),
@@ -545,23 +545,22 @@ pub fn encodeBody(buffers: Buffers, out: []u8) void {
         buffers.liveOverlayIconVertices(),
         buffers.liveOverlayIconLineVertices(),
     }) |slice| {
-        const bytes = std.mem.sliceAsBytes(slice);
-        @memcpy(out[pos..][0..bytes.len], bytes);
-        pos += bytes.len;
+        writeFloatSlice(out[pos..][0 .. slice.len * @sizeOf(f32)], slice);
+        pos += slice.len * @sizeOf(f32);
     }
 }
 
 pub fn decodeBody(body: []const u8) BodyHeader {
     const hdr: BodyHeader = .{
-        .rect_floats = std.mem.readInt(u32, body[0..4], .little),
-        .text_floats = std.mem.readInt(u32, body[4..8], .little),
-        .icon_floats = std.mem.readInt(u32, body[8..12], .little),
-        .icon_line_floats = std.mem.readInt(u32, body[12..16], .little),
-        .image_floats = std.mem.readInt(u32, body[16..20], .little),
-        .overlay_rect_floats = std.mem.readInt(u32, body[20..24], .little),
-        .overlay_text_floats = std.mem.readInt(u32, body[24..28], .little),
-        .overlay_icon_floats = std.mem.readInt(u32, body[28..32], .little),
-        .overlay_icon_line_floats = std.mem.readInt(u32, body[32..36], .little),
+        .rect_floats = byte_utils.load32(body[0..4]).?,
+        .text_floats = byte_utils.load32(body[4..8]).?,
+        .icon_floats = byte_utils.load32(body[8..12]).?,
+        .icon_line_floats = byte_utils.load32(body[12..16]).?,
+        .image_floats = byte_utils.load32(body[16..20]).?,
+        .overlay_rect_floats = byte_utils.load32(body[20..24]).?,
+        .overlay_text_floats = byte_utils.load32(body[24..28]).?,
+        .overlay_icon_floats = byte_utils.load32(body[28..32]).?,
+        .overlay_icon_line_floats = byte_utils.load32(body[32..36]).?,
     };
     return hdr;
 }
@@ -583,9 +582,32 @@ pub fn applyBody(body: []const u8, buffers: *Buffers) void {
         const n: usize = field.count;
         field.len.* = n;
         if (n == 0) continue;
-        const src = std.mem.bytesAsSlice(f32, body[pos..][0 .. n * @sizeOf(f32)]);
-        @memcpy(field.dst[0..n], src);
+        readFloatSlice(field.dst[0..n], body[pos..][0 .. n * @sizeOf(f32)]);
         pos += n * @sizeOf(f32);
+    }
+}
+
+fn writeHeader(out: []u8, hdr: BodyHeader) void {
+    _ = byte_utils.store32(out[0..4], hdr.rect_floats);
+    _ = byte_utils.store32(out[4..8], hdr.text_floats);
+    _ = byte_utils.store32(out[8..12], hdr.icon_floats);
+    _ = byte_utils.store32(out[12..16], hdr.icon_line_floats);
+    _ = byte_utils.store32(out[16..20], hdr.image_floats);
+    _ = byte_utils.store32(out[20..24], hdr.overlay_rect_floats);
+    _ = byte_utils.store32(out[24..28], hdr.overlay_text_floats);
+    _ = byte_utils.store32(out[28..32], hdr.overlay_icon_floats);
+    _ = byte_utils.store32(out[32..36], hdr.overlay_icon_line_floats);
+}
+
+fn writeFloatSlice(out: []u8, values: []const f32) void {
+    for (values, 0..) |value, index| {
+        _ = byte_utils.store32(out[index * @sizeOf(f32) ..][0..@sizeOf(f32)], @bitCast(value));
+    }
+}
+
+fn readFloatSlice(out: []f32, raw: []const u8) void {
+    for (out, 0..) |*value, index| {
+        value.* = @bitCast(byte_utils.load32(raw[index * @sizeOf(f32) ..][0..@sizeOf(f32)]).?);
     }
 }
 
@@ -617,7 +639,7 @@ pub fn textGlyphAt(values: []const f32, index: usize) Error!TextGlyph {
     const glyph_key: u32 = @intFromFloat(glyph[text_glyph_codepoint_weight_index]);
     const weight_raw: u8 = @intCast(glyph_key & 3);
     const codepoint_raw = glyph_key / 4;
-    if (codepoint_raw > std.math.maxInt(u21)) return error.InvalidBuffer;
+    if (codepoint_raw > max_u21) return error.InvalidBuffer;
     return .{
         .x = glyph[text_glyph_x_index],
         .baseline_y = glyph[text_glyph_baseline_y_index],
@@ -632,6 +654,8 @@ pub fn textGlyphAt(values: []const f32, index: usize) Error!TextGlyph {
         .color = colorFromChannels(glyph[text_glyph_color_r_index], glyph[text_glyph_color_g_index], glyph[text_glyph_color_b_index], glyph[text_glyph_color_a_index]),
     };
 }
+
+const max_u21: u32 = 0x10ffff;
 
 pub const TextGlyphIterator = struct {
     values: []const f32,

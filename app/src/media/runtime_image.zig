@@ -119,10 +119,10 @@ pub fn encodeRgbaTiled(width: usize, height: usize, tile_w: usize, tile_h: usize
     if (width > 0xFFFF or height > 0xFFFF) return error.BadImage;
     if (tile_w > width or tile_h > height) return error.BadImage;
     if (tile_w > 0xFFFF or tile_h > 0xFFFF) return error.BadImage;
-    const pixel_count = std.math.mul(usize, width, height) catch return error.OutputBudget;
+    const pixel_count = common.checkedMul(width, height) catch return error.OutputBudget;
     if (pixels.len < pixel_count) return error.BadImage;
     const payload_len = rgbaPayloadLenForTiling(width, height, tile_w, tile_h) catch return error.OutputBudget;
-    const total = std.math.add(usize, header_size, payload_len) catch return error.OutputBudget;
+    const total = common.checkedAdd(header_size, payload_len) catch return error.OutputBudget;
     if (out.len < total) return error.OutputBudget;
     const tile_count = tileCountFor(width, height, tile_w, tile_h) catch return error.OutputBudget;
 
@@ -145,7 +145,7 @@ pub fn encodeRgbaTiled(width: usize, height: usize, tile_w: usize, tile_h: usize
         var y: usize = 0;
         while (y < bounds.height) : (y += 1) {
             const source = pixels[(bounds.y + y) * width + bounds.x ..][0..bounds.width];
-            const source_bytes = std.mem.sliceAsBytes(source);
+            const source_bytes = colorBytes(source);
             @memcpy(out[cursor..][0..source_bytes.len], source_bytes);
             cursor += source_bytes.len;
         }
@@ -190,11 +190,19 @@ pub fn decodeRgbaInto(canonical: []const u8, out: []ui.Color) common.DecodeError
             const row_bytes_len = bounds.width * @sizeOf(ui.Color);
             const row_bytes = payload[cursor..][0..row_bytes_len];
             const dest = out[(bounds.y + y) * view.header.width + bounds.x ..][0..bounds.width];
-            @memcpy(std.mem.sliceAsBytes(dest), row_bytes);
+            @memcpy(colorBytesMut(dest), row_bytes);
             cursor += row_bytes_len;
         }
     }
     return view.header;
+}
+
+fn colorBytes(value: []const ui.Color) []const u8 {
+    return @as([*]const u8, @ptrCast(value.ptr))[0 .. value.len * @sizeOf(ui.Color)];
+}
+
+fn colorBytesMut(value: []ui.Color) []u8 {
+    return @as([*]u8, @ptrCast(value.ptr))[0 .. value.len * @sizeOf(ui.Color)];
 }
 
 pub fn tileBoundsFor(header: Header, tile_index: usize) common.DecodeError!TileBounds {

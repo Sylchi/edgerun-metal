@@ -1,4 +1,3 @@
-const std = @import("std");
 const ui = @import("../ui/core.zig");
 const image_common = @import("common.zig");
 const webp = @import("webp/root.zig");
@@ -66,9 +65,9 @@ pub fn mapImageDecodeError(err: image_common.DecodeError) Error {
 
 pub fn referenceScratchByteLen(header: Header) Error!usize {
     const count = image_common.pixelCount(.{ .width = header.width, .height = header.height }) catch |err| return mapImageDecodeError(err);
-    const rgba_len = std.math.mul(usize, count, color_byte_len) catch return error.PixelBudget;
+    const rgba_len = image_common.checkedMul(count, color_byte_len) catch return error.PixelBudget;
     const yuv_len = webp.vp8VideoReferenceByteLen(.{ .width = header.width, .height = header.height }) catch |err| return mapImageDecodeError(err);
-    return std.math.add(usize, rgba_len, std.math.mul(usize, yuv_len, vp8_yuv_scratch_count) catch return error.PixelBudget) catch return error.PixelBudget;
+    return image_common.checkedAdd(rgba_len, image_common.checkedMul(yuv_len, vp8_yuv_scratch_count) catch return error.PixelBudget) catch return error.PixelBudget;
 }
 
 pub fn decodeFramePayload(frame: Frame, out: []ui.Color, scratch: []u8) Error!void {
@@ -123,7 +122,7 @@ fn storeVp8References(header: Header, out: []const ui.Color, scratch: []u8, stat
     }
     const pixel_count = rgba_len / color_byte_len;
     if (out.len < pixel_count) return error.PixelBudget;
-    @memcpy(scratch[0..rgba_len], std.mem.sliceAsBytes(out[0..pixel_count]));
+    @memcpy(scratch[0..rgba_len], colorBytes(out[0..pixel_count]));
 
     const refs = try vp8StoredYuvReferences(header, scratch);
     const current = try vp8CurrentYuvReferenceRequired(header, scratch);
@@ -171,7 +170,11 @@ fn vp8CurrentYuvReferenceRequired(header: Header, scratch: []u8) Error![]u8 {
 
 fn vp8RgbaReferenceByteLen(header: Header) Error!usize {
     const count = image_common.pixelCount(.{ .width = header.width, .height = header.height }) catch |err| return mapImageDecodeError(err);
-    return std.math.mul(usize, count, color_byte_len) catch return error.PixelBudget;
+    return image_common.checkedMul(count, color_byte_len) catch return error.PixelBudget;
+}
+
+fn colorBytes(value: []const ui.Color) []const u8 {
+    return @as([*]const u8, @ptrCast(value.ptr))[0 .. value.len * @sizeOf(ui.Color)];
 }
 
 const Vp8StoredYuvReferences = struct {

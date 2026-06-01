@@ -43,7 +43,7 @@ pub const MemoryRegion = struct {
     }
 
     pub fn byteLength(self: MemoryRegion) ?u64 {
-        return @import("std").math.mul(u64, self.page_count, page_size) catch null;
+        return checkedMulU64(self.page_count, page_size);
     }
 
     pub fn usable(self: MemoryRegion) bool {
@@ -64,7 +64,7 @@ pub fn writeMemoryResourceId(index: usize, out: []u8) ?[]const u8 {
     const needed = prefix_len + hex_digits;
     if (out.len < needed) return null;
     _ = bytes.copy(out[0..prefix_len], memory_resource_id_prefix);
-    var shift: @import("std").math.Log2Int(usize) = @intCast((@sizeOf(usize) * 8) - 4);
+    var shift: u6 = @intCast(@bitSizeOf(usize) - 4);
     var cursor = prefix_len;
     while (true) {
         const nibble: u8 = @truncate((index >> shift) & 0xf);
@@ -75,6 +75,13 @@ pub fn writeMemoryResourceId(index: usize, out: []u8) ?[]const u8 {
     }
     return out[0..needed];
 }
+
+fn checkedMulU64(left: u64, right: u64) ?u64 {
+    if (left != 0 and right > max_u64 / left) return null;
+    return left * right;
+}
+
+const max_u64: u64 = 0xffff_ffff_ffff_ffff;
 
 test "boot resource map writes stable memory resource ids" {
     const testing = @import("std").testing;

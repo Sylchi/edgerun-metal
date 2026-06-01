@@ -63,7 +63,7 @@ fn renderWorkspaceRail(app: component.View, bounds: ui.Rect, active: app_locatio
             .id = item.id,
             .label = item.rail_label,
             .icon = item.icon,
-            .variant = if (std.meta.eql(active, item.location)) .primary else .ghost,
+            .variant = if (locationEql(active, item.location)) .primary else .ghost,
         };
     }
     try app.workspaceRailValues(bounds, .{
@@ -90,7 +90,7 @@ fn renderWorkspaceSidebar(app: component.View, bounds: ui.Rect, state: State) !v
             .kind = .workspace_sidebar,
             .binding = row,
             .bounds = row_bounds,
-            .active = std.meta.eql(state.location, row.location),
+            .active = locationEql(state.location, row.location),
         });
     }
 }
@@ -111,6 +111,10 @@ fn statusText(location: app_location.Location) []const u8 {
     if (app_location.isSourceWorkspace(location)) return "workspace";
     if (app_location.isAppPreview(location)) return "preview";
     return "object";
+}
+
+fn locationEql(a: app_location.Location, b: app_location.Location) bool {
+    return bytes.eql(&a.object, &b.object);
 }
 
 test "app frame renders agent workspace" {

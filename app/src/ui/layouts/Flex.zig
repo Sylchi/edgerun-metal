@@ -152,12 +152,6 @@ pub fn resolveMainSizes(bounds: ui.Rect, children: []const layout.Measurement, o
         out[index] = preferred;
         preferred_total += preferred;
         min_total += min_size;
-        if (preferred <= 0 or min_size <= 0) {
-            std.debug.print("FLEX: child {d} preferred={d:.3} min={d:.3} axis={s} bounds=({d:.1},{d:.1},{d:.1},{d:.1})\n", .{
-                index, preferred, min_size, @tagName(options.axis),
-                bounds.x, bounds.y, bounds.w, bounds.h,
-            });
-        }
     }
 
     if (preferred_total <= available_children_main) return out[0..count];

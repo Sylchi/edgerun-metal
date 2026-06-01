@@ -1,4 +1,3 @@
-const std = @import("std");
 const bounded = @import("../bounded.zig");
 const geometry = @import("geometry.zig");
 
@@ -983,7 +982,7 @@ pub fn utf8CodepointCount(value: []const u8) usize {
     var count: usize = 0;
     var index: usize = 0;
     while (index < value.len) : (count += 1) {
-        const len = std.unicode.utf8ByteSequenceLength(value[index]) catch 1;
+        const len = utf8ByteSequenceLength(value[index]) orelse 1;
         index += @min(len, value.len - index);
     }
     return count;
@@ -992,19 +991,55 @@ pub fn utf8CodepointCount(value: []const u8) usize {
 pub fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
     if (index.* >= value.len) return null;
     const start = index.*;
-    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+    const codepoint_len = utf8ByteSequenceLength(value[start]) orelse {
         index.* = start + 1;
-        return std.unicode.replacement_character;
+        return unicode_replacement_character;
     };
     const end = start + codepoint_len;
     if (end > value.len) {
         index.* = value.len;
-        return std.unicode.replacement_character;
+        return unicode_replacement_character;
     }
-    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+    const codepoint = utf8Decode(value[start..end]) orelse {
         index.* = start + 1;
-        return std.unicode.replacement_character;
+        return unicode_replacement_character;
     };
     index.* = end;
+    return codepoint;
+}
+
+const unicode_replacement_character: u21 = 0xfffd;
+
+pub fn utf8ByteSequenceLength(first: u8) ?usize {
+    return switch (first) {
+        0x00...0x7f => 1,
+        0xc2...0xdf => 2,
+        0xe0...0xef => 3,
+        0xf0...0xf4 => 4,
+        else => null,
+    };
+}
+
+pub fn utf8Decode(value: []const u8) ?u21 {
+    if (value.len == 0) return null;
+    const len = utf8ByteSequenceLength(value[0]) orelse return null;
+    if (value.len != len) return null;
+    var index: usize = 1;
+    var codepoint: u21 = switch (len) {
+        1 => value[0],
+        2 => value[0] & 0x1f,
+        3 => value[0] & 0x0f,
+        4 => value[0] & 0x07,
+        else => return null,
+    };
+    while (index < len) : (index += 1) {
+        const byte = value[index];
+        if ((byte & 0xc0) != 0x80) return null;
+        codepoint = (codepoint << 6) | @as(u21, byte & 0x3f);
+    }
+    if (len == 2 and codepoint < 0x80) return null;
+    if (len == 3 and codepoint < 0x800) return null;
+    if (len == 4 and codepoint < 0x10000) return null;
+    if (codepoint > 0x10ffff or (codepoint >= 0xd800 and codepoint <= 0xdfff)) return null;
     return codepoint;
 }

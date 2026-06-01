@@ -1,4 +1,5 @@
 const std = @import("std");
+const media_common = @import("common.zig");
 const bytes_mod = @import("../bytes.zig");
 const video_common = @import("video_common.zig");
 
@@ -312,7 +313,7 @@ fn webmFrameFromBlock(header: Header, frame_index: usize, block: WebmBlock, clus
 
 fn readWebmBlock(payload: []const u8) Error!WebmBlock {
     const track = try readEbmlVint(payload, 0, true);
-    const header_size = std.math.add(usize, track.size, 3) catch return error.BadVideo;
+    const header_size = media_common.checkedAdd(track.size, 3) catch return error.BadVideo;
     if (payload.len < header_size) return error.BadVideo;
     const timecode_index = track.size;
     const relative_timecode = readSignedI16Be(payload[timecode_index..][0..2]);
@@ -327,7 +328,7 @@ fn readWebmBlock(payload: []const u8) Error!WebmBlock {
 
 fn applyWebmRelativeTimecode(cluster_timecode: u64, relative_timecode: i16) Error!u64 {
     if (relative_timecode >= 0) {
-        return std.math.add(u64, cluster_timecode, @intCast(relative_timecode)) catch error.BadVideo;
+        return checkedAddU64(cluster_timecode, @intCast(relative_timecode)) orelse error.BadVideo;
     }
     const delta: u16 = @intCast(-relative_timecode);
     if (cluster_timecode < delta) return error.BadVideo;
@@ -335,7 +336,6 @@ fn applyWebmRelativeTimecode(cluster_timecode: u64, relative_timecode: i16) Erro
 }
 
 fn readSignedI16Be(bytes: []const u8) i16 {
-    std.debug.assert(bytes.len == 2);
     const unsigned = (@as(u16, bytes[0]) << 8) | @as(u16, bytes[1]);
     return @bitCast(unsigned);
 }
@@ -344,8 +344,8 @@ fn readEbmlElement(bytes: []const u8, cursor: usize) Error!Element {
     const id = try readEbmlId(bytes, cursor);
     const size = try readEbmlVint(bytes, cursor + id.size, true);
     if (size.value > ~@as(usize, 0)) return error.BadVideo;
-    const payload_start = std.math.add(usize, cursor + id.size, size.size) catch return error.BadVideo;
-    const payload_end = std.math.add(usize, payload_start, @as(usize, @intCast(size.value))) catch return error.BadVideo;
+    const payload_start = media_common.checkedAdd(cursor + id.size, size.size) catch return error.BadVideo;
+    const payload_end = media_common.checkedAdd(payload_start, @as(usize, @intCast(size.value))) catch return error.BadVideo;
     if (payload_end > bytes.len) return error.BadVideo;
     return .{
         .id = id.value,
@@ -353,6 +353,11 @@ fn readEbmlElement(bytes: []const u8, cursor: usize) Error!Element {
         .payload_start = payload_start,
         .next_cursor = payload_end,
     };
+}
+
+fn checkedAddU64(a: u64, b: u64) ?u64 {
+    const sum = a +% b;
+    return if (sum < a) null else sum;
 }
 
 fn readEbmlId(bytes: []const u8, cursor: usize) Error!VInt {

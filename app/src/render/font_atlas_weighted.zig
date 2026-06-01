@@ -2,6 +2,7 @@ const std = @import("std");
 const font_builtin = @import("font.zig");
 const font_vector = @import("font.zig");
 const raster = @import("vector_raster.zig");
+const ui = @import("../ui/core.zig");
 
 pub const width: usize = font_builtin.atlas_width;
 pub const height: usize = font_builtin.atlas_height;
@@ -241,10 +242,10 @@ fn glyph(context: *anyopaque, ch: u21, px: u8) Error!?Glyph {
 fn nextCodepointStrict(value: []const u8, index: *usize) Error!?u21 {
     if (index.* >= value.len) return null;
     const start = index.*;
-    const len = std.unicode.utf8ByteSequenceLength(value[start]) catch return error.InvalidBuffer;
+    const len = ui.utf8ByteSequenceLength(value[start]) orelse return error.InvalidBuffer;
     const end = start + len;
     if (end > value.len) return error.InvalidBuffer;
-    const cp = std.unicode.utf8Decode(value[start..end]) catch return error.InvalidBuffer;
+    const cp = ui.utf8Decode(value[start..end]) orelse return error.InvalidBuffer;
     index.* = end;
     return cp;
 }
@@ -252,7 +253,7 @@ fn nextCodepointStrict(value: []const u8, index: *usize) Error!?u21 {
 fn nextCodepointLenient(value: []const u8, index: *usize) ?u21 {
     if (index.* >= value.len) return null;
     const start = index.*;
-    const len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+    const len = ui.utf8ByteSequenceLength(value[start]) orelse {
         index.* = start + 1;
         return null;
     };
@@ -261,7 +262,7 @@ fn nextCodepointLenient(value: []const u8, index: *usize) ?u21 {
         index.* = value.len;
         return null;
     }
-    const cp = std.unicode.utf8Decode(value[start..end]) catch {
+    const cp = ui.utf8Decode(value[start..end]) orelse {
         index.* = start + 1;
         return null;
     };

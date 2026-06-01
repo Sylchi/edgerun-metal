@@ -103,18 +103,11 @@ er_fn open_output
 
 ; is_supported_exit_subset() -> eax=1/0.
 er_fn is_supported_exit_subset
-    cmp     qword [rel directive_count], 2
-    jb      .no
-    cmp     qword [rel instr_count], 1
-    jae     .has_payload
     cmp     qword [rel text_len], 1
     jb      .no
-.has_payload:
-    cmp     qword [rel global_count], 1
-    jb      .no
-    cmp     qword [rel pending_global_count], 0
-    jne     .no
     cmp     qword [rel pending_branch_count], 0
+    jne     .no
+    cmp     qword [rel pending_call_count], 0
     jne     .no
     cmp     qword [rel generic_instr_bad], 0
     jne     .no
@@ -129,195 +122,28 @@ er_fn is_supported_exit_subset
     xor     eax, eax
     ret
 
-; emit_exit_object(path) -> eax=0/error.
-er_fn emit_exit_object
-    er_push rbx, r12
+; emit_flat_binary(path) -> eax=0/error.
+er_fn emit_flat_binary
+    er_push rbx
     call    open_output
     test    eax, eax
     js      .bad
     mov     ebx, eax
-    call    build_exit_object
     cmp     qword [rel exit_subset_bad], 0
     jne     .bad
     mov     edi, ebx
-    lea     rsi, [rel object_buf]
-    mov     edx, ER_ASM_OBJ_SIZE
+    lea     rsi, [rel text_buf]
+    mov     rdx, [rel text_len]
     mov     eax, SYS_write
     syscall
-    cmp     rax, ER_ASM_OBJ_SIZE
+    cmp     rax, [rel text_len]
     jne     .bad
     xor     eax, eax
     jmp     .done
 .bad:
     mov     eax, 1
 .done:
-    er_pop  rbx, r12
-    ret
-
-er_fn build_exit_object
-    er_push rbx, r12, r13
-    lea     rbx, [rel object_buf]
-    lea     r12, [rel exit_object_start]
-    mov     r13d, ER_ASM_OBJ_SIZE
-.copy_obj:
-    test    r13, r13
-    jz      .copy_text_start
-    movzx   eax, byte [r12]
-    mov     [rbx], al
-    inc     r12
-    inc     rbx
-    dec     r13
-    jmp     .copy_obj
-.copy_text_start:
-    lea     rbx, [rel object_buf + ER_ASM_TEXT_OFF]
-    lea     r12, [rel text_buf]
-    mov     r13, [rel text_len]
-.copy_text:
-    test    r13, r13
-    jz      .patch
-    movzx   eax, byte [r12]
-    mov     [rbx], al
-    inc     r12
-    inc     rbx
-    dec     r13
-    jmp     .copy_text
-.patch:
-    mov     rax, [rel text_len]
-    mov     [rel object_buf + ER_ASM_TEXT_SH_SIZE_OFF], rax
-    call    patch_global_symbols
-    er_pop  rbx, r12, r13
-    ret
-
-er_fn patch_global_symbols
-    er_push rbx, r12, r13, r14, r15
-    mov     r12, 1
-    xor     r13d, r13d
-.str_loop:
-    cmp     r13, [rel global_count]
-    jae     .extern_str_start
-    mov     r14, [rel global_len + r13 * 8]
-    lea     rax, [r12 + r14 + 1]
-    cmp     rax, ER_ASM_STRTAB_CAP
-    ja      .bad
-    mov     [rel global_name_off + r13 * 8], r12
-    lea     rbx, [rel object_buf + ER_ASM_STRTAB_OFF]
-    add     rbx, r12
-    mov     r15, [rel global_ptr + r13 * 8]
-    xor     ecx, ecx
-.copy_name:
-    cmp     rcx, r14
-    jae     .name_done
-    movzx   eax, byte [r15 + rcx]
-    mov     [rbx + rcx], al
-    inc     ecx
-    jmp     .copy_name
-.name_done:
-    mov     byte [rbx + rcx], 0
-    lea     r12, [r12 + r14 + 1]
-    inc     r13
-    jmp     .str_loop
-.extern_str_start:
-    xor     r13d, r13d
-.extern_str_loop:
-    cmp     r13, [rel pending_call_count]
-    jae     .sym_start
-    mov     r14, [rel pending_call_len + r13 * 8]
-    lea     rax, [r12 + r14 + 1]
-    cmp     rax, ER_ASM_STRTAB_CAP
-    ja      .bad
-    lea     rbx, [rel object_buf + ER_ASM_STRTAB_OFF]
-    add     rbx, r12
-    mov     r15, [rel pending_call_ptr + r13 * 8]
-    xor     ecx, ecx
-.extern_copy_name:
-    cmp     rcx, r14
-    jae     .extern_name_done
-    movzx   eax, byte [r15 + rcx]
-    mov     [rbx + rcx], al
-    inc     ecx
-    jmp     .extern_copy_name
-.extern_name_done:
-    mov     byte [rbx + rcx], 0
-    mov     [rel pending_branch_ptr + r13 * 8], r12
-    lea     r12, [r12 + r14 + 1]
-    inc     r13
-    jmp     .extern_str_loop
-.sym_start:
-    mov     rax, [rel global_count]
-    add     rax, [rel pending_call_count]
-    inc     rax
-    imul    rax, rax, ER_ASM_SYMTAB_ENTRY_SIZE
-    cmp     rax, ER_ASM_SYMTAB_CAP
-    ja      .bad
-    mov     [rel object_buf + ER_ASM_SYMTAB_SH_SIZE_OFF], rax
-    mov     [rel object_buf + ER_ASM_STRTAB_SH_SIZE_OFF], r12
-    xor     r13d, r13d
-.sym_loop:
-    cmp     r13, [rel global_count]
-    jae     .extern_sym_start
-    cmp     r13, ER_ASM_GLOBAL_CAP
-    jae     .bad
-    lea     rbx, [rel object_buf + ER_ASM_SYMTAB_OFF + ER_ASM_SYMTAB_ENTRY_SIZE]
-    imul    rax, r13, ER_ASM_SYMTAB_ENTRY_SIZE
-    add     rbx, rax
-    mov     eax, [rel global_name_off + r13 * 8]
-    mov     [rbx], eax
-    mov     byte [rbx + 4], 0x10
-    mov     byte [rbx + 5], 0
-    mov     word [rbx + 6], 1
-    mov     rax, [rel global_value + r13 * 8]
-    mov     [rbx + 8], rax
-    mov     qword [rbx + 16], 0
-    inc     r13
-    jmp     .sym_loop
-.extern_sym_start:
-    xor     r13d, r13d
-.extern_sym_loop:
-    cmp     r13, [rel pending_call_count]
-    jae     .reloc_start
-    mov     rax, [rel global_count]
-    add     rax, r13
-    lea     rbx, [rel object_buf + ER_ASM_SYMTAB_OFF + ER_ASM_SYMTAB_ENTRY_SIZE]
-    imul    rax, rax, ER_ASM_SYMTAB_ENTRY_SIZE
-    add     rbx, rax
-    mov     eax, [rel pending_branch_ptr + r13 * 8]
-    mov     [rbx], eax
-    mov     byte [rbx + 4], 0x10
-    mov     byte [rbx + 5], 0
-    mov     word [rbx + 6], 0
-    mov     qword [rbx + 8], 0
-    mov     qword [rbx + 16], 0
-    inc     r13
-    jmp     .extern_sym_loop
-.reloc_start:
-    mov     rax, [rel pending_call_count]
-    imul    rax, rax, ER_ASM_RELA_ENTRY_SIZE
-    cmp     rax, ER_ASM_RELA_CAP
-    ja      .bad
-    mov     [rel object_buf + ER_ASM_RELA_SH_SIZE_OFF], rax
-    xor     r13d, r13d
-.reloc_loop:
-    cmp     r13, [rel pending_call_count]
-    jae     .done
-    lea     rbx, [rel object_buf + ER_ASM_RELA_OFF]
-    imul    rax, r13, ER_ASM_RELA_ENTRY_SIZE
-    add     rbx, rax
-    mov     rax, [rel pending_call_off + r13 * 8]
-    mov     [rbx], rax
-    mov     rax, [rel global_count]
-    add     rax, r13
-    inc     rax
-    shl     rax, 32
-    or      rax, 4
-    mov     [rbx + 8], rax
-    mov     rax, -4
-    mov     [rbx + 16], rax
-    inc     r13
-    jmp     .reloc_loop
-.bad:
-    mov     qword [rel exit_subset_bad], 1
-.done:
-    er_pop  rbx, r12, r13, r14, r15
+    er_pop  rbx
     ret
 
 ; parse_file(path) -> eax=0/error

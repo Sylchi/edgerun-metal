@@ -75,7 +75,7 @@ pub fn resolveTree(source: store.Store, owner: identity.Id, tree: object.View, r
 
 fn resolveTreeChildren(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View, expected_count: ?usize) Error![]const object.View {
     if (!owner.valid() or tree.header.kind != .tree) return error.Corrupt;
-    const child_count = std.math.cast(usize, tree.header.child_count) orelse return error.Corrupt;
+    const child_count: usize = tree.header.child_count;
     if (expected_count) |expected| {
         if (child_count != expected) return error.Corrupt;
     }

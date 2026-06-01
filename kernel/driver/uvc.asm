@@ -30,7 +30,6 @@ extern er_xhci_get_port_config_blob
 
 ; Stream state layout
 %define UVC_STREAM_ENABLED    0   ; u8
-%define UVC_STREAM_FMT        1   ; u8
 %define UVC_STREAM_FPS        2   ; u16
 %define UVC_STREAM_WIDTH      4   ; u16
 %define UVC_STREAM_HEIGHT     6   ; u16
@@ -96,7 +95,6 @@ er_fn er_uvc_parse_config_caps
 .pc_streaming_if:
     cmp     esi, UVC_SC_VIDEOSTREAMING
     jne     .pc_next
-    or      r9d, UVC_CAP_RGB_PRESENT
     jmp     .pc_next
 
 .pc_cs_interface:
@@ -385,12 +383,9 @@ er_fn er_uvc_stream_start
     je      .start_bad_arg
     cmp     word [r8 + UVC_STREAM_FPS], 0
     je      .start_bad_arg
-    mov     byte [r8 + UVC_STREAM_ENABLED], 1
-    mov     dword [r8 + UVC_STREAM_FRAME_CNT], 0
-    mov     dword [r8 + UVC_STREAM_ERR_CNT], 0
-    xor     eax, eax
-    mov     dword [uvc_last_status], ERROR_OK
-    er_ok
+    mov     eax, -1
+    mov     dword [uvc_last_status], ERROR_NOT_IMPLEMENTED
+    er_err  ERROR_NOT_IMPLEMENTED
     ret
 .start_bad_arg:
     mov     eax, -1
@@ -416,6 +411,10 @@ er_fn er_uvc_stream_poll
     jz      .poll_read
     lea     r8, [uvc_ir_state]
 .poll_read:
+    cmp     byte [uvc_attached], 1
+    jne     .poll_absent
+    cmp     byte [r8 + UVC_STREAM_ENABLED], 1
+    jne     .poll_not_started
     mov     eax, [r8 + UVC_STREAM_FRAME_CNT]
     mov     [rsi], rax
     mov     eax, [r8 + UVC_STREAM_ERR_CNT]
@@ -426,4 +425,12 @@ er_fn er_uvc_stream_poll
 .poll_bad_arg:
     mov     eax, -1
     er_err  ERROR_BAD_ARGUMENT
+    ret
+.poll_absent:
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+.poll_not_started:
+    mov     eax, -1
+    er_err  ERROR_NOT_IMPLEMENTED
     ret

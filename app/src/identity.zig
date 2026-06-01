@@ -81,11 +81,11 @@ pub const Source = struct {
         return prepare(.delegation, &material);
     }
 
-    pub fn active(self: Source) []const u8 {
+    pub fn active(self: *const Source) []const u8 {
         return self.material[0..self.len];
     }
 
-    pub fn id(self: Source) Id {
+    pub fn id(self: *const Source) Id {
         if (self.kind == .ed25519_public) return .{ .bytes = self.material[0..id_size].* };
 
         var hasher = crypto.blake3.init(.{});
@@ -101,7 +101,7 @@ pub const Source = struct {
         return .{ .bytes = out };
     }
 
-    pub fn valid(self: Source) bool {
+    pub fn valid(self: *const Source) bool {
         return materialLenValid(self.kind, self.len) and bytes.nonzero(self.active());
     }
 };

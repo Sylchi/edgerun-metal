@@ -57,7 +57,7 @@ pub const Scope = struct {
 
     pub fn indexed(self: Scope, role: Role, index: usize) HitId {
         var buf: [32]u8 = undefined;
-        const key = std.fmt.bufPrint(&buf, "{}", .{index}) catch return self.id(role, "");
+        const key = formatUnsigned(&buf, index) orelse return self.id(role, "");
         return self.id(role, key);
     }
 };
@@ -84,6 +84,24 @@ fn updateHash(initial: u32, value: []const u8) u32 {
         hash *%= 0x01000193;
     }
     return hash;
+}
+
+fn formatUnsigned(out: []u8, value: usize) ?[]const u8 {
+    if (out.len == 0) return null;
+    var scratch: [32]u8 = undefined;
+    var remaining = value;
+    var count: usize = 0;
+    while (remaining >= 10) {
+        scratch[count] = @intCast('0' + remaining % 10);
+        remaining /= 10;
+        count += 1;
+    }
+    scratch[count] = @intCast('0' + remaining);
+    count += 1;
+    if (count > out.len) return null;
+    var index: usize = 0;
+    while (index < count) : (index += 1) out[index] = scratch[count - 1 - index];
+    return out[0..count];
 }
 
 const location_tag_none: u8 = 0;

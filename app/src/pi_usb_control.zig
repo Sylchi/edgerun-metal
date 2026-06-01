@@ -198,7 +198,8 @@ fn lengthValid(command: Command, length: u32) bool {
 }
 
 fn enumFromInt(comptime E: type, value: u32) ?E {
-    inline for (std.enums.values(E)) |candidate| {
+    inline for (@typeInfo(E).@"enum".fields) |field| {
+        const candidate: E = @enumFromInt(field.value);
         if (@intFromEnum(candidate) == value) return candidate;
     }
     return null;

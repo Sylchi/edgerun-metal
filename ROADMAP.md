@@ -268,12 +268,12 @@ state just by mutating its heap.
 ### P6b — NVMe Read/Write Block Commands
 
 - **File:** `kernel/driver/nvme.asm`
-- **Current:** IO submission/completion queues created (`er_nvme_io_setup`),
-  identify works, but no `er_nvme_read_blocks` or `er_nvme_write_blocks`
-- **Work:** Implement NVMe read/write using IO queue 1. SQE at `NVME_IO_SQ`
-  (0x304000), CQ at `NVME_IO_CQ` (0x303000), data buffer at `NVME_IO_BUF`
-  (0x305000). IO SQ doorbell at BAR0 + 0x1008.
-- **Dependencies:** P6b completion
+- **Current:** `er_nvme_read_blocks` and `er_nvme_write_blocks` build IO queue
+  1 read/write SQEs, ring the SQ1 tail doorbell at BAR0 + 0x1008, poll
+  `NVME_IO_CQ`, and are covered by `./build.sh test-nvme`.
+- **Work:** Validate the IO path against real hardware and connect it to the
+  store flush path with explicit error propagation for controller status codes.
+- **Dependencies:** P6b hardware validation
 - **Forms basis of:** Block I/O backend for PersistentStore
 
 ### P6c — Kernel Block Device Abstraction

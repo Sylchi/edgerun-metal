@@ -66,10 +66,11 @@ pub const Body = struct {
 };
 
 pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize) ?usize {
-    const glyph_bytes = std.math.mul(usize, glyph_count, glyph_record_size) catch return null;
-    const kern_bytes = std.math.mul(usize, kern_count, kern_record_size) catch return null;
-    const command_bytes = std.math.mul(usize, command_count, command_record_size) catch return null;
-    return std.math.add(usize, header_size, glyph_bytes + kern_bytes + command_bytes) catch null;
+    const glyph_bytes = checkedMulUsize(glyph_count, glyph_record_size) orelse return null;
+    const kern_bytes = checkedMulUsize(kern_count, kern_record_size) orelse return null;
+    const command_bytes = checkedMulUsize(command_count, command_record_size) orelse return null;
+    const record_bytes = checkedAddUsize(glyph_bytes, kern_bytes) orelse return null;
+    return checkedAddUsize(header_size, checkedAddUsize(record_bytes, command_bytes) orelse return null);
 }
 
 pub fn encodeBody(out: []u8, body_val: Body) ?[]const u8 {
@@ -193,7 +194,7 @@ fn encodeGlyphRecord(out: []u8, glyph: GlyphRecord) bool {
 fn decodeGlyphRecord(in: []const u8) ?GlyphRecord {
     if (in.len < glyph_record_size) return null;
     const codepoint = bytes.load32(in[0..4]) orelse return null;
-    if (codepoint > std.math.maxInt(u21)) return null;
+    if (codepoint > max_u21) return null;
     if ((bytes.load16(in[6..8]) orelse return null) != 0) return null;
     return .{ .codepoint = @intCast(codepoint), .glyph_id = bytes.load16(in[4..6]) orelse return null, .command_offset = bytes.load32(in[8..12]) orelse return null, .command_count = bytes.load32(in[12..16]) orelse return null, .advance = loadF32(in[16..20]) orelse return null };
 }
@@ -210,7 +211,7 @@ fn decodeKernRecord(in: []const u8) ?KernRecord {
     if (in.len < kern_record_size) return null;
     const left = bytes.load32(in[0..4]) orelse return null;
     const right = bytes.load32(in[4..8]) orelse return null;
-    if (left > std.math.maxInt(u21) or right > std.math.maxInt(u21)) return null;
+    if (left > max_u21 or right > max_u21) return null;
     return .{ .left_codepoint = @intCast(left), .right_codepoint = @intCast(right), .advance_adjust = loadF32(in[8..12]) orelse return null };
 }
 
@@ -266,7 +267,20 @@ test "font vector body round trips widened counts" {
 pub const atlas_width: usize = 1024;
 pub const atlas_height: usize = 1024;
 pub const atlas_bytes: usize = atlas_width * atlas_height;
-pub const replacement_codepoint: u21 = std.unicode.replacement_character;
+pub const replacement_codepoint: u21 = 0xfffd;
+
+fn checkedAddUsize(left: usize, right: usize) ?usize {
+    const sum = left +% right;
+    return if (sum < left) null else sum;
+}
+
+fn checkedMulUsize(left: usize, right: usize) ?usize {
+    if (left != 0 and right > max_usize / left) return null;
+    return left * right;
+}
+
+const max_usize: usize = ~@as(usize, 0);
+const max_u21: u32 = 0x10ffff;
 
 pub const Weight = enum(u8) {
     regular,

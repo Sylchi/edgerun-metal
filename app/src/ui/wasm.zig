@@ -1,4 +1,3 @@
-const std = @import("std");
 const component = @import("components/Component.zig");
 const Component = component.Component;
 const ui = @import("core.zig");

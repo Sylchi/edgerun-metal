@@ -2,7 +2,6 @@ const common = @import("../component_common.zig");
 const clock = @import("../../clock.zig");
 const codec = @import("../codec.zig");
 const object = @import("../../object.zig");
-const std = @import("std");
 const ui = @import("../core.zig");
 
 const Error = common.Error;
@@ -22,12 +21,12 @@ pub fn requirements() object.Requirements {
 
 pub fn validateView(view: object.View) Error!void {
     if (view.header.kind != .bytes) return error.Corrupt;
-    if (!std.meta.eql(view.header.requirements, requirements())) return error.Corrupt;
+    if (!view.header.requirements.eql(requirements())) return error.Corrupt;
 }
 
 pub fn validateTreeView(view: object.View) Error!void {
     if (view.header.kind != .tree) return error.Corrupt;
-    if (!std.meta.eql(view.header.requirements, requirements())) return error.Corrupt;
+    if (!view.header.requirements.eql(requirements())) return error.Corrupt;
 }
 
 pub fn singleNode(view: object.View) Error!ui.Node {
@@ -43,7 +42,7 @@ pub fn singleNode(view: object.View) Error!ui.Node {
     };
 }
 
-pub fn nodeView(view: object.View, comptime tag: std.meta.Tag(ui.Node)) Error!@FieldType(ui.Node, @tagName(tag)) {
+pub fn nodeView(view: object.View, comptime tag: @typeInfo(ui.Node).@"union".tag_type.?) Error!@FieldType(ui.Node, @tagName(tag)) {
     const node = try singleNode(view);
     return switch (node) {
         tag => |payload| payload,
@@ -51,7 +50,7 @@ pub fn nodeView(view: object.View, comptime tag: std.meta.Tag(ui.Node)) Error!@F
     };
 }
 
-pub fn decodeFromView(comptime ComponentType: type, comptime tag: std.meta.Tag(ui.Node), view: object.View) Error!ComponentType {
+pub fn decodeFromView(comptime ComponentType: type, comptime tag: @typeInfo(ui.Node).@"union".tag_type.?, view: object.View) Error!ComponentType {
     return ComponentType.fromNode(try nodeView(view, tag));
 }
 
@@ -98,7 +97,7 @@ pub fn EmptyComponent(comptime ComponentType: type, comptime tag_name: []const u
         }
 
         pub fn fromView(view: object.View) Error!ComponentType {
-            return ComponentType.fromNode(try nodeView(view, @field(std.meta.Tag(ui.Node), tag_name)));
+            return ComponentType.fromNode(try nodeView(view, @field(@typeInfo(ui.Node).@"union".tag_type.?, tag_name)));
         }
     };
 }
@@ -123,7 +122,7 @@ pub fn OneStringComponent(comptime ComponentType: type, comptime tag_name: []con
         }
 
         pub fn fromView(view: object.View) Error!ComponentType {
-            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+            return decodeFromView(ComponentType, @field(@typeInfo(ui.Node).@"union".tag_type.?, tag_name), view);
         }
     };
 }
@@ -139,7 +138,7 @@ pub fn OneStringFixedIdComponent(comptime ComponentType: type, comptime tag_name
         }
 
         pub fn fromView(view: object.View) Error!ComponentType {
-            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+            return decodeFromView(ComponentType, @field(@typeInfo(ui.Node).@"union".tag_type.?, tag_name), view);
         }
     };
 }
@@ -166,7 +165,7 @@ pub fn TwoStringComponent(comptime ComponentType: type, comptime tag_name: []con
         }
 
         pub fn fromView(view: object.View) Error!ComponentType {
-            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+            return decodeFromView(ComponentType, @field(@typeInfo(ui.Node).@"union".tag_type.?, tag_name), view);
         }
     };
 }

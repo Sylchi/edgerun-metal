@@ -300,7 +300,7 @@ pub const State = struct {
 
     fn applyF32(self: *State, component_id: u8, payload: []const u8) !void {
         if (payload.len < 4) return error.BadUiStreamPatch;
-        if (component_id == status_component_id) self.progress = math.clampF(@as(f32, @bitCast(std.mem.readInt(u32, payload[0..4], .little))), 0.0, 1.0);
+        if (component_id == status_component_id) self.progress = math.clampF(@as(f32, @bitCast(bytes.load32(payload[0..4]).?)), 0.0, 1.0);
     }
 };
 
@@ -419,7 +419,7 @@ fn renderStatusCard(app: component.View, bounds: ui.Rect, state: State) !void {
 fn renderContextCard(app: component.View, bounds: ui.Rect, state: State) !void {
     var detail_buf: [128]u8 = undefined;
     const total = pipelineContextUsed(state);
-    const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens across {d} fixed-role prompts", .{ total, context_window_tokens, state.agents.len }) catch "32k context budget";
+    const detail = writeContextDetail(&detail_buf, total, context_window_tokens, state.agents.len) orelse "32k context budget";
     const body = try app.panelScaffold(bounds, .{
         .title = "32k context budget",
         .detail = detail,
@@ -443,7 +443,7 @@ fn renderAgents(app: component.View, bounds: ui.Rect, state: State) !void {
 
 fn writeAgentSemanticItems(state: State, items: *[max_agents]component.SemanticItem, detail_bufs: *[max_agents][176]u8) []const component.SemanticItem {
     for (state.agents, 0..) |agent, index| {
-        const detail = std.fmt.bufPrint(&detail_bufs[index], "{s} · {s} · {d} tokens", .{ agent.role, agent.model, agent.context_used }) catch agent.role;
+        const detail = writeAgentDetail(&detail_bufs[index], agent.role, agent.model, agent.context_used) orelse agent.role;
         items[index] = .{
             .id = agent_row_id_base + @as(u32, @intCast(index)),
             .kind = .identity,
@@ -455,6 +455,58 @@ fn writeAgentSemanticItems(state: State, items: *[max_agents]component.SemanticI
         };
     }
     return items[0..state.agents.len];
+}
+
+fn writeContextDetail(out: []u8, used: usize, total: usize, prompts: usize) ?[]const u8 {
+    var cursor: usize = 0;
+    tryAppendUnsigned(out, &cursor, used) orelse return null;
+    tryAppend(out, &cursor, " / ") orelse return null;
+    tryAppendUnsigned(out, &cursor, total) orelse return null;
+    tryAppend(out, &cursor, " tokens across ") orelse return null;
+    tryAppendUnsigned(out, &cursor, prompts) orelse return null;
+    tryAppend(out, &cursor, " fixed-role prompts") orelse return null;
+    return out[0..cursor];
+}
+
+fn writeAgentDetail(out: []u8, role: []const u8, model: []const u8, tokens: usize) ?[]const u8 {
+    var cursor: usize = 0;
+    tryAppend(out, &cursor, role) orelse return null;
+    tryAppend(out, &cursor, " · ") orelse return null;
+    tryAppend(out, &cursor, model) orelse return null;
+    tryAppend(out, &cursor, " · ") orelse return null;
+    tryAppendUnsigned(out, &cursor, tokens) orelse return null;
+    tryAppend(out, &cursor, " tokens") orelse return null;
+    return out[0..cursor];
+}
+
+fn tryAppend(out: []u8, cursor: *usize, value: []const u8) ?void {
+    if (out.len - cursor.* < value.len) return null;
+    @memcpy(out[cursor.*..][0..value.len], value);
+    cursor.* += value.len;
+}
+
+fn tryAppendUnsigned(out: []u8, cursor: *usize, value: usize) ?void {
+    var digits: [32]u8 = undefined;
+    const raw = writeUnsigned(&digits, value) orelse return null;
+    return tryAppend(out, cursor, raw);
+}
+
+fn writeUnsigned(out: []u8, value: usize) ?[]const u8 {
+    if (out.len == 0) return null;
+    var scratch: [32]u8 = undefined;
+    var remaining = value;
+    var count: usize = 0;
+    while (remaining >= 10) {
+        scratch[count] = @intCast('0' + remaining % 10);
+        remaining /= 10;
+        count += 1;
+    }
+    scratch[count] = @intCast('0' + remaining);
+    count += 1;
+    if (count > out.len) return null;
+    var index: usize = 0;
+    while (index < count) : (index += 1) out[index] = scratch[count - 1 - index];
+    return out[0..count];
 }
 
 fn renderTranscript(app: component.View, bounds: ui.Rect, state: State) !void {
@@ -1399,7 +1451,8 @@ const AgentEventList = struct {
 
     fn push(self: *AgentEventList, kind: AgentEventKind, stage_index: usize, title: []const u8, detail: []const u8) void {
         if (self.len == max_events) {
-            std.mem.copyForwards(AgentEvent, self.items[0 .. max_events - 1], self.items[1..max_events]);
+            var index: usize = 0;
+            while (index < max_events - 1) : (index += 1) self.items[index] = self.items[index + 1];
             self.len = max_events - 1;
         }
         self.items[self.len] = .{

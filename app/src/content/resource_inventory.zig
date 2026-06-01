@@ -127,7 +127,8 @@ fn overlap(left: resource_contract.Bounds, right: resource_contract.Bounds) bool
 }
 
 fn checkedEnd(offset: u64, length: u64) ?u64 {
-    return @import("std").math.add(u64, offset, length) catch null;
+    const end = offset +% length;
+    return if (end < offset) null else end;
 }
 
 fn sameChunk(left: data_chunk.DataChunk, right: data_chunk.DataChunk) bool {

@@ -3,6 +3,7 @@ const math = @import("math.zig");
 const icon_vector = @import("ui/icon_vector.zig");
 
 pub const transform_epsilon: f32 = 0.00001;
+const pi: f32 = 3.14159265358979323846264338327950288;
 
 pub const ViewBox = struct {
     min_x: f32 = 0.0,
@@ -46,7 +47,7 @@ pub const Transform = struct {
     }
 
     pub fn rotationDegrees(self: Transform) f32 {
-        return math.atan2F(self.b, self.a) * 180.0 / std.math.pi;
+        return math.atan2F(self.b, self.a) * 180.0 / pi;
     }
 };
 
@@ -87,32 +88,102 @@ pub fn skipSvgNumberSeparators(data: []const u8, index: *usize) !void {
 }
 
 fn parseFiniteSvgFloat(raw: []const u8) !f32 {
-    const value = std.fmt.parseFloat(f32, raw) catch return error.InvalidSvg;
-    if (!math.isFiniteF(value)) return error.InvalidSvg;
-    return value;
+    if (raw.len == 0) return error.InvalidSvg;
+    var index: usize = 0;
+    var sign: f64 = 1.0;
+    if (raw[index] == '-' or raw[index] == '+') {
+        if (raw[index] == '-') sign = -1.0;
+        index += 1;
+    }
+
+    var value: f64 = 0.0;
+    var has_digit = false;
+    while (index < raw.len and isDigit(raw[index])) : (index += 1) {
+        value = value * 10.0 + @as(f64, @floatFromInt(raw[index] - '0'));
+        has_digit = true;
+    }
+    if (index < raw.len and raw[index] == '.') {
+        index += 1;
+        var scale: f64 = 0.1;
+        while (index < raw.len and isDigit(raw[index])) : (index += 1) {
+            value += @as(f64, @floatFromInt(raw[index] - '0')) * scale;
+            scale *= 0.1;
+            has_digit = true;
+        }
+    }
+    if (!has_digit) return error.InvalidSvg;
+
+    var exponent: i32 = 0;
+    if (index < raw.len and (raw[index] == 'e' or raw[index] == 'E')) {
+        index += 1;
+        var exponent_sign: i32 = 1;
+        if (index < raw.len and (raw[index] == '-' or raw[index] == '+')) {
+            if (raw[index] == '-') exponent_sign = -1;
+            index += 1;
+        }
+        var exponent_digits = false;
+        while (index < raw.len and isDigit(raw[index])) : (index += 1) {
+            if (exponent < max_svg_exponent_abs) exponent = exponent * 10 + @as(i32, raw[index] - '0');
+            exponent_digits = true;
+        }
+        if (!exponent_digits) return error.InvalidSvg;
+        exponent *= exponent_sign;
+    }
+    if (index != raw.len) return error.InvalidSvg;
+
+    value = sign * applyDecimalExponent(value, exponent);
+    const parsed: f32 = @floatCast(value);
+    if (!math.isFiniteF(parsed)) return error.InvalidSvg;
+    return parsed;
 }
 
-pub fn parseSvgNumber(data: []const u8, index: *usize) !f32 {
-    try skipSvgNumberSeparators(data, index);
-    if (index.* >= data.len) return error.InvalidSvg;
+fn applyDecimalExponent(value: f64, exponent: i32) f64 {
+    if (value == 0.0) return value;
+    if (exponent > max_svg_exponent_abs) return inf_f64;
+    if (exponent < -max_svg_exponent_abs) return 0.0;
+    var scaled = value;
+    if (exponent >= 0) {
+        var remaining: i32 = exponent;
+        while (remaining > 0) : (remaining -= 1) scaled *= 10.0;
+    } else {
+        var remaining: i32 = -exponent;
+        while (remaining > 0) : (remaining -= 1) scaled *= 0.1;
+    }
+    return scaled;
+}
+
+fn isDigit(byte: u8) bool {
+    return byte >= '0' and byte <= '9';
+}
+
+const max_svg_exponent_abs: i32 = 128;
+const inf_f64: f64 = @bitCast(@as(u64, 0x7ff0000000000000));
+
+fn parseSvgNumberToken(data: []const u8, index: *usize) ![]const u8 {
     const start = index.*;
     if (data[index.*] == '-' or data[index.*] == '+') index.* += 1;
     var has_digit = false;
-    while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) has_digit = true;
+    while (index.* < data.len and isDigit(data[index.*])) : (index.* += 1) has_digit = true;
     if (index.* < data.len and data[index.*] == '.') {
         index.* += 1;
-        while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) has_digit = true;
+        while (index.* < data.len and isDigit(data[index.*])) : (index.* += 1) has_digit = true;
     }
     if (!has_digit) return error.InvalidSvg;
     if (index.* < data.len and (data[index.*] == 'e' or data[index.*] == 'E')) {
         index.* += 1;
         if (index.* < data.len and (data[index.*] == '-' or data[index.*] == '+')) index.* += 1;
         var exponent_digits = false;
-        while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) exponent_digits = true;
+        while (index.* < data.len and isDigit(data[index.*])) : (index.* += 1) exponent_digits = true;
         if (!exponent_digits) return error.InvalidSvg;
     }
     if (index.* == start) return error.InvalidSvg;
-    return parseFiniteSvgFloat(data[start..index.*]);
+    return data[start..index.*];
+}
+
+pub fn parseSvgNumber(data: []const u8, index: *usize) !f32 {
+    try skipSvgNumberSeparators(data, index);
+    if (index.* >= data.len) return error.InvalidSvg;
+    return parseFiniteSvgFloat(try parseSvgNumberToken(data, index));
 }
 
 pub const PathIterator = struct {
@@ -322,3 +393,22 @@ pub const PathIterator = struct {
         };
     }
 };
+
+test "svg number parser handles decimals signs and exponents" {
+    var index: usize = 0;
+    try std.testing.expectEqual(@as(f32, -12.5), try parseSvgNumber("-12.5", &index));
+    try std.testing.expectEqual(@as(usize, 5), index);
+
+    index = 0;
+    try std.testing.expectEqual(@as(f32, 1250.0), try parseSvgNumber("1.25e3", &index));
+    try std.testing.expectEqual(@as(usize, 6), index);
+
+    index = 0;
+    try std.testing.expectEqual(@as(f32, 0.25), try parseSvgNumber(".25", &index));
+    try std.testing.expectEqual(@as(usize, 3), index);
+}
+
+test "svg number parser rejects non finite exponents" {
+    var index: usize = 0;
+    try std.testing.expectError(error.InvalidSvg, parseSvgNumber("1e129", &index));
+}

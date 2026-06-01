@@ -1,4 +1,5 @@
 const std = @import("std");
+const byte_utils = @import("../bytes.zig");
 const font_vector = @import("font.zig");
 const renderer_ir = @import("ir.zig");
 const ui = @import("../ui/core.zig");
@@ -310,7 +311,7 @@ pub fn dirtyTilesMarkSceneDiff(plan: TilePlan, prev: ui.Scene, next: ui.Scene, t
     while (i < common) : (i += 1) {
         const a = prev_commands[i];
         const b = next_commands[i];
-        if (!std.meta.eql(a, b)) {
+        if (!commandEql(a, b)) {
             if (!markCommand(plan, a, tile_marks, list) or !markCommand(plan, b, tile_marks, list)) return false;
         }
     }
@@ -490,12 +491,64 @@ fn divCeil(value: u32, divisor: u32) u32 {
 }
 
 fn add(a: u64, b: u64) ?u64 {
-    return std.math.add(u64, a, b) catch null;
+    const sum = a +% b;
+    return if (sum < a) null else sum;
 }
 
 fn mul(a: anytype, b: anytype) ?u64 {
-    return std.math.mul(u64, @as(u64, a), @as(u64, b)) catch null;
+    const left: u64 = @intCast(a);
+    const right: u64 = @intCast(b);
+    if (left != 0 and right > max_u64 / left) return null;
+    return left * right;
 }
+
+fn commandEql(a: ui.Command, b: ui.Command) bool {
+    return switch (a) {
+        .rect => |left| b == .rect and rectCommandEql(left, b.rect),
+        .overlay_rect => |left| b == .overlay_rect and rectCommandEql(left, b.overlay_rect),
+        .border => |left| b == .border and rectEql(left.bounds, b.border.bounds) and colorEql(left.color, b.border.color),
+        .text => |left| b == .text and textCommandEql(left, b.text),
+        .overlay_text => |left| b == .overlay_text and textCommandEql(left, b.overlay_text),
+        .drag_source => |left| b == .drag_source and left.scope_id == b.drag_source.scope_id and left.item_id == b.drag_source.item_id and left.index == b.drag_source.index and rectEql(left.bounds, b.drag_source.bounds),
+        .drop_target => |left| b == .drop_target and left.scope_id == b.drop_target.scope_id and left.index == b.drop_target.index and rectEql(left.bounds, b.drop_target.bounds),
+        .icon_quad => |left| b == .icon_quad and iconQuadEql(left, b.icon_quad),
+        .overlay_icon_quad => |left| b == .overlay_icon_quad and iconQuadEql(left, b.overlay_icon_quad),
+        .svg_quad => |left| b == .svg_quad and iconQuadEql(left, b.svg_quad),
+        .text_quad => |left| b == .text_quad and quadEql(left, b.text_quad),
+        .image_quad => |left| b == .image_quad and quadEql(left, b.image_quad),
+        .transition => |left| b == .transition and transitionEql(left, b.transition),
+    };
+}
+
+fn rectCommandEql(a: anytype, b: @TypeOf(a)) bool {
+    return rectEql(a.bounds, b.bounds) and colorEql(a.color, b.color) and colorEql(a.color2, b.color2) and a.mode == b.mode and a.radius == b.radius and a.shadow == b.shadow;
+}
+
+fn textCommandEql(a: anytype, b: @TypeOf(a)) bool {
+    return rectEql(a.origin, b.origin) and byte_utils.eql(a.value, b.value) and colorEql(a.color, b.color) and a.alignment == b.alignment and a.weight == b.weight;
+}
+
+fn iconQuadEql(a: ui.IconQuad, b: ui.IconQuad) bool {
+    return rectEql(a.bounds, b.bounds) and a.icon_id == b.icon_id and colorEql(a.color, b.color);
+}
+
+fn quadEql(a: ui.Quad, b: ui.Quad) bool {
+    return rectEql(a.bounds, b.bounds) and a.u0 == b.u0 and a.v0 == b.v0 and a.u1 == b.u1 and a.v1 == b.v1 and a.atlas_id == b.atlas_id and colorEql(a.color, b.color);
+}
+
+fn transitionEql(a: ui.Transition, b: ui.Transition) bool {
+    return a.id == b.id and a.property == b.property and a.from == b.from and a.to == b.to and a.duration_ms == b.duration_ms and a.delay_ms == b.delay_ms and a.easing == b.easing;
+}
+
+fn rectEql(a: ui.Rect, b: ui.Rect) bool {
+    return a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h;
+}
+
+fn colorEql(a: ui.Color, b: ui.Color) bool {
+    return a.r == b.r and a.g == b.g and a.b == b.b and a.a == b.a;
+}
+
+const max_u64: u64 = 0xffff_ffff_ffff_ffff;
 
 fn floorI64(value: f32) i64 {
     return @intFromFloat(@floor(value));
