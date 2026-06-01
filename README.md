@@ -8,13 +8,13 @@ The repository has two distinct code worlds with a hard boundary:
   (`kernel/x86_64/macros.inc`). This owns the kernel, drivers, boot path, PCI, MMIO,
   serial, TPM, framebuffer, interrupt management, and the WASM interpreter.
   No C, no Zig, no external runtime. Built with `yasm` + `ld` via `build.sh`.
-- **App-side code** — Zig, compiled to WASM, running inside the canonical
-  host-side EdgeRun WASM interpreter. Apps must have zero host assumptions:
-  no syscalls, no libc, no POSIX, no platform intrinsics. Authority enters
-  only through explicit EdgeRun import contracts backed by requirements and
-  receipts.
-  The Zig toolchain is being removed from production boot paths and retained
-  only as an app-authoring frontend until the self-hosted compiler replaces it.
+- **App-side code** — application logic compiled to WASM and run inside the
+  canonical host-side EdgeRun WASM interpreter. Existing Zig app sources are
+  transitional bootstrap code and are being ported to owned ASM/self-hosted
+  source-to-WASM paths so the full app/runtime stack reaches 100% owned code.
+  Do not add new Zig app code. Apps must have zero host assumptions: no
+  syscalls, no libc, no POSIX, no platform intrinsics. Authority enters only
+  through explicit EdgeRun import contracts backed by requirements and receipts.
 
  Current production assets ~5MB expected to shrink while features are added. Goal is simple: computers do what they are good at — deterministically moving bytes. Data is controlled by its real owners. Zero waste. 
 
@@ -117,8 +117,9 @@ verify the receipt
   - `kernel/host/` — x86_64 ASM Linux userspace host tools for Pi USB boot and
     ESP32 serial boot.
   - `kernel/test/` — self-hosted ASM test runners.
-- `app/` — app-side Zig frontend. Zig remains an app-authoring path: source is
-  compiled to WASM and run by the host-side EdgeRun interpreter/import contract.
+- `app/` — transitional app-side Zig frontend. Existing Zig is porting input,
+  not the destination; new app behavior should be implemented in owned
+  ASM/self-hosted source-to-WASM paths instead of adding Zig.
   - `app/src/` — app object model, identity, clock, storage, grants, receipts,
     media, UI, UEFI smoke paths, Pi helpers, and host-facing dev tools.
   - `app/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
@@ -135,9 +136,10 @@ verify the receipt
 - `./build.sh kernel` builds the x86_64 kernel image with the current host-side
   ASM stack: drivers, TPM, local cells/routes/circuits, DA, WASM interpreter,
   WASM compiler/JIT pieces, Tor pieces, media codecs, and framebuffer/render IR.
-- A Zig app-side core exists for canonical objects, identities, deterministic
-  clocks, append-only storage, sealed movement, grants, manifests, receipts,
-  and UI/component authoring.
+- A transitional Zig app-side core exists for canonical objects, identities,
+  deterministic clocks, append-only storage, sealed movement, grants,
+  manifests, receipts, and UI/component authoring. It is being ported to owned
+  ASM/self-hosted paths rather than expanded with new Zig.
 - The host-side x86_64 ASM WASM compiler now has tested source-to-WASM slices,
   including the `test-wasm-compiler` path. It is not yet the full app compiler.
 - The local cell/router layer is implemented as the kernel identity transport:
@@ -169,8 +171,9 @@ contracts.
 
 Temporary gaps still present:
 
-- App authoring still uses Zig until the host-side compiler replaces enough of
-  the source-to-WASM path.
+- Existing app authoring still has Zig bootstrap surfaces, but they are being
+  replaced by owned ASM/self-hosted source-to-WASM paths. New Zig code should
+  not be added.
 - Some hardware paths are probe/test slices; the kernel should keep one explicit
   path per device class and delete placeholders as real behavior lands.
 

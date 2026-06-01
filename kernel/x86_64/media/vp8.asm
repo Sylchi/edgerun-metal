@@ -700,7 +700,10 @@ er_fn er_vp8_decode_frame_with_reference
     mov     r13d, esi
     mov     [rsp + VP8_DECODE_STACK_WIDTH], edx
     mov     [rsp + VP8_DECODE_STACK_HEIGHT], ecx
-    mov     [rsp + VP8_DECODE_STACK_LEFT_Y], r8
+    mov     [rsp + VP8_DECODE_STACK_REF_LAST], r8
+    mov     [rsp + VP8_DECODE_STACK_REF_GOLDEN], r8
+    mov     [rsp + VP8_DECODE_STACK_REF_ALTERNATE], r8
+    mov     [rsp + VP8_DECODE_STACK_REF_SELECTED], r8
     mov     [rsp + VP8_DECODE_STACK_YUV], r9
     mov     rax, [rsp + VP8_DECODE_STACK_TOTAL + 56]
     mov     [rsp + VP8_DECODE_STACK_OUT], rax
@@ -878,7 +881,11 @@ er_fn er_vp8_decode_frame_with_reference
     lea     rdx, [rsp + VP8_DECODE_STACK_TOP_MODES]
     lea     rcx, [rsp + VP8_DECODE_STACK_LEFT_MODES]
     lea     r8, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    lea     r9, [rsp + VP8_DECODE_STACK_TOP_MVS]
+    lea     rax, [rsp + VP8_DECODE_STACK_LEFT_MVS]
+    push    rax
     call    er_vp8_read_inter_macroblock_header
+    add     rsp, 8
     test    edx, edx
     jnz     .done_decode_reference
     lea     rdi, [rsp + VP8_DECODE_STACK_COEFFS]
@@ -937,6 +944,22 @@ er_fn er_vp8_decode_frame_with_reference
     cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
     je      .copy_inter_split_mb
 .copy_inter_mb:
+    movzx   eax, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_REFERENCE]
+    cmp     eax, VP8_REFERENCE_NAME_LAST
+    je      .select_last_reference
+    cmp     eax, VP8_REFERENCE_NAME_GOLDEN
+    je      .select_golden_reference
+    cmp     eax, VP8_REFERENCE_NAME_ALTERNATE
+    jne     .corrupt
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_ALTERNATE]
+    jmp     .reference_selected
+.select_last_reference:
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_LAST]
+    jmp     .reference_selected
+.select_golden_reference:
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_GOLDEN]
+.reference_selected:
+    mov     [rsp + VP8_DECODE_STACK_REF_SELECTED], rax
     xor     r8d, r8d
     xor     r9d, r9d
     xor     ebx, ebx
@@ -963,14 +986,14 @@ er_fn er_vp8_decode_frame_with_reference
     jnz     .read_inter_luma_subpixel
     lea     r10, [rsp + VP8_DECODE_STACK_Y_PLANE]
     push    r10
-    push    qword [rsp + 8 + VP8_DECODE_STACK_LEFT_Y]
+    push    qword [rsp + 8 + VP8_DECODE_STACK_REF_SELECTED]
     call    er_vp8_read_reference_luma_nearest
     add     rsp, 16
     jmp     .read_inter_luma_done
 .read_inter_luma_subpixel:
     lea     r10, [rsp + VP8_DECODE_STACK_Y_PLANE]
     push    r10
-    push    qword [rsp + 8 + VP8_DECODE_STACK_LEFT_Y]
+    push    qword [rsp + 8 + VP8_DECODE_STACK_REF_SELECTED]
     movsxd  r10, r15d
     push    r10
     movsxd  r10, ebx
@@ -995,7 +1018,7 @@ er_fn er_vp8_decode_frame_with_reference
     and     r15d, VP8_MOTION_VECTOR_CHROMA_FRACTION_MASK
     sar     r9d, VP8_MOTION_VECTOR_CHROMA_SHIFT
 .read_inter_chroma:
-    mov     r10, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     r10, [rsp + VP8_DECODE_STACK_REF_SELECTED]
     mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
     lea     r11, [r10 + rax]
     mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
@@ -1083,6 +1106,22 @@ er_fn er_vp8_decode_frame_with_reference
     jnz     .done_decode_reference
     jmp     .finish_inter_prediction_state
 .copy_inter_split_mb:
+    movzx   eax, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_REFERENCE]
+    cmp     eax, VP8_REFERENCE_NAME_LAST
+    je      .split_select_last_reference
+    cmp     eax, VP8_REFERENCE_NAME_GOLDEN
+    je      .split_select_golden_reference
+    cmp     eax, VP8_REFERENCE_NAME_ALTERNATE
+    jne     .corrupt
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_ALTERNATE]
+    jmp     .split_reference_selected
+.split_select_last_reference:
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_LAST]
+    jmp     .split_reference_selected
+.split_select_golden_reference:
+    mov     rax, [rsp + VP8_DECODE_STACK_REF_GOLDEN]
+.split_reference_selected:
+    mov     [rsp + VP8_DECODE_STACK_REF_SELECTED], rax
     mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
     mov     esi, [rsp + VP8_DECODE_STACK_HEIGHT]
     mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
@@ -1090,7 +1129,7 @@ er_fn er_vp8_decode_frame_with_reference
     lea     r8, [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
     lea     rax, [rsp + VP8_DECODE_STACK_Y_PLANE]
     push    rax
-    mov     r9, [rsp + 8 + VP8_DECODE_STACK_LEFT_Y]
+    mov     r9, [rsp + 8 + VP8_DECODE_STACK_REF_SELECTED]
     call    er_vp8_read_reference_luma_split
     add     rsp, 8
     test    edx, edx
@@ -1108,7 +1147,7 @@ er_fn er_vp8_decode_frame_with_reference
     mov     r15d, r9d
     and     r15d, VP8_MOTION_VECTOR_CHROMA_FRACTION_MASK
     sar     r9d, VP8_MOTION_VECTOR_CHROMA_SHIFT
-    mov     r10, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     r10, [rsp + VP8_DECODE_STACK_REF_SELECTED]
     mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
     lea     r11, [r10 + rax]
     mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
@@ -1326,6 +1365,10 @@ er_fn er_vp8_decode_frame_with_reference
 .unsupported:
     xor     eax, eax
     er_err  ERROR_UNSUPPORTED
+    jmp     .done_decode_reference
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
 .done_decode_reference:
     er_stack_free VP8_DECODE_STACK_TOTAL
     er_pop  rbx, r12, r13, r14, r15
@@ -3421,11 +3464,11 @@ er_fn er_vp8_read_inter_prediction
     er_pop  rbx, r12, r13, r14
     er_ret
 
-; er_vp8_read_inter_split_motion(reader, compressed_header, best, out)
-; -> eax=VP8_Y_BLOCK_COUNT, rdx=error. Boundary subblock contexts are zero.
+; er_vp8_read_inter_split_motion(reader, compressed_header, best, out, mb_x, top_mvs, left_mvs)
+; -> eax=VP8_Y_BLOCK_COUNT, rdx=error.
 er_fn er_vp8_read_inter_split_motion
     er_push rbx, r12, r13, r14, r15
-    er_stack_alloc 80
+    er_stack_alloc 104
     test    rdi, rdi
     jz      .invalid_param
     test    rsi, rsi
@@ -3434,10 +3477,18 @@ er_fn er_vp8_read_inter_split_motion
     jz      .invalid_param
     test    rcx, rcx
     jz      .invalid_param
+    test    r9, r9
+    jz      .invalid_param
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
     mov     r15, rcx
+    mov     [rsp + 80], r8d
+    mov     [rsp + 88], r9
+    mov     rax, [rsp + 152]
+    test    rax, rax
+    jz      .invalid_param
+    mov     [rsp + 96], rax
     lea     rdi, [rsp]
     xor     esi, esi
     mov     edx, VP8_Y_BLOCK_COUNT
@@ -3477,7 +3528,7 @@ er_fn er_vp8_read_inter_split_motion
     mov     eax, ebx
     and     eax, 3
     test    eax, eax
-    jz      .above_context
+    jz      .left_boundary_context
     cmp     byte [rsp + rbx - 1], 0
     je      .above_context
     mov     eax, ebx
@@ -3485,15 +3536,34 @@ er_fn er_vp8_read_inter_split_motion
     imul    eax, VP8_MOTION_VECTOR_SIZE
     mov     edx, [r15 + rax]
     mov     [rsp + 16], edx
+    jmp     .above_context
+.left_boundary_context:
+    mov     eax, ebx
+    shr     eax, 2
+    imul    eax, VP8_MOTION_VECTOR_SIZE
+    mov     rdx, [rsp + 96]
+    mov     edx, [rdx + rax]
+    mov     [rsp + 16], edx
 .above_context:
     cmp     ebx, VP8_BLOCK_SIZE
-    jb      .read_vector
+    jb      .above_boundary_context
     cmp     byte [rsp + rbx - VP8_BLOCK_SIZE], 0
     je      .read_vector
     mov     eax, ebx
     sub     eax, VP8_BLOCK_SIZE
     imul    eax, VP8_MOTION_VECTOR_SIZE
     mov     edx, [r15 + rax]
+    mov     [rsp + 20], edx
+    jmp     .read_vector
+.above_boundary_context:
+    mov     eax, [rsp + 80]
+    shl     eax, 4
+    mov     edx, ebx
+    and     edx, 3
+    imul    edx, VP8_MOTION_VECTOR_SIZE
+    add     eax, edx
+    mov     rdx, [rsp + 88]
+    mov     edx, [rdx + rax]
     mov     [rsp + 20], edx
 .read_vector:
     mov     rdi, r12
@@ -3535,7 +3605,7 @@ er_fn er_vp8_read_inter_split_motion
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done_split_motion:
-    er_stack_free 80
+    er_stack_free 104
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
@@ -3624,11 +3694,11 @@ er_fn er_vp8_finish_inter_motion_state
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
-; er_vp8_read_inter_macroblock_header(compressed_header, mb_x, top_modes, left_modes, out)
+; er_vp8_read_inter_macroblock_header(compressed_header, mb_x, top_modes, left_modes, out, top_mvs, left_mvs)
 ; -> eax=VP8_MACROBLOCK_HEADER_SIZE, rdx=error
 er_fn er_vp8_read_inter_macroblock_header
     er_push rbx, r12, r13, r14, r15
-    er_stack_alloc 8
+    er_stack_alloc 24
     test    rdi, rdi
     jz      .invalid_param
     test    rdx, rdx
@@ -3637,11 +3707,18 @@ er_fn er_vp8_read_inter_macroblock_header
     jz      .invalid_param
     test    r8, r8
     jz      .invalid_param
+    test    r9, r9
+    jz      .invalid_param
+    mov     rax, [rsp + 72]
+    test    rax, rax
+    jz      .invalid_param
     mov     r12, rdi
     mov     r13, rdx
     mov     r14, rcx
     mov     r15, r8
     mov     [rsp], esi
+    mov     [rsp + 8], r9
+    mov     [rsp + 16], rax
     mov     byte [r15 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 0
     mov     byte [r15 + VP8_MACROBLOCK_HEADER_SKIP], 0
     mov     byte [r15 + VP8_MACROBLOCK_HEADER_REFERENCE], VP8_REFERENCE_NAME_LAST
@@ -3709,7 +3786,11 @@ er_fn er_vp8_read_inter_macroblock_header
     mov     rsi, r12
     lea     rdx, [r15 + VP8_MACROBLOCK_HEADER_MOTION_VECTOR]
     lea     rcx, [r15 + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    mov     r8d, [rsp]
+    mov     r9, [rsp + 8]
+    push    qword [rsp + 16]
     call    er_vp8_read_inter_split_motion
+    add     rsp, 8
     test    edx, edx
     jnz     .done_inter_mb
 .inter_modes_ready:
@@ -3786,7 +3867,7 @@ er_fn er_vp8_read_inter_macroblock_header
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
 .done_inter_mb:
-    er_stack_free 8
+    er_stack_free 24
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 

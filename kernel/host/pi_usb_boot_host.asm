@@ -1,5 +1,5 @@
 ; Pi Zero USB boot host tool — x86_64 Linux userspace assembly
-; Ported from edgerun-zig/src/pi_usb_boot_host.zig
+; Canonical Pi Zero USB boot host implementation.
 ;
 ; Usage: pi_usb_boot_host [options] [bootcode.bin]
 ;

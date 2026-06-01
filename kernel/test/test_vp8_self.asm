@@ -1477,7 +1477,10 @@ _start:
     mov     rdx, top_modes
     mov     rcx, left_modes
     mov     r8, macroblock_header
+    mov     r9, top_modes
+    push    split_partition
     call    er_vp8_read_inter_macroblock_header
+    add     rsp, 8
     cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
     jne     .fail_inter_macroblock_header
     test    edx, edx
@@ -1503,7 +1506,10 @@ _start:
     mov     rdx, top_modes
     mov     rcx, left_modes
     mov     r8, macroblock_header
+    mov     r9, top_modes
+    push    split_partition
     call    er_vp8_read_inter_macroblock_header
+    add     rsp, 8
     cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
     jne     .fail_inter_macroblock_header
     test    edx, edx
@@ -4389,13 +4395,25 @@ _start:
     xor     esi, esi
     mov     edx, VP8_Y_BLOCK_COUNT * VP8_MOTION_VECTOR_SIZE
     call    er_vp8_memset
+    mov     rdi, top_modes
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     rdi, split_partition
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
     mov     word [rel motion_vector + VP8_MOTION_VECTOR_ROW], 0
     mov     word [rel motion_vector + VP8_MOTION_VECTOR_COL], 0
     mov     rdi, bool_reader
     mov     rsi, compressed_header
     mov     rdx, motion_vector
     lea     rcx, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    xor     r8d, r8d
+    mov     r9, top_modes
+    push    split_partition
     call    er_vp8_read_inter_split_motion
+    add     rsp, 8
     cmp     eax, VP8_Y_BLOCK_COUNT
     jne     .fail_read_inter_split_motion
     test    edx, edx
@@ -4403,6 +4421,41 @@ _start:
     cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + VP8_MOTION_VECTOR_ROW], 0
     jne     .fail_read_inter_split_motion
     cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 15 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], 0
+    jne     .fail_read_inter_split_motion
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    lea     rdi, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    xor     esi, esi
+    mov     edx, VP8_Y_BLOCK_COUNT * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     rdi, top_modes
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     rdi, split_partition
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     word [rel split_partition + VP8_MOTION_VECTOR_ROW], 7
+    mov     word [rel split_partition + VP8_MOTION_VECTOR_COL], -7
+    mov     rdi, bool_reader
+    mov     rsi, compressed_header
+    mov     rdx, motion_vector
+    lea     rcx, [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS]
+    xor     r8d, r8d
+    mov     r9, top_modes
+    push    split_partition
+    call    er_vp8_read_inter_split_motion
+    add     rsp, 8
+    cmp     eax, VP8_Y_BLOCK_COUNT
+    jne     .fail_read_inter_split_motion
+    test    edx, edx
+    jnz     .fail_read_inter_split_motion
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + VP8_MOTION_VECTOR_ROW], 7
+    jne     .fail_read_inter_split_motion
+    cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + VP8_MOTION_VECTOR_COL], -7
     jne     .fail_read_inter_split_motion
     inc     qword [rel passed]
     jmp     .finish_inter_motion_state

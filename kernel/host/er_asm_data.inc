@@ -277,6 +277,8 @@ tok_rsp: db "rsp"
 tok_rsp_len equ $ - tok_rsp
 tok_r8: db "r8"
 tok_r8_len equ $ - tok_r8
+tok_r8w: db "r8w"
+tok_r8w_len equ $ - tok_r8w
 tok_r8d: db "r8d"
 tok_r8d_len equ $ - tok_r8d
 tok_r8b: db "r8b"

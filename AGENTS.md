@@ -8,7 +8,7 @@
 - No shortcuts.
 - No external dependencies beyond what's required for self-hosted builds.
 - All host-side production code is x86_64 assembly using the project's own macro DSL (`macros.inc`).
-- No C, no Python, no CMake in host-side production code paths. App-side code is Zig compiled to WASM — that is the intended workflow.
+- No C, no Python, no CMake in host-side production code paths. Existing app-side Zig is transitional legacy code being ported to owned ASM/self-hosted paths; do not add new Zig code.
 - Host-side test harnesses may temporarily use C for linking purposes, but must be migrated to pure ASM self-hosted runners.
 - The permitted vendor binary exceptions are explicit and narrow: device radio firmware needed to operate a radio block, such as CYW43438 RAM/NVRAM/CLM files, and Raspberry Pi Zero-family boot firmware needed for the Broadcom mask-ROM/GPU boot chain to load repo-owned `kernel.img` on Pi Zero W v1.1 bring-up hardware. These exceptions do not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
 - No ambiguity.
@@ -37,16 +37,19 @@ The repository has two code worlds separated by a hard boundary:
   assembly using the project's own DSL (`macros.inc`). Owns the kernel, drivers,
   boot path, PCI, MMIO, serial, TPM, framebuffer, WASM interpreter, render IR,
   UI shell, and all host tooling.
-- **App-side** — Zig source compiled to WASM. Runs inside the canonical
-  host-side EdgeRun WASM interpreter. Must have zero host assumptions: no
-  syscalls, no libc, no POSIX, no platform intrinsics. Authority enters only
-  through explicit EdgeRun import contracts backed by requirements and receipts.
+- **App-side** — application logic that runs inside the canonical host-side
+  EdgeRun WASM interpreter. Existing Zig app sources are a temporary bootstrap
+  surface and must be ported to owned ASM/self-hosted compiler paths to reach
+  100% owned code. Do not add new Zig app code. Apps must have zero host
+  assumptions: no syscalls, no libc, no POSIX, no platform intrinsics.
+  Authority enters only through explicit EdgeRun import contracts backed by
+  requirements and receipts.
 
 ## Workspace & Language
 
-- **The project has two languages, each owning its side of the boundary:**
+- **The project is consolidating to owned code on both sides of the boundary:**
   - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
-  - **App-side:** Zig source compiled to WASM. This is an app-authoring path for application logic that runs inside the host-side WASM interpreter. App-side code must not contain a competing WASM interpreter.
+  - **App-side:** Existing Zig source compiled to WASM is legacy bootstrap code. Port app logic, UI contracts, object/grant helpers, media helpers, and host-facing app utilities to owned ASM/self-hosted source-to-WASM paths. Do not add new Zig files, tests, examples, generators, or app features. App-side code must not contain a competing WASM interpreter.
 - `kernel/x86_64/` — canonical hardware-near implementation, organized by subsystem:
   - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
   - `drv/` — hardware drivers
@@ -62,7 +65,7 @@ The repository has two code worlds separated by a hard boundary:
 - `kernel/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
 - `kernel/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
 - `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
-- `app/` — app-side Zig frontend and browser-facing app runtime. App code compiles to WASM and runs on the canonical host-side WASM interpreter/import contract. Do not add an app-side WASM interpreter.
+- `app/` — transitional app-side Zig frontend and browser-facing app runtime. Treat existing Zig as porting input, not a place for new implementation. App code compiles to WASM and runs on the canonical host-side WASM interpreter/import contract. Do not add an app-side WASM interpreter.
 - `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)
@@ -72,7 +75,7 @@ The repository has two code worlds separated by a hard boundary:
 - `ld` / `objcopy` (binutils) — linker. Long-term goal: own linker.
 
 ### Current bootstrap dependencies to eliminate
-- `zig` — app-side authoring compiler until the self-hosted source-to-WASM path replaces enough of it.
+- `zig` — temporary bootstrap compiler for existing app-side code only. It is being eliminated; new Zig code is not allowed.
 
 - `qemu-system-x86_64` and `qemu-system-arm` — emulator test environments.
 - `arm-none-eabi-as`, `arm-none-eabi-ld`, `arm-none-eabi-objcopy` — Pi Zero W build/test tools.

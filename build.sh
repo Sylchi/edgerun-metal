@@ -514,6 +514,19 @@ test-wasm-float|contract|wasm|yes|cmd_test_wasm_float|Run WASM float opcode test
 test-bench-render-ir|bench|ui|no|cmd_test_bench_render_ir|Run render_ir RDTSC benchmark
 test-tor-live-host|integration|crypto|no|cmd_test_tor_live_host|Build and run hosted live Tor ORPort probe
 test-app|app|app|no|cmd_test_app|Run app-side Zig tests
+test-app-ui-wasm|app|app|no|cmd_app_ui_wasm|Build app UI WASM artifact directly
+test-app-uefi-smoke|app|app|no|cmd_immutable_kernel_gop_smoke_efi|Build app UEFI native renderer smoke artifact directly
+test-app-project-intro-video|app|app|no|cmd_project_intro_video_build|Build project intro renderer artifact directly
+test-app-chat-preview|app|app|no|cmd_chat_preview_build|Build chat preview renderer artifact directly
+test-app-jc3248-frame|app|app|no|cmd_jc3248_frame_build|Build JC3248 frame renderer artifact directly
+test-app-build-dashboard|app|app|no|cmd_build_dashboard|Build dashboard renderer artifact directly
+test-app-media-video-dump|app|app|no|cmd_media_video_dump|Build media video dump artifact directly
+test-app-ifstatus|app|app|no|cmd_ifstatus|Build interface status publisher artifact directly
+test-app-pi-usb-load|app|app|no|cmd_pi_usb_boot|Build Pi USB boot host ASM artifact directly
+test-app-pi-usb-control|app|app|no|cmd_pi_usb_control|Build Pi USB control host artifact directly
+test-app-wayland-window|app|app|no|cmd_wayland_window|Build Wayland native window artifact directly
+test-app-drm-gbm-window|app|app|no|cmd_drm_gbm_window|Build DRM/GBM native window artifact directly
+test-app-build|app|app|no|cmd_app|Run complete direct app build path
 EOF
 }
 
@@ -1619,8 +1632,6 @@ cmd_test_core() {
 
 cmd_test_app() {
   local roots=(
-   src/pi_usb_boot_host.zig
-   src/pi_usb_control_host.zig
    src/clock.zig
    src/bytes.zig
    src/math.zig
@@ -1743,12 +1754,24 @@ cmd_project_intro_video() {
  cmd_app_exe src/project_intro_video.zig edgerun-project-intro-video
 }
 
+cmd_project_intro_video_build() {
+ cmd_app_exe_build_only src/project_intro_video.zig edgerun-project-intro-video
+}
+
 cmd_chat_preview() {
  cmd_app_exe src/encrypted_chat_preview.zig edgerun-chat-preview
 }
 
+cmd_chat_preview_build() {
+ cmd_app_exe_build_only src/encrypted_chat_preview.zig edgerun-chat-preview
+}
+
 cmd_jc3248_frame() {
  cmd_app_exe src/jc3248_display_frame.zig edgerun-jc3248-frame
+}
+
+cmd_jc3248_frame_build() {
+ cmd_app_exe_build_only src/jc3248_display_frame.zig edgerun-jc3248-frame
 }
 
 cmd_build_dashboard() {
@@ -1767,24 +1790,6 @@ cmd_media_video_dump() {
   -Mroot=src/media_video_dump.zig \
   -Mer_std=src/std.zig \
   -femit-bin="../${BUILD_DIR}/app/edgerun-media-video-dump")
-}
-
-cmd_pi_usb_load() {
- mkdir -p "${BUILD_DIR}/app"
- (cd app && zig build-exe -ODebug \
-  --dep er_std \
-  -Mroot=src/pi_usb_boot_host.zig \
-  -Mer_std=src/std.zig \
-  -femit-bin="../${BUILD_DIR}/app/edgerun-pi-usb-boot-host")
-}
-
-cmd_pi_usb_control() {
- mkdir -p "${BUILD_DIR}/app"
- (cd app && zig build-exe -ODebug \
-  --dep er_std \
-  -Mroot=src/pi_usb_control_host.zig \
-  -Mer_std=src/std.zig \
-  -femit-bin="../${BUILD_DIR}/app/edgerun-pi-usb-control-host")
 }
 
 cmd_wayland_window() {
@@ -1840,7 +1845,7 @@ cmd_app() {
  cmd_build_dashboard
  cmd_media_video_dump
  cmd_ifstatus
- cmd_pi_usb_load
+ cmd_pi_usb_boot
  cmd_pi_usb_control
  cmd_wayland_window
  cmd_drm_gbm_window
@@ -2327,6 +2332,15 @@ cmd_pi_usb_boot() {
 	echo "  LD  ${PI_USB_BOOT}"
 }
 
+cmd_pi_usb_control() {
+	mkdir -p "${HOST_BUILD}"
+	local src="kernel/host/pi_usb_control_host.asm"
+	local obj="${HOST_BUILD}/pi_usb_control_host.o"
+	asm_x86_obj elf64 "$obj" "$src"
+	ld -o "${HOST_BUILD}/pi_usb_control" "$obj"
+	echo "  LD  ${HOST_BUILD}/pi_usb_control"
+}
+
 cmd_pi_boot() {
 	cmd_pi_kernel
 	cmd_pi_usb_boot
@@ -2475,8 +2489,8 @@ EdgeRun build targets:
   build-dashboard    Build dashboard renderer without app/build.zig
   media-video-dump   Build media video dump tool without app/build.zig
   ifstatus           Build interface status publisher without app/build.zig
-  pi-usb-load        Build Pi USB boot host without app/build.zig
-  pi-usb-control     Build Pi USB control host without app/build.zig
+  pi-usb-load        Build Pi USB boot host tool (x86_64 ASM)
+  pi-usb-control     Build Pi USB control host tool (x86_64 ASM)
   wayland-window     Build Wayland native window host without app/build.zig
   drm-gbm-window     Build DRM/GBM native window host without app/build.zig
   tpm-real-check     Build real TPM checker without app/build.zig
@@ -2542,7 +2556,7 @@ case "${1:-help}" in
 	build-dashboard) cmd_build_dashboard ;;
 	media-video-dump) cmd_media_video_dump ;;
 	ifstatus)       cmd_ifstatus ;;
-	pi-usb-load)    cmd_pi_usb_load ;;
+	pi-usb-load)    cmd_pi_usb_boot ;;
 	pi-usb-control) cmd_pi_usb_control ;;
 	wayland-window) cmd_wayland_window ;;
 	drm-gbm-window) cmd_drm_gbm_window ;;
