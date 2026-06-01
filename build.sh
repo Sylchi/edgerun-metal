@@ -1728,6 +1728,17 @@ cmd_app_exe() {
  "${BUILD_DIR}/app/${out}"
 }
 
+cmd_app_exe_build_only() {
+ local root="$1"
+ local out="$2"
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot="$root" \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/${out}")
+}
+
 cmd_project_intro_video() {
  cmd_app_exe src/project_intro_video.zig edgerun-project-intro-video
 }
@@ -1820,11 +1831,12 @@ cmd_real_tpm() {
 cmd_app() {
  cmd_test_app
  cmd_app_ui_wasm
+ cmd_immutable_kernel_gop_smoke_efi
  cmd_sdk_cli
  cmd_sdk_bench
- cmd_project_intro_video
- cmd_chat_preview
- cmd_jc3248_frame
+ cmd_app_exe_build_only src/project_intro_video.zig edgerun-project-intro-video
+ cmd_app_exe_build_only src/encrypted_chat_preview.zig edgerun-chat-preview
+ cmd_app_exe_build_only src/jc3248_display_frame.zig edgerun-jc3248-frame
  cmd_build_dashboard
  cmd_media_video_dump
  cmd_ifstatus

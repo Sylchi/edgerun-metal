@@ -39,6 +39,7 @@ extern er_vp8_read_key_macroblock_header
 extern er_vp8_read_reference_name
 extern er_vp8_read_inter_prediction
 extern er_vp8_read_inter_split_motion
+extern er_vp8_finish_inter_motion_state
 extern er_vp8_read_inter_macroblock_header
 extern er_vp8_luma_mode_intra4_mode
 extern er_vp8_memset
@@ -4404,8 +4405,44 @@ _start:
     cmp     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 15 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], 0
     jne     .fail_read_inter_split_motion
     inc     qword [rel passed]
-    jmp     .done
+    jmp     .finish_inter_motion_state
 .fail_read_inter_split_motion:
+    inc     qword [rel failed]
+
+.finish_inter_motion_state:
+    mov     rdi, top_modes
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE * 2
+    call    er_vp8_memset
+    mov     rdi, split_partition
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 12 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], 12
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 12 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], -12
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 15 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], 15
+    mov     word [rel macroblock_header + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + 15 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], -15
+    mov     rdi, macroblock_header
+    mov     esi, 1
+    mov     rdx, top_modes
+    mov     rcx, split_partition
+    call    er_vp8_finish_inter_motion_state
+    cmp     eax, VP8_BLOCK_SIZE
+    jne     .fail_finish_inter_motion_state
+    test    edx, edx
+    jnz     .fail_finish_inter_motion_state
+    cmp     word [rel top_modes + VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], 12
+    jne     .fail_finish_inter_motion_state
+    cmp     word [rel top_modes + VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], -12
+    jne     .fail_finish_inter_motion_state
+    cmp     word [rel split_partition + 3 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_ROW], 15
+    jne     .fail_finish_inter_motion_state
+    cmp     word [rel split_partition + 3 * VP8_MOTION_VECTOR_SIZE + VP8_MOTION_VECTOR_COL], -15
+    jne     .fail_finish_inter_motion_state
+    inc     qword [rel passed]
+    jmp     .done
+.fail_finish_inter_motion_state:
     inc     qword [rel failed]
 
 .done:

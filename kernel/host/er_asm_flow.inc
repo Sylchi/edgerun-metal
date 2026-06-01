@@ -486,12 +486,15 @@ er_fn track_real_instruction
     mov     eax, 1
     ret
 .test_same:
+    push    r14
     call    match_direct_test_same
     test    eax, eax
     jz      .early_common_mov
+    pop     r11
     mov     eax, 1
     ret
 .early_common_mov:
+    pop     r14
     mov     rdi, r12
     mov     rsi, r13
     lea     rdx, [rel tok_mov]

@@ -131,6 +131,41 @@ er_fn match_common_mov
     jmp     .yes
 .not_r10_rsi:
     pop     r14
+    lea     rdi, [rel tok_ecx]
+    mov     esi, tok_ecx_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .not_early_ecx_imm
+    pop     r11
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    push    r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .early_ecx_try_madt_entries
+    pop     r11
+    jmp     .early_ecx_value_ok
+.early_ecx_try_madt_entries:
+    pop     r14
+    lea     rdi, [rel tok_madt_entries]
+    mov     esi, tok_madt_entries_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    mov     qword [rel imm_u32_value], 44
+.early_ecx_value_ok:
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0xb9
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u32
+    jmp     .yes
+.not_early_ecx_imm:
+    pop     r14
     lea     rdi, [rel tok_rcx]
     mov     esi, tok_rcx_len
     push    r14

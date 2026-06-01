@@ -826,6 +826,10 @@ er_fn er_vp8_decode_frame_with_reference
     mov     esi, VP8_INTRA4_MODE_DC
     mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
     call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_MVS]
+    xor     esi, esi
+    mov     edx, VP8_MAX_MACROBLOCK_COLUMNS * VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
+    call    er_vp8_memset
     mov     dword [rsp + VP8_DECODE_STACK_MB_Y], 0
 .inter_header_row_loop:
     mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
@@ -846,6 +850,10 @@ er_fn er_vp8_decode_frame_with_reference
     lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_V]
     mov     esi, VP8_PLANE_LEFT_DEFAULT
     mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_MVS]
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE * VP8_MOTION_VECTOR_SIZE
     call    er_vp8_memset
     lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT + VP8_RESIDUAL_CONTEXT_LEFT_Y]
     xor     esi, esi
@@ -1262,6 +1270,13 @@ er_fn er_vp8_decode_frame_with_reference
     push    rax
     call    er_vp8_filter_macroblock
     add     rsp, 56
+    test    edx, edx
+    jnz     .done_decode_reference
+    lea     rdi, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOP_MVS]
+    lea     rcx, [rsp + VP8_DECODE_STACK_LEFT_MVS]
+    call    er_vp8_finish_inter_motion_state
     test    edx, edx
     jnz     .done_decode_reference
     lea     rdi, [rsp + VP8_DECODE_STACK_TOP_Y]
@@ -3521,6 +3536,91 @@ er_fn er_vp8_read_inter_split_motion
     er_err  ERROR_CORRUPT
 .done_split_motion:
     er_stack_free 80
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_finish_inter_motion_state(macroblock_header, mb_x, top_mvs, left_mvs)
+; -> eax=VP8_BLOCK_SIZE, rdx=error. top_mvs stores four MVs per macroblock column.
+er_fn er_vp8_finish_inter_motion_state
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 16
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    cmp     esi, VP8_MAX_MACROBLOCK_COLUMNS
+    jae     .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15, rcx
+    cmp     byte [r12 + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_SPLIT
+    je      .split
+    cmp     byte [r12 + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_MOTION
+    je      .macro_vector
+    cmp     byte [r12 + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTER_ZERO
+    je      .macro_vector
+    mov     dword [rsp], 0
+    jmp     .write_repeated
+.macro_vector:
+    mov     eax, [r12 + VP8_MACROBLOCK_HEADER_MOTION_VECTOR]
+    mov     [rsp], eax
+.write_repeated:
+    mov     eax, r13d
+    shl     eax, 4
+    mov     [rsp + 4], eax
+    xor     ebx, ebx
+.repeat_loop:
+    cmp     ebx, VP8_BLOCK_SIZE
+    jae     .ok
+    mov     edx, [rsp]
+    mov     eax, [rsp + 4]
+    lea     eax, [rax + rbx * VP8_MOTION_VECTOR_SIZE]
+    mov     [r14 + rax], edx
+    mov     [r15 + rbx * VP8_MOTION_VECTOR_SIZE], edx
+    inc     ebx
+    jmp     .repeat_loop
+.split:
+    mov     eax, r13d
+    shl     eax, 4
+    mov     [rsp + 4], eax
+    xor     ebx, ebx
+.split_top_loop:
+    cmp     ebx, VP8_BLOCK_SIZE
+    jae     .split_left
+    mov     ecx, ebx
+    add     ecx, 12
+    imul    ecx, VP8_MOTION_VECTOR_SIZE
+    mov     edx, [r12 + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + rcx]
+    mov     eax, [rsp + 4]
+    lea     eax, [rax + rbx * VP8_MOTION_VECTOR_SIZE]
+    mov     [r14 + rax], edx
+    inc     ebx
+    jmp     .split_top_loop
+.split_left:
+    xor     ebx, ebx
+.split_left_loop:
+    cmp     ebx, VP8_BLOCK_SIZE
+    jae     .ok
+    mov     ecx, ebx
+    shl     ecx, 2
+    add     ecx, 3
+    imul    ecx, VP8_MOTION_VECTOR_SIZE
+    mov     edx, [r12 + VP8_MACROBLOCK_HEADER_SPLIT_VECTORS + rcx]
+    mov     [r15 + rbx * VP8_MOTION_VECTOR_SIZE], edx
+    inc     ebx
+    jmp     .split_left_loop
+.ok:
+    mov     eax, VP8_BLOCK_SIZE
+    er_ok
+    jmp     .done_motion_state
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_motion_state:
+    er_stack_free 16
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
