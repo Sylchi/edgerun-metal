@@ -35,7 +35,6 @@ extern er_tor_hs_service_wait_introduce2
 extern er_tor_hs_parse_introduce_plaintext
 extern er_tor_hs_send_rendezvous1
 extern er_tor_ntor_keygen
-extern er_local_route_register_tor_hs
 extern er_tcp_recv
 extern er_fn_load_trusted
 extern er_fn_call_args
@@ -119,12 +118,9 @@ tor_stream_id_app: resw 1  ; primary stream for app traffic
 ; Buffer for building test traffic
 tor_test_buf: resb 512
 
-; Tor cell-tunnel state (local cell format over RELAY_DATA)
+; Directory stream state
 tor_dir_stream_id: resw 1
 tor_dir_stream_open: resd 1
-tor_tunnel_rx_head: resd 1
-tor_tunnel_rx_tail: resd 1
-tor_tunnel_rx_ring: resb LOCAL_CELL_SIZE * 4
 
 ; Directory fetch buffers/state
 tor_dir_resp_len: resd 1
@@ -163,8 +159,6 @@ tor_hs_service_rend_relay_ip: resd 1
 tor_hs_service_rend_relay_port: resw 1
 tor_hs_service_rend_relay_onion_key: resb 32
 tor_hs_live_stream_next_id: resw 1
-tor_hs_live_last_circ_id: resd 1
-tor_hs_live_last_stream_id: resw 1
 tor_signing_runtime: resb RUNTIME_SIZE
 tor_signing_memory: resb 17 * 65536
 tor_signing_ticks: resq 1
@@ -853,25 +847,6 @@ er_fn er_tor_get_role_caps
     mov     eax, [tor_state + TOR_STATE_ROLE_CAPS]
     er_ok
     er_ret
-
-; ==================================================================
-; er_tor_route_bind_hs_stream — bind identity routing to an open HS stream
-; rdi = dest identity hash, esi = rendezvous circ_id, edx = stream_id
-; ==================================================================
-global er_tor_route_bind_hs_stream
-er_fn er_tor_route_bind_hs_stream
-    call    er_local_route_register_tor_hs
-    er_ret
-
-; ==================================================================
-; er_tor_route_bind_live_hs_identity — bind identity to last live HS stream
-; rdi = dest identity hash
-; ==================================================================
-global er_tor_route_bind_live_hs_identity
-er_fn er_tor_route_bind_live_hs_identity
-    mov     esi, [rel tor_hs_live_last_circ_id]
-    movzx   edx, word [rel tor_hs_live_last_stream_id]
-    jmp     er_tor_route_bind_hs_stream
 
 ; ==================================================================
 ; er_tor_open_directory_channel — open BEGIN_DIR stream on app circuit
@@ -1920,10 +1895,6 @@ er_fn er_tor_hs_open_stream_live_from_desc
     call    er_tor_hs_open_client_stream
     test    eax, eax
     js      .fail
-    mov     eax, [rel tor_hs_rend_circ_id]
-    mov     [rel tor_hs_live_last_circ_id], eax
-    mov     [rel tor_hs_live_last_stream_id], si
-
     xor     eax, eax
     er_ok
     add     rsp, 16
@@ -3129,40 +3100,6 @@ _tor_parse_consensus_first_relay:
     ret
 
 ; ==================================================================
-; er_tor_tunnel_recv_cell — recv one tunneled local cell (non-blocking)
-; rdi = out_cell_ptr (LOCAL_CELL_SIZE)
-; ==================================================================
-global er_tor_tunnel_recv_cell
-er_fn er_tor_tunnel_recv_cell
-    push    rbx
-    push    r12
-    mov     r12, rdi
-    mov     eax, [tor_tunnel_rx_head]
-    mov     ebx, [tor_tunnel_rx_tail]
-    cmp     eax, ebx
-    je      .empty
-
-    and     ebx, 3
-    imul    ebx, LOCAL_CELL_SIZE
-    lea     rsi, [tor_tunnel_rx_ring + rbx]
-    mov     rdi, r12
-    mov     edx, LOCAL_CELL_SIZE
-    call    er_memcpy
-
-    inc     dword [tor_tunnel_rx_tail]
-    xor     eax, eax
-    er_ok
-    pop     r12
-    pop     rbx
-    er_ret
-.empty:
-    mov     eax, -1
-    er_err  ERROR_LOCAL_EMPTY
-    pop     r12
-    pop     rbx
-    er_ret
-
-; ==================================================================
 ; _tor_print_status — print status message
 ; void _tor_print_status(const char *msg)
 ; ==================================================================
@@ -3261,14 +3198,9 @@ er_fn er_tor_init
     call    er_tor_set_role
     test    eax, eax
     js      .link_fail
-    mov     dword [tor_hs_live_last_circ_id], 0
-    mov     word [tor_hs_live_last_stream_id], 0
     mov     dword [tor_dir_stream_open], 0
     mov     word [tor_dir_stream_id], 0
     mov     word [tor_hs_live_stream_next_id], 1
-    mov     dword [tor_tunnel_rx_head], 0
-    mov     dword [tor_tunnel_rx_tail], 0
-
     ; === Phase 1: Connect to guard relay ===
     lea     rdi, [rel str_tor_connect]
     call    _tor_print_status
@@ -3576,29 +3508,6 @@ er_fn er_tor_poll
     ; Copy relay data to stream buffer
     movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
     xchg    cl, ch
-
-    ; Fast-path: local cell payload on the last live HS stream.
-    ; Drop when the local receive ring is full.
-    movzx   eax, word [rel tor_hs_live_last_stream_id]
-    cmp     r14w, ax
-    jne     .print_data
-.cell_stream:
-    cmp     ecx, LOCAL_CELL_SIZE
-    jne     .print_data
-    mov     eax, [tor_tunnel_rx_head]
-    mov     edx, [tor_tunnel_rx_tail]
-    sub     eax, edx
-    cmp     eax, 4
-    jae     .done
-    mov     eax, [tor_tunnel_rx_head]
-    and     eax, 3
-    imul    eax, LOCAL_CELL_SIZE
-    lea     rdi, [tor_tunnel_rx_ring + rax]
-    lea     rsi, [tor_rx_cell + 16]
-    mov     edx, LOCAL_CELL_SIZE
-    call    er_memcpy
-    inc     dword [tor_tunnel_rx_head]
-    jmp     .done
 
 .print_data:
     ; Print received data length

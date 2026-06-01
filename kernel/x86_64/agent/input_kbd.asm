@@ -25,7 +25,7 @@
 extern er_i8042_read_scancode
 extern er_i8042_scancode_to_ascii
 extern er_local_route_register
-extern er_local_cell_send
+extern er_route_send
 extern er_memset
 
 ; DA's focus globals — read directly (same address space, no cell overhead)
@@ -230,7 +230,7 @@ _ik_forward:
 
     lea     rdi, [rel da_focused_hash]
     mov     rsi, r12
-    call    er_local_cell_send
+    call    er_route_send
 
     pop     r12
     xor     eax, eax

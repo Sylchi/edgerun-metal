@@ -141,19 +141,6 @@ const sidebar_content_min_w: f32 = 120.0;
 const sidebar_min_width: f32 = 160.0;
 const sidebar_min_height: f32 = 48.0;
 
-test "sidebar component serializes to canonical object and deserializes" {
-    const sidebar = Sidebar{ .id = 1003, .title = "Workspace", .item = "Nav" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = sidebar.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Sidebar.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(sidebar.id, decoded.id);
-    try std.testing.expectEqualStrings(sidebar.title, decoded.title);
-    try std.testing.expectEqualStrings(sidebar.item, decoded.item);
-}
-
 test "sidebar component renders rail item and hit regions" {
     const sidebar = Sidebar{ .id = 1003, .title = "Workspace", .item = "Nav" };
     var commands: [24]ui.Command = undefined;

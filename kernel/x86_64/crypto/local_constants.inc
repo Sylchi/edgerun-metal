@@ -2,14 +2,14 @@
 ; Same-machine identity-based cell routing using SPSC ring buffers.
 
 ; ==================================================================
-; Local cell format (fixed-size, 256 bytes)
+; Local cell format (Tor fixed cell, link protocol v4+)
 ; ==================================================================
 LOCAL_CELL_CIRC_ID      equ 0   ; 4 bytes
 LOCAL_CELL_CMD          equ 4   ; 1 byte
-LOCAL_CELL_PAYLOAD      equ 5   ; 251 bytes
-LOCAL_CELL_SIZE         equ 256 ; 4 + 1 + 251
+LOCAL_CELL_PAYLOAD      equ 5   ; 509 bytes
+LOCAL_CELL_SIZE         equ 514 ; 4-byte CircID + 1-byte Command + 509-byte Body
 LOCAL_CELL_HEADER_LEN   equ 5
-LOCAL_CELL_PAYLOAD_LEN  equ 251
+LOCAL_CELL_PAYLOAD_LEN  equ 509
 
 ; ==================================================================
 ; Local cell commands
@@ -34,15 +34,13 @@ LOCAL_ID_HASH           equ 0   ; 32 bytes identity hash (BLAKE3)
 LOCAL_ID_RING           equ 32  ; incoming ring buffer (LOCAL_RING_SIZE bytes)
 LOCAL_ID_HANDLER        equ 32 + LOCAL_RING_SIZE  ; 8-byte agent handler fn ptr
 LOCAL_ID_FLAGS          equ 40 + LOCAL_RING_SIZE  ; 1-byte agent flags
-LOCAL_ID_ROUTE_KIND     equ 41 + LOCAL_RING_SIZE  ; 1=local ring, 2=Tor HS stream
-LOCAL_ID_TOR_CIRC_ID    equ 42 + LOCAL_RING_SIZE  ; u32 rendezvous circuit id
-LOCAL_ID_TOR_STREAM_ID  equ 46 + LOCAL_RING_SIZE  ; u16 rendezvous stream id
-LOCAL_ID_SLOT_SIZE      equ 48 + LOCAL_RING_SIZE
+LOCAL_ID_ROUTE_KIND     equ 41 + LOCAL_RING_SIZE  ; 1=local ring, 2=relay forwarding
+LOCAL_ID_SLOT_SIZE      equ 42 + LOCAL_RING_SIZE
 LOCAL_MAX_IDENTITIES    equ 16
 LOCAL_ROUTE_TABLE_SIZE  equ LOCAL_MAX_IDENTITIES * LOCAL_ID_SLOT_SIZE
 
 LOCAL_ROUTE_KIND_LOCAL  equ 1
-LOCAL_ROUTE_KIND_TOR_HS equ 2
+LOCAL_ROUTE_KIND_RELAY  equ 2   ; raw Tor fixed-cell forwarding
 
 ; ==================================================================
 ; Local circuit state (extended for local-only circuits)

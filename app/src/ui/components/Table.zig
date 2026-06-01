@@ -167,55 +167,38 @@ const table_header_role_asc = "Role ^";
 const table_header_role_desc = "Role v";
 const separator_height: f32 = 1.0;
 
-test "table component serializes to canonical object and deserializes" {
-    const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = table.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Table.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(table.id, decoded.id);
-    try std.testing.expectEqualStrings(table.name, decoded.name);
-    try std.testing.expectEqualStrings(table.role, decoded.role);
-}
-
 test "table component renders header row and hit region" {
     const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [3]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 3){};
+    h.init();
 
-    try table.render(&scene, ui.Rect.init(0, 0, 240, 64), .{});
-    try table.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 64));
+    try h.render(table, ui.Rect.init(0, 0, 240, 64), .{});
+    try table.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 64));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Name"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Role"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Sarah Chen"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Engineer"));
-    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 660 + name_header_id_offset), collector.written()[0].id);
-    try std.testing.expectEqual(@as(u32, 660 + role_header_id_offset), collector.written()[1].id);
-    try std.testing.expectEqual(@as(u32, 660 + row_id_offset), collector.written()[2].id);
+    try h.expectText("Name");
+    try h.expectText("Role");
+    try h.expectText("Sarah Chen");
+    try h.expectText("Engineer");
+    try h.expectHitCount(3);
+    try h.expectHitId(0, 660 + name_header_id_offset);
+    try h.expectHitId(1, 660 + role_header_id_offset);
+    try h.expectHitId(2, 660 + row_id_offset);
 }
 
 test "table component renders sorted column state without changing row hit" {
     const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };
-    var commands: [32]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [3]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(32, 3){};
+    h.init();
 
-    try table.render(&scene, ui.Rect.init(0, 0, 240, 64), .{
+    try h.render(table, ui.Rect.init(0, 0, 240, 64), .{
         .table_sort = .{ .column = .role, .direction = .descending },
     });
-    try table.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 64));
+    try table.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 64));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Role v"));
-    try std.testing.expectEqual(@as(u32, 660 + row_id_offset), collector.written()[2].id);
-    try std.testing.expect(collector.written()[0].bounds.x < collector.written()[1].bounds.x);
-    try std.testing.expect(collector.written()[2].bounds.y > collector.written()[0].bounds.y);
+    try h.expectText("Role v");
+    try h.expectHitId(2, 660 + row_id_offset);
+    try std.testing.expect(h.hits()[0].bounds.x < h.hits()[1].bounds.x);
+    try std.testing.expect(h.hits()[2].bounds.y > h.hits()[0].bounds.y);
 }
 
 test "table component measurement wraps long row cells under narrow constraints" {

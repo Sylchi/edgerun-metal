@@ -9,11 +9,18 @@
 ;          bench_wasm_jit.o .build/kernel/runtime.o
 ; Run:   ./bench_wasm_jit
 
+%define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
 
 ITERS_NATIVE  equ 10000000
 ITERS_JIT     equ 5000000
 ITERS_TRAMP   equ 100000
+LINUX_SYS_MPROTECT equ 10
+LINUX_PROT_READ    equ 1
+LINUX_PROT_WRITE   equ 2
+LINUX_PROT_EXEC    equ 4
+LINUX_PAGE_SIZE    equ 4096
+LINUX_PAGE_MASK    equ -LINUX_PAGE_SIZE
 
 SECTION .data
 align 16
@@ -28,10 +35,23 @@ BODY0_LEN     equ 5
 SECTION .bss
 ; decoder scratch
 dec_scratch: resq 1
+global er_wasm_runtime_ptr
+er_wasm_runtime_ptr: resq 1
 
 SECTION .text
 global _start
 _start:
+
+    lea     rdi, [rel jit_code_cache]
+    and     rdi, LINUX_PAGE_MASK
+    lea     rsi, [rel jit_code_cache + JIT_CACHE_SIZE + LINUX_PAGE_SIZE - 1]
+    and     rsi, LINUX_PAGE_MASK
+    sub     rsi, rdi
+    mov     edx, LINUX_PROT_READ | LINUX_PROT_WRITE | LINUX_PROT_EXEC
+    mov     eax, LINUX_SYS_MPROTECT
+    syscall
+    test    rax, rax
+    jnz     .fail
 
     ; ── common runtime setup ──
     lea     rax, [rel dummy_mem]

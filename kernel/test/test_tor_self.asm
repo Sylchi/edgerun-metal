@@ -16,10 +16,9 @@ extern er_tor_get_role
 extern er_tor_get_role_caps
 extern er_tor_hsdir_build_publish_header
 extern er_tor_hsdir_build_fetch_request
-extern er_tor_route_bind_hs_stream
-extern er_tor_route_bind_live_hs_identity
 extern er_local_cell_init
-extern er_local_cell_send
+extern er_route_register_relay
+extern er_route_send
 extern er_memcpy
 
 SECTION .data
@@ -96,11 +95,6 @@ last_relay_len: resd 1
 tor_conn_id: resd 1
 tor_rx_cell: resb TOR_CELL_LEN
 tor_recv_len: resd 1
-global tor_hs_live_last_circ_id
-global tor_hs_live_last_stream_id
-tor_hs_live_last_circ_id: resd 1
-tor_hs_live_last_stream_id: resw 1
-
 SECTION .text
 global _start
 _start:
@@ -409,47 +403,40 @@ _start:
     ASSERT_MEM_EQ [rel hsdir_fetch_expected], [rel req_buf], hsdir_fetch_expected_len
 
 ; ================================================================
-; Test 12: identity route requires bound hidden-service stream
+; Test 12: identity route requires registered relay forwarding
 ; ================================================================
     TEST_LABEL "12"
     lea     rdi, [rel route_hash]
     lea     rsi, [rel route_cell]
-    call    er_local_cell_send
+    call    er_route_send
     ASSERT_RDX ERROR_LOCAL_NOT_FOUND
 
     lea     rdi, [rel route_hash]
-    mov     esi, 7
-    mov     edx, 9
-    call    er_tor_route_bind_hs_stream
+    call    er_route_register_relay
     ASSERT_RDX 0
 
     lea     rdi, [rel route_hash]
     lea     rsi, [rel route_cell]
-    call    er_local_cell_send
+    call    er_route_send
     ASSERT_RDX 0
-    ASSERT_EQ dword [rel last_relay_circ], 7
-    ASSERT_EQ dword [rel last_relay_stream], 9
-    ASSERT_EQ dword [rel last_relay_cmd], TOR_RELAY_DATA
     lea     rax, [rel route_cell]
     ASSERT_EQ qword [rel last_relay_data], rax
     ASSERT_EQ dword [rel last_relay_len], LOCAL_CELL_SIZE
 
 ; ================================================================
-; Test 13: live HS route binding uses last opened stream state
+; Test 13: relay route can be registered idempotently
 ; ================================================================
     TEST_LABEL "13"
-    mov     dword [rel tor_hs_live_last_circ_id], 21
-    mov     word [rel tor_hs_live_last_stream_id], 23
     lea     rdi, [rel route_hash]
-    call    er_tor_route_bind_live_hs_identity
+    call    er_route_register_relay
     ASSERT_RDX 0
 
     lea     rdi, [rel route_hash]
     lea     rsi, [rel route_cell]
-    call    er_local_cell_send
+    call    er_route_send
     ASSERT_RDX 0
-    ASSERT_EQ dword [rel last_relay_circ], 21
-    ASSERT_EQ dword [rel last_relay_stream], 23
+    lea     rax, [rel route_cell]
+    ASSERT_EQ qword [rel last_relay_data], rax
 
 %ifdef TOR_BENCH
 ; ================================================================
@@ -581,6 +568,7 @@ global er_tor_link_handshake
 global er_tor_circuit_create
 global er_tor_circuit_extend
 global er_tor_send_relay
+global er_tor_send_cell
 global er_tor_recv_relay
 global er_tor_open_stream
 global er_tor_open_dir_stream
@@ -665,6 +653,13 @@ er_tor_send_relay:
     mov     [rel last_relay_cmd], edx
     mov     [rel last_relay_data], rcx
     mov     [rel last_relay_len], r8d
+    xor     eax, eax
+    er_ok
+    ret
+
+er_tor_send_cell:
+    mov     [rel last_relay_data], rdi
+    mov     dword [rel last_relay_len], LOCAL_CELL_SIZE
     xor     eax, eax
     er_ok
     ret

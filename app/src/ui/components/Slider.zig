@@ -112,19 +112,6 @@ const slider_track_shadow_size: f32 = 2.0;
 const slider_min_width: f32 = 120.0;
 const slider_min_height: f32 = 32.0;
 
-test "slider component serializes to canonical object and deserializes" {
-    const slider = Slider{ .id = 13, .label = "Brightness", .value = 0.72 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = slider.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Slider.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(slider.id, decoded.id);
-    try std.testing.expectEqualStrings(slider.label, decoded.label);
-    try std.testing.expect(@abs(decoded.value - slider.value) < 0.001);
-}
-
 test "slider component clamps rendered fill and thumb to track" {
     const slider = Slider{ .id = 13, .label = "Brightness", .value = 2.0 };
     var commands: [16]ui.Command = undefined;

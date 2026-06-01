@@ -64,19 +64,6 @@ const menu_radius: f32 = 8.0;
 const menu_list_layout = primitives.MenuListLayout{ .padding = 5.0, .item_h = 14.0, .item_pitch = 16.0, .item_radius = 4.0, .item_padding = 5.0, .item_text_h = 12.0 };
 const menu_trigger_padding: f32 = 8.0;
 
-test "context menu component serializes to canonical object and deserializes" {
-    const menu = ContextMenu{ .id = 999, .first = "Profile", .second = "Settings" };
-    var ui_raw: [224]u8 = undefined;
-    var object_raw: [object.header_size + 224]u8 = undefined;
-
-    const canonical = menu.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try ContextMenu.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(menu.id, decoded.id);
-    try std.testing.expectEqualStrings(menu.first, decoded.first);
-    try std.testing.expectEqualStrings(menu.second, decoded.second);
-}
-
 test "context menu component renders menu rows and hit regions" {
     const menu = ContextMenu{ .id = 999, .first = "Profile", .second = "Settings" };
     var commands: [24]ui.Command = undefined;

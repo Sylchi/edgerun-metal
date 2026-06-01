@@ -1018,77 +1018,49 @@ test "ble route advertisement identifies a self route" {
     try std.testing.expectEqualStrings("tv", decoded_route.name);
 }
 
-test "encode/decode accordion_open bool patch" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 1, ui.Patch{ .accordion_open = true }).?;
-    try std.testing.expectEqual(@as(usize, 3), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 1), decoded.component_id);
-    try std.testing.expectEqual(true, decoded.patch.accordion_open);
+test "encode/decode patch round-trips typed payloads" {
+    const Case = struct {
+        component_id: u8,
+        patch: ui.Patch,
+        encoded_len: usize,
+    };
+    const cases = [_]Case{
+        .{ .component_id = 1, .patch = .{ .accordion_open = true }, .encoded_len = 3 },
+        .{ .component_id = 2, .patch = .{ .toggle_pressed = false }, .encoded_len = 3 },
+        .{ .component_id = 3, .patch = .{ .checkbox_checked = true }, .encoded_len = 3 },
+        .{ .component_id = 4, .patch = .{ .switch_checked = false }, .encoded_len = 3 },
+        .{ .component_id = 5, .patch = .{ .progress_value = 0.75 }, .encoded_len = 6 },
+        .{ .component_id = 2, .patch = .{ .label_value = "23.5°C" }, .encoded_len = 10 },
+        .{ .component_id = 3, .patch = .{ .card_text = .{ .title = "Sensor", .detail = "Active" } }, .encoded_len = 16 },
+        .{ .component_id = 0, .patch = .{ .rect_color = ui.Color.accent }, .encoded_len = 6 },
+    };
+
+    for (cases) |case| {
+        var buf: [32]u8 = undefined;
+        const encoded = encodePatch(&buf, case.component_id, case.patch).?;
+        try std.testing.expectEqual(case.encoded_len, encoded.len);
+        const decoded = decodePatch(encoded).?;
+        try std.testing.expectEqual(case.component_id, decoded.component_id);
+        try expectPatchEqual(case.patch, decoded.patch);
+    }
 }
 
-test "encode/decode toggle_pressed bool patch" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 2, ui.Patch{ .toggle_pressed = false }).?;
-    try std.testing.expectEqual(@as(usize, 3), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 2), decoded.component_id);
-    try std.testing.expectEqual(false, decoded.patch.toggle_pressed);
-}
-
-test "encode/decode checkbox_checked bool patch" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 3, ui.Patch{ .checkbox_checked = true }).?;
-    try std.testing.expectEqual(@as(usize, 3), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 3), decoded.component_id);
-    try std.testing.expectEqual(true, decoded.patch.checkbox_checked);
-}
-
-test "encode/decode switch_checked bool patch" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 4, ui.Patch{ .switch_checked = false }).?;
-    try std.testing.expectEqual(@as(usize, 3), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 4), decoded.component_id);
-    try std.testing.expectEqual(false, decoded.patch.switch_checked);
-}
-
-test "encode/decode f32 patch round-trips progress_value" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 5, ui.Patch{ .progress_value = 0.75 }).?;
-    try std.testing.expectEqual(@as(usize, 6), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 5), decoded.component_id);
-    try std.testing.expectEqual(@as(f32, 0.75), decoded.patch.progress_value);
-}
-
-test "encode/decode string patch round-trips label_value" {
-    var buf: [16]u8 = undefined;
-    const encoded = encodePatch(&buf, 2, ui.Patch{ .label_value = "23.5°C" }).?;
-    try std.testing.expectEqual(@as(usize, 10), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 2), decoded.component_id);
-    try std.testing.expectEqualStrings("23.5°C", decoded.patch.label_value);
-}
-
-test "encode/decode two-string patch round-trips card_text" {
-    var buf: [32]u8 = undefined;
-    const encoded = encodePatch(&buf, 3, ui.Patch{ .card_text = .{ .title = "Sensor", .detail = "Active" } }).?;
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(@as(u8, 3), decoded.component_id);
-    try std.testing.expectEqualStrings("Sensor", decoded.patch.card_text.title);
-    try std.testing.expectEqualStrings("Active", decoded.patch.card_text.detail);
-}
-
-test "encode/decode color patch round-trips rect_color" {
-    var buf: [8]u8 = undefined;
-    const encoded = encodePatch(&buf, 0, ui.Patch{ .rect_color = ui.Color.accent }).?;
-    try std.testing.expectEqual(@as(usize, 6), encoded.len);
-    const decoded = decodePatch(encoded).?;
-    try std.testing.expectEqual(ui.Color.accent.r, decoded.patch.rect_color.r);
-    try std.testing.expectEqual(ui.Color.accent.g, decoded.patch.rect_color.g);
-    try std.testing.expectEqual(ui.Color.accent.b, decoded.patch.rect_color.b);
+fn expectPatchEqual(expected: ui.Patch, actual: ui.Patch) !void {
+    try std.testing.expectEqual(std.meta.activeTag(expected), std.meta.activeTag(actual));
+    switch (expected) {
+        .accordion_open => |value| try std.testing.expectEqual(value, actual.accordion_open),
+        .toggle_pressed => |value| try std.testing.expectEqual(value, actual.toggle_pressed),
+        .checkbox_checked => |value| try std.testing.expectEqual(value, actual.checkbox_checked),
+        .switch_checked => |value| try std.testing.expectEqual(value, actual.switch_checked),
+        .progress_value => |value| try std.testing.expectEqual(value, actual.progress_value),
+        .label_value => |value| try std.testing.expectEqualStrings(value, actual.label_value),
+        .card_text => |value| {
+            try std.testing.expectEqualStrings(value.title, actual.card_text.title);
+            try std.testing.expectEqualStrings(value.detail, actual.card_text.detail);
+        },
+        .rect_color => |value| try std.testing.expectEqual(value, actual.rect_color),
+        else => return error.UnsupportedPatchTestCase,
+    }
 }
 
 test "encode/decode fails on short buffer" {

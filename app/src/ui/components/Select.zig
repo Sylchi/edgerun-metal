@@ -96,19 +96,6 @@ const select_label_max_lines: usize = 2;
 const select_min_width: f32 = 112.0;
 const select_min_height: f32 = 40.0;
 
-test "select component serializes icon slot to canonical object and deserializes" {
-    const select = Select{ .id = 22, .label = "Production", .icon_slot = IconSlot.named(.trailing, .chevron_right) };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = select.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Select.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(select.id, decoded.id);
-    try std.testing.expectEqualStrings(select.label, decoded.label);
-    try std.testing.expectEqual(Icon.named(.chevron_right).value, decoded.icon_slot.trailing.value);
-}
-
 test "select component renders chevron through icon primitive" {
     const select = Select{ .id = 22, .label = "Production" };
     var commands: [16]ui.Command = undefined;

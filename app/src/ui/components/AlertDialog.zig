@@ -66,33 +66,18 @@ const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_delete_label = "Delete";
 
-test "alert dialog component serializes to canonical object and deserializes" {
-    const dialog = AlertDialog{ .id = 997, .title = "Are you sure?", .detail = "Modal content" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = dialog.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try AlertDialog.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(dialog.id, decoded.id);
-    try std.testing.expectEqualStrings(dialog.title, decoded.title);
-    try std.testing.expectEqualStrings(dialog.detail, decoded.detail);
-}
-
 test "alert dialog component renders destructive trigger and hit regions" {
     const dialog = AlertDialog{ .id = 997, .title = "Are you sure?", .detail = "Modal content" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 2){};
+    h.init();
 
-    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
-    try dialog.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(dialog, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
+    try dialog.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Delete"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Are you sure?"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 998), collector.written()[1].id);
+    try h.expectText("Delete");
+    try h.expectText("Are you sure?");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 998);
 }
 
 test "alert dialog measurement follows title and detail text" {

@@ -372,38 +372,10 @@ fn iconButtonSize(size: common.ControlSize) f32 {
     };
 }
 
-test "button component serializes to canonical object and deserializes" {
-    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = button.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Button.fromView(try object.View.decode(canonical));
-
-    try @import("std").testing.expectEqual(@as(u32, 7), decoded.id);
-    try @import("std").testing.expectEqualStrings("Run", decoded.label);
-    try @import("std").testing.expectEqual(common.ButtonVariant.secondary, decoded.variant);
-    try @import("std").testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
-}
-
 test "button component rejects ambiguous dual icon slots" {
     const node = ui.buttonDetailNode(7, "Run", variantTag(.secondary), Icon.named(.search).tag(), Icon.named(.chevron_right).tag());
 
     try std.testing.expectError(error.Corrupt, Button.fromNode(node.button));
-}
-
-test "icon button component serializes to canonical object and deserializes" {
-    const button = IconButton{ .id = 17, .label = "Search", .icon = Icon.named(.search), .variant = .ghost };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = button.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try IconButton.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(@as(u32, 17), decoded.id);
-    try std.testing.expectEqualStrings("Search", decoded.label);
-    try std.testing.expectEqual(common.ButtonVariant.ghost, decoded.variant);
-    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon.value);
 }
 
 test "icon button component renders centered icon and hit region" {

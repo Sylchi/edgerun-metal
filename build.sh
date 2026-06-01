@@ -792,13 +792,34 @@ cmd_test_er_asm_cli() {
  cmd_er_asm >/dev/null
  local src="${ASM_BUILD}/er_asm_exit_probe.asm"
  local src_status="${ASM_BUILD}/er_asm_exit_status_probe.asm"
+ local src_include="${ASM_BUILD}/er_asm_exit_include_probe.asm"
+ local src_local_include="${ASM_BUILD}/er_asm_exit_local_include_probe.asm"
+ local src_char="${ASM_BUILD}/er_asm_exit_char_probe.asm"
+ local src_64reg="${ASM_BUILD}/er_asm_exit_64reg_probe.asm"
+ local src_named="${ASM_BUILD}/er_asm_exit_named_probe.asm"
+ local src_long_named="${ASM_BUILD}/er_asm_exit_long_named_probe.asm"
+ local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
+ local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
+ local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
+ local inc_dir="${ASM_BUILD}/er_asm_inc"
+ local inc_file="${inc_dir}/exit_defs.inc"
  local bad_src="${ASM_BUILD}/er_asm_bad_exit_probe.asm"
  local bad_u32_src="${ASM_BUILD}/er_asm_bad_u32_probe.asm"
  local bad_hex_src="${ASM_BUILD}/er_asm_bad_hex_probe.asm"
+ local bad_dup_equ_src="${ASM_BUILD}/er_asm_bad_dup_equ_probe.asm"
+ local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
  local out="${ASM_BUILD}/er_asm_exit_probe.o"
  local bin="${ASM_BUILD}/er_asm_exit_probe"
  local bad="${ASM_BUILD}/er_asm_unsupported.o"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
+ local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$bin" "$bad" "$log")
+ cleanup_er_asm_cli() {
+  rm -rf "$inc_dir_a"
+  rm -rf "$inc_dir"
+  rm -f "${cleanup_files[@]}"
+ }
+ mkdir -p "$inc_dir_a"
+ mkdir -p "$inc_dir"
  cat > "$src" <<'EOF'
 [BITS 64]
 section .text
@@ -808,15 +829,83 @@ _start:
     xor     edi, edi
     syscall
 EOF
+ cat > "$inc_file" <<'EOF'
+%define SYSCALL_EXIT 0x3c
+INCLUDED_STATUS equ 0x2d
+EOF
+ cat > "$inc_file_a" <<'EOF'
+INCLUDED_DELTA equ 3
+EOF
+ cat > "$local_inc_file" <<'EOF'
+%define SYSCALL_EXIT 0x3c
+LOCAL_STATUS equ 0x2e
+EOF
+ cat > "$src_include" <<'EOF'
+[BITS 64]
+%include "exit_more_defs.inc"
+%include "exit_defs.inc"
+section .text
+global _start
+_start:
+    mov     eax, SYSCALL_EXIT
+    mov     edi, INCLUDED_STATUS
+    syscall
+EOF
+ cat > "$src_local_include" <<'EOF'
+[BITS 64]
+%include "local_exit_defs.inc"
+section .text
+global _start
+_start:
+    mov     eax, SYSCALL_EXIT
+    mov     edi, LOCAL_STATUS
+    syscall
+EOF
  cat > "$src_status" <<'EOF'
 [BITS 64]
-SYSCALL_EXIT equ 0x3c
+%define SYSCALL_EXIT 0x3c
 STATUS_CODE equ 0x12c
 section .text
 global _start
 _start:
     mov     eax, SYSCALL_EXIT
     mov     edi, STATUS_CODE
+    syscall
+EOF
+ cat > "$src_char" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     eax, 60
+    mov     edi, '/'
+    syscall
+EOF
+ cat > "$src_64reg" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     rax, 60
+    mov     rdi, '0'
+    syscall
+EOF
+ cat > "$src_named" <<'EOF'
+[BITS 64]
+section .text
+global ermain
+ermain:
+    mov     eax, 60
+    mov     edi, '1'
+    syscall
+EOF
+ cat > "$src_long_named" <<'EOF'
+[BITS 64]
+section .text
+global er_isdigit
+er_isdigit:
+    mov     eax, 60
+    mov     edi, '2'
     syscall
 EOF
  cat > "$bad_src" <<'EOF'
@@ -846,6 +935,27 @@ _start:
     xor     edi, edi
     syscall
 EOF
+ cat > "$bad_dup_equ_src" <<'EOF'
+[BITS 64]
+%define SYSCALL_EXIT 0x3c
+syscall_exit equ 60
+section .text
+global _start
+_start:
+    mov     eax, SYSCALL_EXIT
+    xor     edi, edi
+    syscall
+EOF
+ cat > "$bad_define_tail_src" <<'EOF'
+[BITS 64]
+%define SYSCALL_EXIT 0x3c trailing
+section .text
+global _start
+_start:
+    mov     eax, SYSCALL_EXIT
+    xor     edi, edi
+    syscall
+EOF
  "${HOST_BUILD}/er_asm" -f elf64 -I "${ASM_DIR}" -DTEST_DEFINE -dTEST_FLAG -o "$out" "$src"
  ld -nostdlib -static -o "$bin" "$out"
  "$bin"
@@ -859,59 +969,153 @@ EOF
  local status=0
  "$bin" || status=$?
  if [ "$status" -ne 44 ]; then
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: generated exit status ${status}, expected 44" >&2
   exit 1
  fi
+ ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$out" "$src_include" -I "$inc_dir_a" -I "$inc_dir"
+ ld -nostdlib -static -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 45 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: included exit status ${status}, expected 45" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 "-I${inc_dir_a}" "-I${inc_dir}" -o "$out" "$src_include"
+ ld -nostdlib -static -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 45 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: joined include flag status ${status}, expected 45" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_local_include"
+ ld -nostdlib -static -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 46 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: local include status ${status}, expected 46" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_char"
+ ld -nostdlib -static -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 47 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: char immediate status ${status}, expected 47" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_64reg"
+ ld -nostdlib -static -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 48 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: 64-bit register status ${status}, expected 48" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_named"
+ ld -nostdlib -static -e ermain -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 49 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: named global status ${status}, expected 49" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_long_named"
+ ld -nostdlib -static -e er_isdigit -o "$bin" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 50 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: long global status ${status}, expected 50" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin"
  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_hex_src" >"$log" 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: out-of-range hex immediate assembled" >&2
   exit 1
  fi
  if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: out-of-range hex immediate did not report cause" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_dup_equ_src" >"$log" 2>&1; then
+  cat "$log" >&2
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: duplicate equ assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: duplicate equ did not report cause" >&2
+  exit 1
+ fi
+ if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_define_tail_src" >"$log" 2>&1; then
+  cat "$log" >&2
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: trailing define junk assembled" >&2
+  exit 1
+ fi
+ if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
+  cat "$log" >&2
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: trailing define junk did not report cause" >&2
   exit 1
  fi
  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_u32_src" >"$log" 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: out-of-range u32 immediate assembled" >&2
   exit 1
  fi
  if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: out-of-range u32 immediate did not report cause" >&2
   exit 1
  fi
  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_src" >"$log" 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: wrong instruction sequence assembled" >&2
   exit 1
  fi
  if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: wrong instruction sequence did not report cause" >&2
   exit 1
  fi
  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "${ASM_DIR}/macros.inc" >"$log" 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: unsupported source assembled" >&2
   exit 1
  fi
  if ! grep 'unsupported source shape' "$log" >/dev/null 2>&1; then
   cat "$log" >&2
-  rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+  cleanup_er_asm_cli
   echo "FAIL er-asm-cli: unsupported source did not report cause" >&2
   exit 1
  fi
- rm -f "$src" "$src_status" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$out" "$bin" "$bad" "$log"
+ cleanup_er_asm_cli
  echo "PASS er-asm-cli"
 }
 

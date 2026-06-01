@@ -26,7 +26,7 @@ TOR_CELL_RESOLVED    equ 133
 ; ==================================================================
 ; Cell sizes
 ; ==================================================================
-TOR_CELL_LEN         equ 514   ; fixed-length cell (2 + 1 + 1 + 509 + 1 padding)
+TOR_CELL_LEN         equ 514   ; fixed-length cell for link protocol v4+: 4 + 1 + 509
 TOR_CELL_HEADER_LEN  equ 5     ; circ_id(2) + cmd(1) + payload(1+...)
 TOR_CELL_PAYLOAD_LEN equ 509   ; fixed cell payload
 TOR_VERSIONS_HEADER  equ 5     ; initial VERSIONS uses v=0: circ_id(2)+cmd(1)+len(2)

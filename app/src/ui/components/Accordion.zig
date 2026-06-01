@@ -107,33 +107,17 @@ const accordion_detail_max_lines: usize = 2;
 const accordion_title_max_lines: usize = 1;
 const separator_height: f32 = 1.0;
 
-test "accordion component serializes to canonical object and deserializes" {
-    const accordion = Accordion{ .id = 101, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = accordion.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Accordion.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(accordion.id, decoded.id);
-    try std.testing.expectEqualStrings(accordion.title, decoded.title);
-    try std.testing.expectEqualStrings(accordion.detail, decoded.detail);
-    try std.testing.expect(decoded.open);
-}
-
 test "accordion component renders open content and trigger hit" {
     const accordion = Accordion{ .id = 101, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
 
-    try accordion.render(&scene, ui.Rect.init(0, 0, 260, 68), .{});
-    try accordion.collectInteractions(&collector, ui.Rect.init(0, 0, 260, 68));
+    try h.render(accordion, ui.Rect.init(0, 0, 260, 68), .{});
+    try accordion.collectInteractions(&h.collector, ui.Rect.init(0, 0, 260, 68));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Is it accessible?"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Yes. It follows the pattern."));
-    try std.testing.expectEqual(@as(u32, 101), collector.written()[0].id);
+    try h.expectText("Is it accessible?");
+    try h.expectText("Yes. It follows the pattern.");
+    try h.expectHitId(0, 101);
 }
 
 test "accordion component hides content when closed" {

@@ -132,20 +132,6 @@ const tabs_panel_padding: f32 = 10.0;
 const tabs_trigger_padding: f32 = 8.0;
 const tabs_panel_max_lines: usize = 2;
 
-test "tabs component serializes to canonical object and deserializes" {
-    const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 1 };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = tabs.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Tabs.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(tabs.id, decoded.id);
-    try std.testing.expectEqualStrings(tabs.first, decoded.first);
-    try std.testing.expectEqualStrings(tabs.second, decoded.second);
-    try std.testing.expectEqual(@as(?u16, 1), decoded.active);
-}
-
 test "tabs component renders active trigger and trigger hits" {
     const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 0 };
     var commands: [20]ui.Command = undefined;

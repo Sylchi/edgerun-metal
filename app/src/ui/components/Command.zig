@@ -205,19 +205,6 @@ const command_max_visible_items: usize = 3;
 const command_empty_label = "No commands found";
 const command_empty_text_h: f32 = 14.0;
 
-test "command component serializes icon slot to canonical object and deserializes" {
-    const command = Command{ .id = 880, .placeholder = "Type a command...", .icon_slot = IconSlot.named(.leading, .search) };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = command.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Command.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(command.id, decoded.id);
-    try std.testing.expectEqualStrings(command.placeholder, decoded.placeholder);
-    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
-}
-
 test "command component renders search input and hit region" {
     const command = Command{ .id = 880, .placeholder = "Type a command..." };
     var commands: [16]ui.Command = undefined;

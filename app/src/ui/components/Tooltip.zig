@@ -101,33 +101,18 @@ const tooltip_trigger_max_lines: usize = 2;
 const tooltip_min_width: f32 = 160.0;
 const tooltip_min_height: f32 = 44.0;
 
-test "tooltip component serializes to canonical object and deserializes" {
-    const tooltip = Tooltip{ .id = 994, .trigger = "Hover me", .content = "Add to library" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = tooltip.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Tooltip.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(tooltip.id, decoded.id);
-    try std.testing.expectEqualStrings(tooltip.trigger, decoded.trigger);
-    try std.testing.expectEqualStrings(tooltip.content, decoded.content);
-}
-
 test "tooltip component renders trigger content and hit region" {
     const tooltip = Tooltip{ .id = 994, .trigger = "Hover me", .content = "Add to library" };
-    var commands: [20]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(20, 1){};
+    h.init();
 
-    try tooltip.render(&scene, ui.Rect.init(0, 0, 240, 44), .{ .overlay = .{ .open_ids = &.{tooltip.id} } });
-    try tooltip.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 44));
+    try h.render(tooltip, ui.Rect.init(0, 0, 240, 44), .{ .overlay = .{ .open_ids = &.{tooltip.id} } });
+    try tooltip.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 44));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Hover me"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Add to library"));
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.overlay_trigger, collector.written()[0].kind);
+    try h.expectText("Hover me");
+    try h.expectText("Add to library");
+    try h.expectHitCount(1);
+    try h.expectHitKind(0, .overlay_trigger);
 }
 
 test "tooltip measurement wraps long content under narrow constraints" {

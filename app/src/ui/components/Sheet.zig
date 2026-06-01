@@ -106,33 +106,18 @@ const sheet_close_inset: f32 = 8.0;
 const sheet_close_space: f32 = 34.0;
 const sheet_panel = primitives.TitleDetailPanel{ .radius = sheet_radius, .padding = sheet_padding, .title_y = 10.0, .title_h = 14.0, .detail_y = 29.0, .detail_h = 12.0, .title_right_inset = sheet_close_space };
 
-test "sheet component serializes to canonical object and deserializes" {
-    const sheet = Sheet{ .id = 999, .title = "Edit profile", .detail = "Sheet content" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = sheet.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Sheet.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(sheet.id, decoded.id);
-    try std.testing.expectEqualStrings(sheet.title, decoded.title);
-    try std.testing.expectEqualStrings(sheet.detail, decoded.detail);
-}
-
 test "sheet component renders trigger content and hit regions" {
     const sheet = Sheet{ .id = 999, .title = "Edit profile", .detail = "Sheet content" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [3]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 3){};
+    h.init();
 
-    try sheet.render(&scene, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{sheet.id} } });
-    try sheet.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 76));
+    try h.render(sheet, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{sheet.id} } });
+    try sheet.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 76));
 
-    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Edit") != null);
-    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Sheet") != null);
-    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 1001), collector.written()[2].id);
+    try h.expectTextPrefix("Edit");
+    try h.expectTextPrefix("Sheet");
+    try h.expectHitCount(3);
+    try h.expectHitId(2, 1001);
 }
 
 test "sheet measurement follows title and detail text" {

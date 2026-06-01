@@ -84,16 +84,11 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 
 - Full repository check:
   - `./build.sh test` (all ASM tests)
-- Focused tests are listed by `./build.sh help`. Important unification checks include:
-  - `./build.sh test-wasm-compiler`
-  - `./build.sh test-wasm-jit`
-  - `./build.sh test-wasm-float`
-  - `./build.sh test-recursion-valid`
-  - `./build.sh test-recursion-invalid`
-  - `./build.sh test-local-route`
-  - `./build.sh test-render-ir`
-  - `./build.sh test-av1-reduced`
-  - `./build.sh test-tor`
+- Machine-readable registry/status checks:
+  - `./build.sh test-list`
+  - `./build.sh test-status [TARGET...]`
+- Focused tests are canonical in `./build.sh test-list` and `./build.sh help`.
+  Use `./build.sh test-status TARGET...` for touched behavior.
 - ASM kernel build:
   - `./build.sh kernel`
   - `./build.sh kernel-hello` (build + QEMU launch)
@@ -147,8 +142,11 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 The kernel routes all inter-process communication by identity using fixed-size cells through SPSC ring buffers.
 
 ### Cell Format (Universal IR)
-All I/O travels as 256-byte cells: `[circ_id:4][cmd:1][payload:251]`.
-The cell is the universal IR — input events, network frames, storage requests, display commands, and agent messages all use it.
+Local transport cells use the Tor fixed-cell shape defined in
+`kernel/x86_64/crypto/local_constants.inc`:
+`[circ_id:4][cmd:1][payload:509]` for `LOCAL_CELL_SIZE = 514` bytes.
+The cell is the universal IR — input events, network frames, storage requests,
+display commands, and agent messages all route through this identity transport.
 
 ### Identities
 Every process has a 32-byte identity (BLAKE3 hash of binary + TPM measurement).
@@ -161,17 +159,22 @@ app manifest → user prompt → signed receipt → TPM-mediated key hierarchy.
 
 ### Route Table
 A fixed-size table (16 entries) maps identity hash → SPSC ring buffer + handler.
-- `register_handler(id)` → slot_id
-- `route_lookup(hash)` → slot_id
-- `cell_send_to_slot(slot, cell)` → pushes to identity's incoming ring
+- `er_local_route_register(id)` → slot_id
+- `er_local_route_lookup(hash)` → slot_id
+- `er_local_route_set_handler(slot, handler, flags)` → sync/async handler binding
+- `er_local_cell_send_to_slot(slot, cell)` → pushes to identity's incoming ring
 
 ### Ring Buffers (Channels)
-SPSC lock-free buffers, 64 slots of 256 bytes each. Producer writes, consumer reads. Non-blocking — returns full/empty immediately.
+SPSC lock-free buffers, 64 slots of `LOCAL_CELL_SIZE` bytes each. Producer writes, consumer reads. Non-blocking — returns full/empty immediately.
 
 ### Circuits
 A circuit caches destination slot_id for fast send.
-- `open_circuit(dest_hash)` → fd
-- `send(fd, cell)` / `recv(fd)` → cell / `close(fd)`
+- `er_local_open_circuit(dest_hash)` → fd
+- `er_local_send_cell(fd, cell)` / `er_local_recv_cell(fd, out_cell)`
+- `er_local_close_circuit(fd)`
+
+WASM imports expose these as `circuit_open`, `circuit_send`, `circuit_recv`, and
+`circuit_close` through `er_local_cell_imports`.
 
 ### Agent Dispatch
 When a cell arrives for a registered identity, the kernel either synchronously calls the handler (SYNC flag) or leaves it in the ring buffer for the consumer to poll.

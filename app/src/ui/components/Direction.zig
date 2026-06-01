@@ -116,30 +116,16 @@ const direction_gap: f32 = 12.0;
 const direction_vertical_padding: f32 = 8.0;
 const direction_label_max_lines: usize = 1;
 
-test "direction component serializes to canonical object and deserializes" {
-    const direction = Direction{ .id = 1004, .active = 1 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = direction.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Direction.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(direction.id, decoded.id);
-    try std.testing.expectEqual(direction.active, decoded.active);
-}
-
 test "direction component renders choices and hit regions" {
     const direction = Direction{ .id = 1004, .active = 1 };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 2){};
+    h.init();
 
-    try direction.render(&scene, ui.Rect.init(0, 0, 150, 36), .{});
-    try direction.collectInteractions(&collector, ui.Rect.init(0, 0, 150, 36));
+    try h.render(direction, ui.Rect.init(0, 0, 150, 36), .{});
+    try direction.collectInteractions(&h.collector, ui.Rect.init(0, 0, 150, 36));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "LTR"));
-    try std.testing.expect(component_test.hasText(scene.written(), "RTL"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 1005), collector.written()[1].id);
+    try h.expectText("LTR");
+    try h.expectText("RTL");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 1005);
 }

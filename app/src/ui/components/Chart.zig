@@ -122,31 +122,17 @@ const chart_floor = ui.Color{ .r = 7, .g = 9, .b = 12, .a = 62 };
 const chart_bar_floor = ui.Color{ .r = 7, .g = 10, .b = 13, .a = 110 };
 const chart_grid_height: f32 = 1.0;
 
-test "chart component serializes to canonical object and deserializes" {
-    const chart = Chart{ .id = 993, .label = "Visitors" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = chart.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Chart.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(chart.id, decoded.id);
-    try std.testing.expectEqualStrings(chart.label, decoded.label);
-}
-
 test "chart component renders bars and hit regions" {
     const chart = Chart{ .id = 993, .label = "Visitors" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [chart_bar_count]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, chart_bar_count){};
+    h.init();
 
-    try chart.render(&scene, ui.Rect.init(0, 0, 240, 90), .{});
-    try chart.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 90));
+    try h.render(chart, ui.Rect.init(0, 0, 240, 90), .{});
+    try chart.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 90));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Visitors"));
-    try std.testing.expectEqual(@as(usize, chart_bar_count), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 997), collector.written()[4].id);
+    try h.expectText("Visitors");
+    try h.expectHitCount(chart_bar_count);
+    try h.expectHitId(4, 997);
 }
 
 test "chart component measurement wraps long labels under narrow constraints" {

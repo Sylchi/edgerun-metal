@@ -123,34 +123,19 @@ const breadcrumb_vertical_padding: f32 = 8.0;
 const breadcrumb_label_max_lines: usize = 1;
 const breadcrumb_middle_label = "Docs";
 
-test "breadcrumb component serializes to canonical object and deserializes" {
-    const breadcrumb = Breadcrumb{ .id = 130, .first = "Home", .current = "Button" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = breadcrumb.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Breadcrumb.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(breadcrumb.id, decoded.id);
-    try std.testing.expectEqualStrings(breadcrumb.first, decoded.first);
-    try std.testing.expectEqualStrings(breadcrumb.current, decoded.current);
-}
-
 test "breadcrumb component renders links current page and link hits" {
     const breadcrumb = Breadcrumb{ .id = 130, .first = "Home", .current = "Button" };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 2){};
+    h.init();
 
-    try breadcrumb.render(&scene, ui.Rect.init(0, 0, 220, 36), .{});
-    try breadcrumb.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36));
+    try h.render(breadcrumb, ui.Rect.init(0, 0, 220, 36), .{});
+    try breadcrumb.collectInteractions(&h.collector, ui.Rect.init(0, 0, 220, 36));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Home"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Docs"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Button"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 131), collector.written()[1].id);
+    try h.expectText("Home");
+    try h.expectText("Docs");
+    try h.expectText("Button");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 131);
 }
 
 test "breadcrumb measurement follows label content" {

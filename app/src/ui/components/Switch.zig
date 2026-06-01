@@ -96,19 +96,6 @@ const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 12 };
 const switch_shadow_inset: f32 = 1.0;
 const switch_shadow_size: f32 = 2.0;
 
-test "switch component serializes to canonical object and deserializes" {
-    const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = switch_control.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Switch.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(switch_control.id, decoded.id);
-    try std.testing.expectEqualStrings(switch_control.label, decoded.label);
-    try std.testing.expectEqual(switch_control.checked, decoded.checked);
-}
-
 test "switch component uses panel token for knob" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = true };
     var commands: [16]ui.Command = undefined;

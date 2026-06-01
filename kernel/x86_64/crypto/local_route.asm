@@ -5,11 +5,12 @@
 ;
 ; Public API:
 ;   er_local_cell_init()     — init routing table and all rings
+;   er_route_send()          — send cell to any identity route
+;   er_route_register_relay() — bind identity to raw Tor cell forwarding
 ;   er_local_route_register() — register an identity
 ;   er_local_route_lookup()  — look up slot by identity hash
 ;   er_local_route_unregister() — unregister an identity
 ;   er_local_route_get_ring() — get ring pointer for a slot
-;   er_local_cell_send()     — send cell to an identity by hash
 ;   er_local_cell_send_to_slot() — send cell to slot directly
 ;   er_local_cell_recv()     — receive cell from own mailbox
 ;   er_local_cell_poll()     — poll registered async handlers
@@ -26,7 +27,7 @@
 extern er_memcpy
 extern er_memset
 extern er_memcmp
-extern er_tor_send_relay
+extern er_tor_send_cell
 
 ; DA WASM import wrappers (from agent/da_wasm.asm)
 extern _wasm_import_da_surface_register
@@ -81,6 +82,55 @@ _local_route_entry_ptr:
 .bad:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
+    ret
+
+; ==================================================================
+; _local_route_hash_valid — reject null or all-zero route identities
+; rdi = hash_ptr (32 bytes)
+; returns edx = 0 on success, ERROR_INVALID_PARAM on failure
+; ==================================================================
+_local_route_hash_valid:
+    test    rdi, rdi
+    jz      .bad
+    mov     rax, [rdi]
+    or      rax, [rdi + 8]
+    or      rax, [rdi + 16]
+    or      rax, [rdi + 24]
+    test    rax, rax
+    jz      .bad
+    xor     eax, eax
+    er_ok
+    ret
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
+
+; ==================================================================
+; _local_route_entry_active — validate an allocated route table entry
+; rax = route entry ptr
+; returns edx = 0 on success, ERROR_INVALID_PARAM on failure
+; ==================================================================
+_local_route_entry_active:
+    test    rax, rax
+    jz      .bad
+    mov     rcx, [rax + LOCAL_ID_HASH]
+    or      rcx, [rax + LOCAL_ID_HASH + 8]
+    or      rcx, [rax + LOCAL_ID_HASH + 16]
+    or      rcx, [rax + LOCAL_ID_HASH + 24]
+    test    rcx, rcx
+    jz      .bad
+    movzx   ecx, byte [rax + LOCAL_ID_ROUTE_KIND]
+    cmp     ecx, LOCAL_ROUTE_KIND_LOCAL
+    je      .ok
+    cmp     ecx, LOCAL_ROUTE_KIND_RELAY
+    je      .ok
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
+.ok:
+    er_ok
     ret
 
 ; ==================================================================
@@ -214,7 +264,12 @@ er_fn er_local_route_register
 
     mov     r12, rdi        ; identity hash
 
+    call    _local_route_hash_valid
+    test    edx, edx
+    jnz     .internal_error
+
     ; Check if already registered
+    mov     rdi, r12
     call    _local_route_find_by_hash
     test    edx, edx
     jz      .already_exists
@@ -277,29 +332,32 @@ er_fn er_local_route_register
 ; Returns: eax = slot_id, edx = 0 on success, ERROR_LOCAL_NOT_FOUND
 ; ==================================================================
 er_fn er_local_route_lookup
+    call    _local_route_hash_valid
+    test    edx, edx
+    jnz     .bad
     call    _local_route_find_by_hash
     ret
+.bad:
+    mov     eax, -1
+    er_ret
 
 ; ==================================================================
-; er_local_route_register_tor_hs — register/update a Tor HS route
-; int er_local_route_register_tor_hs(hash[32], circ_id, stream_id)
-; rdi = identity hash, esi = rendezvous circ_id, edx = stream_id
+; er_route_register_relay — register/update raw Tor cell forwarding
+; int er_route_register_relay(hash[32])
+; rdi = identity hash
 ; ==================================================================
-global er_local_route_register_tor_hs
-er_fn er_local_route_register_tor_hs
+global er_route_register_relay
+er_fn er_route_register_relay
     push    rbx
     push    r12
-    push    r13
-    push    r14
 
     mov     r12, rdi
-    mov     r13d, esi
-    mov     r14w, dx
-    test    r13d, r13d
-    jz      .bad
-    test    r14w, r14w
-    jz      .bad
 
+    call    _local_route_hash_valid
+    test    edx, edx
+    jnz     .bad
+
+    mov     rdi, r12
     call    _local_route_find_by_hash
     test    edx, edx
     jz      .use_slot
@@ -326,22 +384,16 @@ er_fn er_local_route_register_tor_hs
     call    _local_route_entry_ptr
     test    edx, edx
     jnz     .bad
-    mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_TOR_HS
-    mov     [rax + LOCAL_ID_TOR_CIRC_ID], r13d
-    mov     [rax + LOCAL_ID_TOR_STREAM_ID], r14w
+    mov     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_RELAY
     mov     eax, ebx
     er_ok
 .done:
-    pop     r14
-    pop     r13
     pop     r12
     pop     rbx
     er_ret
 .bad:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
-    pop     r14
-    pop     r13
     pop     r12
     pop     rbx
     er_ret
@@ -358,12 +410,18 @@ er_fn er_local_route_unregister
     call    _local_route_entry_ptr
     test    edx, edx
     jnz     .bad
+    mov     rbx, rax
+    call    _local_route_entry_active
+    test    edx, edx
+    jnz     .bad
 
-    ; Zero the hash (marks as free)
-    lea     rdi, [rax + LOCAL_ID_HASH]
+    ; Clear the full route entry and reinitialize its ring.
+    mov     rdi, rbx
     xor     esi, esi
-    mov     edx, 32
+    mov     edx, LOCAL_ID_SLOT_SIZE
     call    er_memset
+    lea     rdi, [rbx + LOCAL_ID_RING]
+    call    er_local_ring_init
 
     dec     dword [local_identity_count]
     xor     eax, eax
@@ -390,6 +448,11 @@ er_fn er_local_route_set_handler
     call    _local_route_entry_ptr
     test    edx, edx
     jnz     .bad
+    call    _local_route_entry_active
+    test    edx, edx
+    jnz     .bad
+    cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
+    jne     .bad
 
     ; Store handler pointer
     mov     [rax + LOCAL_ID_HANDLER], rsi
@@ -417,6 +480,11 @@ er_fn er_local_route_get_ring
     call    _local_route_entry_ptr
     test    edx, edx
     jnz     .bad
+    call    _local_route_entry_active
+    test    edx, edx
+    jnz     .bad
+    cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
+    jne     .bad
     add     rax, LOCAL_ID_RING
     er_ok
     ret
@@ -425,17 +493,22 @@ er_fn er_local_route_get_ring
     er_ret
 
 ; ==================================================================
-; er_local_cell_send — send a cell to an identity by hash
-; int er_local_cell_send(const u8 *dest_hash[32], const u8 *cell[LOCAL_CELL_SIZE])
+; er_route_send — send a cell to an identity route
+; int er_route_send(const u8 *dest_hash[32], const u8 *cell[LOCAL_CELL_SIZE])
 ; rdi = dest identity hash, rsi = cell data
 ; Returns: eax = 0, edx = 0 on success
 ; ==================================================================
-er_fn er_local_cell_send
+global er_route_send
+er_fn er_route_send
     push    rbx
     push    r12
     push    r13
 
     mov     r12, rsi        ; cell
+
+    call    _local_route_hash_valid
+    test    edx, edx
+    jnz     .bad
 
     call    _local_route_find_by_hash
     test    edx, edx
@@ -448,7 +521,7 @@ er_fn er_local_cell_send
     jnz     .bad
 
     movzx   ecx, byte [rax + LOCAL_ID_ROUTE_KIND]
-    cmp     ecx, LOCAL_ROUTE_KIND_TOR_HS
+    cmp     ecx, LOCAL_ROUTE_KIND_RELAY
     je      .send_tor
     cmp     ecx, LOCAL_ROUTE_KIND_LOCAL
     jne     .not_found
@@ -463,12 +536,8 @@ er_fn er_local_cell_send
     er_ret
 
 .send_tor:
-    mov     edi, [rax + LOCAL_ID_TOR_CIRC_ID]
-    movzx   esi, word [rax + LOCAL_ID_TOR_STREAM_ID]
-    mov     edx, TOR_RELAY_DATA
-    mov     rcx, r12
-    mov     r8d, LOCAL_CELL_SIZE
-    call    er_tor_send_relay
+    mov     rdi, r12
+    call    er_tor_send_cell
     test    eax, eax
     js      .tor_fail
     xor     eax, eax
@@ -547,6 +616,11 @@ er_fn er_local_cell_send_to_slot
     test    edx, edx
     jnz     .bad
     mov     r13, rax        ; route entry
+    call    _local_route_entry_active
+    test    edx, edx
+    jnz     .bad
+    cmp     byte [r13 + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
+    jne     .bad
 
     ; Synchronous handlers consume the cell immediately and do not queue it.
     movzx   ecx, byte [r13 + LOCAL_ID_FLAGS]
@@ -602,6 +676,11 @@ er_fn er_local_cell_poll
     call    _local_route_entry_ptr
     test    edx, edx
     jnz     .next
+    call    _local_route_entry_active
+    test    edx, edx
+    jnz     .next
+    cmp     byte [rax + LOCAL_ID_ROUTE_KIND], LOCAL_ROUTE_KIND_LOCAL
+    jne     .next
 
     ; Check for handler
     mov     rcx, [rax + LOCAL_ID_HANDLER]
@@ -667,66 +746,82 @@ er_fn er_local_cell_poll
 ; Linear memory offsets (passed as i32) need conversion to host pointers.
 ; ==================================================================
 
+; _wasm_memory_ptr_checked(rdi=offset, esi=len) -> rax=host ptr
+; Rejects null runtime, overflow, and ranges outside linear memory.
+_wasm_memory_ptr_checked:
+    mov     r8, [er_wasm_runtime_ptr]
+    test    r8, r8
+    jz      .no_mem
+    mov     eax, edi
+    mov     ecx, esi
+    mov     r9, rax
+    add     r9, rcx
+    jc      .bad
+    cmp     r9, [r8 + RUNTIME_MEMORY_LEN_OFF]
+    ja      .bad
+    mov     rax, [r8 + RUNTIME_MEMORY_PTR_OFF]
+    add     rax, rdi
+    er_ok
+    ret
+.no_mem:
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
+
 ; er_wasm_local_cell_send(rdi=dest_hash_ptr(i32), rsi=cell_ptr(i32)) -> i32
 _wasm_import_local_cell_send:
     push    rsi
-    push    rdi
-    mov     rdi, [er_wasm_runtime_ptr]
-    test    rdi, rdi
-    jz      .no_mem
-    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
+    mov     esi, 32
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .send_fail
+    mov     r11, rax
     pop     rdi
-    add     rdi, rax
-    pop     rsi
-    add     rsi, rax
-    jmp     er_local_cell_send
-.no_mem:
-    add     rsp, 16
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
+    mov     esi, LOCAL_CELL_SIZE
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     rdi, r11
+    mov     rsi, rax
+    jmp     er_route_send
+.send_fail:
+    add     rsp, 8
+_wasm_import_ret_fail:
     ret
 
 ; er_wasm_local_cell_recv(rdi=slot_id(i32), rsi=out_cell_ptr(i32)) -> i32
 _wasm_import_local_cell_recv:
-    push    rdi
-    mov     rdi, [er_wasm_runtime_ptr]
-    test    rdi, rdi
-    jz      .no_mem
-    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
-    pop     rdi
-    add     rsi, rax
+    mov     r10d, edi
+    mov     rdi, rsi
+    mov     esi, LOCAL_CELL_SIZE
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     edi, r10d
+    mov     rsi, rax
     jmp     er_local_cell_recv
-.no_mem:
-    pop     rdi
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_local_route_register(rdi=hash_ptr(i32)) -> i32 (slot_id)
 _wasm_import_local_route_register:
-    mov     rax, [er_wasm_runtime_ptr]
-    test    rax, rax
-    jz      .no_mem
-    mov     rax, [rax + RUNTIME_MEMORY_PTR_OFF]
-    add     rdi, rax
+    mov     esi, 32
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     rdi, rax
     jmp     er_local_route_register
-.no_mem:
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_local_route_lookup(rdi=hash_ptr(i32)) -> i32 (slot_id or -1)
 _wasm_import_local_route_lookup:
-    mov     rax, [er_wasm_runtime_ptr]
-    test    rax, rax
-    jz      .no_mem
-    mov     rax, [rax + RUNTIME_MEMORY_PTR_OFF]
-    add     rdi, rax
+    mov     esi, 32
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     rdi, rax
     jmp     er_local_route_lookup
-.no_mem:
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_local_route_unregister(rdi=slot_id(i32)) -> i32
 _wasm_import_local_route_unregister:
@@ -749,51 +844,38 @@ _wasm_import_local_cell_available:
 
 ; er_wasm_circuit_open(rdi=dest_hash_ptr(i32), rsi=own_slot(i32)) -> i32 (fd)
 _wasm_import_circuit_open:
-    push    rsi              ; save own_slot (i32 value)
-    mov     rax, [er_wasm_runtime_ptr]
-    test    rax, rax
-    jz      .no_mem_open
-    mov     rax, [rax + RUNTIME_MEMORY_PTR_OFF]
-    add     rdi, rax         ; convert dest_hash ptr to host pointer
-    pop     rsi              ; restore own_slot (raw i32, not an offset)
+    mov     r10d, esi        ; save own_slot (raw i32, not an offset)
+    mov     esi, 32
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     rdi, rax
+    mov     esi, r10d
     jmp     er_local_open_circuit
-.no_mem_open:
-    add     rsp, 8
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_circuit_send(rdi=fd(i32), rsi=cell_ptr(i32)) -> i32
 _wasm_import_circuit_send:
-    push    rdi
-    mov     rdi, [er_wasm_runtime_ptr]
-    test    rdi, rdi
-    jz      .no_mem_send
-    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
-    pop     rdi
-    add     rsi, rax
+    mov     r10d, edi
+    mov     rdi, rsi
+    mov     esi, LOCAL_CELL_SIZE
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     edi, r10d
+    mov     rsi, rax
     jmp     er_local_send_cell
-.no_mem_send:
-    pop     rdi
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_circuit_recv(rdi=fd(i32), rsi=out_cell_ptr(i32)) -> i32
 _wasm_import_circuit_recv:
-    push    rdi
-    mov     rdi, [er_wasm_runtime_ptr]
-    test    rdi, rdi
-    jz      .no_mem_recv
-    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
-    pop     rdi
-    add     rsi, rax
+    mov     r10d, edi
+    mov     rdi, rsi
+    mov     esi, LOCAL_CELL_SIZE
+    call    _wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     _wasm_import_ret_fail
+    mov     edi, r10d
+    mov     rsi, rax
     jmp     er_local_recv_cell
-.no_mem_recv:
-    pop     rdi
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
 
 ; er_wasm_circuit_close(rdi=fd(i32)) -> i32
 _wasm_import_circuit_close:

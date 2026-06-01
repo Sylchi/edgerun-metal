@@ -81,32 +81,18 @@ const resizable_handle_hit_outset: f32 = 6.0;
 const resizable_min_width: f32 = 96.0;
 const resizable_min_height: f32 = 36.0;
 
-test "resizable component serializes to canonical object and deserializes" {
-    const resizable = Resizable{ .id = 770, .ratio = 0.62 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = resizable.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Resizable.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(resizable.id, decoded.id);
-    try std.testing.expect(@abs(decoded.ratio - 0.62) < 0.001);
-}
-
 test "resizable component renders panels and handle hit region" {
     const resizable = Resizable{ .id = 770, .ratio = 0.58 };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
 
-    try resizable.render(&scene, ui.Rect.init(0, 0, 220, 36), .{});
-    try resizable.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36), .{});
+    try h.render(resizable, ui.Rect.init(0, 0, 220, 36), .{});
+    try resizable.collectInteractions(&h.collector, ui.Rect.init(0, 0, 220, 36), .{});
 
-    try std.testing.expect(scene.written().len >= 3);
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.slider, collector.written()[0].kind);
-    try std.testing.expectEqual(@as(u32, 770), collector.written()[0].id);
+    try std.testing.expect(h.written().len >= 3);
+    try h.expectHitCount(1);
+    try h.expectHitKind(0, .slider);
+    try h.expectHitId(0, 770);
 }
 
 test "resizable measurement derives from handle geometry" {

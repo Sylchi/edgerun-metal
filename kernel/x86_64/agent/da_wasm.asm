@@ -24,6 +24,7 @@ extern er_local_route_lookup
 extern er_local_cell_send_to_slot
 extern er_blake3_hash_bytes
 extern er_memcpy
+extern er_memset
 
 SECTION .bss
 da_wasm_da_slot:   resd 1    ; cached DA route slot (-1 = uninit)
@@ -110,6 +111,34 @@ _da_wasm_ensure_init:
     xor     edx, edx
     ret
 
+; _da_wasm_memory_ptr_checked(rdi=offset, esi=len) -> rax=host ptr
+; Rejects null runtime, overflow, and ranges outside WASM linear memory.
+_da_wasm_memory_ptr_checked:
+    mov     r10, [rel er_wasm_runtime_ptr]
+    test    r10, r10
+    jz      .no_mem
+    mov     eax, edi
+    mov     ecx, esi
+    mov     r11, rax
+    add     r11, rcx
+    jc      .bad
+    cmp     r11, [r10 + RUNTIME_MEMORY_LEN_OFF]
+    ja      .bad
+    mov     rax, [r10 + RUNTIME_MEMORY_PTR_OFF]
+    test    rax, rax
+    jz      .no_mem
+    add     rax, rdi
+    er_ok
+    ret
+.no_mem:
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
+
 ; ==================================================================
 ; _wasm_import_da_surface_register — register a surface with the DA
 ; rdi = params_ptr (WASM linear memory offset, i32)
@@ -122,34 +151,38 @@ _wasm_import_da_surface_register:
     push    r12
     push    r13
     push    r14
+    push    r15
     mov     rbp, rsp
-    sub     rsp, 256          ; cell buffer
+    sub     rsp, LOCAL_CELL_SIZE ; cell buffer
+    mov     r15d, edi            ; params offset; ensure_init clobbers rdi
 
     ; Initialize caches
     call    _da_wasm_ensure_init
     test    edx, edx
     jnz     .ret_with_eax
 
-    ; Get WASM memory base pointer
-    mov     rax, [rel er_wasm_runtime_ptr]
-    test    rax, rax
-    jz      .ret_fail
-    mov     r14, [rax + RUNTIME_MEMORY_PTR_OFF]  ; r14 = memory base
-    test    r14, r14
-    jz      .ret_fail
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
+    xor     esi, esi
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memset
 
     ; Read params struct from WASM memory
     ; params layout: layer(4), flags(4), rect_data(4), rect_count(4) = 16 bytes
-    mov     r12d, edi         ; r12d = params offset (zero-extend)
-    add     r12, r14          ; r12 = host pointer to params
+    mov     edi, r15d
+    mov     esi, 16
+    call    _da_wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .ret_fail
+    mov     r12, rax          ; r12 = host pointer to params
     mov     r13d, [r12]       ; r13d = layer
     mov     ebx, [r12 + 4]    ; ebx = flags
     mov     ecx, [r12 + 8]    ; ecx = rect_data offset (WASM)
     mov     r8d, [r12 + 12]   ; r8d = rect_count
 
-    ; Build register cell on stack (at rbp - 256 = rsp)
+    ; Build register cell on stack (at rbp - LOCAL_CELL_SIZE = rsp)
     mov     rdi, rbp
-    sub     rdi, 256          ; rdi = cell buffer
+    sub     rdi, LOCAL_CELL_SIZE ; rdi = cell buffer
 
     ; [0] type = DA_MSG_SURFACE_REGISTER (1)
     mov     byte [rdi + LOCAL_CELL_PAYLOAD + 0], DA_MSG_SURFACE_REGISTER
@@ -157,9 +190,8 @@ _wasm_import_da_surface_register:
     mov     [rdi + LOCAL_CELL_PAYLOAD + 1], r13b
     ; [2] flags
     mov     [rdi + LOCAL_CELL_PAYLOAD + 2], bl
-    ; [3-4] rect_count (LE u16)
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 3], r8w
-
+    ; [3-4] rect_count (LE u16), overwritten after clamp when nonzero
+    mov     word [rdi + LOCAL_CELL_PAYLOAD + 3], 0
     ; [5-36] app hash (32 bytes)
     lea     rsi, [rel da_wasm_app_hash]
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 5]
@@ -172,28 +204,36 @@ _wasm_import_da_surface_register:
 
     ; Clamp rect_count: max 3 rects fit in cell after header
     ; Header = type(1) + layer(1) + flags(1) + rect_count(2) + hash(32) = 37
-    ; Max rects = (251 - 37) / 60 = 3
-    cmp     r8d, 3
+    ; Max rects = (509 - 37) / 60 = 7
+    cmp     r8d, 7
     jbe     .rect_count_ok_register
-    mov     r8d, 3
+    mov     r8d, 7
 .rect_count_ok_register:
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
+    mov     [rdi + LOCAL_CELL_PAYLOAD + 3], r8w
 
     mov     eax, r8d
     imul    eax, 60           ; rect data bytes
-    mov     edx, eax
+    mov     r15d, eax
+
+    mov     edi, ecx          ; WASM offset of rect data
+    mov     esi, r15d
+    call    _da_wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .ret_fail
+    mov     rsi, rax
+    mov     edx, r15d
 
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 37]  ; dst in cell
-
-    mov     esi, ecx          ; WASM offset of rect data
-    add     rsi, r14          ; host pointer
     call    er_memcpy
 
 .send:
     ; Send cell to DA route slot
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     rsi, rdi          ; rsi = cell_ptr
     mov     edi, [rel da_wasm_da_slot]
     call    er_local_cell_send_to_slot
@@ -211,6 +251,7 @@ _wasm_import_da_surface_register:
     mov     eax, -1
 .done:
     mov     rsp, rbp
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -230,24 +271,29 @@ _wasm_import_da_surface_update:
     push    r12
     push    r13
     push    r14
+    push    r15
     mov     rbp, rsp
-    sub     rsp, 256
+    sub     rsp, LOCAL_CELL_SIZE
+    mov     r15d, edi            ; params offset; ensure_init clobbers rdi
 
     call    _da_wasm_ensure_init
     test    edx, edx
     jnz     .ret_fail
 
-    mov     rax, [rel er_wasm_runtime_ptr]
-    test    rax, rax
-    jz      .ret_fail
-    mov     r14, [rax + RUNTIME_MEMORY_PTR_OFF]
-    test    r14, r14
-    jz      .ret_fail
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
+    xor     esi, esi
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memset
 
     ; Read params struct from WASM memory
     ; params layout: update_flags(4), rect_count(4), rect_data(4), icon_count(4), icon_data(4)
-    mov     r12d, edi
-    add     r12, r14
+    mov     edi, r15d
+    mov     esi, 20
+    call    _da_wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .ret_fail
+    mov     r12, rax
     mov     r13d, [r12]        ; r13d = update_flags
     mov     ebx, [r12 + 4]     ; ebx = rect_count
     mov     ecx, [r12 + 8]     ; ecx = rect_data offset
@@ -256,7 +302,7 @@ _wasm_import_da_surface_update:
 
     ; Build update cell
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
 
     mov     byte [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_TYPE_OFF], DA_MSG_SURFACE_UPDATE
     mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_FLAGS_OFF], r13b
@@ -266,7 +312,7 @@ _wasm_import_da_surface_update:
     call    er_memcpy
 
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF], bx
     mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], r8w
     mov     word [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RESERVED_OFF], 0
@@ -289,10 +335,17 @@ _wasm_import_da_surface_update:
 
     mov     eax, ebx
     imul    eax, DA_RECT_BYTES
-    mov     edx, eax
+    mov     r15d, eax
+    mov     edi, ecx
+    mov     esi, r15d
+    call    _da_wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .ret_fail
+    mov     rsi, rax
+    mov     edx, r15d
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
-    mov     esi, ecx
-    add     rsi, r14
     call    er_memcpy
 .rect_done:
 
@@ -302,9 +355,9 @@ _wasm_import_da_surface_update:
 
     mov     eax, ebx
     imul    eax, DA_RECT_BYTES
-    mov     r10d, eax                 ; rect_bytes
+    mov     r14d, eax                 ; rect_bytes
     mov     r11d, DA_UPDATE_PAYLOAD_DATA_BYTES
-    sub     r11d, r10d                ; remaining bytes
+    sub     r11d, r14d                ; remaining bytes
     jle     .icons_zero
     mov     eax, r11d
     xor     edx, edx
@@ -315,29 +368,38 @@ _wasm_import_da_surface_update:
     mov     r8d, eax
 .icon_count_ok:
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], r8w
 
     test    r8d, r8d
     jz      .send
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
-    add     rdi, r10
-    mov     esi, r9d
-    add     rsi, r14
+    add     rdi, r14
     mov     eax, r8d
     imul    eax, DA_ICON_BYTES
-    mov     edx, eax
+    mov     r15d, eax
+    mov     edi, r9d
+    mov     esi, r15d
+    call    _da_wasm_memory_ptr_checked
+    test    edx, edx
+    jnz     .ret_fail
+    mov     rsi, rax
+    mov     edx, r15d
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
+    add     rdi, r14
     call    er_memcpy
     jmp     .send
 
 .icons_zero:
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     word [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], 0
 
 .send:
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     rsi, rdi
     mov     edi, [rel da_wasm_da_slot]
     call    er_local_cell_send_to_slot
@@ -351,6 +413,7 @@ _wasm_import_da_surface_update:
     mov     eax, -1
 .done:
     mov     rsp, rbp
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -369,14 +432,20 @@ _wasm_import_da_surface_unregister:
     push    rbx
     push    r12
     mov     rbp, rsp
-    sub     rsp, 256
+    sub     rsp, LOCAL_CELL_SIZE
 
     call    _da_wasm_ensure_init
     test    edx, edx
     jnz     .ret_fail
 
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
+    xor     esi, esi
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memset
+
+    mov     rdi, rbp
+    sub     rdi, LOCAL_CELL_SIZE
 
     ; [0] type = DA_MSG_SURFACE_UNREGISTER (3)
     mov     byte [rdi + LOCAL_CELL_PAYLOAD + 0], DA_MSG_SURFACE_UNREGISTER
@@ -388,7 +457,7 @@ _wasm_import_da_surface_unregister:
     call    er_memcpy
 
     mov     rdi, rbp
-    sub     rdi, 256
+    sub     rdi, LOCAL_CELL_SIZE
     mov     rsi, rdi
     mov     edi, [rel da_wasm_da_slot]
     call    er_local_cell_send_to_slot

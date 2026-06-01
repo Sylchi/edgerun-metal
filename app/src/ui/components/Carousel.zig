@@ -97,31 +97,17 @@ const carousel_radius: f32 = 8.0;
 const carousel_text_padding: f32 = 8.0;
 const carousel_label_max_lines: usize = 1;
 
-test "carousel component serializes to canonical object and deserializes" {
-    const carousel = Carousel{ .id = 990, .label = "Slide" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = carousel.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Carousel.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(carousel.id, decoded.id);
-    try std.testing.expectEqualStrings(carousel.label, decoded.label);
-}
-
 test "carousel component renders content and button hit regions" {
     const carousel = Carousel{ .id = 990, .label = "Slide" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 2){};
+    h.init();
 
-    try carousel.render(&scene, ui.Rect.init(0, 0, 240, 40), .{});
-    try carousel.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 40));
+    try h.render(carousel, ui.Rect.init(0, 0, 240, 40), .{});
+    try carousel.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 40));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Slide"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 991), collector.written()[1].id);
+    try h.expectText("Slide");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 991);
 }
 
 test "carousel measurement follows label text" {

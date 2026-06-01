@@ -59,33 +59,18 @@ const hover_card_padding: f32 = 10.0;
 const hover_card_panel = primitives.TitleDetailPanel{ .radius = hover_card_radius, .padding = hover_card_padding, .title_y = 8.0, .title_h = 14.0, .detail_y = 25.0, .detail_h = 12.0 };
 const hover_card_detail_label = "Hover content";
 
-test "hover card component serializes to canonical object and deserializes" {
-    const hover_card = HoverCard{ .id = 997, .trigger = "Hover", .content = "@shadcn" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = hover_card.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try HoverCard.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(hover_card.id, decoded.id);
-    try std.testing.expectEqualStrings(hover_card.trigger, decoded.trigger);
-    try std.testing.expectEqualStrings(hover_card.content, decoded.content);
-}
-
 test "hover card component renders trigger content and hit regions" {
     const hover_card = HoverCard{ .id = 997, .trigger = "Hover", .content = "@shadcn" };
-    var commands: [20]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(20, 2){};
+    h.init();
 
-    try hover_card.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{hover_card.id} } });
-    try hover_card.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(hover_card, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{hover_card.id} } });
+    try hover_card.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Hover"));
-    try std.testing.expect(component_test.hasText(scene.written(), "@shadcn"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 998), collector.written()[1].id);
+    try h.expectText("Hover");
+    try h.expectText("@shadcn");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 998);
 }
 
 test "hover card measurement follows trigger and content text" {

@@ -93,32 +93,17 @@ const input_group_text_max_lines: usize = 2;
 const input_group_min_width: f32 = 140.0;
 const input_group_min_height: f32 = 36.0;
 
-test "input group component serializes to canonical object and deserializes" {
-    const input_group = InputGroup{ .id = 91, .addon = "https://", .placeholder = "example.com" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = input_group.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try InputGroup.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(input_group.id, decoded.id);
-    try std.testing.expectEqualStrings(input_group.addon, decoded.addon);
-    try std.testing.expectEqualStrings(input_group.placeholder, decoded.placeholder);
-}
-
 test "input group component renders addon placeholder and input hit" {
     const input_group = InputGroup{ .id = 91, .addon = "https://", .placeholder = "example.com" };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
 
-    try input_group.render(&scene, ui.Rect.init(0, 0, 260, 40), .{});
-    try input_group.collectInteractions(&collector, ui.Rect.init(0, 0, 260, 40));
+    try h.render(input_group, ui.Rect.init(0, 0, 260, 40), .{});
+    try input_group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 260, 40));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "https://"));
-    try std.testing.expect(component_test.hasText(scene.written(), "example.com"));
-    try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
+    try h.expectText("https://");
+    try h.expectText("example.com");
+    try h.expectHitKind(0, .input);
 }
 
 test "input group measurement wraps long addon and placeholder under narrow constraints" {

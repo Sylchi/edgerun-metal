@@ -87,19 +87,6 @@ const checkbox_label_height: f32 = component_primitives.control_label_height;
 const checkbox_label_max_lines: usize = 2;
 const checkbox_min_width: f32 = 96.0;
 
-test "checkbox component serializes to canonical object and deserializes" {
-    const checkbox = Checkbox{ .id = 11, .label = "Enable sync", .checked = true };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = checkbox.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Checkbox.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(checkbox.id, decoded.id);
-    try std.testing.expectEqualStrings(checkbox.label, decoded.label);
-    try std.testing.expectEqual(checkbox.checked, decoded.checked);
-}
-
 test "checkbox component renders checked mark through icon primitive" {
     const checked = Checkbox{ .id = 11, .label = "Enable sync", .checked = true };
     const unchecked = Checkbox{ .id = 12, .label = "Disable sync", .checked = false };

@@ -62,33 +62,18 @@ const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
 
-test "dialog component serializes to canonical object and deserializes" {
-    const dialog = Dialog{ .id = 996, .title = "Edit profile", .detail = "Modal content" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = dialog.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Dialog.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(dialog.id, decoded.id);
-    try std.testing.expectEqualStrings(dialog.title, decoded.title);
-    try std.testing.expectEqualStrings(dialog.detail, decoded.detail);
-}
-
 test "dialog component renders trigger content and hit regions" {
     const dialog = Dialog{ .id = 996, .title = "Edit profile", .detail = "Modal content" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 2){};
+    h.init();
 
-    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
-    try dialog.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(dialog, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
+    try dialog.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Edit profile"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Modal content"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 997), collector.written()[1].id);
+    try h.expectText("Edit profile");
+    try h.expectText("Modal content");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 997);
 }
 
 test "dialog measurement follows title and detail text" {

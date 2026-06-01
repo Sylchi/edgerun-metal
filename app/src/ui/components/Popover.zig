@@ -74,33 +74,18 @@ const popover_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w 
 const popover_radius: f32 = 8.0;
 const popover_padding: f32 = 10.0;
 
-test "popover component serializes to canonical object and deserializes" {
-    const popover = Popover{ .id = 995, .trigger = "Open", .content = "Place content" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = popover.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Popover.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(popover.id, decoded.id);
-    try std.testing.expectEqualStrings(popover.trigger, decoded.trigger);
-    try std.testing.expectEqualStrings(popover.content, decoded.content);
-}
-
 test "popover component renders trigger content and hit regions" {
     const popover = Popover{ .id = 995, .trigger = "Open", .content = "Place content" };
-    var commands: [20]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(20, 2){};
+    h.init();
 
-    try popover.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{popover.id} } });
-    try popover.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(popover, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{popover.id} } });
+    try popover.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Open"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Place content"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 996), collector.written()[1].id);
+    try h.expectText("Open");
+    try h.expectText("Place content");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 996);
 }
 
 test "popover measurement follows trigger and content text" {

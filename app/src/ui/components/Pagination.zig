@@ -78,33 +78,19 @@ const pagination_gap: f32 = 4.0;
 const pagination_text_padding: f32 = 2.0;
 const pagination_labels = [_][]const u8{ "<", "1", "2", "3", ">" };
 
-test "pagination component serializes to canonical object and deserializes" {
-    const pagination = Pagination{ .id = 120, .page = 2 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = pagination.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Pagination.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(pagination.id, decoded.id);
-    try std.testing.expectEqual(@as(u16, 2), decoded.page);
-}
-
 test "pagination component renders pages and hit regions" {
     const pagination = Pagination{ .id = 120, .page = 1 };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [5]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 5){};
+    h.init();
 
-    try pagination.render(&scene, ui.Rect.init(0, 0, 240, 36), .{});
-    try pagination.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 36));
+    try h.render(pagination, ui.Rect.init(0, 0, 240, 36), .{});
+    try pagination.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 36));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "1"));
-    try std.testing.expect(component_test.hasText(scene.written(), "2"));
-    try std.testing.expect(component_test.hasText(scene.written(), "3"));
-    try std.testing.expectEqual(@as(usize, 5), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 124), collector.written()[4].id);
+    try h.expectText("1");
+    try h.expectText("2");
+    try h.expectText("3");
+    try h.expectHitCount(5);
+    try h.expectHitId(4, 124);
 }
 
 test "pagination measurement follows labels and shared segment layout" {

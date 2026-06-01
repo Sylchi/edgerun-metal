@@ -158,33 +158,18 @@ const field_validation_max_lines: usize = 2;
 const field_min_width: f32 = 120.0;
 const field_min_height: f32 = 48.0;
 
-test "field component serializes to canonical object and deserializes" {
-    const field = Field{ .id = 330, .label = "Email", .placeholder = "m@example.com" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = field.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Field.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(field.id, decoded.id);
-    try std.testing.expectEqualStrings(field.label, decoded.label);
-    try std.testing.expectEqualStrings(field.placeholder, decoded.placeholder);
-}
-
 test "field component renders label input and hit region" {
     const field = Field{ .id = 330, .label = "Email", .placeholder = "m@example.com" };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
 
-    try field.render(&scene, ui.Rect.init(0, 0, 220, 56), .{});
-    try field.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 56));
+    try h.render(field, ui.Rect.init(0, 0, 220, 56), .{});
+    try field.collectInteractions(&h.collector, ui.Rect.init(0, 0, 220, 56));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Email"));
-    try std.testing.expect(component_test.hasText(scene.written(), "m@example.com"));
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 330), collector.written()[0].id);
+    try h.expectText("Email");
+    try h.expectText("m@example.com");
+    try h.expectHitCount(1);
+    try h.expectHitId(0, 330);
 }
 
 test "field component renders helper and invalid validation text" {

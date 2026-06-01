@@ -86,17 +86,6 @@ const text_line_height: f32 = 18.0;
 const text_max_lines: usize = 8;
 const text_min_width: f32 = 24.0;
 
-test "text component serializes to canonical object and deserializes" {
-    const text = Text{ .value = "DNS asks, resolver answers." };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = text.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Text.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqualStrings(text.value, decoded.value);
-}
-
 test "text component renders its own text commands" {
     const text = Text{ .value = "DNS asks" };
     var commands: [4]ui.Command = undefined;

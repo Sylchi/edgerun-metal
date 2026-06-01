@@ -10,40 +10,124 @@ extern er_av1_bits_write_init
 extern er_av1_bits_write
 extern er_av1_bits_bytes_written
 
-%macro call_read_bit 0
+%macro read_bits 1
     mov     rdi, rsp
-    mov     esi, 1
+    mov     esi, %1
     call    er_av1_bits_read
     test    edx, edx
     jnz     .done
 %endmacro
 
-%macro write_bits 2
+%macro call_read_bit 0
+    read_bits 1
+%endmacro
+
+%macro write_esi_bits 1
     mov     rdi, rsp
-    mov     esi, %1
-    mov     edx, %2
+    mov     edx, %1
     call    er_av1_bits_write
     test    edx, edx
     jnz     .done
 %endmacro
 
+%macro write_bits 2
+    mov     esi, %1
+    write_esi_bits %2
+%endmacro
+
 %macro write_one_from_esi 0
-    mov     rdi, rsp
-    mov     edx, 1
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits 1
+%endmacro
+
+%macro write_byte_field_bits 2
+    movzx   esi, byte [r13 + %1]
+    write_esi_bits %2
+%endmacro
+
+%macro write_bit_field 1
+    movzx   esi, byte [r13 + %1]
+    cmp     esi, 1
+    ja      .invalid_param
+    write_one_from_esi
+%endmacro
+
+%macro write_byte_field_max_bits 3
+    movzx   esi, byte [r13 + %1]
+    cmp     esi, %2
+    ja      .invalid_param
+    write_esi_bits %3
+%endmacro
+
+%macro write_byte_field_range_offset_bits 4
+    movzx   esi, byte [r13 + %1]
+    cmp     esi, %2
+    jb      .invalid_param
+    cmp     esi, %3
+    ja      .invalid_param
+    sub     esi, %2
+    write_esi_bits %4
+%endmacro
+
+%macro write_dword_field_max_bits 3
+    mov     esi, [r13 + %1]
+    cmp     esi, %2
+    ja      .invalid_param
+    write_esi_bits %3
+%endmacro
+
+%macro write_cdef_sec_field 1
+    movzx   esi, byte [r13 + %1 + rbx]
+    cmp     esi, AV1_CDEF_SEC_SKIP
+    je      .invalid_param
+    cmp     esi, AV1_CDEF_SEC_MAX
+    ja      .invalid_param
+    cmp     esi, AV1_CDEF_SEC_MAX
+    jne     %%ready
+    mov     esi, AV1_CDEF_SEC_SKIP
+%%ready:
+    write_esi_bits AV1_CDEF_SEC_BITS
+%endmacro
+
+%macro check_byte_max_rcx 2
+    cmp     byte [rcx + %1], %2
+    ja      .invalid_param
+%endmacro
+
+%macro check_byte_max_r13 2
+    cmp     byte [r13 + %1], %2
+    ja      .invalid_param
+%endmacro
+
+%macro check_byte_zero_rcx 1
+    cmp     byte [rcx + %1], 0
+    jne     .invalid_param
+%endmacro
+
+%macro check_byte_zero_r13 1
+    cmp     byte [r13 + %1], 0
+    jne     .invalid_param
+%endmacro
+
+%macro check_dword_signed_rcx 2
+    mov     eax, [rcx + %1]
+    cmp     eax, %2
+    jg      .invalid_param
+    cmp     eax, -%2
+    jl      .invalid_param
+%endmacro
+
+%macro check_eax_signed_range 1
+    cmp     eax, %1
+    jg      .invalid_param
+    cmp     eax, -%1
+    jl      .invalid_param
 %endmacro
 
 %macro read_delta_q_to 1
     call_read_bit
     test    eax, eax
     jz      %%zero
-    mov     rdi, rsp
-    mov     esi, AV1_QUANT_DELTA_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_QUANT_DELTA_BITS
     mov     ecx, eax
     test    ecx, ecx
     jz      %%store
@@ -76,11 +160,7 @@ extern er_av1_bits_bytes_written
 %%positive:
     cmp     esi, AV1_QUANT_DELTA_MAX
     ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_QUANT_DELTA_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_QUANT_DELTA_BITS
     xor     esi, esi
     cmp     dword [r13 + %1], 0
     jns     %%sign_ready
@@ -166,6 +246,105 @@ extern er_av1_bits_bytes_written
 %%done:
 %endmacro
 
+%macro zero_motion_tool_state 0
+    mov     byte [r13 + AV1_FRAME_ALLOW_WARPED_MOTION], 0
+    mov     byte [r13 + AV1_FRAME_REDUCED_TX_SET], 0
+    mov     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP
+%endmacro
+
+%macro zero_film_grain_state 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_APPLY], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_REF_IDX], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_AR_LAG], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_OVERLAP], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED], 0
+    mov     dword [r13 + AV1_FRAME_FILM_GRAIN_CB_OFFSET], 0
+    mov     dword [r13 + AV1_FRAME_FILM_GRAIN_CR_OFFSET], 0
+    mov     dword [r13 + AV1_FRAME_FILM_GRAIN_SEED], 0
+%endmacro
+
+%macro read_film_grain_point 2
+    read_bits AV1_FILM_GRAIN_POINT_VALUE_BITS
+    mov     [r13 + %1 + rbx], al
+    read_bits AV1_FILM_GRAIN_POINT_SCALING_BITS
+    mov     [r13 + %2 + rbx], al
+%endmacro
+
+%macro read_film_grain_points 3
+    xor     ebx, ebx
+%%loop:
+    cmp     bl, [r13 + %1]
+    jae     %%done
+    read_film_grain_point %2, %3
+    inc     ebx
+    jmp     %%loop
+%%done:
+%endmacro
+
+%macro write_film_grain_point 2
+    movzx   esi, byte [r13 + %1 + rbx]
+    write_esi_bits AV1_FILM_GRAIN_POINT_VALUE_BITS
+    movzx   esi, byte [r13 + %2 + rbx]
+    write_esi_bits AV1_FILM_GRAIN_POINT_SCALING_BITS
+%endmacro
+
+%macro write_film_grain_points 3
+    xor     ebx, ebx
+%%loop:
+    cmp     bl, [r13 + %1]
+    jae     %%done
+    write_film_grain_point %2, %3
+    inc     ebx
+    jmp     %%loop
+%%done:
+%endmacro
+
+%macro read_film_grain_ar_coeff 1
+    read_bits AV1_FILM_GRAIN_AR_COEFF_BITS
+    sub     eax, AV1_FILM_GRAIN_AR_COEFF_BIAS
+    mov     [r13 + %1 + rbx * 4], eax
+%endmacro
+
+%macro read_film_grain_ar_coeffs 2
+    xor     ebx, ebx
+%%loop:
+    cmp     ebx, %2
+    jae     %%done
+    read_film_grain_ar_coeff %1
+    inc     ebx
+    jmp     %%loop
+%%done:
+%endmacro
+
+%macro write_film_grain_ar_coeff 1
+    mov     esi, [r13 + %1 + rbx * 4]
+    cmp     esi, AV1_FILM_GRAIN_AR_COEFF_MAX
+    jg      .invalid_param
+    cmp     esi, AV1_FILM_GRAIN_AR_COEFF_MIN
+    jl      .invalid_param
+    add     esi, AV1_FILM_GRAIN_AR_COEFF_BIAS
+    write_esi_bits AV1_FILM_GRAIN_AR_COEFF_BITS
+%endmacro
+
+%macro write_film_grain_ar_coeffs 2
+    xor     ebx, ebx
+%%loop:
+    cmp     ebx, %2
+    jae     %%done
+    write_film_grain_ar_coeff %1
+    inc     ebx
+    jmp     %%loop
+%%done:
+%endmacro
+
 %macro read_segment_feature 4
     call_read_bit
     test    eax, eax
@@ -178,11 +357,7 @@ extern er_av1_bits_bytes_written
     shl     eax, AV1_SEGMENT_FEATURE_DATA_SHIFT
     mov     dword [r13 + AV1_FRAME_SEGMENT_FEATURE_DATA + rax + (%1 * 4)], 0
 %else
-    mov     rdi, rsp
-    mov     esi, %2
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits %2
     cmp     eax, %3
     ja      .corrupt
     mov     ecx, eax
@@ -211,11 +386,7 @@ extern er_av1_bits_bytes_written
     call_read_bit
     test    eax, eax
     jz      %%zero
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_DELTA_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_DELTA_BITS
     cmp     eax, AV1_LOOP_FILTER_DELTA_MAX
     ja      .corrupt
     mov     ecx, eax
@@ -250,11 +421,7 @@ extern er_av1_bits_bytes_written
     jns     %%positive
     neg     esi
 %%positive:
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_DELTA_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_LOOP_FILTER_DELTA_BITS
     xor     esi, esi
     cmp     dword [r13 + %1 + rbx * 4], 0
     jns     %%sign_ready
@@ -265,11 +432,7 @@ extern er_av1_bits_bytes_written
 %endmacro
 
 %macro read_global_motion_param 0
-    mov     rdi, rsp
-    mov     esi, AV1_GLOBAL_MOTION_PARAM_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_GLOBAL_MOTION_PARAM_BITS
     mov     ecx, eax
     mov     [rsp + AV1_BITS_SIZE], ecx
     call_read_bit
@@ -297,11 +460,7 @@ extern er_av1_bits_bytes_written
     jns     %%positive
     neg     esi
 %%positive:
-    mov     rdi, rsp
-    mov     edx, AV1_GLOBAL_MOTION_PARAM_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_GLOBAL_MOTION_PARAM_BITS
     xor     esi, esi
     mov     eax, ebx
     imul    eax, AV1_GLOBAL_MOTION_PARAM_STRIDE
@@ -341,11 +500,7 @@ extern er_av1_bits_bytes_written
     cmp     esi, %3
     ja      .invalid_param
 %endif
-    mov     rdi, rsp
-    mov     edx, %2
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits %2
 %if %4 = 1
     xor     esi, esi
     mov     eax, ebx
@@ -389,11 +544,7 @@ er_fn er_av1_frame_decode
     test    eax, eax
     jnz     .show_existing_frame
 
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_TYPE_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_TYPE_BITS
     mov     [r13 + AV1_FRAME_TYPE], al
     cmp     eax, AV1_FRAME_TYPE_KEY
     je      .key_frame
@@ -471,21 +622,13 @@ er_fn er_av1_frame_decode
     je      .frame_size_override
     cmp     byte [r13 + AV1_FRAME_ERROR_RESILIENT_MODE], 1
     je      .primary_ref_none
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_PRIMARY_REF_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_PRIMARY_REF_BITS
     mov     [r13 + AV1_FRAME_PRIMARY_REF_FRAME], al
     jmp     .refresh_flags
 .primary_ref_none:
     mov     byte [r13 + AV1_FRAME_PRIMARY_REF_FRAME], AV1_FRAME_PRIMARY_REF_NONE
 .refresh_flags:
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REFRESH_FLAGS_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REFRESH_FLAGS_BITS
     mov     [r13 + AV1_FRAME_REFRESH_FRAME_FLAGS], al
 
 .frame_size_override:
@@ -517,47 +660,19 @@ er_fn er_av1_frame_decode
     cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_SWITCH
     jne     .read_dimensions
 .read_ref_indices:
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX0], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX1], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX2], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX3], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX4], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX5], al
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_REF_FRAME_IDX6], al
     call_read_bit
     mov     [r13 + AV1_FRAME_ALLOW_HIGH_PRECISION_MV], al
@@ -596,11 +711,7 @@ er_fn er_av1_frame_decode
     call_read_bit
     test    eax, eax
     jz      .read_render_size
-    mov     rdi, rsp
-    mov     esi, AV1_SUPERRES_DENOM_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_SUPERRES_DENOM_BITS
     add     eax, AV1_SUPERRES_DENOM_MIN
     mov     [r13 + AV1_FRAME_SUPERRES_DENOM], eax
     mov     ebx, eax
@@ -656,11 +767,7 @@ er_fn er_av1_frame_decode
     cmp     eax, 1
     jne     .unsupported
     mov     [r13 + AV1_FRAME_TILE_INFO_UNIFORM], al
-    mov     rdi, rsp
-    mov     esi, AV1_TILE_LOG2_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_TILE_LOG2_BITS
     cmp     eax, AV1_TILE_LOG2_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_TILE_INFO_COLS_LOG2], al
@@ -668,11 +775,7 @@ er_fn er_av1_frame_decode
     mov     eax, 1
     shl     eax, cl
     mov     [r13 + AV1_FRAME_TILE_INFO_COLS], eax
-    mov     rdi, rsp
-    mov     esi, AV1_TILE_LOG2_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_TILE_LOG2_BITS
     cmp     eax, AV1_TILE_LOG2_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2], al
@@ -686,27 +789,15 @@ er_fn er_av1_frame_decode
     add     bl, [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2]
     test    ebx, ebx
     jz      .read_tile_size_bytes
-    mov     rdi, rsp
-    mov     esi, ebx
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits ebx
     mov     [r13 + AV1_FRAME_TILE_INFO_CONTEXT_UPDATE_ID], eax
 .read_tile_size_bytes:
-    mov     rdi, rsp
-    mov     esi, AV1_TILE_SIZE_BYTES_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_TILE_SIZE_BYTES_BITS
     inc     eax
     mov     [r13 + AV1_FRAME_TILE_INFO_TILE_SIZE_BYTES], al
 
 .read_quantization:
-    mov     rdi, rsp
-    mov     esi, AV1_QUANT_BASE_Q_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_QUANT_BASE_Q_BITS
     mov     [r13 + AV1_FRAME_BASE_Q_IDX], al
     read_delta_q_to AV1_FRAME_DELTA_Q_Y_DC
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
@@ -789,11 +880,7 @@ er_fn er_av1_frame_decode
     mov     [r13 + AV1_FRAME_DELTA_Q_PRESENT], al
     test    eax, eax
     jz      .read_delta_q_res_zero
-    mov     rdi, rsp
-    mov     esi, AV1_DELTA_Q_RES_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_DELTA_Q_RES_BITS
     cmp     eax, AV1_DELTA_Q_RES_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_DELTA_Q_RES], al
@@ -806,11 +893,7 @@ er_fn er_av1_frame_decode
     mov     [r13 + AV1_FRAME_DELTA_LF_PRESENT], al
     test    eax, eax
     jz      .read_delta_lf_zero_res
-    mov     rdi, rsp
-    mov     esi, AV1_DELTA_LF_RES_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_DELTA_LF_RES_BITS
     cmp     eax, AV1_DELTA_LF_RES_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_DELTA_LF_RES], al
@@ -833,17 +916,9 @@ er_fn er_av1_frame_decode
 .read_loop_filter:
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .read_loop_filter_zero
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_LEVEL_BITS
     mov     [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_V], al
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_LEVEL_BITS
     mov     [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_H], al
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
     je      .read_loop_filter_chroma_zero
@@ -851,28 +926,16 @@ er_fn er_av1_frame_decode
     movzx   ecx, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_H]
     or      eax, ecx
     jz      .read_loop_filter_chroma_zero
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_LEVEL_BITS
     mov     [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_U], al
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_LEVEL_BITS
     mov     [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_V], al
     jmp     .read_loop_filter_sharpness
 .read_loop_filter_chroma_zero:
     mov     byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_U], 0
     mov     byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_V], 0
 .read_loop_filter_sharpness:
-    mov     rdi, rsp
-    mov     esi, AV1_LOOP_FILTER_SHARPNESS_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_LOOP_FILTER_SHARPNESS_BITS
     mov     [r13 + AV1_FRAME_LOOP_FILTER_SHARPNESS], al
     call_read_bit
     mov     [r13 + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED], al
@@ -919,18 +982,10 @@ er_fn er_av1_frame_decode
     jne     .read_cdef_zero
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .read_cdef_zero
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_DAMPING_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_DAMPING_BITS
     add     eax, AV1_CDEF_DAMPING_MIN
     mov     [r13 + AV1_FRAME_CDEF_DAMPING], al
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_BITS_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_BITS_BITS
     cmp     eax, AV1_CDEF_BITS_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_CDEF_BITS], al
@@ -941,33 +996,17 @@ er_fn er_av1_frame_decode
 .read_cdef_loop:
     cmp     ebx, r15d
     jae     .read_restoration
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_PRI_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_PRI_BITS
     mov     [r13 + AV1_FRAME_CDEF_Y_PRI + rbx], al
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_SEC_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_SEC_BITS
     cmp     eax, AV1_CDEF_SEC_SKIP
     jne     .read_cdef_y_sec_store
     inc     eax
 .read_cdef_y_sec_store:
     mov     [r13 + AV1_FRAME_CDEF_Y_SEC + rbx], al
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_PRI_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_PRI_BITS
     mov     [r13 + AV1_FRAME_CDEF_UV_PRI + rbx], al
-    mov     rdi, rsp
-    mov     esi, AV1_CDEF_SEC_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_CDEF_SEC_BITS
     cmp     eax, AV1_CDEF_SEC_SKIP
     jne     .read_cdef_uv_sec_store
     inc     eax
@@ -994,29 +1033,17 @@ er_fn er_av1_frame_decode
     jne     .read_restoration_zero
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .read_restoration_zero
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_TYPE_BITS
     cmp     eax, AV1_RESTORATION_TYPE_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_Y], al
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
     je      .read_restoration_chroma_zero
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_TYPE_BITS
     cmp     eax, AV1_RESTORATION_TYPE_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_U], al
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_TYPE_BITS
     cmp     eax, AV1_RESTORATION_TYPE_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_V], al
@@ -1027,11 +1054,7 @@ er_fn er_av1_frame_decode
 .read_restoration_units:
     cmp     byte [r13 + AV1_FRAME_RESTORATION_Y], AV1_RESTORE_NONE
     je      .read_restoration_unit_y_zero
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_UNIT_BITS
     cmp     eax, AV1_RESTORATION_UNIT_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_UNIT_Y], al
@@ -1041,11 +1064,7 @@ er_fn er_av1_frame_decode
 .read_restoration_unit_u:
     cmp     byte [r13 + AV1_FRAME_RESTORATION_U], AV1_RESTORE_NONE
     je      .read_restoration_unit_v
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_UNIT_BITS
     cmp     eax, AV1_RESTORATION_UNIT_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_UNIT_U], al
@@ -1059,11 +1078,7 @@ er_fn er_av1_frame_decode
     jne     .read_restoration_unit_v_read
     jmp     .read_restoration_unit_v_zero
 .read_restoration_unit_v_read:
-    mov     rdi, rsp
-    mov     esi, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_RESTORATION_UNIT_BITS
     cmp     eax, AV1_RESTORATION_UNIT_MAX
     ja      .corrupt
     mov     [r13 + AV1_FRAME_RESTORATION_UNIT_V], al
@@ -1095,7 +1110,8 @@ er_fn er_av1_frame_decode
     mov     byte [r13 + AV1_FRAME_REFERENCE_SELECT], 0
     mov     byte [r13 + AV1_FRAME_SKIP_MODE_PRESENT], 0
     zero_global_motion_state
-    jmp     .finish_header
+    zero_motion_tool_state
+    jmp     .read_film_grain
 .read_reference_select:
     call_read_bit
     mov     [r13 + AV1_FRAME_REFERENCE_SELECT], al
@@ -1105,15 +1121,11 @@ er_fn er_av1_frame_decode
     xor     ebx, ebx
 .read_global_motion_loop:
     cmp     ebx, AV1_GLOBAL_MOTION_REF_COUNT
-    jae     .finish_header
+    jae     .read_motion_tools
     call_read_bit
     test    eax, eax
     jz      .read_global_motion_next
-    mov     rdi, rsp
-    mov     esi, AV1_GLOBAL_MOTION_TYPE_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_GLOBAL_MOTION_TYPE_BITS
     test    eax, eax
     jz      .corrupt
     cmp     eax, AV1_GLOBAL_MOTION_AFFINE
@@ -1143,6 +1155,166 @@ er_fn er_av1_frame_decode
     inc     ebx
     jmp     .read_global_motion_loop
 
+.read_motion_tools:
+    cmp     byte [r12 + AV1_SEQ_ENABLE_WARPED_MOTION], 1
+    jne     .read_allow_warped_zero
+    cmp     byte [r13 + AV1_FRAME_FORCE_INTEGER_MV], 1
+    je      .read_allow_warped_zero
+    call_read_bit
+    mov     [r13 + AV1_FRAME_ALLOW_WARPED_MOTION], al
+    jmp     .read_interpolation_filter
+.read_allow_warped_zero:
+    mov     byte [r13 + AV1_FRAME_ALLOW_WARPED_MOTION], 0
+.read_interpolation_filter:
+    cmp     byte [r12 + AV1_SEQ_ENABLE_DUAL_FILTER], 1
+    jne     .read_interpolation_eighttap
+    call_read_bit
+    test    eax, eax
+    jz      .read_interpolation_fixed
+    mov     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_SWITCHABLE
+    jmp     .read_reduced_tx_set
+.read_interpolation_fixed:
+    read_bits AV1_INTERP_FILTER_BITS
+    cmp     eax, AV1_INTERP_FILTER_FIXED_MAX
+    ja      .corrupt
+    mov     [r13 + AV1_FRAME_INTERPOLATION_FILTER], al
+    jmp     .read_reduced_tx_set
+.read_interpolation_eighttap:
+    mov     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP
+.read_reduced_tx_set:
+    call_read_bit
+    mov     [r13 + AV1_FRAME_REDUCED_TX_SET], al
+    jmp     .read_film_grain
+
+.read_film_grain:
+    cmp     byte [r12 + AV1_SEQ_FILM_GRAIN], 1
+    jne     .read_film_grain_zero
+    cmp     byte [r13 + AV1_FRAME_SHOW_FRAME], 1
+    je      .read_film_grain_apply
+    cmp     byte [r13 + AV1_FRAME_SHOWABLE_FRAME], 1
+    jne     .read_film_grain_zero
+.read_film_grain_apply:
+    call_read_bit
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_APPLY], al
+    test    eax, eax
+    jz      .read_film_grain_zero
+    read_bits AV1_FILM_GRAIN_SEED_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_SEED], eax
+    cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_INTER
+    jne     .read_film_grain_update_true
+    call_read_bit
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], al
+    test    eax, eax
+    jnz     .read_film_grain_points_y_count
+    read_bits AV1_FILM_GRAIN_REF_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_REF_IDX], al
+    jmp     .finish_header
+.read_film_grain_update_true:
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], 1
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_REF_IDX], 0
+.read_film_grain_points_y_count:
+    read_bits AV1_FILM_GRAIN_Y_POINTS_BITS
+    cmp     eax, AV1_FILM_GRAIN_Y_POINTS_MAX
+    ja      .corrupt
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], al
+    read_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS, AV1_FRAME_FILM_GRAIN_Y_VALUES, AV1_FRAME_FILM_GRAIN_Y_SCALING
+.read_film_grain_chroma_from_luma:
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .read_film_grain_chroma_from_luma_zero
+    call_read_bit
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], al
+    jmp     .read_film_grain_chroma_counts
+.read_film_grain_chroma_from_luma_zero:
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 0
+.read_film_grain_chroma_counts:
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .read_film_grain_chroma_counts_zero
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    je      .read_film_grain_chroma_counts_zero
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .read_film_grain_chroma_counts_zero
+    read_bits AV1_FILM_GRAIN_CHROMA_POINTS_BITS
+    cmp     eax, AV1_FILM_GRAIN_CHROMA_POINTS_MAX
+    ja      .corrupt
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], al
+    read_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS, AV1_FRAME_FILM_GRAIN_CB_VALUES, AV1_FRAME_FILM_GRAIN_CB_SCALING
+.read_film_grain_cr_count:
+    read_bits AV1_FILM_GRAIN_CHROMA_POINTS_BITS
+    cmp     eax, AV1_FILM_GRAIN_CHROMA_POINTS_MAX
+    ja      .corrupt
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], al
+    read_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FRAME_FILM_GRAIN_CR_VALUES, AV1_FRAME_FILM_GRAIN_CR_SCALING
+.read_film_grain_chroma_counts_zero:
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+.read_film_grain_scaling:
+    read_bits AV1_FILM_GRAIN_SCALING_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], al
+    read_bits AV1_FILM_GRAIN_AR_LAG_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_AR_LAG], al
+    movzx   ecx, al
+    lea     eax, [rcx + 1]
+    imul    eax, ecx
+    shl     eax, 1
+    mov     r15d, eax
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .read_film_grain_cb_coeffs_start
+    read_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_Y_COEFFS, r15d
+.read_film_grain_cb_coeffs_start:
+    movzx   ecx, byte [r13 + AV1_FRAME_FILM_GRAIN_AR_LAG]
+    lea     eax, [rcx + 1]
+    imul    eax, ecx
+    shl     eax, 1
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .read_film_grain_cb_coeff_count_ready
+    inc     eax
+.read_film_grain_cb_coeff_count_ready:
+    mov     r15d, eax
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    jne     .read_film_grain_cb_coeff_loop_start
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    jne     .read_film_grain_cr_coeffs_start
+.read_film_grain_cb_coeff_loop_start:
+    read_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_CB_COEFFS, r15d
+.read_film_grain_cr_coeffs_start:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    jne     .read_film_grain_cr_coeff_loop_start
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    jne     .read_film_grain_shifts
+.read_film_grain_cr_coeff_loop_start:
+    read_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_CR_COEFFS, r15d
+.read_film_grain_shifts:
+    read_bits AV1_FILM_GRAIN_AR_SHIFT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], al
+    read_bits AV1_FILM_GRAIN_SCALE_SHIFT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], al
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    je      .read_film_grain_cr_mults
+    read_bits AV1_FILM_GRAIN_MULT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CB_MULT], al
+    read_bits AV1_FILM_GRAIN_MULT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CB_LUMA_MULT], al
+    read_bits AV1_FILM_GRAIN_OFFSET_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CB_OFFSET], eax
+.read_film_grain_cr_mults:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    je      .read_film_grain_tail
+    read_bits AV1_FILM_GRAIN_MULT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CR_MULT], al
+    read_bits AV1_FILM_GRAIN_MULT_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CR_LUMA_MULT], al
+    read_bits AV1_FILM_GRAIN_OFFSET_BITS
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CR_OFFSET], eax
+.read_film_grain_tail:
+    call_read_bit
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_OVERLAP], al
+    call_read_bit
+    mov     [r13 + AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED], al
+    jmp     .finish_header
+.read_film_grain_zero:
+    zero_film_grain_state
+    jmp     .finish_header
+
 .finish_header:
     mov     ebx, [rsp + AV1_BITS_POS]
     mov     [r13 + AV1_FRAME_HEADER_BITS], ebx
@@ -1157,11 +1329,7 @@ er_fn er_av1_frame_decode
     er_ok
     jmp     .done
 .show_existing_frame:
-    mov     rdi, rsp
-    mov     esi, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits AV1_FRAME_REF_INDEX_BITS
     mov     [r13 + AV1_FRAME_EXISTING_FRAME_IDX], al
     cmp     byte [r12 + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 1
     je      .read_display_frame_id
@@ -1230,6 +1398,8 @@ er_fn er_av1_frame_decode
     zero_delta_state
     zero_transform_ref_state
     zero_global_motion_state
+    zero_motion_tool_state
+    zero_film_grain_state
     mov     dword [r13 + AV1_FRAME_TILE_OFFSET], 0
     mov     dword [r13 + AV1_FRAME_TILE_LEN], 0
     mov     ebx, [rsp + AV1_BITS_POS]
@@ -1272,47 +1442,20 @@ er_fn er_av1_frame_encode
     jne     .unsupported
     cmp     byte [rcx + AV1_FRAME_SHOW_EXISTING_FRAME], 1
     je      .params_ok
-    mov     eax, [rcx + AV1_FRAME_DELTA_Q_Y_DC]
-    cmp     eax, AV1_QUANT_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_QUANT_DELTA_MAX
-    jl      .invalid_param
-    mov     eax, [rcx + AV1_FRAME_DELTA_Q_U_DC]
-    cmp     eax, AV1_QUANT_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_QUANT_DELTA_MAX
-    jl      .invalid_param
-    mov     eax, [rcx + AV1_FRAME_DELTA_Q_U_AC]
-    cmp     eax, AV1_QUANT_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_QUANT_DELTA_MAX
-    jl      .invalid_param
-    mov     eax, [rcx + AV1_FRAME_DELTA_Q_V_DC]
-    cmp     eax, AV1_QUANT_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_QUANT_DELTA_MAX
-    jl      .invalid_param
-    mov     eax, [rcx + AV1_FRAME_DELTA_Q_V_AC]
-    cmp     eax, AV1_QUANT_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_QUANT_DELTA_MAX
-    jl      .invalid_param
+    check_dword_signed_rcx AV1_FRAME_DELTA_Q_Y_DC, AV1_QUANT_DELTA_MAX
+    check_dword_signed_rcx AV1_FRAME_DELTA_Q_U_DC, AV1_QUANT_DELTA_MAX
+    check_dword_signed_rcx AV1_FRAME_DELTA_Q_U_AC, AV1_QUANT_DELTA_MAX
+    check_dword_signed_rcx AV1_FRAME_DELTA_Q_V_DC, AV1_QUANT_DELTA_MAX
+    check_dword_signed_rcx AV1_FRAME_DELTA_Q_V_AC, AV1_QUANT_DELTA_MAX
     cmp     byte [rcx + AV1_FRAME_USING_QMATRIX], 0
     jne     .unsupported
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_LEVEL_Y_V], AV1_LOOP_FILTER_LEVEL_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_LEVEL_Y_H], AV1_LOOP_FILTER_LEVEL_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_LEVEL_U], AV1_LOOP_FILTER_LEVEL_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_LEVEL_V], AV1_LOOP_FILTER_LEVEL_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_SHARPNESS], 7
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED], 1
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_DELTA_UPDATE], 1
-    ja      .invalid_param
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_Y_V, AV1_LOOP_FILTER_LEVEL_MAX
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_Y_H, AV1_LOOP_FILTER_LEVEL_MAX
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_U, AV1_LOOP_FILTER_LEVEL_MAX
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_V, AV1_LOOP_FILTER_LEVEL_MAX
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_SHARPNESS, 7
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_DELTA_ENABLED, 1
+    check_byte_max_rcx AV1_FRAME_LOOP_FILTER_DELTA_UPDATE, 1
     cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED], 1
     jne     .check_loop_filter_delta_done
     cmp     byte [rcx + AV1_FRAME_LOOP_FILTER_DELTA_UPDATE], 1
@@ -1322,10 +1465,7 @@ er_fn er_av1_frame_encode
     cmp     r11d, AV1_LOOP_FILTER_REF_DELTA_COUNT
     jae     .check_loop_filter_mode_delta_start
     mov     eax, [rcx + AV1_FRAME_LOOP_FILTER_REF_DELTAS + r11 * 4]
-    cmp     eax, AV1_LOOP_FILTER_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_LOOP_FILTER_DELTA_MAX
-    jl      .invalid_param
+    check_eax_signed_range AV1_LOOP_FILTER_DELTA_MAX
     inc     r11d
     jmp     .check_loop_filter_ref_delta_loop
 .check_loop_filter_mode_delta_start:
@@ -1334,10 +1474,7 @@ er_fn er_av1_frame_encode
     cmp     r11d, AV1_LOOP_FILTER_MODE_DELTA_COUNT
     jae     .check_loop_filter_delta_done
     mov     eax, [rcx + AV1_FRAME_LOOP_FILTER_MODE_DELTAS + r11 * 4]
-    cmp     eax, AV1_LOOP_FILTER_DELTA_MAX
-    jg      .invalid_param
-    cmp     eax, -AV1_LOOP_FILTER_DELTA_MAX
-    jl      .invalid_param
+    check_eax_signed_range AV1_LOOP_FILTER_DELTA_MAX
     inc     r11d
     jmp     .check_loop_filter_mode_delta_loop
 .check_loop_filter_delta_done:
@@ -1347,10 +1484,8 @@ er_fn er_av1_frame_encode
     je      .check_cdef_done
     cmp     byte [rcx + AV1_FRAME_CDEF_DAMPING], AV1_CDEF_DAMPING_MIN
     jb      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_CDEF_DAMPING], AV1_CDEF_DAMPING_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_CDEF_BITS], AV1_CDEF_BITS_MAX
-    ja      .invalid_param
+    check_byte_max_rcx AV1_FRAME_CDEF_DAMPING, AV1_CDEF_DAMPING_MAX
+    check_byte_max_rcx AV1_FRAME_CDEF_BITS, AV1_CDEF_BITS_MAX
     movzx   eax, byte [rcx + AV1_FRAME_CDEF_BITS]
     mov     ebx, 1
     cmp     eax, 0
@@ -1386,12 +1521,9 @@ er_fn er_av1_frame_encode
     jne     .check_restoration_done
     cmp     byte [rcx + AV1_FRAME_ALLOW_INTRABC], 1
     je      .check_restoration_done
-    cmp     byte [rcx + AV1_FRAME_RESTORATION_Y], AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_RESTORATION_U], AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
-    cmp     byte [rcx + AV1_FRAME_RESTORATION_V], AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
+    check_byte_max_rcx AV1_FRAME_RESTORATION_Y, AV1_RESTORATION_TYPE_MAX
+    check_byte_max_rcx AV1_FRAME_RESTORATION_U, AV1_RESTORATION_TYPE_MAX
+    check_byte_max_rcx AV1_FRAME_RESTORATION_V, AV1_RESTORATION_TYPE_MAX
     cmp     byte [rdx + AV1_SEQ_MONO_CHROME], 1
     jne     .check_restoration_units
     cmp     byte [rcx + AV1_FRAME_RESTORATION_U], AV1_RESTORE_NONE
@@ -1416,13 +1548,37 @@ er_fn er_av1_frame_encode
 .check_restoration_done:
     movzx   eax, byte [rcx + AV1_FRAME_TYPE]
     cmp     eax, AV1_FRAME_TYPE_KEY
-    je      .check_dimensions
+    je      .check_motion_tools_zero
     cmp     eax, AV1_FRAME_TYPE_INTRA_ONLY
-    je      .check_dimensions
+    je      .check_motion_tools_zero
     cmp     eax, AV1_FRAME_TYPE_INTER
-    je      .check_dimensions
+    je      .check_motion_tools_inter
     cmp     eax, AV1_FRAME_TYPE_SWITCH
-    jne     .unsupported
+    je      .check_motion_tools_inter
+    jmp     .unsupported
+.check_motion_tools_zero:
+    check_byte_zero_rcx AV1_FRAME_ALLOW_WARPED_MOTION
+    check_byte_zero_rcx AV1_FRAME_REDUCED_TX_SET
+    cmp     byte [rcx + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP
+    jne     .invalid_param
+    jmp     .check_dimensions
+.check_motion_tools_inter:
+    check_byte_max_rcx AV1_FRAME_ALLOW_WARPED_MOTION, 1
+    check_byte_max_rcx AV1_FRAME_REDUCED_TX_SET, 1
+    check_byte_max_rcx AV1_FRAME_INTERPOLATION_FILTER, AV1_INTERP_FILTER_MAX
+    cmp     byte [rdx + AV1_SEQ_ENABLE_WARPED_MOTION], 1
+    je      .check_motion_tools_force_integer
+    check_byte_zero_rcx AV1_FRAME_ALLOW_WARPED_MOTION
+    jmp     .check_motion_tools_interp
+.check_motion_tools_force_integer:
+    cmp     byte [rcx + AV1_FRAME_FORCE_INTEGER_MV], 1
+    jne     .check_motion_tools_interp
+    check_byte_zero_rcx AV1_FRAME_ALLOW_WARPED_MOTION
+.check_motion_tools_interp:
+    cmp     byte [rdx + AV1_SEQ_ENABLE_DUAL_FILTER], 1
+    je      .check_dimensions
+    cmp     byte [rcx + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP
+    jne     .invalid_param
 .check_dimensions:
     cmp     dword [rcx + AV1_FRAME_WIDTH], 0
     je      .invalid_param
@@ -1459,12 +1615,7 @@ er_fn er_av1_frame_encode
     write_one_from_esi
     cmp     byte [r13 + AV1_FRAME_SHOW_EXISTING_FRAME], 1
     jne     .write_frame_type
-    movzx   esi, byte [r13 + AV1_FRAME_EXISTING_FRAME_IDX]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_EXISTING_FRAME_IDX, AV1_FRAME_REF_INDEX_BITS
     cmp     byte [r12 + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 1
     jne     .bytes_written
     mov     esi, [r13 + AV1_FRAME_DISPLAY_FRAME_ID]
@@ -1477,12 +1628,7 @@ er_fn er_av1_frame_encode
     jmp     .bytes_written
 
 .write_frame_type:
-    movzx   esi, byte [r13 + AV1_FRAME_TYPE]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_TYPE_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_TYPE, AV1_FRAME_TYPE_BITS
     movzx   esi, byte [r13 + AV1_FRAME_SHOW_FRAME]
     write_one_from_esi
     cmp     byte [r13 + AV1_FRAME_SHOW_FRAME], 1
@@ -1523,19 +1669,9 @@ er_fn er_av1_frame_encode
     je      .write_frame_size_override_bit
     cmp     byte [r13 + AV1_FRAME_ERROR_RESILIENT_MODE], 1
     je      .write_refresh_flags
-    movzx   esi, byte [r13 + AV1_FRAME_PRIMARY_REF_FRAME]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_PRIMARY_REF_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_PRIMARY_REF_FRAME, AV1_FRAME_PRIMARY_REF_BITS
 .write_refresh_flags:
-    movzx   esi, byte [r13 + AV1_FRAME_REFRESH_FRAME_FLAGS]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REFRESH_FLAGS_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_REFRESH_FRAME_FLAGS, AV1_FRAME_REFRESH_FLAGS_BITS
 
 .write_frame_size_override_bit:
     movzx   esi, byte [r13 + AV1_FRAME_FRAME_SIZE_OVERRIDE]
@@ -1562,48 +1698,13 @@ er_fn er_av1_frame_encode
     cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_SWITCH
     jne     .write_dimensions
 .write_ref_indices:
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX0]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX1]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX2]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX3]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX4]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX5]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_REF_FRAME_IDX6]
-    mov     rdi, rsp
-    mov     edx, AV1_FRAME_REF_INDEX_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX0, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX1, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX2, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX3, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX4, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX5, AV1_FRAME_REF_INDEX_BITS
+    write_byte_field_bits AV1_FRAME_REF_FRAME_IDX6, AV1_FRAME_REF_INDEX_BITS
     movzx   esi, byte [r13 + AV1_FRAME_ALLOW_HIGH_PRECISION_MV]
     write_one_from_esi
 
@@ -1640,11 +1741,7 @@ er_fn er_av1_frame_encode
     write_bits 1, 1
     mov     esi, ebx
     sub     esi, AV1_SUPERRES_DENOM_MIN
-    mov     rdi, rsp
-    mov     edx, AV1_SUPERRES_DENOM_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_SUPERRES_DENOM_BITS
     jmp     .write_render_size
 .write_superres_inactive:
     write_bits 0, 1
@@ -1705,18 +1802,8 @@ er_fn er_av1_frame_encode
     cmp     byte [r13 + AV1_FRAME_TILE_INFO_TILE_SIZE_BYTES], AV1_TILE_SIZE_BYTES_MAX
     ja      .invalid_param
     write_bits 1, 1
-    movzx   esi, byte [r13 + AV1_FRAME_TILE_INFO_COLS_LOG2]
-    mov     rdi, rsp
-    mov     edx, AV1_TILE_LOG2_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2]
-    mov     rdi, rsp
-    mov     edx, AV1_TILE_LOG2_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_TILE_INFO_COLS_LOG2, AV1_TILE_LOG2_BITS
+    write_byte_field_bits AV1_FRAME_TILE_INFO_ROWS_LOG2, AV1_TILE_LOG2_BITS
     movzx   ebx, byte [r13 + AV1_FRAME_TILE_INFO_COLS_LOG2]
     add     bl, [r13 + AV1_FRAME_TILE_INFO_ROWS_LOG2]
     test    ebx, ebx
@@ -1730,19 +1817,10 @@ er_fn er_av1_frame_encode
 .write_tile_size_bytes:
     movzx   esi, byte [r13 + AV1_FRAME_TILE_INFO_TILE_SIZE_BYTES]
     dec     esi
-    mov     rdi, rsp
-    mov     edx, AV1_TILE_SIZE_BYTES_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_TILE_SIZE_BYTES_BITS
 
 .write_quantization:
-    movzx   esi, byte [r13 + AV1_FRAME_BASE_Q_IDX]
-    mov     rdi, rsp
-    mov     edx, AV1_QUANT_BASE_Q_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_BASE_Q_IDX, AV1_QUANT_BASE_Q_BITS
     write_delta_q_from AV1_FRAME_DELTA_Q_Y_DC
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
     je      .write_qmatrix
@@ -1759,24 +1837,15 @@ er_fn er_av1_frame_encode
     jmp     .write_segmentation
 
 .write_segmentation:
-    movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_ENABLED]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_SEGMENTATION_ENABLED
     cmp     byte [r13 + AV1_FRAME_SEGMENTATION_ENABLED], 1
     jne     .write_delta_q_params
     cmp     byte [r13 + AV1_FRAME_PRIMARY_REF_FRAME], AV1_FRAME_PRIMARY_REF_NONE
     je      .write_segmentation_data
-    movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_UPDATE_MAP]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_SEGMENTATION_UPDATE_MAP
     cmp     byte [r13 + AV1_FRAME_SEGMENTATION_UPDATE_MAP], 1
     jne     .write_segmentation_temporal_done
-    movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_TEMPORAL_UPDATE]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_SEGMENTATION_TEMPORAL_UPDATE
 .write_segmentation_temporal_done:
     movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_UPDATE_DATA]
     cmp     esi, 1
@@ -1801,38 +1870,21 @@ er_fn er_av1_frame_encode
 .write_delta_q_params:
     cmp     byte [r13 + AV1_FRAME_BASE_Q_IDX], 0
     je      .write_delta_zero
-    movzx   esi, byte [r13 + AV1_FRAME_DELTA_Q_PRESENT]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_DELTA_Q_PRESENT
     cmp     byte [r13 + AV1_FRAME_DELTA_Q_PRESENT], 1
     jne     .write_delta_lf_zero_required
     movzx   esi, byte [r13 + AV1_FRAME_DELTA_Q_RES]
     cmp     esi, AV1_DELTA_Q_RES_MAX
     ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_DELTA_Q_RES_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_DELTA_LF_PRESENT]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_esi_bits AV1_DELTA_Q_RES_BITS
+    write_bit_field AV1_FRAME_DELTA_LF_PRESENT
     cmp     byte [r13 + AV1_FRAME_DELTA_LF_PRESENT], 1
     jne     .write_loop_filter
     movzx   esi, byte [r13 + AV1_FRAME_DELTA_LF_RES]
     cmp     esi, AV1_DELTA_LF_RES_MAX
     ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_DELTA_LF_RES_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_DELTA_LF_MULTI]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_esi_bits AV1_DELTA_LF_RES_BITS
+    write_bit_field AV1_FRAME_DELTA_LF_MULTI
     jmp     .write_loop_filter
 .write_delta_lf_zero_required:
     cmp     byte [r13 + AV1_FRAME_DELTA_Q_RES], 0
@@ -1860,53 +1912,22 @@ er_fn er_av1_frame_encode
 .write_loop_filter:
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .write_cdef
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_V]
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_H]
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_LOOP_FILTER_LEVEL_Y_V, AV1_LOOP_FILTER_LEVEL_BITS
+    write_byte_field_bits AV1_FRAME_LOOP_FILTER_LEVEL_Y_H, AV1_LOOP_FILTER_LEVEL_BITS
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
     je      .write_loop_filter_sharpness
     movzx   eax, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_V]
     movzx   ecx, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_Y_H]
     or      eax, ecx
     jz      .write_loop_filter_sharpness
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_U]
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_LEVEL_V]
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_LEVEL_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_bits AV1_FRAME_LOOP_FILTER_LEVEL_U, AV1_LOOP_FILTER_LEVEL_BITS
+    write_byte_field_bits AV1_FRAME_LOOP_FILTER_LEVEL_V, AV1_LOOP_FILTER_LEVEL_BITS
 .write_loop_filter_sharpness:
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_SHARPNESS]
-    mov     rdi, rsp
-    mov     edx, AV1_LOOP_FILTER_SHARPNESS_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_byte_field_bits AV1_FRAME_LOOP_FILTER_SHARPNESS, AV1_LOOP_FILTER_SHARPNESS_BITS
+    write_bit_field AV1_FRAME_LOOP_FILTER_DELTA_ENABLED
     cmp     byte [r13 + AV1_FRAME_LOOP_FILTER_DELTA_ENABLED], 1
     jne     .write_cdef
-    movzx   esi, byte [r13 + AV1_FRAME_LOOP_FILTER_DELTA_UPDATE]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_LOOP_FILTER_DELTA_UPDATE
     cmp     byte [r13 + AV1_FRAME_LOOP_FILTER_DELTA_UPDATE], 1
     jne     .write_cdef
     xor     ebx, ebx
@@ -1930,25 +1951,8 @@ er_fn er_av1_frame_encode
     jne     .write_restoration
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .write_restoration
-    movzx   esi, byte [r13 + AV1_FRAME_CDEF_DAMPING]
-    cmp     esi, AV1_CDEF_DAMPING_MIN
-    jb      .invalid_param
-    cmp     esi, AV1_CDEF_DAMPING_MAX
-    ja      .invalid_param
-    sub     esi, AV1_CDEF_DAMPING_MIN
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_DAMPING_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_CDEF_BITS]
-    cmp     esi, AV1_CDEF_BITS_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_BITS_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_range_offset_bits AV1_FRAME_CDEF_DAMPING, AV1_CDEF_DAMPING_MIN, AV1_CDEF_DAMPING_MAX, AV1_CDEF_DAMPING_BITS
+    write_byte_field_max_bits AV1_FRAME_CDEF_BITS, AV1_CDEF_BITS_MAX, AV1_CDEF_BITS_BITS
     movzx   eax, byte [r13 + AV1_FRAME_CDEF_BITS]
     mov     r14d, 1
     cmp     eax, 0
@@ -1966,45 +1970,11 @@ er_fn er_av1_frame_encode
     cmp     ebx, r14d
     jae     .write_restoration
     movzx   esi, byte [r13 + AV1_FRAME_CDEF_Y_PRI + rbx]
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_PRI_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_CDEF_Y_SEC + rbx]
-    cmp     esi, AV1_CDEF_SEC_SKIP
-    je      .invalid_param
-    cmp     esi, AV1_CDEF_SEC_MAX
-    ja      .invalid_param
-    cmp     esi, AV1_CDEF_SEC_MAX
-    jne     .write_cdef_y_sec
-    mov     esi, AV1_CDEF_SEC_SKIP
-.write_cdef_y_sec:
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_SEC_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_CDEF_PRI_BITS
+    write_cdef_sec_field AV1_FRAME_CDEF_Y_SEC
     movzx   esi, byte [r13 + AV1_FRAME_CDEF_UV_PRI + rbx]
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_PRI_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_CDEF_UV_SEC + rbx]
-    cmp     esi, AV1_CDEF_SEC_SKIP
-    je      .invalid_param
-    cmp     esi, AV1_CDEF_SEC_MAX
-    ja      .invalid_param
-    cmp     esi, AV1_CDEF_SEC_MAX
-    jne     .write_cdef_uv_sec
-    mov     esi, AV1_CDEF_SEC_SKIP
-.write_cdef_uv_sec:
-    mov     rdi, rsp
-    mov     edx, AV1_CDEF_SEC_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_CDEF_PRI_BITS
+    write_cdef_sec_field AV1_FRAME_CDEF_UV_SEC
     inc     ebx
     jmp     .write_cdef_loop
 
@@ -2013,65 +1983,23 @@ er_fn er_av1_frame_encode
     jne     .write_transform_ref
     cmp     byte [r13 + AV1_FRAME_ALLOW_INTRABC], 1
     je      .write_transform_ref
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_Y]
-    cmp     esi, AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_Y, AV1_RESTORATION_TYPE_MAX, AV1_RESTORATION_TYPE_BITS
     cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
     je      .write_restoration_units
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_U]
-    cmp     esi, AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_V]
-    cmp     esi, AV1_RESTORATION_TYPE_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_TYPE_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_U, AV1_RESTORATION_TYPE_MAX, AV1_RESTORATION_TYPE_BITS
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_V, AV1_RESTORATION_TYPE_MAX, AV1_RESTORATION_TYPE_BITS
 .write_restoration_units:
     cmp     byte [r13 + AV1_FRAME_RESTORATION_Y], AV1_RESTORE_NONE
     je      .write_restoration_unit_u
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_UNIT_Y]
-    cmp     esi, AV1_RESTORATION_UNIT_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_UNIT_Y, AV1_RESTORATION_UNIT_MAX, AV1_RESTORATION_UNIT_BITS
 .write_restoration_unit_u:
     cmp     byte [r13 + AV1_FRAME_RESTORATION_U], AV1_RESTORE_NONE
     je      .write_restoration_unit_v
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_UNIT_U]
-    cmp     esi, AV1_RESTORATION_UNIT_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_UNIT_U, AV1_RESTORATION_UNIT_MAX, AV1_RESTORATION_UNIT_BITS
 .write_restoration_unit_v:
     cmp     byte [r13 + AV1_FRAME_RESTORATION_V], AV1_RESTORE_NONE
     je      .write_transform_ref
-    movzx   esi, byte [r13 + AV1_FRAME_RESTORATION_UNIT_V]
-    cmp     esi, AV1_RESTORATION_UNIT_MAX
-    ja      .invalid_param
-    mov     rdi, rsp
-    mov     edx, AV1_RESTORATION_UNIT_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_byte_field_max_bits AV1_FRAME_RESTORATION_UNIT_V, AV1_RESTORATION_UNIT_MAX, AV1_RESTORATION_UNIT_BITS
 
 .write_transform_ref:
     movzx   esi, byte [r13 + AV1_FRAME_TX_MODE]
@@ -2094,14 +2022,8 @@ er_fn er_av1_frame_encode
     jne     .invalid_param
     jmp     .write_global_motion_zero_required
 .write_reference_select:
-    movzx   esi, byte [r13 + AV1_FRAME_REFERENCE_SELECT]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
-    movzx   esi, byte [r13 + AV1_FRAME_SKIP_MODE_PRESENT]
-    cmp     esi, 1
-    ja      .invalid_param
-    write_one_from_esi
+    write_bit_field AV1_FRAME_REFERENCE_SELECT
+    write_bit_field AV1_FRAME_SKIP_MODE_PRESENT
     jmp     .write_global_motion
 
 .write_global_motion_zero_required:
@@ -2117,7 +2039,7 @@ er_fn er_av1_frame_encode
     xor     ebx, ebx
 .write_global_motion_zero_param_loop:
     cmp     ebx, AV1_GLOBAL_MOTION_REF_COUNT * AV1_GLOBAL_MOTION_PARAM_COUNT
-    jae     .bytes_written
+    jae     .write_film_grain
     cmp     dword [r13 + AV1_FRAME_GLOBAL_MOTION_PARAMS + rbx * 4], 0
     jne     .invalid_param
     inc     ebx
@@ -2127,7 +2049,7 @@ er_fn er_av1_frame_encode
     xor     ebx, ebx
 .write_global_motion_loop:
     cmp     ebx, AV1_GLOBAL_MOTION_REF_COUNT
-    jae     .bytes_written
+    jae     .write_motion_tools
     movzx   esi, byte [r13 + AV1_FRAME_GLOBAL_MOTION_TYPES + rbx]
     cmp     esi, AV1_GLOBAL_MOTION_IDENTITY
     jne     .write_global_motion_nonidentity
@@ -2139,11 +2061,7 @@ er_fn er_av1_frame_encode
     ja      .invalid_param
     write_bits 1, 1
     movzx   esi, byte [r13 + AV1_FRAME_GLOBAL_MOTION_TYPES + rbx]
-    mov     rdi, rsp
-    mov     edx, AV1_GLOBAL_MOTION_TYPE_BITS
-    call    er_av1_bits_write
-    test    edx, edx
-    jnz     .done
+    write_esi_bits AV1_GLOBAL_MOTION_TYPE_BITS
     xor     r11d, r11d
 .write_global_motion_param_loop:
     cmp     byte [r13 + AV1_FRAME_GLOBAL_MOTION_TYPES + rbx], AV1_GLOBAL_MOTION_TRANSLATION
@@ -2167,6 +2085,135 @@ er_fn er_av1_frame_encode
 .write_global_motion_next:
     inc     ebx
     jmp     .write_global_motion_loop
+
+.write_motion_tools:
+    cmp     byte [r12 + AV1_SEQ_ENABLE_WARPED_MOTION], 1
+    jne     .write_interpolation_filter
+    cmp     byte [r13 + AV1_FRAME_FORCE_INTEGER_MV], 1
+    je      .write_interpolation_filter
+    write_bit_field AV1_FRAME_ALLOW_WARPED_MOTION
+.write_interpolation_filter:
+    cmp     byte [r12 + AV1_SEQ_ENABLE_DUAL_FILTER], 1
+    jne     .write_reduced_tx_set
+    cmp     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_SWITCHABLE
+    jne     .write_interpolation_fixed
+    write_bits 1, 1
+    jmp     .write_reduced_tx_set
+.write_interpolation_fixed:
+    cmp     byte [r13 + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_FIXED_MAX
+    ja      .invalid_param
+    write_bits 0, 1
+    write_byte_field_bits AV1_FRAME_INTERPOLATION_FILTER, AV1_INTERP_FILTER_BITS
+.write_reduced_tx_set:
+    write_bit_field AV1_FRAME_REDUCED_TX_SET
+    jmp     .write_film_grain
+
+.write_film_grain:
+    cmp     byte [r12 + AV1_SEQ_FILM_GRAIN], 1
+    jne     .write_film_grain_inactive_required
+    cmp     byte [r13 + AV1_FRAME_SHOW_FRAME], 1
+    je      .write_film_grain_apply
+    cmp     byte [r13 + AV1_FRAME_SHOWABLE_FRAME], 1
+    jne     .write_film_grain_inactive_required
+.write_film_grain_apply:
+    write_bit_field AV1_FRAME_FILM_GRAIN_APPLY
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_APPLY], 1
+    jne     .bytes_written
+    mov     esi, [r13 + AV1_FRAME_FILM_GRAIN_SEED]
+    write_esi_bits AV1_FILM_GRAIN_SEED_BITS
+    cmp     byte [r13 + AV1_FRAME_TYPE], AV1_FRAME_TYPE_INTER
+    jne     .write_film_grain_update_required
+    write_bit_field AV1_FRAME_FILM_GRAIN_UPDATE
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], 1
+    je      .write_film_grain_y_count
+    write_byte_field_bits AV1_FRAME_FILM_GRAIN_REF_IDX, AV1_FILM_GRAIN_REF_BITS
+    jmp     .bytes_written
+.write_film_grain_update_required:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_UPDATE], 1
+    jne     .invalid_param
+.write_film_grain_y_count:
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS, AV1_FILM_GRAIN_Y_POINTS_MAX, AV1_FILM_GRAIN_Y_POINTS_BITS
+    write_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS, AV1_FRAME_FILM_GRAIN_Y_VALUES, AV1_FRAME_FILM_GRAIN_Y_SCALING
+.write_film_grain_chroma_from_luma:
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .write_film_grain_chroma_counts
+    write_bit_field AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA
+.write_film_grain_chroma_counts:
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .write_film_grain_chroma_counts_zero_required
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    je      .write_film_grain_chroma_counts_zero_required
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .write_film_grain_chroma_counts_zero_required
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS, AV1_FILM_GRAIN_CHROMA_POINTS_MAX, AV1_FILM_GRAIN_CHROMA_POINTS_BITS
+    write_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS, AV1_FRAME_FILM_GRAIN_CB_VALUES, AV1_FRAME_FILM_GRAIN_CB_SCALING
+.write_film_grain_cr_count:
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FILM_GRAIN_CHROMA_POINTS_MAX, AV1_FILM_GRAIN_CHROMA_POINTS_BITS
+    write_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FRAME_FILM_GRAIN_CR_VALUES, AV1_FRAME_FILM_GRAIN_CR_SCALING
+.write_film_grain_chroma_counts_zero_required:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    jne     .invalid_param
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    jne     .invalid_param
+.write_film_grain_scaling:
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8, 3, AV1_FILM_GRAIN_SCALING_BITS
+    movzx   esi, byte [r13 + AV1_FRAME_FILM_GRAIN_AR_LAG]
+    cmp     esi, 3
+    ja      .invalid_param
+    mov     r14d, esi
+    write_esi_bits AV1_FILM_GRAIN_AR_LAG_BITS
+    lea     eax, [r14d + 1]
+    imul    eax, r14d
+    shl     eax, 1
+    mov     r14d, eax
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .write_film_grain_cb_coeffs_start
+    write_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_Y_COEFFS, r14d
+.write_film_grain_cb_coeffs_start:
+    movzx   ecx, byte [r13 + AV1_FRAME_FILM_GRAIN_AR_LAG]
+    lea     eax, [rcx + 1]
+    imul    eax, ecx
+    shl     eax, 1
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 0
+    je      .write_film_grain_cb_coeff_count_ready
+    inc     eax
+.write_film_grain_cb_coeff_count_ready:
+    mov     r14d, eax
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    jne     .write_film_grain_cb_coeff_loop_start
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    jne     .write_film_grain_cr_coeffs_start
+.write_film_grain_cb_coeff_loop_start:
+    write_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_CB_COEFFS, r14d
+.write_film_grain_cr_coeffs_start:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    jne     .write_film_grain_cr_coeff_loop_start
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    jne     .write_film_grain_shifts
+.write_film_grain_cr_coeff_loop_start:
+    write_film_grain_ar_coeffs AV1_FRAME_FILM_GRAIN_AR_CR_COEFFS, r14d
+.write_film_grain_shifts:
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6, 3, AV1_FILM_GRAIN_AR_SHIFT_BITS
+    write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_SCALE_SHIFT, 3, AV1_FILM_GRAIN_SCALE_SHIFT_BITS
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    je      .write_film_grain_cr_mults
+    write_byte_field_bits AV1_FRAME_FILM_GRAIN_CB_MULT, AV1_FILM_GRAIN_MULT_BITS
+    write_byte_field_bits AV1_FRAME_FILM_GRAIN_CB_LUMA_MULT, AV1_FILM_GRAIN_MULT_BITS
+    write_dword_field_max_bits AV1_FRAME_FILM_GRAIN_CB_OFFSET, AV1_FILM_GRAIN_OFFSET_MAX, AV1_FILM_GRAIN_OFFSET_BITS
+.write_film_grain_cr_mults:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    je      .write_film_grain_tail
+    write_byte_field_bits AV1_FRAME_FILM_GRAIN_CR_MULT, AV1_FILM_GRAIN_MULT_BITS
+    write_byte_field_bits AV1_FRAME_FILM_GRAIN_CR_LUMA_MULT, AV1_FILM_GRAIN_MULT_BITS
+    write_dword_field_max_bits AV1_FRAME_FILM_GRAIN_CR_OFFSET, AV1_FILM_GRAIN_OFFSET_MAX, AV1_FILM_GRAIN_OFFSET_BITS
+.write_film_grain_tail:
+    write_bit_field AV1_FRAME_FILM_GRAIN_OVERLAP
+    write_bit_field AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED
+    jmp     .bytes_written
+.write_film_grain_inactive_required:
+    cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_APPLY], 0
+    jne     .invalid_param
+    jmp     .bytes_written
 
 .bytes_written:
     mov     rdi, rsp
@@ -2246,6 +2293,8 @@ er_fn er_av1_frame_decode_reduced_still
     zero_delta_state
     zero_transform_ref_state
     zero_global_motion_state
+    zero_motion_tool_state
+    zero_film_grain_state
 
     movzx   esi, byte [r12 + AV1_SEQ_WIDTH_BITS]
     mov     rdi, rsp
@@ -2263,11 +2312,7 @@ er_fn er_av1_frame_decode_reduced_still
     inc     eax
     mov     [r13 + AV1_FRAME_HEIGHT], eax
 
-    mov     rdi, rsp
-    mov     esi, 1
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits 1
     test    eax, eax
     jnz     .render_different
     mov     eax, [r13 + AV1_FRAME_WIDTH]
@@ -2293,11 +2338,7 @@ er_fn er_av1_frame_decode_reduced_still
     mov     [r13 + AV1_FRAME_RENDER_HEIGHT], eax
 
 .allow_intrabc:
-    mov     rdi, rsp
-    mov     esi, 1
-    call    er_av1_bits_read
-    test    edx, edx
-    jnz     .done
+    read_bits 1
     mov     [r13 + AV1_FRAME_ALLOW_INTRABC], al
     mov     ebx, [rsp + AV1_BITS_POS]
     mov     [r13 + AV1_FRAME_HEADER_BITS], ebx

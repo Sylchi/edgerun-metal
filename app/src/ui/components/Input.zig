@@ -132,19 +132,6 @@ const input_icon_size: f32 = 16.0;
 const input_icon_gap: f32 = 8.0;
 const input_label_max_lines: usize = 1;
 
-test "input component serializes to canonical object and deserializes" {
-    const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = input.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Input.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(input.id, decoded.id);
-    try std.testing.expectEqualStrings(input.placeholder, decoded.placeholder);
-    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
-}
-
 test "input component renders placeholder through shared control text" {
     const input = Input{ .id = 10, .placeholder = "Search objects" };
     var h = component_test.SceneHarness(8){};

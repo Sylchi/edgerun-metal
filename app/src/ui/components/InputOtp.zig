@@ -86,18 +86,6 @@ const input_otp_slot_size: f32 = 36.0;
 const input_otp_slot_gap: f32 = 0.0;
 const input_otp_text_padding: f32 = 8.0;
 
-test "input otp component serializes to canonical object and deserializes" {
-    const otp = InputOtp{ .id = 440, .value = "123456" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = otp.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try InputOtp.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(otp.id, decoded.id);
-    try std.testing.expectEqualStrings(otp.value, decoded.value);
-}
-
 test "input otp component renders slots and hit regions" {
     const otp = InputOtp{ .id = 440, .value = "123" };
     var commands: [32]ui.Command = undefined;

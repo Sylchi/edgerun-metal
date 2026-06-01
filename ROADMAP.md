@@ -11,17 +11,22 @@ The full mapping from Tor semantics to OS primitives is specified in
 
 ---
 
-## Current State (Legacy Path)
+## Current State
 
-The existing Tor code (`asm/x86_64/crypto/tor_*.asm`, `asm/x86_64/net/`) is a
-legacy Tor client that speaks the real Tor link protocol over TCP via a hardcoded
-guard relay (`10.0.2.2:9001`). It is retained as-is — no code is deleted.
+The host-side implementation lives under `kernel/x86_64/`. The Tor code
+(`kernel/x86_64/crypto/tor*.asm`, `kernel/x86_64/net/`) still contains the
+legacy Tor-over-TCP path, but identity-addressed local cells, route registration,
+handler dispatch, and per-process circuit helpers now exist in
+`kernel/x86_64/crypto/local_cell.asm`, `local_route.asm`, and
+`local_circuit.asm`. The remaining work is to make those primitives the default
+network path instead of a tested side path.
 
 | Module | State | Reusable For Native Path |
 |--------|-------|--------------------------|
+| `local_cell.asm` / `local_route.asm` / `local_circuit.asm` | Working, tested | Native identity transport primitives |
 | `tor_cell.asm` — cell I/O, circuits, streams over TCP | Working 1-hop | Cell format, circuit table layout, relay cell processing |
-| `tor.asm` — client orchestrator, init, poll | Working 1-hop | Bootstrap flow reference |
-| `tor_ntor.asm` — ntor handshake | Working client side; **stubs:** `_fe_invert`, `_curve25519_ladder_step`, `er_tor_curve25519_scalar_mult` | Key derivation, handshake protocol — needs real scalar mult |
+| `tor.asm` — client orchestrator, init, poll | Working 1-hop plus local route binding | Bootstrap flow reference and bridge path |
+| `tor_ntor.asm` — ntor handshake | Working client side; Curve25519 coverage exists through `test-x25519` | Key derivation and handshake protocol |
 | `tor_aes.asm` — AES-128-CTR | Working | Reusable as-is |
 | `tor_digest.asm` — SHA-256/HMAC via TPM | Working | Replace with software SHA-256 once verified |
 | `sha256.asm` — software SHA-256 | Working (bug fixed) | Replaces TPM path for digest |
@@ -34,26 +39,16 @@ guard relay (`10.0.2.2:9001`). It is retained as-is — no code is deleted.
 
 ## Phase 0: Critical Crypto Gaps
 
-These are the minimum cryptographic primitives missing from the ntor path.
-Without these, identity-based routing cannot establish encrypted circuits.
+These are the cryptographic primitives that gate full native encrypted circuits.
+Curve25519 arithmetic is implemented and covered; Ed25519 remains open.
 
-### P0a — Curve25519 field inversion (`_fe_invert`)
-- **File:** `asm/x86_64/crypto/tor_ntor.asm:412`
-- **Current:** Stub — copies input to output
-- **Work:** Implement a^(p-2) mod 2^255-19 using existing `_fe_mul`, `_fe_sq`
-- **Forms basis of:** Curve25519 scalar multiplication
+| Primitive | File | Current | Coverage |
+|-----------|------|---------|----------|
+| `_fe_invert` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-fe-mul`, `./build.sh test-x25519` |
+| `_curve25519_ladder_step` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
+| `er_tor_curve25519_scalar_mult` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
 
-### P0b — Curve25519 Montgomery ladder (`_curve25519_ladder_step`)
-- **File:** `asm/x86_64/crypto/tor_ntor.asm:426`
-- **Current:** Stub — only `ret`
-- **Work:** Implement the Montgomery ladder step function
-- **Dependencies:** P0a (inversion needed for ladder finalization)
-
-### P0c — `er_tor_curve25519_scalar_mult`
-- **File:** `asm/x86_64/crypto/tor_ntor.asm:455`
-- **Current:** Placeholder — copies base point
-- **Work:** Replace with real scalar multiplication using P0b
-- **Forms basis of:** ntor handshake for both legacy and native paths
+These form the basis of ntor handshake support for both legacy and native paths.
 
 ### P0d — Ed25519 signing/verification
 - **File:** Does not exist yet (constants in `identity.asm`)
@@ -65,44 +60,47 @@ Without these, identity-based routing cannot establish encrypted circuits.
 
 ## Phase 1: Kernel Identity Routing Primitives
 
-Create the kernel syscall interface described in `00-os-mapping.md` section
-"Kernel Primitives."
+The in-kernel local transport exists and is covered by `./build.sh test-local-route`.
+The remaining work is syscall/exec integration and full production policy wiring.
 
 ### P1a — `register_handler` syscall
 - `register_handler(identity[32], ring_buffer_base, ring_buffer_size)`
-- Registers a process as the handler for a given identity
-- Kernel creates a shared-memory ring buffer for incoming cells
-- One identity per process (enforced at kernel level)
+- Local route registration and handler dispatch exist in
+  `kernel/x86_64/crypto/local_route.asm`
+- Kernel-created process ring ownership and syscall exposure remain future work
+- One identity per process still needs exec/syscall enforcement
 - **Replaces:** `tor_cell.asm`'s circuit listen path
-- **New file:** `asm/x86_64/crypto/identity_route.asm`
+- **Current file:** `kernel/x86_64/crypto/local_route.asm`
 
 ### P1b — `open_circuit` syscall
 - `open_circuit(destination_identity[32]) → circuit_fd`
-- Kernel looks up destination in routing table
-- Returns a circuit handle (fd) referencing a slot in the per-process circuit table
+- Local circuit open/close/send/recv helpers exist in
+  `kernel/x86_64/crypto/local_circuit.asm`
+- Syscall exposure and process table ownership remain future work
 - **Replaces:** `er_tor_circuit_create` TCP-based circuit
-- **New file:** `asm/x86_64/net/circuit.asm`
+- **Current file:** `kernel/x86_64/crypto/local_circuit.asm`
 
 ### P1c — `send` / `recv` cell syscalls
-- `send(circuit_fd, cell[256])` — fire-and-forget
-- `recv(circuit_fd) → cell[256]` — non-blocking poll
-- Kernel encrypts/decrypts per-hop in the send/recv path
+- `send(circuit_fd, cell[LOCAL_CELL_SIZE])` — fire-and-forget
+- `recv(circuit_fd) → cell[LOCAL_CELL_SIZE]` — non-blocking poll
+- Local cell send/recv and WASM import wrappers exist; per-hop encryption remains
+  future multi-hop work
 - **Replaces:** `er_tor_send_relay`, `er_tor_recv_relay` over TCP
-- **Extends:** `asm/x86_64/net/circuit.asm`
+- **Extends:** `kernel/x86_64/crypto/local_cell.asm` and `local_circuit.asm`
 
 ### P1d — Per-process circuit table
 - Fixed-size table (preallocated at process exec)
 - Entry: `[destination_id, path[5], keys[5], window_state, stream_table]`
-- Kernel manages the table; process accesses via circuit_fd
+- Local fixed-size circuit table exists; process exec ownership is not complete
 - **Reuses:** Circuit table layout from `tor_constants.inc`
-- **New file:** `asm/x86_64/kernel/circuit_table.asm`
+- **Current file:** `kernel/x86_64/crypto/local_circuit.asm`
 
-### P1e — Kernel cell type enum
-- Replace Tor command byte with kernel cell type enum
-- Types: `CELL_DATA`, `CELL_CREATE`, `CELL_CREATED`, `CELL_DESTROY`,
-  `CELL_SENDME`, `CELL_BEACON`, `CELL_REGISTER`, `CELL_ROUTE`
-- Fixed 256B cell in kernel ring buffers
-- **New file:** `asm/x86_64/net/cell_constants.inc`
+### P1e — Local cell command enum
+- Current commands are `LOCAL_CELL_DATA`, `LOCAL_CELL_OPEN`, and
+  `LOCAL_CELL_CLOSE` in `kernel/x86_64/crypto/local_constants.inc`
+- Tor fixed-cell shaped local cells exist as the current universal transport
+  shape: `[circ_id:4][cmd:1][payload:509]`, `LOCAL_CELL_SIZE = 514`
+- **Current file:** `kernel/x86_64/crypto/local_constants.inc`
 
 ---
 
@@ -121,7 +119,7 @@ Create the kernel syscall interface described in `00-os-mapping.md` section
 - If recognized: deliver to handler
 - If not: forward to next hop via routing table
 - **Reuses:** `tor_aes.asm` (AES-CTR), `sha256.asm` (digest)
-- **Extends:** `asm/x86_64/net/circuit.asm`
+- **Extends:** `kernel/x86_64/crypto/local_circuit.asm`
 
 ### P2c — Per-hop ntor key agreement
 - At each extend step, derive `Kf/Kb` (AES keys) and `Df/Db` (digest seeds)
@@ -138,21 +136,21 @@ Create the kernel syscall interface described in `00-os-mapping.md` section
 - Maintains routing table: identity → device_id → MAC/link
 - Privileged syscall: `set_route(id, next_hop, cost, expiry)` — DA only
 - Process registration: `register_handler(id)` at exec time
-- Boilerplate process in `asm/x86_64/crypto/da.asm`
+- Boilerplate process in `kernel/x86_64/agent/da.asm`
 
 ### P3b — Device beacon protocol
 - Raw ethernet broadcast on LAN
 - Beacon payload: `[device_id[32], timestamp, nonce, signature]`
 - Neighbor table: fixed N entries per device
 - Device discovery daemon (built into kernel or DA)
-- **New file:** `asm/x86_64/net/beacon.asm`
+- **New file:** `kernel/x86_64/net/beacon.asm`
 - **New MAC:** Use NIC MAC as link-layer address
 
 ### P3c — Routing table
 - Three-level map: `app_id → device_id`, `device_id → MAC + link_key`, `user_id → device_id`
 - Fixed-size, preallocated
 - DA updates via `set_route` syscall
-- **New file:** `asm/x86_64/net/route_table.asm`
+- **New file:** `kernel/x86_64/net/route_table.asm`
 
 ### P3d — Process identity at exec
 - Kernel assigns identity `= H(binary + TPM_measurement)` at exec time
@@ -169,12 +167,12 @@ Create the kernel syscall interface described in `00-os-mapping.md` section
 - Only process that speaks legacy TCP/IP
 - Translates native cells to TCP connections (SOCKS/DNS last resort)
 - Registers as handler for `IDENTITY_EXIT_BRIDGE`
-- **New file:** `asm/x86_64/net/exit_bridge.asm`
+- **New file:** `kernel/x86_64/net/exit_bridge.asm`
 
 ### P4b — Wire `er_tor_init` to native mode
 - Add native-mode path that bypasses TCP connect, TLS, VERSIONS
 - Use `register_handler` + `open_circuit` instead
-- Keep legacy path as fallback for exit bridge interop
+- Keep legacy path only as the explicit exit bridge interop path
 
 ### P4c — Bypass legacy Tor link handshake
 - No VERSIONS negotiation
@@ -321,7 +319,7 @@ on the block device.
 
 ### P6g — Host Conversion Tool
 
-- **New file:** `asm/host/obj_convert.asm`
+- **New file:** `kernel/host/obj_convert.asm`
 - **Work:** Linux userspace tool that walks a filesystem tree, wraps every file
   as `OBJECT_KIND_BYTES`, every directory as `OBJECT_KIND_TREE`, and writes them
   into a PersistentStore partition. Also builds the index: each file is indexed

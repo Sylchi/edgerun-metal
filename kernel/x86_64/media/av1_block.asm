@@ -401,6 +401,252 @@ er_fn er_av1_block_inverse_tx_8x8
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
+; er_av1_block_residual_sub_8x8(dst, src, src_stride, pred, pred_stride)
+; rdi=i16 residual[64], rsi=u8 source, edx=source stride, rcx=u8 predictor, r8d=pred stride.
+; Stores source - predictor for one 8x8 encoder block.
+er_fn er_av1_block_residual_sub_8x8
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    cmp     edx, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    cmp     r8d, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, rcx
+    xor     ebx, ebx
+.row:
+    cmp     ebx, AV1_BLOCK_DIM_8
+    jae     .ok
+    mov     eax, ebx
+    imul    eax, r14d
+    lea     r10, [r13 + rax]
+    mov     eax, ebx
+    imul    eax, r8d
+    lea     r11, [r15 + rax]
+    imul    eax, ebx, AV1_BLOCK_DIM_8
+    lea     r9, [r12 + rax * 2]
+    xor     edx, edx
+.col:
+    cmp     edx, AV1_BLOCK_DIM_8
+    jae     .next_row
+    movzx   eax, byte [r10 + rdx]
+    movzx   ecx, byte [r11 + rdx]
+    sub     eax, ecx
+    mov     [r9 + rdx * 2], ax
+    inc     edx
+    jmp     .col
+.next_row:
+    inc     ebx
+    jmp     .row
+.ok:
+    mov     eax, AV1_BLOCK_PIXELS_8X8
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_block_forward_tx_8x8(dst, residual, tx_type)
+; rdi=i16 coeffs[64], rsi=i16 residual[64], edx=AV1_TX_TYPE_*.
+er_fn er_av1_block_forward_tx_8x8
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 16
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     edx, AV1_TX_TYPE_MAX
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    xor     ebx, ebx
+.clear_loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .dispatch
+    mov     word [r12 + rbx * 2], 0
+    inc     ebx
+    jmp     .clear_loop
+.dispatch:
+    cmp     r14d, AV1_TX_TYPE_IDTX
+    je      .idtx
+    cmp     r14d, AV1_TX_TYPE_DC_ONLY
+    je      .dc_only
+    jmp     .dct_dct
+.idtx:
+    xor     ebx, ebx
+.idtx_loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .ok
+    mov     ax, [r13 + rbx * 2]
+    mov     [r12 + rbx * 2], ax
+    inc     ebx
+    jmp     .idtx_loop
+.dc_only:
+    xor     eax, eax
+    xor     ebx, ebx
+.dc_loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .dc_store
+    movsx   ecx, word [r13 + rbx * 2]
+    add     eax, ecx
+    inc     ebx
+    jmp     .dc_loop
+.dc_store:
+    test    eax, eax
+    js      .dc_negative
+    add     eax, AV1_BLOCK_PIXELS_8X8 / 2
+    jmp     .dc_shift
+.dc_negative:
+    sub     eax, AV1_BLOCK_PIXELS_8X8 / 2
+.dc_shift:
+    sar     eax, 6
+    mov     [r12], ax
+    jmp     .ok
+.dct_dct:
+    xor     r14d, r14d
+.dct_v_loop:
+    cmp     r14d, AV1_BLOCK_DIM_8
+    jae     .ok
+    xor     r15d, r15d
+.dct_u_loop:
+    cmp     r15d, AV1_BLOCK_DIM_8
+    jae     .dct_next_v
+    mov     dword [rsp], 0
+    mov     dword [rsp + 4], 0
+.dct_y_loop:
+    cmp     dword [rsp + 4], AV1_BLOCK_DIM_8
+    jae     .dct_store
+    mov     dword [rsp + 8], 0
+.dct_x_loop:
+    cmp     dword [rsp + 8], AV1_BLOCK_DIM_8
+    jae     .dct_next_y
+    mov     eax, [rsp + 4]
+    shl     eax, 3
+    add     eax, [rsp + 8]
+    movsx   eax, word [r13 + rax * 2]
+    test    eax, eax
+    jz      .dct_next_x
+    mov     ebx, r15d
+    shl     ebx, 3
+    add     ebx, [rsp + 8]
+    movsx   ebx, word [rel av1_idct8_basis + rbx * 2]
+    imul    eax, ebx
+    mov     ebx, r14d
+    shl     ebx, 3
+    add     ebx, [rsp + 4]
+    movsx   ebx, word [rel av1_idct8_basis + rbx * 2]
+    imul    eax, ebx
+    add     [rsp], eax
+.dct_next_x:
+    inc     dword [rsp + 8]
+    jmp     .dct_x_loop
+.dct_next_y:
+    inc     dword [rsp + 4]
+    jmp     .dct_y_loop
+.dct_store:
+    mov     eax, [rsp]
+    test    eax, eax
+    js      .dct_round_negative
+    add     eax, 1 << (AV1_TX_DCT_FORWARD_SCALE_BITS - 1)
+    jmp     .dct_shift
+.dct_round_negative:
+    sub     eax, 1 << (AV1_TX_DCT_FORWARD_SCALE_BITS - 1)
+.dct_shift:
+    sar     eax, AV1_TX_DCT_FORWARD_SCALE_BITS
+    cmp     eax, AV1_COEFF_MIN_16
+    jl      .dct_clip_low
+    cmp     eax, AV1_COEFF_MAX_16
+    jg      .dct_clip_high
+    jmp     .dct_write
+.dct_clip_low:
+    mov     eax, AV1_COEFF_MIN_16
+    jmp     .dct_write
+.dct_clip_high:
+    mov     eax, AV1_COEFF_MAX_16
+.dct_write:
+    mov     ebx, r14d
+    shl     ebx, 3
+    add     ebx, r15d
+    mov     [r12 + rbx * 2], ax
+    inc     r15d
+    jmp     .dct_u_loop
+.dct_next_v:
+    inc     r14d
+    jmp     .dct_v_loop
+.ok:
+    mov     eax, AV1_BLOCK_PIXELS_8X8
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_stack_free 16
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_block_quant_8x8(dst, coeffs, qstep)
+; rdi=i16 quantized[64], rsi=i16 coeffs[64], edx=quant step.
+er_fn er_av1_block_quant_8x8
+    er_push rbx, r12, r13, r14
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     edx, AV1_QUANT_STEP_MIN
+    jb      .invalid_param
+    cmp     edx, AV1_QUANT_STEP_MAX
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .ok
+    movsx   eax, word [r13 + rbx * 2]
+    test    eax, eax
+    js      .negative
+    mov     ecx, r14d
+    shr     ecx, 1
+    add     eax, ecx
+    xor     edx, edx
+    div     r14d
+    jmp     .store
+.negative:
+    neg     eax
+    mov     ecx, r14d
+    shr     ecx, 1
+    add     eax, ecx
+    xor     edx, edx
+    div     r14d
+    neg     eax
+.store:
+    mov     [r12 + rbx * 2], ax
+    inc     ebx
+    jmp     .loop
+.ok:
+    mov     eax, AV1_BLOCK_PIXELS_8X8
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
 ; er_av1_tile_decode_intra8x8_luma(ctx, image_desc, cdfs, qstep, disable_update)
 ; Walks an 8-bit luma tile in 8x8 blocks and reconstructs into image_desc Y.
 er_fn er_av1_tile_decode_intra8x8_luma

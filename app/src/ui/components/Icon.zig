@@ -125,18 +125,6 @@ fn renderIconGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: u
 
 pub const default_size: f32 = 18.0;
 
-test "icon component serializes to canonical object and deserializes" {
-    const icon_component = Icon.named(.search);
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = icon_component.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Icon.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(icon.Icon.search, decoded.value);
-    try std.testing.expectEqualStrings(icon.label(.search), decoded.label);
-}
-
 test "icon slot can be constructed from icon component value" {
     const component = Icon.named(.code);
     const slot = IconSlot.of(.leading, component);

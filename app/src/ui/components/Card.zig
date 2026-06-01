@@ -202,19 +202,6 @@ pub fn variantFromTag(tag: u16) Error!common.SurfaceVariant {
     };
 }
 
-test "card component serializes to canonical object and deserializes" {
-    const card = Card{ .title = "Project", .detail = "Interactive docs", .variant = .elevated };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = card.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Card.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqualStrings(card.title, decoded.title);
-    try std.testing.expectEqualStrings(card.detail, decoded.detail);
-    try std.testing.expectEqual(common.SurfaceVariant.elevated, decoded.variant);
-}
-
 test "card component lays out detail-only content without empty title gap" {
     const card = Card{ .title = "", .detail = "Only detail" };
     var commands: [16]ui.Command = undefined;

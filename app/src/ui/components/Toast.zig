@@ -128,33 +128,18 @@ const toast_title_line_height: f32 = 14.0;
 const toast_detail_line_height: f32 = 12.0;
 const toast_text_max_lines: usize = 2;
 
-test "toast component serializes to canonical object and deserializes" {
-    const toast = Toast{ .id = 1002, .title = "Saved", .detail = "Notification" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = toast.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Toast.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(toast.id, decoded.id);
-    try std.testing.expectEqualStrings(toast.title, decoded.title);
-    try std.testing.expectEqualStrings(toast.detail, decoded.detail);
-}
-
 test "toast component renders title detail and hit region" {
     const toast = Toast{ .id = 1002, .title = "Saved", .detail = "Notification" };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
 
-    try toast.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
-    try toast.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(toast, ui.Rect.init(0, 0, 240, 52), .{});
+    try toast.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Saved"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Notification"));
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.button, collector.written()[0].kind);
+    try h.expectText("Saved");
+    try h.expectText("Notification");
+    try h.expectHitCount(1);
+    try h.expectHitKind(0, .button);
 }
 
 test "toast measurement wraps long content under narrow constraints" {

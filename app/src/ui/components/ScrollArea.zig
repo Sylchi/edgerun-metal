@@ -130,15 +130,6 @@ const scroll_area_thumb_ratio: f32 = 0.45;
 const scroll_area_label = "Scrollable content";
 const scroll_area_label_max_lines: usize = 1;
 
-test "scroll area component serializes to canonical object and deserializes" {
-    const scroll_area = ScrollArea{};
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = scroll_area.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    _ = try ScrollArea.fromView(try object.View.decode(canonical));
-}
-
 test "scroll area component renders viewport and scrollbar" {
     const scroll_area = ScrollArea{};
     var commands: [16]ui.Command = undefined;

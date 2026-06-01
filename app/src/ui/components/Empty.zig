@@ -94,19 +94,6 @@ const empty_detail_max_lines: usize = 2;
 const empty_min_width: f32 = 144.0;
 const empty_min_height: f32 = 96.0;
 
-test "empty component serializes icon slot to canonical object and deserializes" {
-    const empty = Empty{ .title = "No results", .detail = "Try another filter.", .icon_slot = IconSlot.named(.media, .search) };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = empty.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Empty.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqualStrings(empty.title, decoded.title);
-    try std.testing.expectEqualStrings(empty.detail, decoded.detail);
-    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.media.value);
-}
-
 test "empty component renders media title and description" {
     const empty = Empty{ .title = "No results", .detail = "Try another filter." };
     var commands: [16]ui.Command = undefined;

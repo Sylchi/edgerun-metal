@@ -131,18 +131,6 @@ const textarea_padding: f32 = 12.0;
 const textarea_max_lines: usize = 4;
 const textarea_min_width: f32 = 96.0;
 
-test "textarea component serializes to canonical object and deserializes" {
-    const textarea = Textarea{ .id = 21, .placeholder = "Describe this app" };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = textarea.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Textarea.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(textarea.id, decoded.id);
-    try std.testing.expectEqualStrings(textarea.placeholder, decoded.placeholder);
-}
-
 test "textarea component wraps placeholder inside shared control inset" {
     const textarea = Textarea{ .id = 21, .placeholder = "Describe this app state" };
     var commands: [16]ui.Command = undefined;
@@ -168,7 +156,6 @@ test "textarea component renders value when present" {
     try std.testing.expectEqual(ui.Color.text, value.text.color);
     try std.testing.expect(component_test.textCommand(scene.written(), "Describe this app state") == null);
 }
-
 
 test "textarea text grid maps pointer position to byte cursor" {
     const value = "aa\nbbbb\nc";

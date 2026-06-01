@@ -116,13 +116,14 @@ verify the receipt
   - `app/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
     GLES, and DRM paths.
 - `build.sh` — all build commands. No Makefile for production paths.
-- `AGENTS.md` — working agreements, session history, porting rules.
+- `AGENTS.md` — working agreements, repository rules, and porting constraints.
 
 ## What Is Real In This Repo
 
-- `./build.sh test` passes the current self-hosted ASM test surface: runtime,
-  drivers, HTTP/TLS/Tor, local routing, AV1 reduced media paths, WASM compiler,
-  WASM JIT, recursion validation, float opcodes, and Pi emulator checks.
+- `./build.sh test` passes the current default self-hosted ASM test surface:
+  runtime, drivers, HTTP/TLS/Tor, identity/local routing, AV1 media paths,
+  WASM compiler/JIT, recursion validation, float opcodes, owned assembler smoke
+  tests, and Pi emulator checks.
 - `./build.sh kernel` builds the x86_64 kernel image with the current host-side
   ASM stack: drivers, TPM, local cells/routes/circuits, DA, WASM interpreter,
   WASM compiler/JIT pieces, Tor pieces, media codecs, and framebuffer/render IR.
@@ -213,136 +214,8 @@ Transport is dumb. No object crosses a device boundary unless explicitly public,
 
 ---
 
-## UI Streaming Architecture
-
-### Core Principle
-
-If it crosses a device boundary, it is an object.
-
-Everything that moves between devices — IR frames, input events, hit results, image textures, video frames — is a canonical `object.zig` `Kind.bytes` or `Kind.tree` payload.
-
-### Object Types
-
-| What | Object Kind | Body | Reference |
-|------|------------|------|-----------|
-| App IR frame | `bytes` | `ir.BodyHeader` + float arrays | `render/ir.zig`: `encodeBody` / `applyBody` |
-| Composited IR frame | `bytes` | Same format, merged output | `render/compositor.zig`: `compose` |
-| Image texture | `bytes` | `ERIMG001` tiled RGBA | `media/image_object.zig` |
-| Input event | `bytes` | Binary event record | `app_input_event.zig` |
-| Hit result | `bytes` | Hit ID + position + scope | compositor output |
-
-### Pipeline
-
-```
-Device A (app host)                          Device B (renderer)
- App produces IR                              receive object
-  → ir.encodeBody()       object bytes         → View.decode()
-  → object.bytesNode()   ─────────────────→   → applyBody()
-                         (BT / WiFi)          → backend renders
-
- Media decoded locally                        receive image object
-  → ERIMG tiles           object body          → ERIMG decode
-  → object.bytesNode()   ─────────────────→   → upload as texture
-                                               → IR references it
-```
-
-### Compositor
-
-The compositor is pure IR-in/IR-out data transformation. No framebuffer, no pixel ops, no software backend dependency. Compiles to WASM.
-
-- Receives serialized IR objects from apps, tagged with a `Layer`
-- Merges by fixed Z-order: scrim < menu < popover < modal < toast
-- Applies cursor IR based on latest pointer position
-- Outputs serialized merged IR object for backends
-- Performs hit-testing on the merged spatial layout
-
-### Media As Objects
-
-Images and video frames are decoded on the source device into `ERIMG001` tiled RGBA (`media/runtime_image.zig`), wrapped as `Kind.bytes` objects by `media/image_object.zig`. On the receiver, the body is decoded back into ERIMG tiles, uploaded as a GPU texture, and referenced by `IR.image_vertices`. No raw pixel stream crosses the device boundary.
-
-### Fragmentation
-
-Large payloads use `Kind.tree` — children with offset/len fields provide built-in reassembly:
-```
-tree object (logical_len = 74 KB)
-  ├─ child offset=0    len=256
-  ├─ child offset=256  len=256
-  └─ ...
-```
-No separate fragment protocol. See `object.zig`: `Child`, `View.decode`.
-
-### Module Boundaries
-
-| Module | Responsibility | WASM |
-|--------|---------------|------|
-| `render/ir.zig` | IR types, push functions, body encode/decode | no |
-| `render/compositor.zig` | IR merge by layer, overlay system | yes |
-| `render/pipeline.zig` | Scene→IR packing, text rasterization, presentation | no |
-| `render/backends/` | Pixel-level renderers (sw, gles) | no |
-| `media/runtime_image.zig` | ERIMG001 tiled RGBA encode/decode | yes |
-| `media/image_object.zig` | ERIMG ↔ object envelope | yes |
-| `ui_codec.zig` | ERUI001 component tree decode | yes |
-| `ui_renderer.zig` | Component tree → IR (WASM-facing) | yes |
-| `app_input_event.zig` | Input event binary format | yes |
-| `object.zig` | Canonical object format | yes |
-| `runtime/render.zig` | Frame orchestration (scene→IR→render) | no |
-
----
-
-## UI Relay Architecture
-
-### Domain Separation
-
-UI is not a root authority. It never knows what the objects mean — it renders slots and emits narrow intent receipts. The UI domain and App domain communicate only over a message channel (the "relay"):
-
-```
-user hits (x,y)  →  UI emits "slot 7 activated"  →  App resolves to action
-app updates      →  App emits scene description   →  UI renders natively
-```
-
-### Authority Boundary
-
-```
-user → input device → [UI Domain] → relay → [App Domain] → storage/network
-                             ↓                         ↓
-                      scene renderer              business logic
-                      zero authority               full authority
-                      no state                      owns state
-```
-
-The UI domain renders whatever scene it receives, collects raw input, and has no access to storage, identity keys, or app data. The App domain owns all business logic, state, and data.
-
-### Relay Protocol
-
-Messages are self-contained binary packets with a 12-byte header:
-
-```
-Offset  Size  Field
-0       4     magic: 0x4552524C ("ERRL")
-4       1     version: 0x01
-5       1     message_type
-6       4     sequence_number
-10      2     payload_length
-```
-
-| Type | Code | Direction | Payload |
-|------|------|-----------|---------|
-| SceneUpdate | 0x01 | App → UI | packed Render IR scene |
-| InputEvent | 0x02 | UI → App | serialized input events |
-| Resize | 0x03 | UI → App | viewport width/height |
-| Hover | 0x04 | UI → App | pointer x/y |
-| IntentReceipt | 0x05 | UI → App | user intent receipt |
-| Ack | 0x80 | bidirectional | acked sequence number |
-
-### Transport Abstraction
-
-The same binary format works over same-process coroutines, serial/UART (HDLC-style 0x7E framing), BLE advertisements (31-byte limit), and TCP/UDP (length-prefixed).
-
-### Multi-Device
-
-A single app broadcasts its scene to multiple UI hosts. Each renders independently. Input from any device flows back to the app. Devices may have different resolutions and input capabilities.
-
----
+Detailed UI streaming and relay notes live in
+[`app/docs/ui-architecture.md`](app/docs/ui-architecture.md).
 
 ## Try The Important Checks
 
@@ -351,28 +224,14 @@ A single app broadcasts its scene to multiple UI hosts. Each renders independent
 ./build.sh kernel
 ```
 
-Focused checks:
+Focused checks are registry-driven. Use `test-list` to discover the canonical
+target names instead of copying a hand-maintained list from this README.
 
 ```sh
-./build.sh test-ctype
-./build.sh test-clock
-./build.sh test-http
-./build.sh test-serial
-./build.sh test-sw-fb
-./build.sh test-render-ir
-./build.sh test-wasm-compiler
-./build.sh test-wasm-jit
-./build.sh test-wasm-float
-./build.sh test-recursion-valid
-./build.sh test-recursion-invalid
-./build.sh test-fe-mul
-./build.sh test-spi-flash
-./build.sh test-tor
-./build.sh test-tor-cell
-./build.sh test-tor-hs
-./build.sh test-local-route
-./build.sh test-av1-reduced
-./build.sh test-x25519
+./build.sh test-list
+./build.sh test-status
+./build.sh test-status --core
+./build.sh test-status test-wasm-jit test-local-route test-tor-hs-app
 ```
 
 Build the standalone component WASM artifact:

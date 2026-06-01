@@ -3,6 +3,7 @@ const ui = @import("../ui/core.zig");
 const video_module = @import("video.zig");
 const ivf_container = @import("video_ivf.zig");
 const webm_container = @import("video_webm.zig");
+const webm_test = @import("test_webm_builder.zig");
 
 const Format = video_module.Format;
 const Codec = video_module.Codec;
@@ -445,37 +446,40 @@ test "webm vp8 decoder reconstructs zero-motion interframes from reference" {
 test "webm vp8 decoder reconstructs multi-macroblock zero-motion interframes" {
     var inter_payload: [test_vp8_inter_zero_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterZeroFrame(&inter_payload);
-    const webm = try buildTestWebmWithSizedPayloads(
-        std.testing.allocator,
-        test_vp8_wide_gray_width,
-        test_vp8_wide_gray_height,
-        &test_vp8_wide_gray_payload,
-        inter_frame,
-        webm_container.codec_vp8,
-    );
-    defer std.testing.allocator.free(webm);
-
-    var decoder = try Decoder.init(webm);
-    var pixels: [test_vp8_wide_gray_width * test_vp8_wide_gray_height]ui.Color = undefined;
-    var scratch: [test_vp8_wide_gray_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestWideGrayFrame(&pixels);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 24), second.timestamp);
-    try expectTestWideGrayFrame(&pixels);
+    try expectWideWebmInterframe(inter_frame, expectTestWideGrayFrame);
 }
 
 test "webm vp8 decoder reconstructs interframe residuals" {
     var inter_payload: [test_vp8_inter_residual_payload_len]u8 = undefined;
     const inter_frame = writeTestVp8InterResidualFrame(&inter_payload);
+    try expectWideWebmInterframe(inter_frame, expectTestWideLightFrame);
+}
+
+test "webm vp8 decoder reconstructs shifted interframes" {
+    var inter_payload: [test_vp8_inter_shift_payload_len]u8 = undefined;
+    const inter_frame = writeTestVp8InterShiftFrame(&inter_payload);
+    try expectStripeWebmInterframe(inter_frame, expectTestStripeShiftedFrame);
+}
+
+test "webm vp8 decoder reconstructs fractional-motion interframes" {
+    var inter_payload: [test_vp8_inter_fractional_payload_len]u8 = undefined;
+    const inter_frame = writeTestVp8InterFractionalFrame(&inter_payload);
+    try expectStripeWebmInterframe(inter_frame, expectTestStripeFractionalFrame);
+}
+
+test "webm vp8 decoder applies loop filter to fractional-motion interframes" {
+    var inter_payload: [test_vp8_inter_fractional_filtered_payload_len]u8 = undefined;
+    const inter_frame = writeTestVp8InterFractionalFilteredFrame(&inter_payload);
+    try expectStripeWebmInterframe(inter_frame, expectTestStripeFractionalFilteredFrame);
+}
+
+fn expectWideWebmInterframe(second_payload: []const u8, expect_second: *const fn ([]const ui.Color) anyerror!void) !void {
     const webm = try buildTestWebmWithSizedPayloads(
         std.testing.allocator,
         test_vp8_wide_gray_width,
         test_vp8_wide_gray_height,
         &test_vp8_wide_gray_payload,
-        inter_frame,
+        second_payload,
         webm_container.codec_vp8,
     );
     defer std.testing.allocator.free(webm);
@@ -489,18 +493,16 @@ test "webm vp8 decoder reconstructs interframe residuals" {
     const second = (try decoder.nextFrame(&pixels, &scratch)).?;
     try std.testing.expectEqual(@as(usize, 1), second.index);
     try std.testing.expectEqual(@as(u64, 24), second.timestamp);
-    try expectTestWideLightFrame(&pixels);
+    try expect_second(&pixels);
 }
 
-test "webm vp8 decoder reconstructs shifted interframes" {
-    var inter_payload: [test_vp8_inter_shift_payload_len]u8 = undefined;
-    const inter_frame = writeTestVp8InterShiftFrame(&inter_payload);
+fn expectStripeWebmInterframe(second_payload: []const u8, expect_second: *const fn ([]const ui.Color) anyerror!void) !void {
     const webm = try buildTestWebmWithSizedPayloads(
         std.testing.allocator,
         test_vp8_stripe_width,
         test_vp8_stripe_height,
         &test_vp8_stripe_payload,
-        inter_frame,
+        second_payload,
         webm_container.codec_vp8,
     );
     defer std.testing.allocator.free(webm);
@@ -514,57 +516,11 @@ test "webm vp8 decoder reconstructs shifted interframes" {
     const second = (try decoder.nextFrame(&pixels, &scratch)).?;
     try std.testing.expectEqual(@as(usize, 1), second.index);
     try std.testing.expectEqual(@as(u64, 24), second.timestamp);
-    try expectTestStripeFrame(&pixels, test_vp8_stripe_shift);
+    try expect_second(&pixels);
 }
 
-test "webm vp8 decoder reconstructs fractional-motion interframes" {
-    var inter_payload: [test_vp8_inter_fractional_payload_len]u8 = undefined;
-    const inter_frame = writeTestVp8InterFractionalFrame(&inter_payload);
-    const webm = try buildTestWebmWithSizedPayloads(
-        std.testing.allocator,
-        test_vp8_stripe_width,
-        test_vp8_stripe_height,
-        &test_vp8_stripe_payload,
-        inter_frame,
-        webm_container.codec_vp8,
-    );
-    defer std.testing.allocator.free(webm);
-
-    var decoder = try Decoder.init(webm);
-    var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
-    var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestStripeFrame(&pixels, 0);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 24), second.timestamp);
-    try expectTestStripeFractionalFrame(&pixels);
-}
-
-test "webm vp8 decoder applies loop filter to fractional-motion interframes" {
-    var inter_payload: [test_vp8_inter_fractional_filtered_payload_len]u8 = undefined;
-    const inter_frame = writeTestVp8InterFractionalFilteredFrame(&inter_payload);
-    const webm = try buildTestWebmWithSizedPayloads(
-        std.testing.allocator,
-        test_vp8_stripe_width,
-        test_vp8_stripe_height,
-        &test_vp8_stripe_payload,
-        inter_frame,
-        webm_container.codec_vp8,
-    );
-    defer std.testing.allocator.free(webm);
-
-    var decoder = try Decoder.init(webm);
-    var pixels: [test_vp8_stripe_pixel_count]ui.Color = undefined;
-    var scratch: [test_vp8_stripe_reference_len]u8 = undefined;
-    _ = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try expectTestStripeFrame(&pixels, 0);
-
-    const second = (try decoder.nextFrame(&pixels, &scratch)).?;
-    try std.testing.expectEqual(@as(usize, 1), second.index);
-    try std.testing.expectEqual(@as(u64, 24), second.timestamp);
-    try expectTestStripeFractionalFilteredFrame(&pixels);
+fn expectTestStripeShiftedFrame(pixels: []const ui.Color) !void {
+    try expectTestStripeFrame(pixels, test_vp8_stripe_shift);
 }
 
 test "webm vp8 frame decoder reconstructs blockgroup pixels" {
@@ -797,9 +753,11 @@ fn buildTestWebmTwoClusters(allocator: std.mem.Allocator) ![]u8 {
     var segment: std.ArrayList(u8) = .empty;
     defer segment.deinit(allocator);
     try appendTestWebmTracks(allocator, &segment, webm_container.codec_vp8);
-    try appendTestWebmCluster(allocator, &segment, &test_vp8_gray_payload, 20, &.{}, false);
-    try appendTestWebmCluster(allocator, &segment, &test_vp8_gray_payload, 30, &[_]u8{3}, false);
-    return buildTestWebmFromSegment(allocator, segment.items);
+    try webm_test.appendCluster(allocator, &segment, .video, 20, &.{}, false);
+    try webm_test.appendCluster(allocator, &segment, .video, 30, &.{
+        .{ .payload = &test_vp8_gray_payload, .relative_timecode = 3 },
+    }, false);
+    return webm_test.finish(allocator, segment.items);
 }
 
 fn buildTestWebmWithPayload(allocator: std.mem.Allocator, payload: []const u8, two_frames: bool, codec_id: []const u8) ![]u8 {
@@ -814,8 +772,11 @@ fn buildTestWebmWithSizedPayloads(allocator: std.mem.Allocator, width: usize, he
     var segment: std.ArrayList(u8) = .empty;
     defer segment.deinit(allocator);
     try appendTestWebmTracksSized(allocator, &segment, codec_id, width, height);
-    try appendTestWebmClusterPayloads(allocator, &segment, first_payload, second_payload, 20, 3, 4);
-    return buildTestWebmFromSegment(allocator, segment.items);
+    try webm_test.appendCluster(allocator, &segment, .video, 20, &.{
+        .{ .payload = first_payload, .relative_timecode = 3 },
+        .{ .payload = second_payload, .relative_timecode = 4 },
+    }, false);
+    return webm_test.finish(allocator, segment.items);
 }
 
 fn buildTestWebmContainer(allocator: std.mem.Allocator, payload: []const u8, two_frames: bool, codec_id: []const u8, block_group: bool) ![]u8 {
@@ -823,11 +784,16 @@ fn buildTestWebmContainer(allocator: std.mem.Allocator, payload: []const u8, two
     defer segment.deinit(allocator);
     try appendTestWebmTracks(allocator, &segment, codec_id);
     if (two_frames) {
-        try appendTestWebmCluster(allocator, &segment, payload, 20, &[_]u8{ 3, 4 }, block_group);
+        try webm_test.appendCluster(allocator, &segment, .video, 20, &.{
+            .{ .payload = payload, .relative_timecode = 3 },
+            .{ .payload = payload, .relative_timecode = 4 },
+        }, block_group);
     } else {
-        try appendTestWebmCluster(allocator, &segment, payload, 20, &[_]u8{if (block_group) 5 else 3}, block_group);
+        try webm_test.appendCluster(allocator, &segment, .video, 20, &.{
+            .{ .payload = payload, .relative_timecode = if (block_group) 5 else 3 },
+        }, block_group);
     }
-    return buildTestWebmFromSegment(allocator, segment.items);
+    return webm_test.finish(allocator, segment.items);
 }
 
 fn appendTestWebmTracks(allocator: std.mem.Allocator, segment: *std.ArrayList(u8), codec_id: []const u8) !void {
@@ -835,104 +801,11 @@ fn appendTestWebmTracks(allocator: std.mem.Allocator, segment: *std.ArrayList(u8
 }
 
 fn appendTestWebmTracksSized(allocator: std.mem.Allocator, segment: *std.ArrayList(u8), codec_id: []const u8, width: usize, height: usize) !void {
-    var track_entry: std.ArrayList(u8) = .empty;
-    defer track_entry.deinit(allocator);
-    try appendTestEbmlElement(allocator, &track_entry, &[_]u8{0xd7}, &[_]u8{1});
-    try appendTestEbmlElement(allocator, &track_entry, &[_]u8{0x83}, &[_]u8{@intCast(webm_container.track_type_video)});
-    try appendTestEbmlElement(allocator, &track_entry, &[_]u8{0x86}, codec_id);
-
-    var video_elements: std.ArrayList(u8) = .empty;
-    defer video_elements.deinit(allocator);
-    try appendTestEbmlElement(allocator, &video_elements, &[_]u8{0xb0}, &[_]u8{@intCast(width)});
-    try appendTestEbmlElement(allocator, &video_elements, &[_]u8{0xba}, &[_]u8{@intCast(height)});
-    try appendTestEbmlElement(allocator, &track_entry, &[_]u8{0xe0}, video_elements.items);
-
-    var tracks: std.ArrayList(u8) = .empty;
-    defer tracks.deinit(allocator);
-    try appendTestEbmlElement(allocator, &tracks, &[_]u8{0xae}, track_entry.items);
-    try appendTestEbmlElement(allocator, segment, &[_]u8{ 0x16, 0x54, 0xae, 0x6b }, tracks.items);
-}
-
-fn appendTestWebmCluster(allocator: std.mem.Allocator, segment: *std.ArrayList(u8), payload: []const u8, timecode: u8, relative_timecodes: []const u8, block_group: bool) !void {
-    var block: std.ArrayList(u8) = .empty;
-    defer block.deinit(allocator);
-
-    var cluster: std.ArrayList(u8) = .empty;
-    defer cluster.deinit(allocator);
-    try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xe7}, &[_]u8{timecode});
-
-    for (relative_timecodes) |relative_timecode| {
-        block.clearRetainingCapacity();
-        try appendTestWebmBlockPayload(allocator, &block, relative_timecode, payload);
-        if (block_group) {
-            var group: std.ArrayList(u8) = .empty;
-            defer group.deinit(allocator);
-            try appendTestEbmlElement(allocator, &group, &[_]u8{0xa1}, block.items);
-            try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xa0}, group.items);
-        } else {
-            try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xa3}, block.items);
-        }
-    }
-
-    try appendTestEbmlElement(allocator, segment, &[_]u8{ 0x1f, 0x43, 0xb6, 0x75 }, cluster.items);
-}
-
-fn appendTestWebmClusterPayloads(
-    allocator: std.mem.Allocator,
-    segment: *std.ArrayList(u8),
-    first_payload: []const u8,
-    second_payload: []const u8,
-    timecode: u8,
-    first_relative_timecode: u8,
-    second_relative_timecode: u8,
-) !void {
-    var block: std.ArrayList(u8) = .empty;
-    defer block.deinit(allocator);
-
-    var cluster: std.ArrayList(u8) = .empty;
-    defer cluster.deinit(allocator);
-    try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xe7}, &[_]u8{timecode});
-
-    try appendTestWebmBlockPayload(allocator, &block, first_relative_timecode, first_payload);
-    try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xa3}, block.items);
-
-    block.clearRetainingCapacity();
-    try appendTestWebmBlockPayload(allocator, &block, second_relative_timecode, second_payload);
-    try appendTestEbmlElement(allocator, &cluster, &[_]u8{0xa3}, block.items);
-
-    try appendTestEbmlElement(allocator, segment, &[_]u8{ 0x1f, 0x43, 0xb6, 0x75 }, cluster.items);
-}
-
-fn buildTestWebmFromSegment(allocator: std.mem.Allocator, segment: []const u8) ![]u8 {
-    var webm: std.ArrayList(u8) = .empty;
-    errdefer webm.deinit(allocator);
-    try appendTestEbmlElement(allocator, &webm, &[_]u8{ 0x1a, 0x45, 0xdf, 0xa3 }, &.{});
-    try appendTestEbmlElement(allocator, &webm, &[_]u8{ 0x18, 0x53, 0x80, 0x67 }, segment);
-    return webm.toOwnedSlice(allocator);
-}
-
-fn appendTestWebmBlockPayload(allocator: std.mem.Allocator, block: *std.ArrayList(u8), relative_timecode: u8, payload: []const u8) !void {
-    try block.append(allocator, 0x81);
-    try block.append(allocator, 0);
-    try block.append(allocator, relative_timecode);
-    try block.append(allocator, 0x80);
-    try block.appendSlice(allocator, payload);
-}
-
-fn appendTestEbmlElement(allocator: std.mem.Allocator, list: *std.ArrayList(u8), id: []const u8, payload: []const u8) !void {
-    try list.appendSlice(allocator, id);
-    try appendTestEbmlSize(allocator, list, payload.len);
-    try list.appendSlice(allocator, payload);
-}
-
-fn appendTestEbmlSize(allocator: std.mem.Allocator, list: *std.ArrayList(u8), payload_len: usize) !void {
-    if (payload_len < 0x7f) {
-        try list.append(allocator, 0x80 | @as(u8, @intCast(payload_len)));
-        return;
-    }
-    if (payload_len >= 0x3fff) return error.BadVideo;
-    const high: u8 = @intCast(payload_len >> 8);
-    const low: u8 = @intCast(payload_len & 0xff);
-    try list.append(allocator, 0x40 | high);
-    try list.append(allocator, low);
+    try webm_test.appendTracks(allocator, segment, &.{
+        .{ .video = .{
+            .codec_id = codec_id,
+            .width = width,
+            .height = height,
+        } },
+    });
 }

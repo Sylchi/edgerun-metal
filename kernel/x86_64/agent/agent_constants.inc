@@ -1,6 +1,6 @@
 ; Agent protocol constants — message types, flags, well-known identities
 ;
-; Agent messages are carried inside cell payloads (251 bytes).
+; Agent messages are carried inside Tor fixed-cell bodies (509 bytes).
 ; The object-native payload envelope is fixed:
 ;   Byte 0:       Agent message type
 ;   Byte 1:       Agent message flags
@@ -8,7 +8,7 @@
 ;   Bytes 6..37:  Request object id
 ;   Bytes 38..69: Input object id
 ;   Bytes 70..101: Grant or receipt object id
-;   Bytes 102..250: Small inline arguments
+;   Bytes 102..508: Small inline arguments
 
 ; ==================================================================
 ; Agent message types (byte 0 of agent cell payload)
@@ -37,7 +37,7 @@ AGENT_PAYLOAD_INLINE_ARGS equ 102
 
 AGENT_PAYLOAD_SENDER_SLOT_SIZE equ 4
 AGENT_PAYLOAD_OBJECT_ID_SIZE equ 32
-AGENT_PAYLOAD_INLINE_ARGS_SIZE equ 149
+AGENT_PAYLOAD_INLINE_ARGS_SIZE equ 407
 
 ; ==================================================================
 ; Agent message flags (byte 1 of agent cell payload)
@@ -48,7 +48,7 @@ AGENT_FLAG_END        equ 2  ; last cell of this message
 ; ==================================================================
 ; Agent handler function signature
 ; All agent handlers follow the same calling convention:
-;   rdi = pointer to incoming cell (256 bytes)
+;   rdi = pointer to incoming cell (514 bytes)
 ;   rsi = sender slot_id
 ; Returns: eax = 0, edx = 0 on success
 ; ==================================================================

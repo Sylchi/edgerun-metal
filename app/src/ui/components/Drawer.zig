@@ -96,33 +96,18 @@ const drawer_handle_y: f32 = 5.0;
 const drawer_handle_radius: f32 = 2.0;
 const drawer_panel = primitives.TitleDetailPanel{ .radius = drawer_radius, .padding = drawer_padding, .title_y = 14.0, .title_h = 14.0, .detail_y = 31.0, .detail_h = 12.0 };
 
-test "drawer component serializes to canonical object and deserializes" {
-    const drawer = Drawer{ .id = 998, .title = "Edit profile", .detail = "Drawer content" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = drawer.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Drawer.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(drawer.id, decoded.id);
-    try std.testing.expectEqualStrings(drawer.title, decoded.title);
-    try std.testing.expectEqualStrings(drawer.detail, decoded.detail);
-}
-
 test "drawer component renders trigger content and hit regions" {
     const drawer = Drawer{ .id = 998, .title = "Edit profile", .detail = "Drawer content" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 2){};
+    h.init();
 
-    try drawer.render(&scene, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{drawer.id} } });
-    try drawer.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 76));
+    try h.render(drawer, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{drawer.id} } });
+    try drawer.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 76));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Edit profile"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Drawer content"));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 999), collector.written()[1].id);
+    try h.expectText("Edit profile");
+    try h.expectText("Drawer content");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 999);
 }
 
 test "drawer measurement follows title and detail text" {

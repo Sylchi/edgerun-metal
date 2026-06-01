@@ -17,7 +17,7 @@ failed: resq 1
 seq:    resb AV1_SEQ_SIZE
 frame:  resb AV1_FRAME_SIZE
 seqbuf: resb 16
-outbuf: resb 128
+outbuf: resb 256
 
 SECTION .text
 global _start
@@ -656,6 +656,9 @@ _start:
     mov     byte [rel seq + AV1_SEQ_ORDER_HINT_BITS], 5
     mov     byte [rel seq + AV1_SEQ_ENABLE_CDEF], 0
     mov     byte [rel seq + AV1_SEQ_ENABLE_RESTORATION], 0
+    mov     byte [rel seq + AV1_SEQ_ENABLE_WARPED_MOTION], 1
+    mov     byte [rel seq + AV1_SEQ_ENABLE_DUAL_FILTER], 1
+    mov     byte [rel seq + AV1_SEQ_FILM_GRAIN], 1
     mov     byte [rel seq + AV1_SEQ_FORCE_SCREEN_CONTENT_TOOLS], 0
     mov     byte [rel seq + AV1_SEQ_FORCE_INTEGER_MV], AV1_SEQ_SELECT_INTEGER_MV
     mov     byte [rel frame + AV1_FRAME_SHOW_EXISTING_FRAME], 0
@@ -709,8 +712,28 @@ _start:
     mov     dword [rel frame + AV1_FRAME_GLOBAL_MOTION_PARAMS + (3 * AV1_GLOBAL_MOTION_PARAM_STRIDE) + 12], -4
     mov     dword [rel frame + AV1_FRAME_GLOBAL_MOTION_PARAMS + (3 * AV1_GLOBAL_MOTION_PARAM_STRIDE) + 16], 5
     mov     dword [rel frame + AV1_FRAME_GLOBAL_MOTION_PARAMS + (3 * AV1_GLOBAL_MOTION_PARAM_STRIDE) + 20], -6
+    mov     byte [rel frame + AV1_FRAME_ALLOW_WARPED_MOTION], 1
+    mov     byte [rel frame + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP_SHARP
+    mov     byte [rel frame + AV1_FRAME_REDUCED_TX_SET], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_APPLY], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_UPDATE], 1
+    mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_SEED], 0x1234
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_VALUES], 12
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_SCALING], 34
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], 2
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_LAG], 0
+    mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CB_COEFFS], 7
+    mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CR_COEFFS], -8
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], 3
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_OVERLAP], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED], 1
     mov     rdi, outbuf
-    mov     esi, 128
+    mov     esi, 256
     mov     rdx, seq
     mov     rcx, frame
     call    er_av1_frame_encode
@@ -725,7 +748,7 @@ _start:
 
 .decode_inter_frame:
     mov     rdi, outbuf
-    mov     esi, 128
+    mov     esi, 256
     mov     rdx, seq
     mov     rcx, frame
     call    er_av1_frame_decode
@@ -786,6 +809,42 @@ _start:
     cmp     dword [rel frame + AV1_FRAME_GLOBAL_MOTION_PARAMS + (3 * AV1_GLOBAL_MOTION_PARAM_STRIDE) + 16], 5
     jne     .fail_decode_inter_frame
     cmp     dword [rel frame + AV1_FRAME_GLOBAL_MOTION_PARAMS + (3 * AV1_GLOBAL_MOTION_PARAM_STRIDE) + 20], -6
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_ALLOW_WARPED_MOTION], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_INTERPOLATION_FILTER], AV1_INTERP_FILTER_EIGHTTAP_SHARP
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_REDUCED_TX_SET], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_APPLY], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_UPDATE], 1
+    jne     .fail_decode_inter_frame
+    cmp     dword [rel frame + AV1_FRAME_FILM_GRAIN_SEED], 0x1234
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_VALUES], 12
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_SCALING], 34
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], 2
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_LAG], 0
+    jne     .fail_decode_inter_frame
+    cmp     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CB_COEFFS], 7
+    jne     .fail_decode_inter_frame
+    cmp     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CR_COEFFS], -8
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], 3
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_OVERLAP], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED], 1
     jne     .fail_decode_inter_frame
     inc     qword [rel passed]
     jmp     .done

@@ -6,7 +6,7 @@
 ;
 ; Agent identity: BLAKE3("edgerun.agent.http")
 ;
-; Request cell payload format (251 bytes max):
+; Request cell body format (509 bytes max):
 ;   [0]     = AGENT_MSG_REQUEST (1)
 ;   [1]     = AGENT_FLAG_END (flags)
 ;   [2..5]  = sender_slot_id (u32 LE)

@@ -64,34 +64,19 @@ const menu_radius: f32 = 8.0;
 const menu_list_layout = primitives.MenuListLayout{ .padding = 5.0, .item_h = 14.0, .item_pitch = 16.0, .item_radius = 4.0, .item_padding = 5.0, .item_text_h = 12.0 };
 const menu_trigger_padding: f32 = 8.0;
 
-test "dropdown menu component serializes to canonical object and deserializes" {
-    const menu = DropdownMenu{ .id = 998, .first = "Profile", .second = "Settings" };
-    var ui_raw: [224]u8 = undefined;
-    var object_raw: [object.header_size + 224]u8 = undefined;
-
-    const canonical = menu.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try DropdownMenu.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(menu.id, decoded.id);
-    try std.testing.expectEqualStrings(menu.first, decoded.first);
-    try std.testing.expectEqualStrings(menu.second, decoded.second);
-}
-
 test "dropdown menu component renders menu rows and hit regions" {
     const menu = DropdownMenu{ .id = 998, .first = "Profile", .second = "Settings" };
-    var commands: [24]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [3]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(24, 3){};
+    h.init();
 
-    try menu.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{menu.id} } });
-    try menu.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
+    try h.render(menu, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{menu.id} } });
+    try menu.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Open"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Profile"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Settings"));
-    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 1000), collector.written()[2].id);
+    try h.expectText("Open");
+    try h.expectText("Profile");
+    try h.expectText("Settings");
+    try h.expectHitCount(3);
+    try h.expectHitId(2, 1000);
 }
 
 test "dropdown menu measurement follows item text" {

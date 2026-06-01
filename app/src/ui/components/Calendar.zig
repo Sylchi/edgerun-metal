@@ -148,19 +148,6 @@ const calendar_day_text_padding: f32 = 2.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
 
-test "calendar component serializes to canonical object and deserializes" {
-    const calendar = Calendar{ .id = 992, .month = "May 2026", .selected_day = 25 };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = calendar.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Calendar.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(calendar.id, decoded.id);
-    try std.testing.expectEqual(calendar.selected_day, decoded.selected_day);
-    try std.testing.expectEqualStrings(calendar.month, decoded.month);
-}
-
 test "calendar component renders caption days and hit regions" {
     const calendar = Calendar{ .id = 992, .month = "May 2026", .selected_day = 25 };
     var commands: [80]ui.Command = undefined;

@@ -33,8 +33,8 @@ const max_session_children: usize = max_events + 1;
 const max_agents: usize = 7;
 const max_tools: usize = 7;
 const context_window_tokens: u32 = 32 * 1024;
-pub const agent_cell_payload_size: usize = 251;
-pub const agent_cell_inline_args_size: usize = 149;
+pub const agent_cell_payload_size: usize = 509;
+pub const agent_cell_inline_args_size: usize = 407;
 pub const agent_request_body_size: usize = 196;
 pub const agent_event_body_size: usize = 198;
 pub const stage_transition_body_size: usize = 168;
@@ -165,7 +165,7 @@ pub const AgentCellEnvelope = struct {
             .request_object = idFromBytes(in[6..38]),
             .input_object = idFromBytes(in[38..70]),
             .grant_or_receipt = idFromBytes(in[70..102]),
-            .inline_args = inlineArgsFromBytes(in[102..251]),
+            .inline_args = inlineArgsFromBytes(in[102..agent_cell_payload_size]),
             .inline_len = agent_cell_inline_args_size,
         };
         if (envelope.sender_slot == 0 or !bytes.nonzero(&envelope.request_object) or !bytes.nonzero(&envelope.input_object) or !bytes.nonzero(&envelope.grant_or_receipt)) return null;

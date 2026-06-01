@@ -84,35 +84,19 @@ pub const toggle_group_item_count: u32 = 3;
 const toggle_group_third_label = "Right";
 const toggle_text_padding: f32 = 8.0;
 
-test "toggle group component serializes to canonical object and deserializes" {
-    const group = ToggleGroup{ .id = 550, .first = "Left", .second = "Center", .active = 1 };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = group.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try ToggleGroup.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(group.id, decoded.id);
-    try std.testing.expectEqualStrings(group.first, decoded.first);
-    try std.testing.expectEqualStrings(group.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 1), decoded.active);
-}
-
 test "toggle group component renders toggles and hit regions" {
     const group = ToggleGroup{ .id = 550, .first = "Left", .second = "Center", .active = 1 };
-    var commands: [32]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [toggle_group_item_count]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(32, 3){};
+    h.init();
 
-    try group.render(&scene, ui.Rect.init(0, 0, 180, 36), .{});
-    try group.collectInteractions(&collector, ui.Rect.init(0, 0, 180, 36));
+    try h.render(group, ui.Rect.init(0, 0, 180, 36), .{});
+    try group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 180, 36));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Left"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Center"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Right"));
-    try std.testing.expectEqual(@as(usize, toggle_group_item_count), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 552), collector.written()[2].id);
+    try h.expectText("Left");
+    try h.expectText("Center");
+    try h.expectText("Right");
+    try h.expectHitCount(toggle_group_item_count);
+    try h.expectHitId(2, 552);
 }
 
 test "toggle group measurement follows segment labels" {

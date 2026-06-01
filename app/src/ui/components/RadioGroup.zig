@@ -105,33 +105,17 @@ const radio_dot_size: f32 = 8.0;
 const radio_option_gap: f32 = 6.0;
 const radio_label_max_lines: usize = 1;
 
-test "radio group component serializes to canonical object and deserializes" {
-    const radio = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable", .selected = 1 };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = radio.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try RadioGroup.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(radio.id, decoded.id);
-    try std.testing.expectEqualStrings(radio.first, decoded.first);
-    try std.testing.expectEqualStrings(radio.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 1), decoded.selected);
-}
-
 test "radio group component renders selected indicator and option hits" {
     const radio = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable", .selected = 1 };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 2){};
+    h.init();
 
-    try radio.render(&scene, ui.Rect.init(0, 0, 220, 52), .{});
-    try radio.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 52));
+    try h.render(radio, ui.Rect.init(0, 0, 220, 52), .{});
+    try radio.collectInteractions(&h.collector, ui.Rect.init(0, 0, 220, 52));
 
-    try std.testing.expect(component_test.hasFillColor(scene.written(), ui.Color.accent));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 71), collector.written()[1].id);
+    try h.expectFillColor(ui.Color.accent);
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 71);
 }
 
 test "radio group measurement follows option labels" {

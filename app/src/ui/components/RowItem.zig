@@ -185,19 +185,6 @@ const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 6 };
 const row_icon_chip_fill = ui.Color{ .r = 13, .g = 19, .b = 23, .a = 186 };
 const row_rim_height: f32 = 1.0;
 
-test "row item component serializes to canonical object and deserializes" {
-    const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = row.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try RowItem.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(row.id, decoded.id);
-    try std.testing.expectEqualStrings(row.title, decoded.title);
-    try std.testing.expectEqualStrings(row.detail, decoded.detail);
-}
-
 test "row item component renders title and detail through shared row renderer" {
     const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };
     var commands: [8]ui.Command = undefined;

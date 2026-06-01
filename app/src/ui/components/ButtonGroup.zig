@@ -80,33 +80,17 @@ fn segmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
 const group_item_count: u16 = 2;
 const toggle_text_padding: f32 = 8.0;
 
-test "button group component serializes to canonical object and deserializes" {
-    const group = ButtonGroup{ .id = 90, .first = "Left", .second = "Right", .active = 1 };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = group.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try ButtonGroup.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(group.id, decoded.id);
-    try std.testing.expectEqualStrings(group.first, decoded.first);
-    try std.testing.expectEqualStrings(group.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 1), decoded.active);
-}
-
 test "button group component renders segments and hit regions" {
     const group = ButtonGroup{ .id = 90, .first = "Left", .second = "Right", .active = 1 };
-    var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(16, 2){};
+    h.init();
 
-    try group.render(&scene, ui.Rect.init(0, 0, 160, 36), .{});
-    try group.collectInteractions(&collector, ui.Rect.init(0, 0, 160, 36));
+    try h.render(group, ui.Rect.init(0, 0, 160, 36), .{});
+    try group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 160, 36));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Left"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Right"));
-    try std.testing.expectEqual(@as(u32, 91), collector.written()[1].id);
+    try h.expectText("Left");
+    try h.expectText("Right");
+    try h.expectHitId(1, 91);
 }
 
 test "button group measurement follows segment labels" {

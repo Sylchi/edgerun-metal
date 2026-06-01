@@ -163,6 +163,14 @@ _tor_stream_ptr:
     er_err  ERROR_INVALID_PARAM
     ret
 
+global er_tor_send_cell
+er_tor_send_cell:
+    mov     rsi, rdi        ; cell
+    mov     edi, [tor_conn_id]
+    mov     edx, TOR_CELL_LEN
+    call    er_tls_send
+    ret
+
 _tor_cell_send:
     mov     edi, [tor_conn_id]
     mov     rsi, rsi        ; cell

@@ -111,20 +111,6 @@ const menubar_item_padding_x: f32 = 8.0;
 const menubar_third_label = "View";
 const menubar_label_max_lines: usize = 1;
 
-test "menubar component serializes to canonical object and deserializes" {
-    const menubar = Menubar{ .id = 120, .first = "File", .second = "Edit", .active = 2 };
-    var ui_raw: [160]u8 = undefined;
-    var object_raw: [object.header_size + 160]u8 = undefined;
-
-    const canonical = menubar.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Menubar.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(menubar.id, decoded.id);
-    try std.testing.expectEqualStrings(menubar.first, decoded.first);
-    try std.testing.expectEqualStrings(menubar.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 2), decoded.active);
-}
-
 test "menubar component renders items and hit regions" {
     const menubar = Menubar{ .id = 120, .first = "File", .second = "Edit", .active = 1 };
     var commands: [24]ui.Command = undefined;

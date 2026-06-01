@@ -121,18 +121,6 @@ pub fn variantFromTag(tag: u16) Error!common.BadgeVariant {
     };
 }
 
-test "badge component serializes to canonical object and deserializes" {
-    const badge = Badge{ .label = "Ready", .variant = .outline };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = badge.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Badge.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqualStrings("Ready", decoded.label);
-    try std.testing.expectEqual(common.BadgeVariant.outline, decoded.variant);
-}
-
 test "badge component renders reference variants" {
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);

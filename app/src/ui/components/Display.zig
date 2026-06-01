@@ -406,13 +406,6 @@ const label_height: f32 = 16.0;
 const label_min_width: f32 = 24.0;
 const label_max_lines: usize = 2;
 
-test "separator component serializes to canonical object and deserializes" {
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = (Separator{}).toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    _ = try Separator.fromView(try object.View.decode(canonical));
-}
-
 test "separator component renders centered border line" {
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -420,13 +413,6 @@ test "separator component renders centered border line" {
     try (Separator{}).render(&scene, ui.Rect.init(4, 10, 120, 9), .{ .style = .{ .border = border } });
     const line = component_test.fillRectColor(scene.written(), border).?;
     try std.testing.expectEqual(ui.Rect.init(4, 14, 120, 1), line);
-}
-
-test "skeleton component serializes to canonical object and deserializes" {
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = (Skeleton{}).toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    _ = try Skeleton.fromView(try object.View.decode(canonical));
 }
 
 test "skeleton component renders muted accent pulse base" {
@@ -437,14 +423,6 @@ test "skeleton component renders muted accent pulse base" {
     try std.testing.expectEqual(ui.Rect.init(8, 12, 120, 20), rect);
 }
 
-test "spinner component serializes to canonical object and deserializes" {
-    const spinner = Spinner{};
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = spinner.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    _ = try Spinner.fromView(try object.View.decode(canonical));
-}
-
 test "spinner component renders deterministic status mark" {
     const spinner = Spinner{};
     var commands: [8]ui.Command = undefined;
@@ -453,15 +431,6 @@ test "spinner component renders deterministic status mark" {
     try std.testing.expectEqual(@as(usize, 2), scene.written().len);
     try std.testing.expectEqual(ui.RectMode.border, scene.written()[0].rect.mode);
     try std.testing.expectEqual(ui.RectMode.pie_slice, scene.written()[1].rect.mode);
-}
-
-test "progress component serializes to canonical object and deserializes" {
-    const progress = Progress{ .value = 0.64 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = progress.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Progress.fromView(try object.View.decode(canonical));
-    try std.testing.expect(@abs(decoded.value - progress.value) < 0.001);
 }
 
 test "progress component clamps rendered fill to track" {
@@ -475,16 +444,6 @@ test "progress component clamps rendered fill to track" {
     try std.testing.expect(fill.x + fill.w <= bounds.x + bounds.w);
 }
 
-test "aspect ratio component serializes to canonical object and deserializes" {
-    const ratio = AspectRatio{ .ratio_w = 16, .ratio_h = 9 };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = ratio.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try AspectRatio.fromView(try object.View.decode(canonical));
-    try std.testing.expectEqual(@as(u16, 16), decoded.ratio_w);
-    try std.testing.expectEqual(@as(u16, 9), decoded.ratio_h);
-}
-
 test "aspect ratio component keeps frame inside bounds" {
     const ratio = AspectRatio{ .ratio_w = 16, .ratio_h = 9 };
     var commands: [4]ui.Command = undefined;
@@ -493,15 +452,6 @@ test "aspect ratio component keeps frame inside bounds" {
     const frame = component_test.lastFillRect(scene.written()).?;
     try std.testing.expectEqual(@as(f32, 160.0), frame.w);
     try std.testing.expect(frame.h < frame.w);
-}
-
-test "kbd component serializes to canonical object and deserializes" {
-    const kbd = Kbd{ .label = "Ctrl-K" };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = kbd.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Kbd.fromView(try object.View.decode(canonical));
-    try std.testing.expectEqualStrings("Ctrl-K", decoded.label);
 }
 
 test "kbd component centers label through shared control text" {
@@ -516,15 +466,6 @@ test "kbd component centers label through shared control text" {
     try std.testing.expectEqual(@as(f32, 8.0), label.text.origin.h);
 }
 
-test "avatar component serializes to canonical object and deserializes" {
-    const avatar = Avatar{ .label = "ER" };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = avatar.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Avatar.fromView(try object.View.decode(canonical));
-    try std.testing.expectEqualStrings("ER", decoded.label);
-}
-
 test "avatar component centers initials through shared control text" {
     const avatar = Avatar{ .label = "ER" };
     var commands: [8]ui.Command = undefined;
@@ -534,15 +475,6 @@ test "avatar component centers initials through shared control text" {
     try std.testing.expectEqual(ui.TextAlign.center, label.text.alignment);
     try std.testing.expectEqual(@as(f32, 28.0), label.text.origin.x);
     try std.testing.expectEqual(@as(f32, 37.0), label.text.origin.y);
-}
-
-test "label component serializes to canonical object and deserializes" {
-    const label = Label{ .value = "Email" };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-    const canonical = label.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Label.fromView(try object.View.decode(canonical));
-    try std.testing.expectEqualStrings(label.value, decoded.value);
 }
 
 test "label component renders its own text slot" {

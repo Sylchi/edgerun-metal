@@ -115,35 +115,20 @@ const combobox_option_padding: f32 = 8.0;
 const combobox_option_indicator_w: f32 = 28.0;
 const combobox_text_max_lines: usize = 1;
 
-test "combobox component serializes to canonical object and deserializes" {
-    const combobox = Combobox{ .id = 991, .placeholder = "Search framework", .selected = "React" };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = combobox.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Combobox.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(combobox.id, decoded.id);
-    try std.testing.expectEqualStrings(combobox.placeholder, decoded.placeholder);
-    try std.testing.expectEqualStrings(combobox.selected, decoded.selected);
-}
-
 test "combobox component renders input option and hit regions" {
     const combobox = Combobox{ .id = 991, .placeholder = "Search framework", .selected = "React" };
-    var commands: [20]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [2]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(20, 2){};
+    h.init();
 
-    try combobox.render(&scene, ui.Rect.init(0, 0, 240, 82), .{});
-    try combobox.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 82));
+    try h.render(combobox, ui.Rect.init(0, 0, 240, 82), .{});
+    try combobox.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 82));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Search framework"));
-    try std.testing.expect(component_test.hasText(scene.written(), "React"));
-    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.check).tag()));
-    try std.testing.expectEqual(@as(usize, 2), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
-    try std.testing.expectEqual(ui.HitKind.button, collector.written()[1].kind);
+    try h.expectText("Search framework");
+    try h.expectText("React");
+    try h.expectIcon(Icon.named(.check).tag());
+    try h.expectHitCount(2);
+    try h.expectHitKind(0, .input);
+    try h.expectHitKind(1, .button);
 }
 
 test "combobox measurement follows placeholder and selected text" {

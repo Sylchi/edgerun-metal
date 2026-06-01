@@ -797,7 +797,11 @@ fn validateCanonicalPreview(component: component_union.Component) GalleryError!v
     var ui_raw: [canonical_ui_buffer_size]u8 = undefined;
     var object_raw: [canonical_object_buffer_size]u8 = undefined;
     const canonical = component.toObject(&ui_raw, &object_raw, galleryEpoch()) orelse return error.NoSpace;
-    _ = try component_union.Component.fromObject(canonical);
+    const decoded = try component_union.Component.fromObject(canonical);
+    var decoded_ui_raw: [canonical_ui_buffer_size]u8 = undefined;
+    var decoded_object_raw: [canonical_object_buffer_size]u8 = undefined;
+    const recanonical = decoded.toObject(&decoded_ui_raw, &decoded_object_raw, galleryEpoch()) orelse return error.NoSpace;
+    if (!std.mem.eql(u8, canonical, recanonical)) return error.Corrupt;
 }
 
 fn componentStyle() ui.Style {

@@ -2,7 +2,15 @@
 
 ## Current Verification Snapshot — 2026-06-01
 - `./build.sh test` passes on the current working tree.
+- `./build.sh test-status` reports all default registered tests passing.
 - `./build.sh kernel` builds `.build/kernel/kernel.elf` and `.build/kernel/kernel.bin`.
+- `./build.sh bench-wasm-jit` links and runs after adding the benchmark's WASM
+  runtime pointer stub and executable JIT cache setup.
+- Root docs now use the current `kernel/x86_64/` layout and registry-driven
+  `build.sh` test/status workflow.
+- Detailed UI streaming/relay protocol notes moved from `README.md` to
+  `app/docs/ui-architecture.md`; README now stays an overview and points to the
+  canonical test registry instead of duplicating target lists.
 - Historical entries below are preserved as session records. Older notes that
   call `test-wasm-compiler`, TPM hash, or broad test failures "pre-existing"
   should not be read as current blockers without re-running `build.sh`.

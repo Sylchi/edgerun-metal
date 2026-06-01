@@ -11,6 +11,10 @@ extern er_av1_block_decode_coeffs_8x8
 extern er_av1_block_decode_mv
 extern er_av1_block_dequant_8x8
 extern er_av1_block_inverse_tx_8x8
+extern er_av1_block_residual_sub_8x8
+extern er_av1_block_forward_tx_8x8
+extern er_av1_block_quant_8x8
+extern er_av1_tile_encode_intra8x8_luma
 extern er_av1_tile_decode_intra8x8_luma
 extern er_av1_tile_decode_inter8x8_luma
 extern er_av1_loop_filter_plane_8x8
@@ -43,6 +47,7 @@ tile_v: resb 64
 inter_y: resb 256
 inter_u: resb 64
 inter_v: resb 64
+tile_coeffs: resb AV1_BLOCK_PIXELS_8X8 * 2 * 4
 
 SECTION .data
 syntax_zero: db 0x00, 0x00, 0x00, 0x80
@@ -282,8 +287,85 @@ _start:
     cmp     byte [rel pred + 63], 120
     jne     .fail_predict_smooth
     inc     qword [rel passed]
-    jmp     .refs_refresh
+    jmp     .encode_block_primitives
 .fail_predict_smooth:
+    inc     qword [rel failed]
+
+.encode_block_primitives:
+    xor     ebx, ebx
+.encode_fill_loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .encode_residual
+    mov     byte [rel dst + rbx], 110
+    mov     byte [rel pred + rbx], 100
+    inc     ebx
+    jmp     .encode_fill_loop
+.encode_residual:
+    mov     rdi, resid
+    mov     rsi, dst
+    mov     edx, AV1_BLOCK_DIM_8
+    mov     rcx, pred
+    mov     r8d, AV1_BLOCK_DIM_8
+    call    er_av1_block_residual_sub_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_encode_block_primitives
+    test    edx, edx
+    jnz     .fail_encode_block_primitives
+    cmp     word [rel resid], 10
+    jne     .fail_encode_block_primitives
+    cmp     word [rel resid + 126], 10
+    jne     .fail_encode_block_primitives
+    mov     rdi, coeffs
+    mov     rsi, resid
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_forward_tx_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_encode_block_primitives
+    test    edx, edx
+    jnz     .fail_encode_block_primitives
+    cmp     word [rel coeffs], 10
+    jne     .fail_encode_block_primitives
+    cmp     word [rel coeffs + 2], 0
+    jne     .fail_encode_block_primitives
+    mov     rdi, resid
+    mov     rsi, coeffs
+    mov     edx, 2
+    call    er_av1_block_quant_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_encode_block_primitives
+    test    edx, edx
+    jnz     .fail_encode_block_primitives
+    cmp     word [rel resid], 5
+    jne     .fail_encode_block_primitives
+    mov     rdi, coeffs
+    mov     rsi, resid
+    mov     edx, 2
+    call    er_av1_block_dequant_8x8
+    test    edx, edx
+    jnz     .fail_encode_block_primitives
+    cmp     word [rel coeffs], 10
+    jne     .fail_encode_block_primitives
+    mov     rdi, resid
+    mov     rsi, coeffs
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_inverse_tx_8x8
+    test    edx, edx
+    jnz     .fail_encode_block_primitives
+    cmp     word [rel resid], 10
+    jne     .fail_encode_block_primitives
+    cmp     word [rel resid + 126], 10
+    jne     .fail_encode_block_primitives
+    mov     rdi, coeffs
+    mov     rsi, resid
+    xor     edx, edx
+    call    er_av1_block_quant_8x8
+    test    eax, eax
+    jnz     .fail_encode_block_primitives
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_encode_block_primitives
+    inc     qword [rel passed]
+    jmp     .refs_refresh
+.fail_encode_block_primitives:
     inc     qword [rel failed]
 
 .refs_refresh:

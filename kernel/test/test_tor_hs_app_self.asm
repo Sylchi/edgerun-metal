@@ -59,8 +59,8 @@ _start:
     ASSERT_EQ eax, 0
 
     lea     rdi, [rel frame]
-    lea     rsi, [rel identity_alice]
-    mov     edx, ER_HS_ID_SIZE
+    lea     rsi, [rel name_alice]
+    mov     edx, name_alice_len
     lea     rcx, [rel identity_alice]
     mov     r8d, ER_HS_ID_SIZE
     call    er_tor_hs_app_build_contact_put
@@ -80,8 +80,8 @@ _start:
     ASSERT_MEM_EQ [rel identity_alice], [rbx + ER_HS_CONTACT_ID], ER_HS_ID_SIZE
 
     lea     rdi, [rel frame]
-    lea     rsi, [rel name_alice]
-    mov     edx, name_alice_len
+    lea     rsi, [rel identity_alice]
+    mov     edx, ER_HS_ID_SIZE
     lea     rcx, [rel body_hello]
     mov     r8d, body_hello_len
     call    er_tor_hs_app_build_message_put

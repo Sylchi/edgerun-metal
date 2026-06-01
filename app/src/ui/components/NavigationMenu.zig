@@ -125,20 +125,6 @@ const navigation_menu_icon_padding: f32 = 8.0;
 const navigation_menu_third_label = "Blocks";
 const navigation_menu_label_max_lines: usize = 1;
 
-test "navigation menu component serializes to canonical object and deserializes" {
-    const menu = NavigationMenu{ .id = 210, .first = "Docs", .second = "Components", .active = 1 };
-    var ui_raw: [192]u8 = undefined;
-    var object_raw: [object.header_size + 192]u8 = undefined;
-
-    const canonical = menu.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try NavigationMenu.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(menu.id, decoded.id);
-    try std.testing.expectEqualStrings(menu.first, decoded.first);
-    try std.testing.expectEqualStrings(menu.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 1), decoded.active);
-}
-
 test "navigation menu component renders triggers and hit regions" {
     const menu = NavigationMenu{ .id = 210, .first = "Docs", .second = "Components", .active = 1 };
     var commands: [32]ui.Command = undefined;

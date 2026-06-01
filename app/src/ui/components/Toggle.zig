@@ -67,31 +67,16 @@ pub const Toggle = struct {
 const toggle_text_padding: f32 = 8.0;
 const toggle_label_max_lines: usize = 1;
 
-test "toggle component serializes to canonical object and deserializes" {
-    const toggle = Toggle{ .id = 44, .label = "Bold", .pressed = true };
-    var ui_raw: [128]u8 = undefined;
-    var object_raw: [object.header_size + 128]u8 = undefined;
-
-    const canonical = toggle.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
-    const decoded = try Toggle.fromView(try object.View.decode(canonical));
-
-    try std.testing.expectEqual(toggle.id, decoded.id);
-    try std.testing.expectEqualStrings(toggle.label, decoded.label);
-    try std.testing.expect(decoded.pressed);
-}
-
 test "toggle component renders pressed state and collects button hit" {
     const toggle = Toggle{ .id = 44, .label = "Bold", .pressed = true };
-    var commands: [8]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
+    var h = component_test.InteractiveHarness(8, 1){};
+    h.init();
 
-    try toggle.render(&scene, ui.Rect.init(0, 0, 96, 36), .{});
-    try toggle.collectInteractions(&collector, ui.Rect.init(0, 0, 96, 36));
+    try h.render(toggle, ui.Rect.init(0, 0, 96, 36), .{});
+    try toggle.collectInteractions(&h.collector, ui.Rect.init(0, 0, 96, 36));
 
-    try std.testing.expect(component_test.hasFillColor(scene.written(), ui.Color.row));
-    try std.testing.expectEqual(@as(u32, 44), collector.written()[0].id);
+    try h.expectFillColor(ui.Color.row);
+    try h.expectHitId(0, 44);
 }
 
 test "toggle measurement follows label text" {
