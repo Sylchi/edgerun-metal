@@ -91,6 +91,14 @@ tok_er_check_zero: db "er_check_zero"
 tok_er_check_zero_len equ $ - tok_er_check_zero
 tok_er_check_nonzero: db "er_check_nonzero"
 tok_er_check_nonzero_len equ $ - tok_er_check_nonzero
+tok_er_cmp_below: db "er_cmp_below"
+tok_er_cmp_below_len equ $ - tok_er_cmp_below
+tok_cmos_out_index: db "_cmos_out_index"
+tok_cmos_out_index_len equ $ - tok_cmos_out_index
+tok_cmos_in_data: db "_cmos_in_data"
+tok_cmos_in_data_len equ $ - tok_cmos_in_data
+tok_cmos_out_data: db "_cmos_out_data"
+tok_cmos_out_data_len equ $ - tok_cmos_out_data
 tok_er_frame_push: db "er_frame_push"
 tok_er_frame_push_len equ $ - tok_er_frame_push
 tok_er_frame_pop: db "er_frame_pop"
@@ -113,6 +121,8 @@ tok_test_exit: db "TEST_EXIT"
 tok_test_exit_len equ $ - tok_test_exit
 tok_test_call_eax: db "TEST_CALL_EAX"
 tok_test_call_eax_len equ $ - tok_test_call_eax
+tok_test_exit_passed_total: db "TEST_EXIT_PASSED_TOTAL"
+tok_test_exit_passed_total_len equ $ - tok_test_exit_passed_total
 tok_total_sym: db "total"
 tok_total_sym_len equ $ - tok_total_sym
 tok_passed_sym: db "passed"
@@ -265,10 +275,14 @@ tok_r8: db "r8"
 tok_r8_len equ $ - tok_r8
 tok_r8d: db "r8d"
 tok_r8d_len equ $ - tok_r8d
+tok_r8b: db "r8b"
+tok_r8b_len equ $ - tok_r8b
 tok_r9: db "r9"
 tok_r9_len equ $ - tok_r9
 tok_r9d: db "r9d"
 tok_r9d_len equ $ - tok_r9d
+tok_r9b: db "r9b"
+tok_r9b_len equ $ - tok_r9b
 tok_r10: db "r10"
 tok_r10_len equ $ - tok_r10
 tok_r10d: db "r10d"
@@ -291,6 +305,8 @@ tok_r14: db "r14"
 tok_r14_len equ $ - tok_r14
 tok_r15: db "r15"
 tok_r15_len equ $ - tok_r15
+tok_ax: db "ax"
+tok_ax_len equ $ - tok_ax
 tok_dil: db "dil"
 tok_dil_len equ $ - tok_dil
 tok_al: db "al"
@@ -327,6 +343,8 @@ tok_mem_r12: db "[r12]"
 tok_mem_r12_len equ $ - tok_mem_r12
 tok_mem_r13: db "[r13]"
 tok_mem_r13_len equ $ - tok_mem_r13
+tok_mem_r14: db "[r14]"
+tok_mem_r14_len equ $ - tok_mem_r14
 tok_mem_r12_open: db "[r12"
 tok_mem_r12_open_len equ $ - tok_mem_r12_open
 tok_mem_rdi_rcx: db "[rdi"

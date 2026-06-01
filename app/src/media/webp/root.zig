@@ -2,6 +2,7 @@ const std = @import("er_std");
 const bytes_mod = @import("../../bytes.zig");
 const ui = @import("../../ui/core.zig");
 const common = @import("../common.zig");
+const vp8_tables = @import("vp8_tables.zig");
 
 const Header = common.Header;
 const DecodeError = common.DecodeError;
@@ -726,7 +727,7 @@ pub const Vp8VideoReferenceSet = struct {
 };
 
 pub const Vp8EntropyState = struct {
-    coeff_probabilities: [webp_vp8_coeff_update_probability_count]u8 = [_]u8{0} ** webp_vp8_coeff_update_probability_count,
+    coeff_probabilities: [webp_vp8_coeff_update_probability_count]u8 = webp_vp8_coeff_default_probabilities,
     intra16_probabilities: [webp_vp8_inter_intra16_probability_count]u8 = webp_vp8_inter_intra16_probability_default,
     chroma_probabilities: [webp_vp8_inter_chroma_probability_count]u8 = webp_vp8_inter_chroma_probability_default,
     motion_vector_probabilities: [webp_vp8_motion_vector_component_count][webp_vp8_motion_vector_probability_count]u8 = webp_vp8_motion_vector_default_probabilities,
@@ -742,32 +743,15 @@ pub const Vp8VideoFrameResult = struct {
 };
 
 pub fn decodeVp8VideoFrameWithReference(data: []const u8, expected_header: Header, out: []ui.Color, previous_rgba: ?[]const u8, previous_yuv: ?[]const u8, current_yuv: ?[]u8) DecodeError!Header {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = previous_rgba;
-    _ = previous_yuv;
-    _ = current_yuv;
-    return error.UnsupportedImage;
+    return (try decodeVp8FrameWithReference(data, expected_header, out, previous_rgba, previous_yuv, current_yuv)).header;
 }
 
 pub fn decodeVp8VideoFrameWithReferences(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = references;
-    _ = current_yuv;
-    return error.UnsupportedImage;
+    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, references, current_yuv, null);
 }
 
 pub fn decodeVp8VideoFrameWithReferencesAndEntropy(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, entropy_state: *Vp8EntropyState) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = references;
-    _ = current_yuv;
-    _ = entropy_state;
-    return error.UnsupportedImage;
+    return decodeVp8FrameWithReferencesCheckedAndEntropy(data, expected_header, out, references, current_yuv, null, entropy_state);
 }
 
 pub fn vp8VideoReferenceByteLen(header: Header) DecodeError!usize {
@@ -779,59 +763,52 @@ pub fn vp8VideoReferenceByteLen(header: Header) DecodeError!usize {
 }
 
 fn decodeVp8FrameWithAlpha(data: []const u8, alpha_data: ?[]const u8, expected_header: Header, out: []ui.Color, scratch: []u8) DecodeError!Header {
-    _ = data;
-    _ = alpha_data;
-    _ = expected_header;
-    _ = out;
-    _ = scratch;
-    return error.UnsupportedImage;
+    var scratch_allocator = Vp8lScratch.init(scratch);
+    const current_yuv = try scratch_allocator.alloc(try vp8VideoReferenceByteLen(expected_header));
+    const header = try decodeVp8FrameWithReference(data, expected_header, out, null, null, current_yuv);
+    if (alpha_data) |data_alpha| {
+        const count = try pixelCount(header.header);
+        try applyWebpAlpha(data_alpha, header.header, out[0..count], scratch[scratch_allocator.cursor..]);
+    }
+    return header.header;
 }
 
 fn decodeVp8Frame(data: []const u8, expected_header: Header, out: []ui.Color) DecodeError!Header {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    return error.UnsupportedImage;
+    return (try decodeVp8FrameWithReference(data, expected_header, out, null, null, null)).header;
 }
 
 fn decodeVp8FrameWithReference(data: []const u8, expected_header: Header, out: []ui.Color, previous: ?[]const u8, previous_yuv: ?[]const u8, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = previous;
-    _ = previous_yuv;
-    _ = current_yuv;
-    return error.UnsupportedImage;
+    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, .{ .last = previous_yuv }, current_yuv, previous);
 }
 
 fn decodeVp8FrameWithReferenceSet(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = references;
-    _ = current_yuv;
-    return error.UnsupportedImage;
+    return decodeVp8FrameWithReferencesChecked(data, expected_header, out, references, current_yuv, null);
 }
 
 fn decodeVp8FrameWithReferencesChecked(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, previous: ?[]const u8) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = references;
-    _ = current_yuv;
-    _ = previous;
-    return error.UnsupportedImage;
+    return decodeVp8FrameWithReferencesCheckedAndEntropy(data, expected_header, out, references, current_yuv, previous, null);
 }
 
 fn decodeVp8FrameWithReferencesCheckedAndEntropy(data: []const u8, expected_header: Header, out: []ui.Color, references: Vp8VideoReferenceSet, current_yuv: ?[]u8, previous: ?[]const u8, entropy_state: ?*Vp8EntropyState) DecodeError!Vp8VideoFrameResult {
-    _ = data;
-    _ = expected_header;
-    _ = out;
-    _ = references;
-    _ = current_yuv;
-    _ = previous;
-    _ = entropy_state;
-    return error.UnsupportedImage;
+    const frame = try parseVp8Frame(data, expected_header, entropy_state);
+    if (frame.header.width != expected_header.width or frame.header.height != expected_header.height) return error.UnsupportedImage;
+    const count = try pixelCount(frame.header);
+    if (out.len < count) return error.PixelBudget;
+    if (previous) |reference| {
+        if (reference.len < count * @sizeOf(ui.Color)) return error.PixelBudget;
+    }
+    const previous_yuv_references = Vp8ReferenceFrames{
+        .last = if (references.last) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+        .golden = if (references.golden) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+        .alternate = if (references.alternate) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+    };
+    const current_reference = if (current_yuv) |reference| blk: {
+        if (reference.len < try vp8VideoReferenceByteLen(frame.header)) return error.PixelBudget;
+        break :blk try vp8ReferenceFrameMut(frame.header, reference);
+    } else return error.PixelBudget;
+    try reconstructVp8Frame(&frame, previous_yuv_references, current_reference, out[0..count]);
+    if (entropy_state) |state| updateVp8EntropyState(state, &frame);
+    return .{ .header = frame.header, .reference_update = frame.compressed_header.reference_update };
 }
 
 fn decodeVp8lFrame(data: []const u8, expected_header: Header, out: []ui.Color, scratch: []u8) DecodeError!Header {
@@ -5085,7 +5062,7 @@ fn vp8Intra4ModeProbabilities(top: Vp8Intra4Mode, left: Vp8Intra4Mode) *const [w
     return webp_vp8_intra4_keyframe_probabilities[offset..][0..webp_vp8_intra4_probability_count];
 }
 
-const webp_vp8_intra4_keyframe_probabilities = [_]u8{};
+const webp_vp8_intra4_keyframe_probabilities = vp8_tables.webp_vp8_intra4_keyframe_probabilities;
 
 const Vp8ResidualSummary = struct {
     non_zero: bool,
@@ -5302,18 +5279,18 @@ fn readVp8SignedCoeff(reader: *Vp8BoolReader, magnitude: i16) DecodeError!i16 {
     return if (try reader.readFlag()) -magnitude else magnitude;
 }
 
-const webp_vp8_coeff_bands = [_]usize{0};
-const webp_vp8_zigzag = [_]usize{0};
-const webp_vp8_dc_quant = [_]i16{0};
-const webp_vp8_ac_quant = [_]i16{0};
-const webp_vp8_coeff_cat_extra_probability_0: u8 = 0;
-const webp_vp8_coeff_cat_extra_probability_1: u8 = 0;
-const webp_vp8_coeff_cat_extra_probability_2: u8 = 0;
-const webp_vp8_coeff_cat3_probabilities = [_]u8{0, 0, 0};
-const webp_vp8_coeff_cat4_probabilities = [_]u8{0, 0, 0, 0};
-const webp_vp8_coeff_cat5_probabilities = [_]u8{0, 0, 0, 0, 0};
-const webp_vp8_coeff_cat6_probabilities = [_]u8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-const webp_vp8_coeff_default_probabilities = [_]u8{0} ** webp_vp8_coeff_update_probability_count;
+const webp_vp8_coeff_bands = vp8_tables.webp_vp8_coeff_bands;
+const webp_vp8_zigzag = vp8_tables.webp_vp8_zigzag;
+const webp_vp8_dc_quant = vp8_tables.webp_vp8_dc_quant;
+const webp_vp8_ac_quant = vp8_tables.webp_vp8_ac_quant;
+const webp_vp8_coeff_cat_extra_probability_0 = vp8_tables.webp_vp8_coeff_cat_extra_probability_0;
+const webp_vp8_coeff_cat_extra_probability_1 = vp8_tables.webp_vp8_coeff_cat_extra_probability_1;
+const webp_vp8_coeff_cat_extra_probability_2 = vp8_tables.webp_vp8_coeff_cat_extra_probability_2;
+const webp_vp8_coeff_cat3_probabilities = vp8_tables.webp_vp8_coeff_cat3_probabilities;
+const webp_vp8_coeff_cat4_probabilities = vp8_tables.webp_vp8_coeff_cat4_probabilities;
+const webp_vp8_coeff_cat5_probabilities = vp8_tables.webp_vp8_coeff_cat5_probabilities;
+const webp_vp8_coeff_cat6_probabilities = vp8_tables.webp_vp8_coeff_cat6_probabilities;
+const webp_vp8_coeff_default_probabilities = vp8_tables.webp_vp8_coeff_default_probabilities;
 const webp_vp8_motion_vector_default_probabilities = [_][webp_vp8_motion_vector_probability_count]u8{
     .{ 162, 128, 225, 146, 172, 147, 214, 39, 156, 128, 129, 132, 75, 145, 178, 206, 239, 254, 254 },
     .{ 164, 128, 204, 170, 119, 235, 140, 230, 228, 128, 130, 130, 74, 148, 180, 203, 236, 254, 254 },
@@ -5373,12 +5350,7 @@ const webp_vp8_coeff_update_probability_count =
     webp_vp8_coeff_context_count *
     webp_vp8_coeff_probability_count;
 
-const Vp8CoeffUpdateProbability = struct {
-    index: usize,
-    probability: u8,
-};
-
-const webp_vp8_coeff_update_probabilities = [_]Vp8CoeffUpdateProbability{};
+const webp_vp8_coeff_update_probabilities = vp8_tables.webp_vp8_coeff_update_probabilities;
 
 fn vp8CoeffUpdateProbability(index: usize) u8 {
     var left: usize = 0;
@@ -5386,8 +5358,9 @@ fn vp8CoeffUpdateProbability(index: usize) u8 {
     while (left < right) {
         const middle = left + (right - left) / 2;
         const entry = webp_vp8_coeff_update_probabilities[middle];
-        if (entry.index == index) return entry.probability;
-        if (entry.index < index) {
+        const entry_index = entry & 0x0000_ffff;
+        if (entry_index == index) return @intCast((entry >> 16) & 0xff);
+        if (entry_index < index) {
             left = middle + 1;
         } else {
             right = middle;

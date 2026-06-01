@@ -902,13 +902,4 @@ _start:
     inc     qword [rel failed]
 
 .done:
-    mov     rax, [rel failed]
-    test    rax, rax
-    jz      .ok
-    mov     edi, 1
-    mov     eax, 60
-    syscall
-.ok:
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT_FAILED

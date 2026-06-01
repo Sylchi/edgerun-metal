@@ -934,6 +934,12 @@ cmd_test_er_asm_cli() {
  local src_reg_moves="${ASM_BUILD}/er_asm_reg_moves_probe.asm"
  local src_sized_mem="${ASM_BUILD}/er_asm_sized_mem_probe.asm"
  local src_test_call="${ASM_BUILD}/er_asm_test_call_probe.asm"
+ local src_check_zero="${ASM_BUILD}/er_asm_check_zero_probe.asm"
+ local src_cmp_below="${ASM_BUILD}/er_asm_cmp_below_probe.asm"
+ local src_test_exit_total="${ASM_BUILD}/er_asm_test_exit_total_probe.asm"
+ local src_cmos_macros="${ASM_BUILD}/er_asm_cmos_macros_probe.asm"
+ local src_cmos_time="${ASM_BUILD}/er_asm_cmos_time_probe.asm"
+ local src_define_product="${ASM_BUILD}/er_asm_define_product_probe.asm"
  local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
  local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
  local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
@@ -946,7 +952,7 @@ cmd_test_er_asm_cli() {
  local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
  local out="${ASM_BUILD}/er_asm_exit_probe.bin"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
- local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_sized_mem" "$src_test_call" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
+ local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_sized_mem" "$src_test_call" "$src_check_zero" "$src_cmp_below" "$src_test_exit_total" "$src_cmos_macros" "$src_cmos_time" "$src_define_product" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -1209,6 +1215,81 @@ global _start
 _start:
     TEST_CALL_EAX er_probe, 1, 2
 EOF
+ cat > "$src_check_zero" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    er_check_zero eax, .done32
+    er_check_zero rdx, .done
+    ret
+.done32:
+    ret
+.done:
+    ret
+EOF
+ cat > "$src_cmp_below" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    er_cmp_below rcx, r10, .loop
+    ret
+.loop:
+    ret
+EOF
+ cat > "$src_test_exit_total" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    TEST_EXIT_PASSED_TOTAL
+EOF
+ cat > "$src_cmos_macros" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    _cmos_out_index dil
+    _cmos_in_data
+    _cmos_out_data sil
+EOF
+ cat > "$src_cmos_time" <<'EOF'
+[BITS 64]
+%define CMOS_RTC_HOUR 0x04
+section .text
+global _start
+_start:
+    push    r8
+    push    r9
+    push    r10
+    mov     dil, CMOS_RTC_HOUR
+    mov     r8b, al
+    mov     r9b, al
+    mov     r10b, al
+    movzx   edi, r8b
+    movzx   edi, r9b
+    movzx   edi, r10b
+    movzx   eax, r8b
+    movzx   eax, r9b
+    movzx   eax, r10b
+    mov     [r12], ax
+    mov     [r13], ax
+    mov     [r14], ax
+    pop     r10
+    pop     r9
+    pop     r8
+    ret
+EOF
+ cat > "$src_define_product" <<'EOF'
+[BITS 64]
+%define MAX_DECODED_OPS 512 * 1024
+section .text
+global _start
+_start:
+    mov     eax, MAX_DECODED_OPS
+    ret
+EOF
  cat > "$bad_src" <<'EOF'
 [BITS 64]
 section .text
@@ -1279,7 +1360,13 @@ EOF
  expect_er_asm_bytes "$src_rel_mem" "00000000893df6ffffffff05f0ffffff" "rel memory ops"
  expect_er_asm_bytes "$src_reg_moves" "4889d689ca4889d189f0c3" "register moves"
  expect_er_asm_bytes "$src_sized_mem" "c70204030201c70100000000" "sized memory immediates"
+ expect_er_asm_bytes "$src_cmos_time" "41504151415240b7044188c04188c14188c2410fb6f8410fb6f9410fb6fa410fb6c0410fb6c1410fb6c26641890424664189450066418906415a41594158c3" "cmos time byte and stack ops"
+ expect_er_asm_bytes "$src_define_product" "b800000800c3" "define product expression"
  expect_er_asm_builds "$src_test_call" "test call macro"
+ expect_er_asm_builds "$src_check_zero" "check zero macro"
+ expect_er_asm_builds "$src_cmp_below" "cmp below macro"
+ expect_er_asm_builds "$src_test_exit_total" "test exit passed total macro"
+ expect_er_asm_builds "$src_cmos_macros" "cmos local macros"
  expect_er_asm_builds "${ASM_DIR}/rt/ctype.asm" "ctype flat binary"
  expect_er_asm_builds "kernel/driver/portio.asm" "portio flat binary"
  expect_er_asm_builds "${ASM_DIR}/wasm/test_table.asm" "test table flat binary"

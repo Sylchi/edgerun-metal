@@ -9,10 +9,7 @@
     call    er_wasm_read_leb_i32
     er_check_nonzero rdx, .corrupt_error
     ; Update reader offset (LEB consumed bytes in rsi - body_ptr)
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_push
     jc      .overflow_error
     jmp     .dispatch_next
@@ -22,10 +19,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i64
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_push
     jc      .overflow_error
     jmp     .dispatch_next
@@ -37,10 +31,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     ; Update reader
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Check bounds
     cmp     rax, [exec_local_count]
     jae     .corrupt_error
@@ -55,10 +46,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     rax, [exec_local_count]
     jae     .corrupt_error
     push    rax        ; save index
@@ -73,10 +61,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     rax, [exec_local_count]
     jae     .corrupt_error
     push    rax
@@ -91,10 +76,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     rax, [global_count]
     jae     .corrupt_error
     push    r10
@@ -111,10 +93,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     rax, [global_count]
     jae     .corrupt_error
     push    rax
@@ -304,10 +283,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Branch to control
     mov     rdi, rax        ; depth
     call    exec_branch_to_control
@@ -319,10 +295,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     push    rax             ; save depth
     call    exec_stack_pop  ; condition
     jc      .underflow_error
@@ -339,10 +312,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     r15, rax                ; save function_index
 
     ; Get param count and result count from function type
@@ -400,10 +370,7 @@
     call    er_wasm_read_leb_u32    ; table_index
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     pop     r15                     ; type_index -> r15
     ; Pop function index from stack
     call    exec_stack_pop
@@ -470,10 +437,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     r13d, r14d
     je      .br_table_branch   ; found matching target
     inc     r13d
@@ -484,10 +448,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
 .br_table_branch:
     mov     rdi, rax        ; branch depth
     call    exec_branch_to_control
@@ -971,10 +932,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rdi, rax
     ; Verify function index < totalFunctionCount
     mov     rax, [import_count]
@@ -1263,10 +1221,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop
     jc      .underflow_error
     cmp     rax, [table_min]
@@ -1282,10 +1237,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop   ; value
     jc      .underflow_error
     push    rax
@@ -2305,10 +2257,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
 
     cmp     eax, EXT_I32_TRUNC_SAT_F32_S
     je      .ext_i32_trunc_sat_f32_s
@@ -2568,19 +2517,13 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     push    rax             ; segment index
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     pop     r15             ; segment index
     ; Pop dest, src, count from stack
     call    exec_stack_pop  ; n
@@ -2638,10 +2581,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Validate segment index
     cmp     rax, [data_segment_count]
     jae     .memory_trap
@@ -2666,19 +2606,13 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Pop n, s, d
     call    exec_stack_pop  ; n
     jc      .underflow_error
@@ -2720,10 +2654,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Pop n, val, d
     call    exec_stack_pop  ; n
     jc      .underflow_error
@@ -2760,19 +2691,13 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     mov     r15, rax            ; element segment index
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop      ; n
     jc      .underflow_error
     mov     r14, rax
@@ -2816,10 +2741,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     cmp     rax, [element_segment_count]
     jae     .memory_trap
     mov     r10, rax
@@ -2835,19 +2757,13 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop      ; n
     jc      .underflow_error
     mov     r14, rax
@@ -2896,10 +2812,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop      ; n
     jc      .underflow_error
     mov     r14, rax
@@ -2942,10 +2855,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rax, [table_min]
     call    exec_stack_push
     jc      .overflow_error
@@ -2957,10 +2867,7 @@
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_error
     er_check_nonzero eax, .memory_trap
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     call    exec_stack_pop      ; n
     jc      .underflow_error
     mov     r14, rax
@@ -3041,10 +2948,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_leb_i32:
@@ -3052,10 +2956,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_leb_i64:
@@ -3063,10 +2964,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_i64
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_block_type:
@@ -3086,10 +2984,7 @@
     er_check_nonzero rdx, .skip_error
     call    er_wasm_read_leb_u32    ; table_index
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_load_store:
@@ -3098,18 +2993,12 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_br_table:
@@ -3125,10 +3014,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     dec     r15d
     jmp     .skip_br_table_loop
 .skip_br_table_default:
@@ -3136,10 +3022,7 @@
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .skip_error
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_select_typed:
@@ -3152,10 +3035,7 @@
     cmp     byte [rsi], 0x7f
     jne     .skip_error
     inc     rsi
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ret
 
 .skip_error:

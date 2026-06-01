@@ -396,6 +396,7 @@ er_fn record_er_fn_directive
     mov     r11, r13
     mov     rax, [rel text_len]
     call    add_global_symbol
+    call    add_current_label_const
     mov     qword [rel exit_instr_step], 0
     inc     qword [rel label_count]
     mov     eax, 1
@@ -1002,11 +1003,36 @@ er_fn record_define
     jz      .skip_unsupported
     call    expect_line_end
     test    eax, eax
+    jz      .maybe_product
+    call    add_equ_symbol
+    test    eax, eax
+    jz      .bad
+    jmp     .done
+.maybe_product:
+    mov     rax, [rel imm_u32_value]
+    push    rax
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad_pop
+    cmp     byte [r14], '*'
+    jne     .bad_pop
+    inc     r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad_pop
+    pop     rax
+    imul    rax, [rel imm_u32_value]
+    mov     [rel imm_u32_value], rax
+    call    expect_line_end
+    test    eax, eax
     jz      .bad
     call    add_equ_symbol
     test    eax, eax
     jz      .bad
     jmp     .done
+.bad_pop:
+    pop     rax
+    jmp     .bad
 .skip_unsupported:
     call    expect_line_end
     test    eax, eax

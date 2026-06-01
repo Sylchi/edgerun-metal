@@ -1,6 +1,13 @@
 extern er_memmove
 extern er_memset
 
+%macro wasm_exec_save_reader_offset 0
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+%endm
+
 er_fn er_fn_pop
     er_frame_push
 
@@ -425,19 +432,13 @@ er_fn exec_memory_prepare
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_mem
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     ; Read offset (LEB)
     mov     rsi, [exec_code_body_ptr]
     add     rsi, [exec_reader_offset]
     call    er_wasm_read_leb_u32
     er_check_nonzero rdx, .corrupt_mem
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
+    wasm_exec_save_reader_offset
     mov     r15d, eax      ; offset
     ; Pop base address from stack
     call    exec_stack_pop
