@@ -15,8 +15,6 @@ cd "$SCRIPT_DIR"
 export CCACHE_DISABLE=1
 export SCCACHE_DISABLE=1
 export PYTHONDONTWRITEBYTECODE=1
-export CARGO_INCREMENTAL=0
-unset CARGO_HOME
 unset GOCACHE
 
 BUILD_DIR=".build"
@@ -127,7 +125,9 @@ KERNEL_ASM_SRCS="
 	net/tcp.asm
 	net/http.asm
 	crypto/sha256.asm
+	crypto/sha512.asm
 	crypto/sha3.asm
+	crypto/ed25519.asm
 	crypto/curve25519.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
@@ -424,6 +424,9 @@ test-pi-sd|emulator|pi|yes|cmd_test_pi_sd|Run Pi Zero W EMMC SD block emulator t
 test-pi-usb|emulator|pi|yes|cmd_test_pi_usb|Run Pi Zero W DWC2 USB host emulator test
 test-pi-wifi-sdio|emulator|pi|yes|cmd_test_pi_wifi_sdio|Run Pi Zero W CYW43438 SDIO probe emulator test
 test-sha3|unit|crypto|yes|cmd_test_sha3|Run SHA3-256 known-answer tests
+test-sha512|unit|crypto|yes|cmd_test_sha512|Run SHA-512 known-answer tests
+test-ed25519|unit|crypto|yes|cmd_test_ed25519|Run Ed25519 ASM helper tests
+test-signing-wasm|unit|crypto|yes|cmd_test_signing_wasm|Run signing WASM guest deterministic tests
 test-tls|contract|crypto|yes|cmd_test_tls|Run TLS ClientHello self-test
 test-tor|contract|crypto|yes|cmd_test_tor|Run Tor AES-128-CTR KAT test
 test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper test
@@ -798,6 +801,12 @@ cmd_test_er_asm_cli() {
  local src_64reg="${ASM_BUILD}/er_asm_exit_64reg_probe.asm"
  local src_named="${ASM_BUILD}/er_asm_exit_named_probe.asm"
  local src_long_named="${ASM_BUILD}/er_asm_exit_long_named_probe.asm"
+ local src_return_fn="${ASM_BUILD}/er_asm_return_fn_probe.asm"
+ local src_zero_fn="${ASM_BUILD}/er_asm_zero_fn_probe.asm"
+ local src_identity_fn="${ASM_BUILD}/er_asm_identity_fn_probe.asm"
+ local src_digit_fn="${ASM_BUILD}/er_asm_digit_fn_probe.asm"
+ local caller_src="${ASM_BUILD}/er_asm_return_caller.asm"
+ local caller_obj="${ASM_BUILD}/er_asm_return_caller.o"
  local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
  local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
  local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
@@ -812,7 +821,7 @@ cmd_test_er_asm_cli() {
  local bin="${ASM_BUILD}/er_asm_exit_probe"
  local bad="${ASM_BUILD}/er_asm_unsupported.o"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
- local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$bin" "$bad" "$log")
+ local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_digit_fn" "$caller_src" "$caller_obj" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$bin" "$bad" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -906,6 +915,56 @@ global er_isdigit
 er_isdigit:
     mov     eax, 60
     mov     edi, '2'
+    syscall
+EOF
+ cat > "$src_return_fn" <<'EOF'
+[BITS 64]
+section .text
+global er_const
+er_const:
+    mov     eax, '3'
+    ret
+EOF
+ cat > "$src_zero_fn" <<'EOF'
+[BITS 64]
+section .text
+global er_zero
+er_zero:
+    xor     eax, eax
+    ret
+EOF
+ cat > "$src_identity_fn" <<'EOF'
+[BITS 64]
+section .text
+global er_identity
+er_identity:
+    mov     eax, edi
+    ret
+EOF
+ cat > "$src_digit_fn" <<'EOF'
+[BITS 64]
+%include "x86_64/macros.inc"
+section .text
+er_fn er_isdigit
+    cmp     dil, '0'
+    jb      .digit_false
+    cmp     dil, '9'
+    ja      .digit_false
+    mov     eax, 1
+    er_ret
+.digit_false:
+    xor     eax, eax
+    er_ret
+EOF
+ cat > "$caller_src" <<'EOF'
+[BITS 64]
+extern er_const
+section .text
+global _start
+_start:
+    call    er_const
+    mov     edi, eax
+    mov     eax, 60
     syscall
 EOF
  cat > "$bad_src" <<'EOF'
@@ -1043,6 +1102,93 @@ EOF
   exit 1
  fi
  rm -f "$out" "$bin"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_return_fn"
+ ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
+ ld -nostdlib -static -o "$bin" "$caller_obj" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 51 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: return function status ${status}, expected 51" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin" "$caller_obj"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_zero_fn"
+ cat > "$caller_src" <<'EOF'
+[BITS 64]
+extern er_zero
+section .text
+global _start
+_start:
+    call    er_zero
+    mov     edi, eax
+    mov     eax, 60
+    syscall
+EOF
+ ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
+ ld -nostdlib -static -o "$bin" "$caller_obj" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 0 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: zero function status ${status}, expected 0" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin" "$caller_obj"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_identity_fn"
+ cat > "$caller_src" <<'EOF'
+[BITS 64]
+extern er_identity
+section .text
+global _start
+_start:
+    mov     edi, '4'
+    call    er_identity
+    mov     edi, eax
+    mov     eax, 60
+    syscall
+EOF
+ ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
+ ld -nostdlib -static -o "$bin" "$caller_obj" "$out"
+ status=0
+ "$bin" || status=$?
+ if [ "$status" -ne 52 ]; then
+  cleanup_er_asm_cli
+  echo "FAIL er-asm-cli: identity function status ${status}, expected 52" >&2
+  exit 1
+ fi
+ rm -f "$out" "$bin" "$caller_obj"
+ "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_digit_fn"
+ cat > "$caller_src" <<'EOF'
+[BITS 64]
+extern er_isdigit
+section .text
+global _start
+_start:
+    mov     edi, '/'
+    call    er_isdigit
+    test    eax, eax
+    jnz     .bad
+    mov     edi, '5'
+    call    er_isdigit
+    test    eax, eax
+    jz      .bad
+    mov     edi, ':'
+    call    er_isdigit
+    test    eax, eax
+    jnz     .bad
+    xor     edi, edi
+    mov     eax, 60
+    syscall
+.bad:
+    mov     edi, 1
+    mov     eax, 60
+    syscall
+EOF
+ ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
+ ld -nostdlib -static -o "$bin" "$caller_obj" "$out"
+ "$bin"
+ rm -f "$out" "$bin" "$caller_obj"
  if ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$bad" "$bad_hex_src" >"$log" 2>&1; then
   cat "$log" >&2
   cleanup_er_asm_cli
@@ -1484,6 +1630,14 @@ cmd_test_sha3() {
 	build_test_self "test_sha3_self" "crypto/sha3"
 }
 
+cmd_test_sha512() {
+	build_test_self "test_sha512_self" "crypto/sha512"
+}
+
+cmd_test_ed25519() {
+	build_test_self "test_ed25519_self" "crypto/ed25519" "crypto/sha512" "crypto/curve25519" "rt/runtime"
+}
+
 cmd_test_tor() {
 	build_test_self "test_tor_self" "crypto/tor_aes" "crypto/tor" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
@@ -1647,14 +1801,17 @@ EOF
 }
 
 cmd_signing_wasm() {
-	local manifest="app/edgerun-signing/Cargo.toml"
-	local cargo_target="${BUILD_DIR}/cargo-target"
-	local wasm_src="${cargo_target}/wasm32-unknown-unknown/release/edgerun_signing.wasm"
+	local wasm_src="${BUILD_DIR}/app/bin/edgerun_signing.wasm"
 	local wasm_dst="${ASM_BUILD}/edgerun_signing.wasm"
-	cargo build --manifest-path "$manifest" --target wasm32-unknown-unknown --release --target-dir "$cargo_target"
+	zig build --build-file app/build.zig -p "${BUILD_DIR}/app" -Doptimize=ReleaseSmall signing-wasm
 	cp "$wasm_src" "$wasm_dst"
 	local wsize=$(stat -c '%s' "$wasm_dst")
 	printf 'signing-wasm: %s (%d bytes)\n' "$wasm_dst" "$wsize"
+}
+
+cmd_test_signing_wasm() {
+	zig test app/src/signing_wasm.zig
+	cmd_signing_wasm
 }
 
 cmd_lib_tor() {

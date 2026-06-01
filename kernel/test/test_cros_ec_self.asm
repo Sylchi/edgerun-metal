@@ -48,9 +48,7 @@ extern er_cros_ec_read_battery_static
 %define EC_HRP_DATA_LEN            4
 %define EC_HRP_SIZE                8
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 flags_out: resd 1
 pct_out: resd 1
 temp_out: resd 1

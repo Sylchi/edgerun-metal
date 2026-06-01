@@ -260,6 +260,9 @@ er_fn er_av1_symbol_init
     mov     dword [r12 + AV1_SYMBOL_RANGE], AV1_CDF_PROB_TOP
     sub     ebx, AV1_CDF_PROB_BITS
     mov     [r12 + AV1_SYMBOL_MAX_BITS], ebx
+    mov     dword [r12 + AV1_SYMBOL_PENDING], 0
+    mov     dword [r12 + AV1_SYMBOL_PENDING_BASE], 0
+    mov     dword [r12 + AV1_SYMBOL_PENDING_SHIFT], 0
     mov     eax, r13d
     er_ok
     jmp     .done
@@ -268,6 +271,392 @@ er_fn er_av1_symbol_init
     er_err  ERROR_INVALID_PARAM
 .done:
     er_pop  rbx, r12, r13
+    er_ret
+
+; er_av1_symbol_write_init(ctx, out, cap) -> eax=0, rdx=error
+; rdi=ctx, rsi=out, edx=cap
+er_fn er_av1_symbol_write_init
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    edx, edx
+    jz      .invalid_param
+    mov     [rdi + AV1_SYMBOL_BUF], rsi
+    mov     [rdi + AV1_SYMBOL_LEN], edx
+    mov     dword [rdi + AV1_SYMBOL_POS], 0
+    mov     dword [rdi + AV1_SYMBOL_VALUE], 0
+    mov     dword [rdi + AV1_SYMBOL_RANGE], AV1_CDF_PROB_TOP
+    mov     dword [rdi + AV1_SYMBOL_MAX_BITS], 0
+    mov     dword [rdi + AV1_SYMBOL_PENDING], 0
+    mov     dword [rdi + AV1_SYMBOL_PENDING_BASE], 0
+    mov     dword [rdi + AV1_SYMBOL_PENDING_SHIFT], 0
+    xor     eax, eax
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_av1_symbol_write_symbol(ctx, cdf, nsymbs, symbol, disable_update)
+; rdi=ctx, rsi=cdf u16[N+1], edx=N, ecx=symbol, r8d=disable_update.
+er_fn er_av1_symbol_write_symbol
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 32
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     edx, AV1_CDF_SYMBOLS_MIN
+    jb      .invalid_param
+    cmp     edx, AV1_CDF_SYMBOLS_MAX
+    ja      .invalid_param
+    cmp     ecx, edx
+    jae     .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     ebx, ecx
+    mov     r15d, r8d
+    call    .validate_cdf
+    test    edx, edx
+    jnz     .done
+    call    .target_for_symbol
+    test    edx, edx
+    jnz     .done
+    mov     [rsp], eax
+    cmp     dword [r12 + AV1_SYMBOL_POS], 0
+    jne     .resolve_pending
+    cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
+    jne     .corrupt
+    mov     [r12 + AV1_SYMBOL_VALUE], eax
+    xor     eax, AV1_CDF_PROB_TOP - 1
+    mov     rdi, r12
+    mov     esi, eax
+    mov     edx, AV1_CDF_PROB_BITS
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+    jmp     .encode_current
+.resolve_pending:
+    cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
+    je      .encode_current
+    mov     eax, [rsp]
+    xor     eax, [r12 + AV1_SYMBOL_PENDING_BASE]
+    mov     ecx, [r12 + AV1_SYMBOL_PENDING_SHIFT]
+    cmp     ecx, 32
+    jae     .corrupt
+    test    ecx, ecx
+    jz      .pending_resolved
+    mov     edx, 1
+    shl     edx, cl
+    dec     edx
+    and     eax, edx
+    mov     rdi, r12
+    mov     esi, eax
+    mov     edx, ecx
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+.pending_resolved:
+    mov     eax, [rsp]
+    mov     [r12 + AV1_SYMBOL_VALUE], eax
+    mov     dword [r12 + AV1_SYMBOL_PENDING], 0
+.encode_current:
+    mov     eax, [rsp]
+    call    .threshold_for_symbol
+    test    edx, edx
+    jnz     .done
+    mov     [rsp + 4], eax
+    mov     r8d, [r12 + AV1_SYMBOL_RANGE]
+    sub     r8d, eax
+    jz      .corrupt
+    bsr     ecx, r8d
+    mov     r9d, AV1_CDF_PROB_BITS
+    sub     r9d, ecx
+    mov     ecx, r9d
+    shl     r8d, cl
+    mov     [r12 + AV1_SYMBOL_RANGE], r8d
+    mov     eax, [rsp]
+    sub     eax, [rsp + 4]
+    inc     eax
+    mov     ecx, r9d
+    shl     eax, cl
+    dec     eax
+    mov     [r12 + AV1_SYMBOL_PENDING_BASE], eax
+    mov     [r12 + AV1_SYMBOL_PENDING_SHIFT], r9d
+    mov     dword [r12 + AV1_SYMBOL_PENDING], 1
+    test    r15d, r15d
+    jnz     .return_symbol
+    call    .update_cdf
+.return_symbol:
+    mov     eax, ebx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 32
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+.validate_cdf:
+    xor     eax, eax
+    xor     r9d, r9d
+.validate_loop:
+    cmp     eax, r14d
+    jae     .validate_ok
+    movzx   ecx, word [r13 + rax * 2]
+    cmp     ecx, r9d
+    jbe     .validate_corrupt
+    mov     r8d, r14d
+    dec     r8d
+    cmp     eax, r8d
+    je      .validate_final
+    cmp     ecx, AV1_CDF_PROB_TOP
+    jae     .validate_corrupt
+    jmp     .validate_next
+.validate_final:
+    cmp     ecx, AV1_CDF_PROB_TOP
+    jne     .validate_corrupt
+.validate_next:
+    mov     r9d, ecx
+    inc     eax
+    jmp     .validate_loop
+.validate_ok:
+    er_ok
+    ret
+.validate_corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    ret
+
+.threshold_for_symbol:
+    movzx   ecx, word [r13 + rbx * 2]
+    mov     eax, AV1_CDF_PROB_TOP
+    sub     eax, ecx
+    shr     eax, AV1_CDF_EC_PROB_SHIFT
+    mov     ecx, [r12 + AV1_SYMBOL_RANGE]
+    shr     ecx, 8
+    imul    eax, ecx
+    shr     eax, 7 - AV1_CDF_EC_PROB_SHIFT
+    mov     ecx, r14d
+    sub     ecx, ebx
+    dec     ecx
+    imul    ecx, AV1_CDF_EC_MIN_PROB
+    add     eax, ecx
+    er_ok
+    ret
+
+.target_for_symbol:
+    call    .threshold_for_symbol
+    test    edx, edx
+    jnz     .target_done
+    mov     [rsp + 8], eax
+    test    ebx, ebx
+    jz      .target_upper_range
+    dec     ebx
+    call    .threshold_for_symbol
+    inc     ebx
+    test    edx, edx
+    jnz     .target_done
+    jmp     .target_have_upper
+.target_upper_range:
+    mov     eax, [r12 + AV1_SYMBOL_RANGE]
+.target_have_upper:
+    sub     eax, [rsp + 8]
+    jbe     .target_corrupt
+    shr     eax, 1
+    add     eax, [rsp + 8]
+    er_ok
+    ret
+.target_corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.target_done:
+    ret
+
+.update_cdf:
+    movzx   ecx, word [r13 + r14 * 2]
+    mov     r15d, 3
+    cmp     ecx, 15
+    jbe     .rate_count_31
+    inc     r15d
+.rate_count_31:
+    cmp     ecx, 31
+    jbe     .rate_size
+    inc     r15d
+.rate_size:
+    bsr     eax, r14d
+    cmp     eax, 2
+    jbe     .rate_add
+    mov     eax, 2
+.rate_add:
+    add     r15d, eax
+    xor     r10d, r10d
+    xor     r8d, r8d
+    mov     r9d, r14d
+    dec     r9d
+.update_loop:
+    cmp     r8d, r9d
+    jae     .update_count
+    cmp     r8d, ebx
+    jne     .update_value
+    mov     r10d, AV1_CDF_PROB_TOP
+.update_value:
+    movzx   eax, word [r13 + r8 * 2]
+    cmp     r10d, eax
+    jae     .increase_value
+    mov     edx, eax
+    sub     edx, r10d
+    mov     ecx, r15d
+    shr     edx, cl
+    sub     eax, edx
+    jmp     .store_value
+.increase_value:
+    mov     edx, r10d
+    sub     edx, eax
+    mov     ecx, r15d
+    shr     edx, cl
+    add     eax, edx
+.store_value:
+    mov     [r13 + r8 * 2], ax
+    inc     r8d
+    jmp     .update_loop
+.update_count:
+    movzx   eax, word [r13 + r14 * 2]
+    cmp     eax, 32
+    jae     .update_done
+    inc     eax
+    mov     [r13 + r14 * 2], ax
+.update_done:
+    ret
+
+; er_av1_symbol_write_finish(ctx) -> eax=bytes written, rdx=error
+; Flushes pending renormalization bits and writes AV1 trailing marker padding.
+er_fn er_av1_symbol_write_finish
+    er_push rbx, r12
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     r12, rdi
+    cmp     dword [r12 + AV1_SYMBOL_POS], 0
+    jne     .maybe_pending
+    mov     rdi, r12
+    mov     esi, AV1_CDF_PROB_TOP - 1
+    mov     edx, AV1_CDF_PROB_BITS
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+.maybe_pending:
+    cmp     dword [r12 + AV1_SYMBOL_PENDING], 0
+    je      .trailing_marker
+    mov     eax, [r12 + AV1_SYMBOL_PENDING_BASE]
+    mov     ecx, [r12 + AV1_SYMBOL_PENDING_SHIFT]
+    cmp     ecx, 32
+    jae     .corrupt
+    test    ecx, ecx
+    jz      .clear_pending
+    mov     edx, 1
+    shl     edx, cl
+    dec     edx
+    and     eax, edx
+    mov     rdi, r12
+    mov     esi, eax
+    mov     edx, ecx
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+.clear_pending:
+    mov     dword [r12 + AV1_SYMBOL_PENDING], 0
+.trailing_marker:
+    mov     rdi, r12
+    mov     esi, 1
+    mov     edx, 1
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+    mov     ebx, [r12 + AV1_SYMBOL_POS]
+    and     ebx, 7
+    jz      .bytes
+    mov     edx, 8
+    sub     edx, ebx
+    mov     rdi, r12
+    xor     esi, esi
+    call    er_av1_bits_write
+    test    edx, edx
+    jnz     .done
+.bytes:
+    mov     rdi, r12
+    call    er_av1_bits_bytes_written
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12
+    er_ret
+
+; er_av1_symbol_write_bool(ctx, bit) -> eax=bit, rdx=error
+; rdi=ctx, esi=bit
+er_fn er_av1_symbol_write_bool
+    cmp     esi, 1
+    ja      .invalid_param
+    mov     ecx, esi
+    mov     rsi, av1_bool_cdf
+    mov     edx, AV1_CDF_SYMBOLS_MIN
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_av1_symbol_write_literal(ctx, value, count) -> eax=count, rdx=error
+; rdi=ctx, esi=value, edx=count
+er_fn er_av1_symbol_write_literal
+    er_push rbx, r12, r13, r14
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     edx, 32
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     ebx, edx
+    test    ebx, ebx
+    jz      .ok
+.loop:
+    mov     ecx, ebx
+    dec     ecx
+    mov     esi, r13d
+    shr     esi, cl
+    and     esi, 1
+    mov     rdi, r12
+    call    er_av1_symbol_write_bool
+    test    edx, edx
+    jnz     .done
+    dec     ebx
+    jnz     .loop
+.ok:
+    mov     eax, r14d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, r12, r13, r14
     er_ret
 
 ; er_av1_symbol_read_symbol(ctx, cdf, nsymbs, disable_update) -> eax=symbol, rdx=error

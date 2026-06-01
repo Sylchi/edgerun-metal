@@ -8,9 +8,7 @@ extern er_uvc_set_config_blob
 extern er_xhci_set_port_config_blob
 extern er_xhci_get_port_config_blob
 
-SECTION .bss
-passed:     resq 1
-failed:     resq 1
+TEST_BSS_PASSED_FAILED
 caps_out:   resd 1
 ptr_out:    resq 1
 len_out:    resq 1

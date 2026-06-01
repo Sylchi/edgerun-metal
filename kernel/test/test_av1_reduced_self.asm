@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_reduced_still_encode
 extern er_av1_reduced_still_encode_split
@@ -36,9 +37,7 @@ extern er_av1_ivf_write_frame
 extern er_av1_obu_decode_unit
 extern er_av1_tile_raw420_fill_desc
 
-SECTION .bss
-passed:  resq 1
-failed:  resq 1
+TEST_BSS_PASSED_FAILED
 raw_len: resd 1
 raw_cursor: resd 1
 ivf_len: resd 1

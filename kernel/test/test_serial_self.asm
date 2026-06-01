@@ -53,8 +53,7 @@ extern er_strcmp
 extern er_strlen
 extern er_memset
 
-TEST_DATA_PASSED_FAILED
-total: dq 0
+TEST_DATA_TOTAL_PASSED_FAILED
 
 ; -------------------------------------------------------------------
 ; Entry point

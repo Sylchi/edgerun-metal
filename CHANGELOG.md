@@ -4,6 +4,11 @@
 - `./build.sh test` passes on the current working tree.
 - `./build.sh test-status` reports all default registered tests passing.
 - `./build.sh kernel` builds `.build/kernel/kernel.elf` and `.build/kernel/kernel.bin`.
+- `./build.sh signing-wasm` now builds the Ed25519 signing guest from
+  `app/src/signing_wasm.zig`; the old Cargo/Rust signing guest path was removed.
+- Native ASM signing replacement started with `kernel/x86_64/crypto/sha512.asm`
+  and `kernel/x86_64/crypto/ed25519.asm` seed scalar/prefix derivation,
+  scalar `reduce64`, and scalar `mulAdd`; all are covered by registry tests.
 - `./build.sh bench-wasm-jit` links and runs after adding the benchmark's WASM
   runtime pointer stub and executable JIT cache setup.
 - Root docs now use the current `kernel/x86_64/` layout and registry-driven

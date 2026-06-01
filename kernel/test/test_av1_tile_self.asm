@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_tile_group_decode_single
 extern er_av1_tile_entries_validate_entropy
@@ -20,9 +21,7 @@ extern er_av1_tile_raw420_validate
 extern er_av1_tile_raw420_encode
 extern er_av1_tile_raw420_decode
 
-SECTION .bss
-passed:    resq 1
-failed:    resq 1
+TEST_BSS_PASSED_FAILED
 desc:      resb AV1_TILE_GROUP_SIZE
 tileinfo:  resb AV1_TILE_INFO_SIZE
 entries:   resb AV1_TILE_ENTRY_SIZE * 4

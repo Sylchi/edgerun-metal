@@ -23,29 +23,6 @@ SIZEOF_CLOCK           equ 88
 ; ─── Use shared assertion macros from test_macros.inc ───────────────
 %include "test/test_macros.inc"
 
-; Assert u64 value at memory location equals expected
-; %1 = address expression (e.g. clock1 + 32), %2 = expected u64 immediate
-%macro ASSERT_MEM_U64 2
-    push    rdi
-    push    rax
-    mov     rdi, %1
-    mov     rax, [rdi]
-    cmp     rax, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-    pop     rax
-    pop     rdi
-%endmacro
-
-; Run a test and print its name (for debug)
-%macro TEST_GROUP 1
-    ; No-op for now; just a label marker
-%endmacro
-
 SECTION .bss
 ; Test clock structures (88 bytes each)
 align 16
@@ -56,8 +33,7 @@ clock4:     resb SIZEOF_CLOCK
 clock5:     resb SIZEOF_CLOCK
 
 ; Result tracking
-passed:     resq 1
-failed:     resq 1
+TEST_BSS_PASSED_FAILED
 
 SECTION .data
 ; ─── Test Keeper IDs ───────────────────────────────────────────────
@@ -204,15 +180,15 @@ _start:
 .keeper2_ok:
 
     ; Verify tick/slot/epoch/era are zero
-    ASSERT_MEM_U64 (clock1 + 32), 0     ; tick = 0
-    ASSERT_MEM_U64 (clock1 + 40), 0     ; slot = 0
-    ASSERT_MEM_U64 (clock1 + 48), 0     ; epoch = 0
-    ASSERT_MEM_U64 (clock1 + 56), 0     ; era = 0
+    ASSERT_QWORD [clock1 + 32], 0     ; tick = 0
+    ASSERT_QWORD [clock1 + 40], 0     ; slot = 0
+    ASSERT_QWORD [clock1 + 48], 0     ; epoch = 0
+    ASSERT_QWORD [clock1 + 56], 0     ; era = 0
 
     ; Verify limits copied
-    ASSERT_MEM_U64 (clock1 + 64), 2     ; ticks_per_slot = 2
-    ASSERT_MEM_U64 (clock1 + 72), 2     ; slots_per_epoch = 2
-    ASSERT_MEM_U64 (clock1 + 80), 2     ; epochs_per_era = 2
+    ASSERT_QWORD [clock1 + 64], 2     ; ticks_per_slot = 2
+    ASSERT_QWORD [clock1 + 72], 2     ; slots_per_epoch = 2
+    ASSERT_QWORD [clock1 + 80], 2     ; epochs_per_era = 2
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: er_clock_init — invalid keeper (all zeros)
@@ -250,7 +226,7 @@ _start:
     call    er_clock_advance_with
     ASSERT_RAX 0                ; no boundary
     ASSERT_RDX 0
-    ASSERT_MEM_U64 (clock1 + 32), 1     ; tick = 1 (was 0, advanced by 1)
+    ASSERT_QWORD [clock1 + 32], 1     ; tick = 1 (was 0, advanced by 1)
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: advance crossing slot boundary
@@ -262,8 +238,8 @@ _start:
     call    er_clock_advance_with
     ASSERT_RAX BOUNDARY_SLOT            ; slot boundary
     ASSERT_RDX 0
-    ASSERT_MEM_U64 (clock1 + 32), 0     ; tick = 0 (wrapped)
-    ASSERT_MEM_U64 (clock1 + 40), 1     ; slot = 1
+    ASSERT_QWORD [clock1 + 32], 0     ; tick = 0 (wrapped)
+    ASSERT_QWORD [clock1 + 40], 1     ; slot = 1
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: advance with er_clock_advance convenience wrapper
@@ -275,7 +251,7 @@ _start:
     call    er_clock_advance_with
     ASSERT_RAX 0
     ASSERT_RDX 0
-    ASSERT_MEM_U64 (clock1 + 32), 1     ; tick = 1
+    ASSERT_QWORD [clock1 + 32], 1     ; tick = 1
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: er_clock_advance_default
@@ -291,9 +267,9 @@ _start:
     call    er_clock_advance_with
     ASSERT_RAX (BOUNDARY_SLOT | BOUNDARY_EPOCH)
     ASSERT_RDX 0
-    ASSERT_MEM_U64 (clock1 + 32), 0     ; tick = 0
-    ASSERT_MEM_U64 (clock1 + 40), 0     ; slot = 0
-    ASSERT_MEM_U64 (clock1 + 48), 1     ; epoch = 1
+    ASSERT_QWORD [clock1 + 32], 0     ; tick = 0
+    ASSERT_QWORD [clock1 + 40], 0     ; slot = 0
+    ASSERT_QWORD [clock1 + 48], 1     ; epoch = 1
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: invalid modifier (stride=0) → error
@@ -341,10 +317,10 @@ _start:
     call    er_clock_advance_with
     ASSERT_RAX (BOUNDARY_SLOT | BOUNDARY_EPOCH | BOUNDARY_ERA)
     ASSERT_RDX 0
-    ASSERT_MEM_U64 (clock2 + 32), 1     ; tick = 1
-    ASSERT_MEM_U64 (clock2 + 40), 1     ; slot = 1
-    ASSERT_MEM_U64 (clock2 + 48), 0     ; epoch = 0
-    ASSERT_MEM_U64 (clock2 + 56), 1     ; era = 1
+    ASSERT_QWORD [clock2 + 32], 1     ; tick = 1
+    ASSERT_QWORD [clock2 + 40], 1     ; slot = 1
+    ASSERT_QWORD [clock2 + 48], 0     ; epoch = 0
+    ASSERT_QWORD [clock2 + 56], 1     ; era = 1
 
 ; ═══════════════════════════════════════════════════════════════════
 ; Test: stamp order (same keeper, different eras)

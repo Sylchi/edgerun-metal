@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_bits_read_init
 extern er_av1_bits_read
@@ -11,6 +12,11 @@ extern er_av1_bits_write
 extern er_av1_bits_bytes_written
 extern er_av1_cdf_symbol
 extern er_av1_symbol_init
+extern er_av1_symbol_write_init
+extern er_av1_symbol_write_symbol
+extern er_av1_symbol_write_bool
+extern er_av1_symbol_write_literal
+extern er_av1_symbol_write_finish
 extern er_av1_symbol_read_symbol
 extern er_av1_symbol_read_bool
 extern er_av1_symbol_read_literal
@@ -22,9 +28,7 @@ extern er_av1_sequence_encode
 extern er_av1_sequence_decode_reduced_still
 extern er_av1_sequence_encode_reduced_still
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 bitctx: resb AV1_BITS_SIZE
 symctx: resb AV1_SYMBOL_SIZE
 seq:    resb AV1_SEQ_SIZE
@@ -39,6 +43,8 @@ sym_trail_bad_padding: db 0xc0
 bad_profile: db 0x20
 short_seq:   db 0x18
 cdf4:        dw 8192, 16384, 24576, AV1_CDF_PROB_TOP
+cdf4_rt_w:   dw 8192, 16384, 24576, AV1_CDF_PROB_TOP
+cdf4_rt_r:   dw 8192, 16384, 24576, AV1_CDF_PROB_TOP
 cdf_bad_eq:  dw 8192, 8192, 24576, AV1_CDF_PROB_TOP
 cdf_bad_top: dw 8192, AV1_CDF_PROB_TOP, 24576, AV1_CDF_PROB_TOP
 cdf_bad_end: dw 8192, 16384, 24576, 32767
@@ -299,8 +305,121 @@ _start:
     test    eax, eax
     jnz     .fail_symbol_bool_literal
     inc     qword [rel passed]
-    jmp     .symbol_ns_zero
+    jmp     .symbol_write_roundtrip
 .fail_symbol_bool_literal:
+    inc     qword [rel failed]
+
+.symbol_write_roundtrip:
+    mov     qword [rel outbuf], 0
+    mov     qword [rel outbuf + 8], 0
+    mov     qword [rel outbuf + 16], 0
+    mov     qword [rel outbuf + 24], 0
+    mov     word [rel cdf4_rt_w], 8192
+    mov     word [rel cdf4_rt_w + 2], 16384
+    mov     word [rel cdf4_rt_w + 4], 24576
+    mov     word [rel cdf4_rt_w + 6], AV1_CDF_PROB_TOP
+    mov     word [rel cdf4_rt_r], 8192
+    mov     word [rel cdf4_rt_r + 2], 16384
+    mov     word [rel cdf4_rt_r + 4], 24576
+    mov     word [rel cdf4_rt_r + 6], AV1_CDF_PROB_TOP
+    mov     rdi, symctx
+    mov     rsi, outbuf
+    mov     edx, 32
+    call    er_av1_symbol_write_init
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_w
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_w
+    mov     edx, 4
+    mov     ecx, 1
+    mov     r8d, 1
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    mov     rdi, symctx
+    call    er_av1_symbol_write_finish
+    test    eax, eax
+    jz      .fail_symbol_write_roundtrip
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    mov     r9d, eax
+    mov     rdi, symctx
+    mov     rsi, outbuf
+    mov     edx, r9d
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_r
+    mov     edx, 4
+    mov     ecx, 1
+    call    er_av1_symbol_read_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    test    eax, eax
+    jnz     .fail_symbol_write_roundtrip
+    mov     rdi, symctx
+    mov     rsi, cdf4_rt_r
+    mov     edx, 4
+    mov     ecx, 1
+    call    er_av1_symbol_read_symbol
+    test    edx, edx
+    jnz     .fail_symbol_write_roundtrip
+    cmp     eax, 1
+    jne     .fail_symbol_write_roundtrip
+    inc     qword [rel passed]
+    jmp     .symbol_write_literal_roundtrip
+.fail_symbol_write_roundtrip:
+    inc     qword [rel failed]
+
+.symbol_write_literal_roundtrip:
+    mov     qword [rel outbuf], 0
+    mov     qword [rel outbuf + 8], 0
+    mov     rdi, symctx
+    mov     rsi, outbuf
+    mov     edx, 32
+    call    er_av1_symbol_write_init
+    test    edx, edx
+    jnz     .fail_symbol_write_literal_roundtrip
+    mov     rdi, symctx
+    mov     esi, 7
+    mov     edx, 3
+    call    er_av1_symbol_write_literal
+    cmp     eax, 3
+    jne     .fail_symbol_write_literal_roundtrip
+    test    edx, edx
+    jnz     .fail_symbol_write_literal_roundtrip
+    mov     rdi, symctx
+    call    er_av1_symbol_write_finish
+    test    eax, eax
+    jz      .fail_symbol_write_literal_roundtrip
+    test    edx, edx
+    jnz     .fail_symbol_write_literal_roundtrip
+    mov     r9d, eax
+    mov     rdi, symctx
+    mov     rsi, outbuf
+    mov     edx, r9d
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_write_literal_roundtrip
+    mov     rdi, symctx
+    mov     esi, 3
+    call    er_av1_symbol_read_literal
+    test    edx, edx
+    jnz     .fail_symbol_write_literal_roundtrip
+    cmp     eax, 7
+    jne     .fail_symbol_write_literal_roundtrip
+    inc     qword [rel passed]
+    jmp     .symbol_ns_zero
+.fail_symbol_write_literal_roundtrip:
     inc     qword [rel failed]
 
 .symbol_ns_zero:

@@ -19,9 +19,7 @@ extern er_av1_padding_decode
 extern er_av1_obu_encode_metadata
 extern er_av1_obu_encode_padding
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 desc:   resb AV1_OBU_DESC_SIZE
 metadata_desc: resb AV1_METADATA_DESC_SIZE
 value:  resq 1

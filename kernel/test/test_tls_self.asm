@@ -29,10 +29,7 @@ extern er_tls_send
 extern er_tor_aes_ctr
 extern er_memcpy
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
-total:  resq 1
+TEST_BSS_TOTAL_PASSED_FAILED
 out_buf: resb TLS_CLIENT_HELLO_RECORD_LEN
 priv_buf: resb TLS_X25519_KEY_LEN
 server_key: resb TLS_X25519_KEY_LEN

@@ -21,9 +21,7 @@ extern er_route_register_relay
 extern er_route_send
 extern er_memcpy
 
-SECTION .data
-passed: dq 0
-failed: dq 0
+TEST_DATA_PASSED_FAILED
 
 test_key: db 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6
           db 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
@@ -101,34 +99,11 @@ _start:
     call    er_local_cell_init
     ASSERT_RDX 0
 
-%macro TEST_LABEL 1
-    jmp     %%done
-%%str: db %1, 10, 0
-%%done:
-    push    rcx
-    push    r11
-    push    rdi
-    push    rsi
-    push    rdx
-    push    rax
-    mov     rdi, 1
-    lea     rsi, [rel %%str]
-    mov     rdx, 2
-    mov     rax, 1
-    syscall
-    pop     rax
-    pop     rdx
-    pop     rsi
-    pop     rdi
-    pop     r11
-    pop     rcx
-%endmacro
-
 ; ================================================================
 ; Test 1: AES-128-CTR encrypt — known-answer test
 ; NIST SP 800-38A test vector F.5.1 (64 bytes, key=2b...)
 ; ================================================================
-    TEST_LABEL "1"
+    TEST_DEBUG_LABEL "1"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -146,7 +121,7 @@ _start:
 ; ================================================================
 ; Test 2: AES-128-CTR roundtrip (decrypt = same operation in CTR)
 ; ================================================================
-    TEST_LABEL "2"
+    TEST_DEBUG_LABEL "2"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -176,7 +151,7 @@ _start:
 ; ================================================================
 ; Test 3: Partial block (non-16-byte aligned length)
 ; ================================================================
-    TEST_LABEL "3"
+    TEST_DEBUG_LABEL "3"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -195,7 +170,7 @@ _start:
 ; ================================================================
 ; Test 4: Empty length (should be no-op)
 ; ================================================================
-    TEST_LABEL "4"
+    TEST_DEBUG_LABEL "4"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -214,7 +189,7 @@ _start:
 ; ================================================================
 ; Test 5: Multi-block XOR (3 blocks = 48 bytes)
 ; ================================================================
-    TEST_LABEL "5"
+    TEST_DEBUG_LABEL "5"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -233,7 +208,7 @@ _start:
 ; Test 6: AES-256-CTR encrypt — known-answer test
 ; NIST SP 800-38A test vector F.5.5 (64 bytes, key=603d...)
 ; ================================================================
-    TEST_LABEL "6"
+    TEST_DEBUG_LABEL "6"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -251,7 +226,7 @@ _start:
 ; ================================================================
 ; Test 7: AES-256-CTR roundtrip
 ; ================================================================
-    TEST_LABEL "7"
+    TEST_DEBUG_LABEL "7"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -281,7 +256,7 @@ _start:
 ; ================================================================
 ; Test 8: Tor role state accepts every defined node role
 ; ================================================================
-    TEST_LABEL "8"
+    TEST_DEBUG_LABEL "8"
     mov     edi, TOR_ROLE_CLIENT
     call    er_tor_set_role
     ASSERT_EQ eax, 0
@@ -354,7 +329,7 @@ _start:
 ; ================================================================
 ; Test 9: Invalid roles fail without changing current role
 ; ================================================================
-    TEST_LABEL "9"
+    TEST_DEBUG_LABEL "9"
     mov     edi, 0x7fffffff
     call    er_tor_set_role
     ASSERT_EQ eax, -1
@@ -382,7 +357,7 @@ _start:
 ; ================================================================
 ; Test 10: HSDir v3 publish POST header
 ; ================================================================
-    TEST_LABEL "10"
+    TEST_DEBUG_LABEL "10"
     lea     rdi, [rel req_buf]
     mov     esi, 512
     mov     edx, 123
@@ -393,7 +368,7 @@ _start:
 ; ================================================================
 ; Test 11: HSDir v3 descriptor fetch GET request
 ; ================================================================
-    TEST_LABEL "11"
+    TEST_DEBUG_LABEL "11"
     lea     rdi, [rel req_buf]
     mov     esi, 512
     lea     rdx, [rel hsdir_blinded]
@@ -405,7 +380,7 @@ _start:
 ; ================================================================
 ; Test 12: identity route requires registered relay forwarding
 ; ================================================================
-    TEST_LABEL "12"
+    TEST_DEBUG_LABEL "12"
     lea     rdi, [rel route_hash]
     lea     rsi, [rel route_cell]
     call    er_route_send
@@ -426,7 +401,7 @@ _start:
 ; ================================================================
 ; Test 13: relay route can be registered idempotently
 ; ================================================================
-    TEST_LABEL "13"
+    TEST_DEBUG_LABEL "13"
     lea     rdi, [rel route_hash]
     call    er_route_register_relay
     ASSERT_RDX 0

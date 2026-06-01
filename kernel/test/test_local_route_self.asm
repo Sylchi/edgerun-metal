@@ -34,9 +34,7 @@ temp_hash:
 zero_hash:
     times 32 db 0
 
-SECTION .bss
-passed:             resq 1
-failed:             resq 1
+TEST_BSS_PASSED_FAILED
 sync_slot:          resd 1
 async_slot:         resd 1
 temp_slot:          resd 1

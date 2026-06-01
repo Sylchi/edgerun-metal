@@ -106,6 +106,28 @@ _local_circuit_fd_to_index:
     ret
 
 ; ==================================================================
+; _local_circuit_open_entry — validate fd and return open circuit entry
+; rdi = fd
+; returns rax = entry ptr, edx = 0 on success
+; ==================================================================
+_local_circuit_open_entry:
+    call    _local_circuit_fd_to_index
+    test    edx, edx
+    jnz     .bad
+    mov     edi, eax
+    call    _local_circuit_entry_ptr
+    test    edx, edx
+    jnz     .bad
+    cmp     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_OPEN
+    jne     .bad
+    er_ok
+    ret
+.bad:
+    xor     eax, eax
+    er_err  ERROR_CIRCUIT_INVALID
+    ret
+
+; ==================================================================
 ; er_local_circuit_init — initialize circuit table
 ; void er_local_circuit_init(void)
 ; ==================================================================
@@ -133,8 +155,11 @@ er_fn er_local_open_circuit
     mov     r12, rdi        ; dest_hash
     mov     r13d, esi       ; own_slot
 
-    ; Store own_slot globally for recv
-    mov     dword [local_circuit_own_slot], r13d
+    ; Validate own slot before mutating global recv state.
+    mov     edi, r13d
+    call    er_local_route_get_ring
+    test    edx, edx
+    jnz     .not_found
 
     ; Look up destination in route table
     mov     rdi, r12
@@ -170,6 +195,7 @@ er_fn er_local_open_circuit
     ; Store destination slot and state
     mov     [rax + CIRCUIT_DEST_SLOT], ebx
     mov     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_OPEN
+    mov     dword [local_circuit_own_slot], r13d
 
     ; Return fd = circuit_index + 1
     lea     eax, [r14d + 1]
@@ -216,25 +242,12 @@ er_fn er_local_send_cell
     mov     r12, rsi        ; cell
     mov     r13d, edi       ; fd (save for circ ID)
 
-    ; Convert fd to circuit index
-    call    _local_circuit_fd_to_index
+    ; Validate circuit before mutating caller-owned cell bytes.
+    call    _local_circuit_open_entry
     test    edx, edx
     jnz     .bad
 
-    mov     ebx, eax        ; circuit_index
-
-    ; Set circuit ID in cell header before entry lookup
     mov     [r12 + LOCAL_CELL_CIRC_ID], r13d
-
-    ; Get circuit entry
-    mov     edi, ebx
-    call    _local_circuit_entry_ptr
-    test    edx, edx
-    jnz     .bad
-
-    ; Check circuit is open
-    cmp     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_OPEN
-    jne     .bad
 
     ; Get destination slot and send
     mov     edi, [rax + CIRCUIT_DEST_SLOT]
@@ -264,8 +277,8 @@ er_fn er_local_recv_cell
 
     mov     r12, rsi        ; out buffer
 
-    ; Validate fd
-    call    _local_circuit_fd_to_index
+    ; Validate fd and open state.
+    call    _local_circuit_open_entry
     test    edx, edx
     jnz     .bad
 
@@ -295,21 +308,15 @@ er_fn er_local_recv_cell
 er_fn er_local_close_circuit
     push    rbx
 
-    ; Convert fd to circuit index
-    call    _local_circuit_fd_to_index
+    call    _local_circuit_open_entry
     test    edx, edx
     jnz     .bad
 
-    mov     ebx, eax        ; circuit_index
-
-    ; Get circuit entry
-    mov     edi, ebx
-    call    _local_circuit_entry_ptr
-    test    edx, edx
-    jnz     .bad
-
-    ; Mark as free
-    mov     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_FREE
+    ; Clear the full circuit entry so stale destinations are not retained.
+    mov     rdi, rax
+    xor     esi, esi
+    mov     edx, CIRCUIT_SLOT_SIZE
+    call    er_memset
 
     xor     eax, eax
     er_ok

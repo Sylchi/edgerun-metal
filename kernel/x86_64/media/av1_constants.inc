@@ -122,7 +122,10 @@ AV1_SYMBOL_POS                      equ 12
 AV1_SYMBOL_VALUE                    equ 16
 AV1_SYMBOL_RANGE                    equ 20
 AV1_SYMBOL_MAX_BITS                 equ 24
-AV1_SYMBOL_SIZE                     equ 32
+AV1_SYMBOL_PENDING                  equ 28
+AV1_SYMBOL_PENDING_BASE             equ 32
+AV1_SYMBOL_PENDING_SHIFT            equ 36
+AV1_SYMBOL_SIZE                     equ 40
 
 AV1_SEQ_PROFILE                     equ 0
 AV1_SEQ_STILL_PICTURE               equ 1

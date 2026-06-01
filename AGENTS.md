@@ -72,8 +72,7 @@ The repository has two code worlds separated by a hard boundary:
 - `ld` / `objcopy` (binutils) — linker. Long-term goal: own linker.
 
 ### Current bootstrap dependencies to eliminate
-- `cargo` / Rust — currently builds the signing WASM guest used by `./build.sh kernel`.
-- `zig` — app-side authoring compiler until the self-hosted source-to-WASM path replaces enough of it.
+- `zig` — app-side authoring compiler and the current signing WASM guest compiler until the self-hosted source-to-WASM path replaces enough of it.
 
 - `qemu-system-x86_64` and `qemu-system-arm` — emulator test environments.
 - `arm-none-eabi-as`, `arm-none-eabi-ld`, `arm-none-eabi-objcopy` — Pi Zero W build/test tools.

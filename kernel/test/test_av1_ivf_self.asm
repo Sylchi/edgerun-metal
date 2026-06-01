@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_ivf_is
 extern er_av1_ivf_decode_header
@@ -14,9 +15,7 @@ extern er_av1_ivf_seek_frame
 extern er_av1_ivf_encode_header
 extern er_av1_ivf_write_frame
 
-SECTION .bss
-passed:     resq 1
-failed:     resq 1
+TEST_BSS_PASSED_FAILED
 ivf_desc:   resb AV1_IVF_HDR_SIZE
 frame_desc: resb AV1_IVF_FRAME_SIZE
 out_buf:    resb 64

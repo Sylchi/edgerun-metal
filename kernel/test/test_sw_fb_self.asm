@@ -33,9 +33,7 @@ rect_part2: dd 0x40800000, 0x40800000, 0x40800000, 0x40800000  ; (4, 4, 4, 4)
 rect_empty: dd 0x41200000, 0x41200000, 0x00000000, 0x00000000  ; (10,10,0,0) — nothing to draw
 rect_off:   dd 0x41A00000, 0x41200000, 0x40800000, 0x40800000  ; (20,10,4,4) — partially off-screen
 
-SECTION .bss
-total:      resq 1
-passed:     resq 1
+TEST_BSS_TOTAL_PASSED
 fb:         resd 100          ; 10x10 framebuffer (400 bytes)
 row:        resd 10           ; buffer for reading one row (40 bytes)
 

@@ -16,15 +16,23 @@ O_CREAT         equ 64
 O_TRUNC         equ 512
 FILE_MODE_0644  equ 420
 ER_ASM_BUF_SIZE equ 1048576
-ER_ASM_OBJ_SIZE equ 520
+ER_ASM_OBJ_SIZE equ 1600
 ER_ASM_TEXT_OFF equ 64
-ER_ASM_TEXT_CAP equ 16
-ER_ASM_SYM_SIZE_OFF equ 120
-ER_ASM_SYM_NAME_OFF equ 129
+ER_ASM_TEXT_CAP equ 512
+ER_ASM_SYMTAB_OFF equ 576
+ER_ASM_SYMTAB_CAP equ 408
+ER_ASM_SYMTAB_ENTRY_SIZE equ 24
+ER_ASM_STRTAB_OFF equ 984
+ER_ASM_STRTAB_CAP equ 256
+ER_ASM_SHSTRTAB_OFF equ 1240
+ER_ASM_SHDR_OFF equ 1280
+ER_ASM_SYM_SIZE_OFF equ 616
+ER_ASM_SYM_NAME_OFF equ 985
 ER_ASM_SYM_NAME_CAP equ 30
-ER_ASM_TEXT_SH_SIZE_OFF equ 296
+ER_ASM_TEXT_SH_SIZE_OFF equ 1376
 ER_ASM_EQU_CAP equ 8
 ER_ASM_INCLUDE_CAP equ 4
+ER_ASM_GLOBAL_CAP equ 16
 ER_ASM_PATH_SIZE equ 4096
 ASCII_0 equ '0'
 ASCII_9 equ '9'
@@ -60,12 +68,21 @@ exit_instr_step: resq 1
 exit_subset_bad: resq 1
 text_len:       resq 1
 imm_u32_value:  resq 1
+branch1_patch_off: resq 1
+branch2_patch_off: resq 1
 equ_name_ptr:   resq ER_ASM_EQU_CAP
 equ_name_len:   resq ER_ASM_EQU_CAP
 equ_value:      resq ER_ASM_EQU_CAP
 equ_count:      resq 1
 global_name_ptr: resq 1
 global_name_len: resq 1
+global_ptr:     resq ER_ASM_GLOBAL_CAP
+global_len:     resq ER_ASM_GLOBAL_CAP
+global_value:   resq ER_ASM_GLOBAL_CAP
+global_name_off: resq ER_ASM_GLOBAL_CAP
+global_count:   resq 1
+pending_global_ptr: resq 1
+pending_global_len: resq 1
 source_dir_buf: resb ER_ASM_PATH_SIZE
 include_path_buf: resb ER_ASM_PATH_SIZE
 num_buf:        resb 32
@@ -233,16 +250,37 @@ er_fn open_output
 
 ; is_supported_exit_subset() -> eax=1/0.
 er_fn is_supported_exit_subset
-    cmp     qword [rel label_count], 1
-    jne     .no
-    cmp     qword [rel instr_count], 3
-    jne     .no
-    cmp     qword [rel exit_instr_step], 3
-    jne     .no
     cmp     qword [rel exit_subset_bad], 0
     jne     .no
     cmp     qword [rel directive_count], 2
     jb      .no
+    cmp     qword [rel instr_count], 8
+    je      .branch_fn_shape
+    cmp     qword [rel label_count], 1
+    jne     .no
+    cmp     qword [rel instr_count], 3
+    je      .exit_shape
+    cmp     qword [rel instr_count], 2
+    jne     .no
+    cmp     qword [rel exit_instr_step], 4
+    je      .yes
+    cmp     qword [rel exit_instr_step], 6
+    je      .yes
+    cmp     qword [rel exit_instr_step], 8
+    jne     .no
+.yes:
+    mov     eax, 1
+    ret
+.exit_shape:
+    cmp     qword [rel exit_instr_step], 3
+    jne     .no
+    mov     eax, 1
+    ret
+.branch_fn_shape:
+    cmp     qword [rel label_count], 2
+    jne     .no
+    cmp     qword [rel exit_instr_step], 28
+    jne     .no
     mov     eax, 1
     ret
 .no:
@@ -301,42 +339,63 @@ er_fn build_exit_object
     jmp     .copy_text
 .patch:
     mov     rax, [rel text_len]
-    mov     [rel object_buf + ER_ASM_SYM_SIZE_OFF], rax
     mov     [rel object_buf + ER_ASM_TEXT_SH_SIZE_OFF], rax
-    call    patch_global_symbol_name
+    call    patch_global_symbols
     er_pop  rbx, r12, r13
     ret
 
-er_fn patch_global_symbol_name
-    er_push rbx, r12, r13
-    mov     r12, [rel global_name_ptr]
-    test    r12, r12
-    jz      .done
-    mov     r13, [rel global_name_len]
-    test    r13, r13
-    jz      .done
-    cmp     r13, ER_ASM_SYM_NAME_CAP
+er_fn patch_global_symbols
+    er_push rbx, r12, r13, r14, r15
+    mov     r12, 1
+    xor     r13d, r13d
+.str_loop:
+    cmp     r13, [rel global_count]
+    jae     .sym_start
+    mov     r14, [rel global_len + r13 * 8]
+    lea     rax, [r12 + r14 + 1]
+    cmp     rax, ER_ASM_STRTAB_CAP
     ja      .bad
-    lea     rbx, [rel object_buf + ER_ASM_SYM_NAME_OFF]
-    mov     ecx, ER_ASM_SYM_NAME_CAP + 1
-.clear:
-    mov     byte [rbx], 0
-    inc     rbx
-    dec     ecx
-    jnz     .clear
-    lea     rbx, [rel object_buf + ER_ASM_SYM_NAME_OFF]
+    mov     [rel global_name_off + r13 * 8], r12
+    lea     rbx, [rel object_buf + ER_ASM_STRTAB_OFF]
+    add     rbx, r12
+    mov     r15, [rel global_ptr + r13 * 8]
     xor     ecx, ecx
-.copy:
-    cmp     rcx, r13
-    jae     .done
-    movzx   eax, byte [r12 + rcx]
+.copy_name:
+    cmp     rcx, r14
+    jae     .name_done
+    movzx   eax, byte [r15 + rcx]
     mov     [rbx + rcx], al
     inc     ecx
-    jmp     .copy
+    jmp     .copy_name
+.name_done:
+    mov     byte [rbx + rcx], 0
+    lea     r12, [r12 + r14 + 1]
+    inc     r13
+    jmp     .str_loop
+.sym_start:
+    xor     r13d, r13d
+.sym_loop:
+    cmp     r13, [rel global_count]
+    jae     .done
+    cmp     r13, ER_ASM_GLOBAL_CAP
+    jae     .bad
+    lea     rbx, [rel object_buf + ER_ASM_SYMTAB_OFF + ER_ASM_SYMTAB_ENTRY_SIZE]
+    imul    rax, r13, ER_ASM_SYMTAB_ENTRY_SIZE
+    add     rbx, rax
+    mov     eax, [rel global_name_off + r13 * 8]
+    mov     [rbx], eax
+    mov     byte [rbx + 4], 0x10
+    mov     byte [rbx + 5], 0
+    mov     word [rbx + 6], 1
+    mov     rax, [rel global_value + r13 * 8]
+    mov     [rbx + 8], rax
+    mov     qword [rbx + 16], 0
+    inc     r13
+    jmp     .sym_loop
 .bad:
     mov     qword [rel exit_subset_bad], 1
 .done:
-    er_pop  rbx, r12, r13
+    er_pop  rbx, r12, r13, r14, r15
     ret
 
 ; parse_file(path) -> eax=0/error
@@ -461,6 +520,8 @@ er_fn scan_source
     cmp     byte [r14], ':'
     jne     .classify
     inc     qword [rel label_count]
+    call    handle_code_label
+    call    record_pending_global_label
     inc     r14
     call    skip_space_inline
     cmp     r14, r15
@@ -475,6 +536,9 @@ er_fn scan_source
     mov     r13, r14
     sub     r13, r12
 .classify:
+    call    record_er_fn_directive
+    test    eax, eax
+    jnz     .directive
     mov     rdi, r12
     mov     rsi, r13
     call    is_directive
@@ -525,6 +589,44 @@ er_fn scan_source
     er_pop  rbx, r12, r13, r14, r15
     ret
 
+er_fn record_er_fn_directive
+    er_push r12, r13
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_fn]
+    mov     ecx, tok_er_fn_len
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    call    skip_space_inline
+    mov     r12, r14
+    call    skip_operand_token
+    mov     r13, r14
+    sub     r13, r12
+    test    r13, r13
+    jz      .bad
+    cmp     r13, ER_ASM_SYM_NAME_CAP
+    ja      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     r10, r12
+    mov     r11, r13
+    mov     rax, [rel text_len]
+    call    add_global_symbol
+    inc     qword [rel label_count]
+    mov     eax, 1
+    jmp     .done
+.bad:
+    mov     qword [rel exit_subset_bad], 1
+    mov     eax, 1
+    jmp     .done
+.no:
+    xor     eax, eax
+.done:
+    er_pop  r12, r13
+    ret
+
 er_fn record_global_directive
     er_push r12, r13
     mov     rdi, r12
@@ -543,13 +645,49 @@ er_fn record_global_directive
     jz      .bad
     cmp     r13, ER_ASM_SYM_NAME_CAP
     ja      .bad
-    mov     [rel global_name_ptr], r12
-    mov     [rel global_name_len], r13
+    mov     [rel pending_global_ptr], r12
+    mov     [rel pending_global_len], r13
     jmp     .done
 .bad:
     mov     qword [rel exit_subset_bad], 1
 .done:
     er_pop  r12, r13
+    ret
+
+er_fn record_pending_global_label
+    mov     r10, [rel pending_global_ptr]
+    test    r10, r10
+    jz      .done
+    mov     r11, [rel pending_global_len]
+    test    r11, r11
+    jz      .done
+    mov     rax, [rel text_len]
+    call    add_global_symbol
+    test    eax, eax
+    jz      .bad
+    mov     qword [rel pending_global_ptr], 0
+    mov     qword [rel pending_global_len], 0
+    ret
+.bad:
+    mov     qword [rel exit_subset_bad], 1
+.done:
+    ret
+
+er_fn add_global_symbol
+    er_push rbx
+    mov     rbx, [rel global_count]
+    cmp     rbx, ER_ASM_GLOBAL_CAP
+    jae     .bad
+    mov     [rel global_ptr + rbx * 8], r10
+    mov     [rel global_len + rbx * 8], r11
+    mov     [rel global_value + rbx * 8], rax
+    inc     qword [rel global_count]
+    mov     eax, 1
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx
     ret
 
 ; record_equ(name=r10, name_len=r11, r14=equ token).
@@ -654,6 +792,13 @@ er_fn record_include
     call    expect_line_end
     test    eax, eax
     jz      .bad
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_x86_macros_inc]
+    mov     ecx, tok_x86_macros_inc_len
+    call    token_eq
+    test    eax, eax
+    jnz     .done
     call    build_include_path
     test    rax, rax
     jz      .bad
@@ -691,6 +836,7 @@ er_fn record_include
     lea     r15, [r14 + rax]
     call    scan_source
     er_pop  r14, r15
+.done:
     er_pop  r12
     ret
 .bad:
@@ -868,9 +1014,29 @@ er_fn track_exit_instruction
     cmp     rbx, 0
     je      .mov_exit
     cmp     rbx, 1
-    je      .xor_zero
+    je      .ret_or_xor_zero
     cmp     rbx, 2
     je      .syscall
+    cmp     rbx, 4
+    je      .bad
+    cmp     rbx, 5
+    je      .ret_after_xor_eax
+    cmp     rbx, 7
+    je      .ret_after_mov_eax_edi
+    cmp     rbx, 20
+    je      .jb_false
+    cmp     rbx, 21
+    je      .cmp_dil_high
+    cmp     rbx, 22
+    je      .ja_false
+    cmp     rbx, 23
+    je      .mov_branch_true
+    cmp     rbx, 24
+    je      .ret_branch_true
+    cmp     rbx, 26
+    je      .xor_branch_false
+    cmp     rbx, 27
+    je      .ret_branch_false
     jmp     .bad
 .mov_exit:
     mov     rdi, r12
@@ -879,7 +1045,7 @@ er_fn track_exit_instruction
     mov     ecx, tok_mov_len
     call    token_eq
     test    eax, eax
-    jz      .bad
+    jz      .xor_eax_zero
     lea     rdi, [rel tok_eax]
     mov     esi, tok_eax_len
     push    r14
@@ -901,6 +1067,24 @@ er_fn track_exit_instruction
     call    expect_comma
     test    eax, eax
     jz      .bad
+    cmp     r10d, 0
+    jne     .mov_exit_u32
+    push    r14
+    lea     rdi, [rel tok_edi]
+    mov     esi, tok_edi_len
+    call    expect_operand
+    test    eax, eax
+    jz      .mov_exit_not_edi
+    pop     r11
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_mov_eax_edi
+    mov     qword [rel exit_instr_step], 7
+    jmp     .done
+.mov_exit_not_edi:
+    pop     r14
+.mov_exit_u32:
     call    expect_u32_operand
     test    eax, eax
     jz      .bad
@@ -915,6 +1099,82 @@ er_fn track_exit_instruction
     call    emit_mov_rax_imm32
 .mov_exit_done:
     inc     qword [rel exit_instr_step]
+    jmp     .done
+.xor_eax_zero:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_xor]
+    mov     ecx, tok_xor_len
+    call    token_eq
+    test    eax, eax
+    jz      .cmp_dil_low
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_xor_eax_eax
+    mov     qword [rel exit_instr_step], 5
+    jmp     .done
+.cmp_dil_low:
+    call    match_cmp_dil_imm8
+    test    eax, eax
+    jz      .bad
+    call    emit_cmp_dil_imm8
+    mov     qword [rel exit_instr_step], 20
+    jmp     .done
+.ret_or_xor_zero:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_ret]
+    mov     ecx, tok_ret_len
+    call    token_eq
+    test    eax, eax
+    jz      .xor_zero
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_ret
+    mov     qword [rel exit_instr_step], 4
+    jmp     .done
+.ret_after_xor_eax:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_ret]
+    mov     ecx, tok_ret_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_ret
+    mov     qword [rel exit_instr_step], 6
+    jmp     .done
+.ret_after_mov_eax_edi:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_ret]
+    mov     ecx, tok_ret_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_ret
+    mov     qword [rel exit_instr_step], 8
     jmp     .done
 .xor_zero:
     mov     rdi, r12
@@ -1001,10 +1261,188 @@ er_fn track_exit_instruction
     call    emit_syscall
     inc     qword [rel exit_instr_step]
     jmp     .done
+.jb_false:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_jb]
+    mov     ecx, tok_jb_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    call    expect_target_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_jb_placeholder
+    mov     qword [rel exit_instr_step], 21
+    jmp     .done
+.cmp_dil_high:
+    call    match_cmp_dil_imm8
+    test    eax, eax
+    jz      .bad
+    call    emit_cmp_dil_imm8
+    mov     qword [rel exit_instr_step], 22
+    jmp     .done
+.ja_false:
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_ja]
+    mov     ecx, tok_ja_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    call    expect_target_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    call    emit_ja_placeholder
+    mov     qword [rel exit_instr_step], 23
+    jmp     .done
+.mov_branch_true:
+    call    match_mov_eax_imm32
+    test    eax, eax
+    jz      .bad
+    call    emit_mov_eax_imm32
+    mov     qword [rel exit_instr_step], 24
+    jmp     .done
+.ret_branch_true:
+    call    match_ret_line
+    test    eax, eax
+    jz      .bad
+    call    emit_ret
+    mov     qword [rel exit_instr_step], 25
+    jmp     .done
+.xor_branch_false:
+    call    match_xor_eax_eax
+    test    eax, eax
+    jz      .bad
+    call    emit_xor_eax_eax
+    mov     qword [rel exit_instr_step], 27
+    jmp     .done
+.ret_branch_false:
+    call    match_ret_line
+    test    eax, eax
+    jz      .bad
+    call    emit_ret
+    mov     qword [rel exit_instr_step], 28
+    jmp     .done
 .bad:
     mov     qword [rel exit_subset_bad], 1
 .done:
     er_pop  rbx, r12, r13
+    ret
+
+er_fn handle_code_label
+    cmp     qword [rel exit_instr_step], 25
+    jne     .done
+    call    patch_branches_to_current
+    cmp     qword [rel exit_subset_bad], 0
+    jne     .done
+    mov     qword [rel exit_instr_step], 26
+.done:
+    ret
+
+er_fn match_cmp_dil_imm8
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_cmp]
+    mov     ecx, tok_cmp_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_dil]
+    mov     esi, tok_dil_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    expect_imm8_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+er_fn match_mov_eax_imm32
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_mov]
+    mov     ecx, tok_mov_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+er_fn match_xor_eax_eax
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_xor]
+    mov     ecx, tok_xor_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+er_fn match_ret_line
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_ret]
+    mov     ecx, tok_ret_len
+    call    token_eq
+    test    eax, eax
+    jnz     .line_end
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_er_ret]
+    mov     ecx, tok_er_ret_len
+    call    token_eq
+    test    eax, eax
+    jz      .bad
+.line_end:
+    call    expect_line_end
+    ret
+.bad:
+    xor     eax, eax
     ret
 
 er_fn append_text_byte
@@ -1041,6 +1479,44 @@ er_fn emit_xor_edi_edi
     mov     edi, 0xff
     jmp     append_text_byte
 
+er_fn emit_xor_eax_eax
+    mov     edi, 0x31
+    call    append_text_byte
+    mov     edi, 0xc0
+    jmp     append_text_byte
+
+er_fn emit_mov_eax_edi
+    mov     edi, 0x89
+    call    append_text_byte
+    mov     edi, 0xf8
+    jmp     append_text_byte
+
+er_fn emit_cmp_dil_imm8
+    mov     edi, 0x40
+    call    append_text_byte
+    mov     edi, 0x80
+    call    append_text_byte
+    mov     edi, 0xff
+    call    append_text_byte
+    mov     rdi, [rel imm_u32_value]
+    jmp     append_text_byte
+
+er_fn emit_jb_placeholder
+    mov     edi, 0x72
+    call    append_text_byte
+    mov     rax, [rel text_len]
+    mov     [rel branch1_patch_off], rax
+    xor     edi, edi
+    jmp     append_text_byte
+
+er_fn emit_ja_placeholder
+    mov     edi, 0x77
+    call    append_text_byte
+    mov     rax, [rel text_len]
+    mov     [rel branch2_patch_off], rax
+    xor     edi, edi
+    jmp     append_text_byte
+
 er_fn emit_mov_edi_imm32
     mov     edi, 0xbf
     call    append_text_byte
@@ -1063,6 +1539,10 @@ er_fn emit_syscall
     mov     edi, 0x05
     jmp     append_text_byte
 
+er_fn emit_ret
+    mov     edi, 0xc3
+    jmp     append_text_byte
+
 er_fn append_text_u32
     er_push rbx
     mov     rbx, rdi
@@ -1078,6 +1558,27 @@ er_fn append_text_u32
     mov     edi, ebx
     call    append_text_byte
     er_pop  rbx
+    ret
+
+er_fn patch_branches_to_current
+    mov     rdi, [rel branch1_patch_off]
+    call    patch_branch_to_current
+    mov     rdi, [rel branch2_patch_off]
+    jmp     patch_branch_to_current
+
+er_fn patch_branch_to_current
+    test    rdi, rdi
+    jz      .bad
+    mov     rax, [rel text_len]
+    sub     rax, rdi
+    dec     rax
+    cmp     rax, 127
+    ja      .bad
+    lea     rdx, [rel text_buf]
+    mov     [rdx + rdi], al
+    ret
+.bad:
+    mov     qword [rel exit_subset_bad], 1
     ret
 
 ; expect_operand(token, len) -> eax=1/0.
@@ -1168,6 +1669,33 @@ er_fn expect_u32_operand
 .char:
     call    expect_char_operand
     jmp     .done
+
+er_fn expect_imm8_operand
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .done
+    cmp     qword [rel imm_u32_value], 255
+    ja      .bad
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+.done:
+    ret
+
+er_fn expect_target_operand
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    mov     rax, r14
+    call    skip_operand_token
+    cmp     r14, rax
+    je      .bad
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+    ret
 
 ; expect_char_operand() -> eax=1/0, imm_u32_value=byte.
 er_fn expect_char_operand
@@ -1542,12 +2070,26 @@ tok_percent_define: db "%define"
 tok_percent_define_len equ $ - tok_percent_define
 tok_percent_include: db "%include"
 tok_percent_include_len equ $ - tok_percent_include
+tok_x86_macros_inc: db "x86_64/macros.inc"
+tok_x86_macros_inc_len equ $ - tok_x86_macros_inc
+tok_er_fn: db "er_fn"
+tok_er_fn_len equ $ - tok_er_fn
+tok_er_ret: db "er_ret"
+tok_er_ret_len equ $ - tok_er_ret
 tok_mov: db "mov"
 tok_mov_len equ $ - tok_mov
 tok_xor: db "xor"
 tok_xor_len equ $ - tok_xor
+tok_cmp: db "cmp"
+tok_cmp_len equ $ - tok_cmp
+tok_jb: db "jb"
+tok_jb_len equ $ - tok_jb
+tok_ja: db "ja"
+tok_ja_len equ $ - tok_ja
 tok_syscall: db "syscall"
 tok_syscall_len equ $ - tok_syscall
+tok_ret: db "ret"
+tok_ret_len equ $ - tok_ret
 tok_eax: db "eax"
 tok_eax_len equ $ - tok_eax
 tok_edi: db "edi"
@@ -1556,6 +2098,8 @@ tok_rax: db "rax"
 tok_rax_len equ $ - tok_rax
 tok_rdi: db "rdi"
 tok_rdi_len equ $ - tok_rdi
+tok_dil: db "dil"
+tok_dil_len equ $ - tok_dil
 align 8
 exit_object_start:
     db 0x7f, "ELF", 2, 1, 1, 0
@@ -1565,7 +2109,7 @@ exit_object_start:
     dd 1
     dq 0
     dq 0
-    dq 200
+    dq 1280
     dd 0
     dw 64
     dw 0
@@ -1576,18 +2120,10 @@ exit_object_start:
 
     times ER_ASM_TEXT_CAP db 0
 
-    dq 0
-    dq 0
-    dq 0
-    dd 1
-    db 0x10
-    db 0
-    dw 1
-    dq 0
-    dq 0
+    times ER_ASM_SYMTAB_CAP db 0
 
-    db 0, "_start", 0
-    times 24 db 0
+    times ER_ASM_STRTAB_CAP db 0
+
     db 0, ".text", 0, ".symtab", 0, ".strtab", 0, ".shstrtab", 0
     times 7 db 0
 
@@ -1617,8 +2153,8 @@ exit_object_start:
     dd 2
     dq 0
     dq 0
-    dq 80
-    dq 48
+    dq 576
+    dq 408
     dd 3
     dd 1
     dq 8
@@ -1628,8 +2164,8 @@ exit_object_start:
     dd 3
     dq 0
     dq 0
-    dq 128
-    dq 32
+    dq 984
+    dq 256
     dd 0
     dd 0
     dq 1
@@ -1639,7 +2175,7 @@ exit_object_start:
     dd 3
     dq 0
     dq 0
-    dq 160
+    dq 1240
     dq 33
     dd 0
     dd 0

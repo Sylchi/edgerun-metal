@@ -27,9 +27,7 @@ extern er_memcpy
 %define ER_HS_MSG_BODY 32
 %define ER_HS_MSG_BLEN 416
 
-SECTION .data
-passed: dq 0
-failed: dq 0
+TEST_DATA_PASSED_FAILED
 
 name_alice: db "alice"
 name_alice_len equ $ - name_alice

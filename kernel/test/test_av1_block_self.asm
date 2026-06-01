@@ -3,18 +3,22 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_symbol_init
 extern er_av1_block_cdfs_init
 extern er_av1_block_decode_intra_symbols
 extern er_av1_block_decode_coeffs_8x8
+extern er_av1_block_encode_coeffs_8x8
 extern er_av1_block_decode_mv
 extern er_av1_block_dequant_8x8
 extern er_av1_block_inverse_tx_8x8
 extern er_av1_block_residual_sub_8x8
 extern er_av1_block_forward_tx_8x8
 extern er_av1_block_quant_8x8
+extern er_av1_tile_encode_coeff_entropy
 extern er_av1_tile_encode_intra8x8_luma
+extern er_av1_tile_encode_intra8x8_420
 extern er_av1_tile_decode_intra8x8_luma
 extern er_av1_tile_decode_inter8x8_luma
 extern er_av1_loop_filter_plane_8x8
@@ -28,9 +32,7 @@ extern er_av1_block_inter_predict_8x8
 extern er_av1_block_predict_8x8
 extern er_av1_block_reconstruct_add_8x8
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 symctx: resb AV1_SYMBOL_SIZE
 block:  resb AV1_BLOCK_SIZE
 cdfs:   resb AV1_BLOCK_CDFS_SIZE
@@ -38,6 +40,8 @@ pred:   resb 128
 dst:    resb 128
 coeffs: resb AV1_BLOCK_PIXELS_8X8 * 2
 resid:  resb AV1_BLOCK_PIXELS_8X8 * 2
+entropy_out: resb 256
+tile_entropy: resb 1024
 image:  resb AV1_IMAGE_SIZE
 refs:   resb AV1_REF_STATE_SIZE
 ref_plane: resb AV1_PLANE_SIZE
@@ -47,7 +51,7 @@ tile_v: resb 64
 inter_y: resb 256
 inter_u: resb 64
 inter_v: resb 64
-tile_coeffs: resb AV1_BLOCK_PIXELS_8X8 * 2 * 4
+tile_coeffs: resb AV1_BLOCK_PIXELS_8X8 * 2 * 6
 
 SECTION .data
 syntax_zero: db 0x00, 0x00, 0x00, 0x80
@@ -364,8 +368,82 @@ _start:
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_encode_block_primitives
     inc     qword [rel passed]
-    jmp     .refs_refresh
+    jmp     .tile_encode_intra
 .fail_encode_block_primitives:
+    inc     qword [rel failed]
+
+.tile_encode_intra:
+    xor     ebx, ebx
+.tile_encode_fill_y:
+    cmp     ebx, 256
+    jae     .tile_encode_desc
+    mov     byte [rel tile_y + rbx], 110
+    inc     ebx
+    jmp     .tile_encode_fill_y
+.tile_encode_desc:
+    mov     dword [rel image + AV1_IMAGE_WIDTH], 16
+    mov     dword [rel image + AV1_IMAGE_HEIGHT], 16
+    mov     qword [rel image + AV1_IMAGE_Y_PTR], tile_y
+    mov     qword [rel image + AV1_IMAGE_U_PTR], tile_u
+    mov     qword [rel image + AV1_IMAGE_V_PTR], tile_v
+    mov     dword [rel image + AV1_IMAGE_Y_LEN], 256
+    mov     dword [rel image + AV1_IMAGE_U_LEN], 64
+    mov     dword [rel image + AV1_IMAGE_V_LEN], 64
+    mov     rdi, image
+    mov     rsi, tile_coeffs
+    mov     edx, AV1_BLOCK_PIXELS_8X8 * 2 * 4
+    mov     ecx, 2
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_tile_encode_intra8x8_luma
+    cmp     eax, 4
+    jne     .fail_tile_encode_intra
+    test    edx, edx
+    jnz     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs], -10
+    jne     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs + 2], 0
+    jne     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs + AV1_BLOCK_PIXELS_8X8 * 2], 0
+    jne     .fail_tile_encode_intra
+    mov     rdi, image
+    mov     rsi, tile_coeffs
+    mov     edx, (AV1_BLOCK_PIXELS_8X8 * 2) - 1
+    mov     ecx, 2
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_tile_encode_intra8x8_luma
+    test    eax, eax
+    jnz     .fail_tile_encode_intra
+    cmp     edx, ERROR_NO_SPACE
+    jne     .fail_tile_encode_intra
+    mov     rdi, image
+    mov     rsi, tile_coeffs
+    mov     edx, AV1_BLOCK_PIXELS_8X8 * 2 * 6
+    mov     ecx, 2
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_tile_encode_intra8x8_420
+    cmp     eax, 6
+    jne     .fail_tile_encode_intra
+    test    edx, edx
+    jnz     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs], -10
+    jne     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs + AV1_BLOCK_PIXELS_8X8 * 2 * 4], -65
+    jne     .fail_tile_encode_intra
+    cmp     word [rel tile_coeffs + AV1_BLOCK_PIXELS_8X8 * 2 * 5], -65
+    jne     .fail_tile_encode_intra
+    mov     rdi, image
+    mov     rsi, tile_coeffs
+    mov     edx, (AV1_BLOCK_PIXELS_8X8 * 2 * 6) - 1
+    mov     ecx, 2
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_tile_encode_intra8x8_420
+    test    eax, eax
+    jnz     .fail_tile_encode_intra
+    cmp     edx, ERROR_NO_SPACE
+    jne     .fail_tile_encode_intra
+    inc     qword [rel passed]
+    jmp     .refs_refresh
+.fail_tile_encode_intra:
     inc     qword [rel failed]
 
 .refs_refresh:
@@ -654,8 +732,52 @@ _start:
     cmp     word [rel coeffs + 126], 0
     jne     .fail_coeff_zero
     inc     qword [rel passed]
-    jmp     .coeff_one
+    jmp     .coeff_encode_zero
 .fail_coeff_zero:
+    inc     qword [rel failed]
+
+.coeff_encode_zero:
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_zero
+    mov     rdi, coeffs
+    mov     rsi, entropy_out
+    mov     edx, 256
+    mov     rcx, cdfs
+    mov     r8d, 1
+    call    er_av1_block_encode_coeffs_8x8
+    test    edx, edx
+    jnz     .fail_coeff_encode_zero
+    test    eax, eax
+    jz      .fail_coeff_encode_zero
+    mov     r9d, eax
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_zero
+    mov     rdi, symctx
+    mov     rsi, entropy_out
+    mov     edx, r9d
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_zero
+    mov     rdi, symctx
+    mov     rsi, coeffs
+    mov     rdx, cdfs
+    mov     ecx, 1
+    call    er_av1_block_decode_coeffs_8x8
+    test    eax, eax
+    jnz     .fail_coeff_encode_zero
+    test    edx, edx
+    jnz     .fail_coeff_encode_zero
+    cmp     word [rel coeffs], 0
+    jne     .fail_coeff_encode_zero
+    cmp     word [rel coeffs + 126], 0
+    jne     .fail_coeff_encode_zero
+    inc     qword [rel passed]
+    jmp     .coeff_one
+.fail_coeff_encode_zero:
     inc     qword [rel failed]
 
 .coeff_one:
@@ -683,8 +805,135 @@ _start:
     cmp     word [rel coeffs + 126], -4
     jne     .fail_coeff_one
     inc     qword [rel passed]
-    jmp     .dequant
+    jmp     .coeff_encode_one
 .fail_coeff_one:
+    inc     qword [rel failed]
+
+.coeff_encode_one:
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_one
+    mov     rdi, coeffs
+    mov     rsi, entropy_out
+    mov     edx, 256
+    mov     rcx, cdfs
+    mov     r8d, 1
+    call    er_av1_block_encode_coeffs_8x8
+    test    edx, edx
+    jnz     .fail_coeff_encode_one
+    test    eax, eax
+    jz      .fail_coeff_encode_one
+    mov     r9d, eax
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_one
+    mov     rdi, symctx
+    mov     rsi, entropy_out
+    mov     edx, r9d
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_one
+    mov     rdi, symctx
+    mov     rsi, coeffs
+    mov     rdx, cdfs
+    mov     ecx, 1
+    call    er_av1_block_decode_coeffs_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_coeff_encode_one
+    test    edx, edx
+    jnz     .fail_coeff_encode_one
+    cmp     word [rel coeffs], -4
+    jne     .fail_coeff_encode_one
+    cmp     word [rel coeffs + 126], -4
+    jne     .fail_coeff_encode_one
+    inc     qword [rel passed]
+    jmp     .coeff_encode_mixed
+.fail_coeff_encode_one:
+    inc     qword [rel failed]
+
+.coeff_encode_mixed:
+    mov     rdi, coeffs
+    xor     eax, eax
+    mov     ecx, (AV1_BLOCK_PIXELS_8X8 * 2) / 8
+    cld
+    rep     stosq
+    mov     word [rel coeffs], 1
+    mov     word [rel coeffs + 2], -2
+    mov     word [rel coeffs + 4], 3
+    mov     word [rel coeffs + 126], -4
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_mixed
+    mov     rdi, coeffs
+    mov     rsi, entropy_out
+    mov     edx, 256
+    mov     rcx, cdfs
+    mov     r8d, 1
+    call    er_av1_block_encode_coeffs_8x8
+    test    eax, eax
+    jz      .fail_coeff_encode_mixed
+    test    edx, edx
+    jnz     .fail_coeff_encode_mixed
+    mov     r9d, eax
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_mixed
+    mov     rdi, symctx
+    mov     rsi, entropy_out
+    mov     edx, r9d
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_coeff_encode_mixed
+    mov     rdi, symctx
+    mov     rsi, coeffs
+    mov     rdx, cdfs
+    mov     ecx, 1
+    call    er_av1_block_decode_coeffs_8x8
+    cmp     eax, 4
+    jne     .fail_coeff_encode_mixed
+    test    edx, edx
+    jnz     .fail_coeff_encode_mixed
+    cmp     word [rel coeffs], 1
+    jne     .fail_coeff_encode_mixed
+    cmp     word [rel coeffs + 2], -2
+    jne     .fail_coeff_encode_mixed
+    cmp     word [rel coeffs + 4], 3
+    jne     .fail_coeff_encode_mixed
+    cmp     word [rel coeffs + 126], -4
+    jne     .fail_coeff_encode_mixed
+    inc     qword [rel passed]
+    jmp     .tile_coeff_entropy
+.fail_coeff_encode_mixed:
+    inc     qword [rel failed]
+
+.tile_coeff_entropy:
+    mov     rdi, tile_coeffs
+    xor     eax, eax
+    mov     ecx, (AV1_BLOCK_PIXELS_8X8 * 2 * 2) / 8
+    cld
+    rep     stosq
+    mov     rdi, cdfs
+    call    er_av1_block_cdfs_init
+    test    edx, edx
+    jnz     .fail_tile_coeff_entropy
+    mov     rdi, tile_coeffs
+    mov     esi, 2
+    mov     rdx, tile_entropy
+    mov     ecx, 1024
+    mov     r8, cdfs
+    mov     r9d, 1
+    call    er_av1_tile_encode_coeff_entropy
+    test    edx, edx
+    jnz     .fail_tile_coeff_entropy
+    test    eax, eax
+    jz      .fail_tile_coeff_entropy
+    inc     qword [rel passed]
+    jmp     .dequant
+.fail_tile_coeff_entropy:
     inc     qword [rel failed]
 
 .dequant:

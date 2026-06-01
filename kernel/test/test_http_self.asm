@@ -11,8 +11,10 @@ extern er_http_is_sse
 extern er_http_sse_parse_event
 
 %include "x86_64/net/http_constants.inc"
+%include "test/test_macros.inc"
+%include "test/test_http_macros.inc"
 
-SECTION .data
+TEST_DATA_PASSED_FAILED
 hex_chars: db "0123456789ABCDEF"
 nl_buf:    db 0x0A
 sp_buf:    db ' '
@@ -260,278 +262,6 @@ print_dec:
     ret
 
 ; -------------------------------------------------------------------
-; Macros for test blocks
-; -------------------------------------------------------------------
-; Each test block: prints name, runs test, prints PASS/FAIL with expected/got.
-; r15 = fail count (accumulated). Must be preserved across blocks.
-
-; test_status(name_str, buf, len, expected)
-%macro test_status 4
-    push    r15
-    ; Call parse_status(buf, len)
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    call    er_http_parse_status
-    mov     r14d, eax           ; save result in r14
-
-    ; Print name
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    ; Compare
-    cmp     r14d, %4
-    jne     %%fail
-
-    ; PASS
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_sp_colon]
-    call    puts
-    mov     eax, %4
-    call    print_dec
-    lea     rsi, [rel s_sp_bang_sp]
-    call    puts
-    mov     eax, r14d
-    call    print_dec
-    lea     rsi, [rel s_nl]
-    call    puts
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; test_ptr(name_str, buf, len, expect_nonnull)
-; expect_nonnull: 1 = expect non-null, 0 = expect null
-%macro test_ptr 4
-    push    r15
-    ; Call find_body(buf, len)
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    call    er_http_find_body
-    mov     r14, rax            ; save result
-
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    test    r14, r14
-    setnz   al
-    movzx   eax, al
-    cmp     eax, %4
-    jne     %%fail
-
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_sp_colon]
-    call    puts
-    mov     eax, %4
-    call    print_dec
-    lea     rsi, [rel s_sp_bang_sp]
-    call    puts
-    mov     eax, r14d
-    call    print_dec
-    lea     rsi, [rel s_nl]
-    call    puts
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; test_is_sse(name_str, buf, len, expected)
-%macro test_is_sse 4
-    push    r15
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    call    er_http_is_sse
-    mov     r14d, eax
-
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    cmp     r14d, %4
-    jne     %%fail
-
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_sp_colon]
-    call    puts
-    mov     eax, %4
-    call    print_dec
-    lea     rsi, [rel s_sp_bang_sp]
-    call    puts
-    mov     eax, r14d
-    call    print_dec
-    lea     rsi, [rel s_nl]
-    call    puts
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; test_sse_event(name_str, body, len, offset, exp_data_len, exp_retry)
-%macro test_sse_event 6
-    push    r15
-    sub     rsp, SSE_EVENT_SIZE
-
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    mov     edx, %4
-    mov     rcx, rsp
-    call    er_http_sse_parse_event
-
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    mov     eax, [rsp + SSE_EVENT_DATA_LEN]
-    cmp     eax, %5
-    jne     %%fail
-
-    mov     eax, [rsp + SSE_EVENT_RETRY]
-    cmp     eax, %6
-    jne     %%fail
-
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    add     rsp, SSE_EVENT_SIZE
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    add     rsp, SSE_EVENT_SIZE
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; test_sse_ptr(name_str, body, len, offset, field_offs, exp_nonnull)
-%macro test_sse_ptr 6
-    push    r15
-    sub     rsp, SSE_EVENT_SIZE
-
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    mov     edx, %4
-    mov     rcx, rsp
-    call    er_http_sse_parse_event
-
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    mov     rax, [rsp + %5]
-    test    rax, rax
-    setnz   al
-    movzx   eax, al
-    cmp     eax, %6
-    jne     %%fail
-
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    add     rsp, SSE_EVENT_SIZE
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    add     rsp, SSE_EVENT_SIZE
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; test_sse(name_str, body, len, offset, exp_data_len, exp_retry,
-;          exp_data_nonnull, exp_event_nonnull, exp_id_nonnull)
-; Combined SSE test checking data len, retry, and field pointer nonnull flags.
-%macro test_cl 4
-    push    r15
-    lea     rdi, [rel %2]
-    mov     esi, %3
-    call    er_http_find_content_length
-    mov     r14d, eax
-
-    lea     rsi, [rel %1]
-    call    puts
-    lea     rsi, [rel s_colon]
-    call    puts
-
-    cmp     r14d, %4
-    jne     %%fail
-
-    lea     rsi, [rel s_pass]
-    call    puts
-    lea     rsi, [rel s_nl]
-    call    puts
-    jmp     %%done
-
-%%fail:
-    lea     rsi, [rel s_fail]
-    call    puts
-    lea     rsi, [rel s_sp_colon]
-    call    puts
-    mov     eax, %4
-    call    print_dec
-    lea     rsi, [rel s_sp_bang_sp]
-    call    puts
-    mov     eax, r14d
-    call    print_dec
-    lea     rsi, [rel s_nl]
-    call    puts
-    pop     r15
-    inc     r15d
-    push    r15
-%%done:
-    pop     r15
-%endmacro
-
-; -------------------------------------------------------------------
 ; Main
 ; -------------------------------------------------------------------
 global _start
@@ -540,10 +270,6 @@ _start:
     push    r12
     push    r13
     push    r14
-    push    r15
-
-    xor     r15d, r15d          ; fail count
-
 ; --- Status parse (9 tests) ---
     test_status s_test_status_200,   resp_200,      resp_200_len,      200
     test_status s_test_status_404,   resp_404,      resp_404_len,      404
@@ -586,22 +312,20 @@ _start:
     call    puts
     lea     rsi, [rel s_total]
     call    puts
-    mov     eax, 27
-    sub     eax, r15d
+    mov     eax, dword [rel passed]
     call    print_dec
     lea     rsi, [rel s_slash]
     call    puts
     mov     eax, 27
     call    print_dec
 
-    test    r15d, r15d
+    cmp     qword [rel failed], 0
     jnz     .exit_fail
     xor     edi, edi
     jmp     .exit
 .exit_fail:
     mov     edi, 1
 .exit:
-    pop     r15
     pop     r14
     pop     r13
     pop     r12

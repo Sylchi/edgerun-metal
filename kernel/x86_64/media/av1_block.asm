@@ -7,6 +7,10 @@
 extern er_av1_symbol_read_symbol
 extern er_av1_symbol_read_bool
 extern er_av1_symbol_read_literal
+extern er_av1_symbol_write_init
+extern er_av1_symbol_write_symbol
+extern er_av1_symbol_write_bool
+extern er_av1_symbol_write_finish
 
 AV1_TILE_WALK_BLOCK                 equ 0
 AV1_TILE_WALK_COEFFS                equ 16
@@ -177,6 +181,163 @@ er_fn er_av1_block_decode_coeffs_8x8
 .invalid_param:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
+.done:
+    er_stack_free 16
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_block_encode_coeffs_8x8(coeffs, out, cap, cdfs, disable_update)
+; rdi=i16 coeffs[64], rsi=out, edx=cap, rcx=cdf workspace, r8d=disable_update.
+; Emits decoder-compatible entropy for coefficient levels supported by the current
+; block entropy subset: zero or signed levels 1..4.
+er_fn er_av1_block_encode_coeffs_8x8
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc AV1_SYMBOL_SIZE + 16
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     [rsp + AV1_SYMBOL_SIZE], edx
+    mov     dword [rsp + AV1_SYMBOL_SIZE + 4], 0
+    xor     ebx, ebx
+    mov     r14, rcx
+    mov     r15d, r8d
+    mov     rdi, rsp
+    mov     rsi, r13
+    call    er_av1_symbol_write_init
+    test    edx, edx
+    jnz     .done
+.encode_loop:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .finish
+    movsx   eax, word [r12 + rbx * 2]
+    mov     [rsp + AV1_SYMBOL_SIZE + 8], eax
+    test    eax, eax
+    jnz     .write_nonzero
+    mov     rdi, rsp
+    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_NONZERO]
+    mov     edx, AV1_BLOCK_COEFF_NONZERO_SYMBOLS
+    xor     ecx, ecx
+    mov     r8d, r15d
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .done
+    jmp     .next_coeff
+.write_nonzero:
+    mov     rdi, rsp
+    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_NONZERO]
+    mov     edx, AV1_BLOCK_COEFF_NONZERO_SYMBOLS
+    mov     ecx, 1
+    mov     r8d, r15d
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + AV1_SYMBOL_SIZE + 8]
+    xor     esi, esi
+    test    eax, eax
+    jns     .have_abs
+    neg     eax
+    mov     esi, 1
+.have_abs:
+    cmp     eax, 1
+    jb      .unsupported
+    cmp     eax, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
+    ja      .unsupported
+    dec     eax
+    mov     [rsp + AV1_SYMBOL_SIZE + 12], esi
+    mov     rdi, rsp
+    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_LEVEL]
+    mov     edx, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
+    mov     ecx, eax
+    mov     r8d, r15d
+    call    er_av1_symbol_write_symbol
+    test    edx, edx
+    jnz     .done
+    mov     rdi, rsp
+    mov     esi, [rsp + AV1_SYMBOL_SIZE + 12]
+    call    er_av1_symbol_write_bool
+    test    edx, edx
+    jnz     .done
+    inc     dword [rsp + AV1_SYMBOL_SIZE + 4]
+.next_coeff:
+    inc     ebx
+    jmp     .encode_loop
+.finish:
+    mov     rdi, rsp
+    call    er_av1_symbol_write_finish
+    test    edx, edx
+    jnz     .done
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+.done:
+    er_stack_free AV1_SYMBOL_SIZE + 16
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_tile_encode_coeff_entropy(coeffs, block_count, out, cap, cdfs, disable_update)
+; rdi=i16 coeff blocks, esi=block_count, rdx=out, ecx=cap, r8=cdfs, r9d=disable_update.
+; Converts contiguous 8x8 coefficient blocks into the current entropy payload subset.
+er_fn er_av1_tile_encode_coeff_entropy
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 16
+    test    rdi, rdi
+    jz      .invalid_param
+    test    esi, esi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rdx
+    mov     r14, r8
+    mov     r15d, esi
+    mov     [rsp], ecx
+    mov     [rsp + 4], r9d
+    xor     ebx, ebx
+.loop:
+    test    r15d, r15d
+    jz      .ok
+    mov     eax, [rsp]
+    test    eax, eax
+    jz      .no_space
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, eax
+    mov     rcx, r14
+    mov     r8d, [rsp + 4]
+    call    er_av1_block_encode_coeffs_8x8
+    test    edx, edx
+    jnz     .done
+    add     r13, rax
+    add     r12, AV1_BLOCK_PIXELS_8X8 * 2
+    add     ebx, eax
+    jc      .no_space
+    sub     [rsp], eax
+    jc      .no_space
+    dec     r15d
+    jmp     .loop
+.ok:
+    mov     eax, ebx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
 .done:
     er_stack_free 16
     er_pop  rbx, r12, r13, r14, r15
@@ -646,6 +807,348 @@ er_fn er_av1_block_quant_8x8
 .done:
     er_pop  rbx, r12, r13, r14
     er_ret
+
+; er_av1_tile_encode_intra8x8_luma(image_desc, coeff_out, coeff_cap, qstep, mode)
+; Walks an 8-bit luma tile and writes quantized 8x8 coefficients, 128 bytes per block.
+; rdi=image desc, rsi=i16 coeff output, edx=output cap bytes, ecx=qstep, r8d=intra mode.
+er_fn er_av1_tile_encode_intra8x8_luma
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc AV1_TILE_WALK_STACK_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     ecx, AV1_QUANT_STEP_MIN
+    jb      .invalid_param
+    cmp     ecx, AV1_QUANT_STEP_MAX
+    ja      .invalid_param
+    cmp     r8d, AV1_PRED_MODE_MAX_SUPPORTED
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     [rsp + AV1_TILE_WALK_QSTEP], ecx
+    mov     [rsp + AV1_TILE_WALK_CHROMA_INDEX], r8d
+    mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
+    mov     rdi, r12
+    call    er_av1_image_validate_420
+    test    edx, edx
+    jnz     .done
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    cmp     eax, AV1_BLOCK_WALK_MIN_DIM
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     [rsp + AV1_TILE_WALK_WIDTH], eax
+    shr     eax, 3
+    mov     [rsp + AV1_TILE_WALK_PLANE_WIDTH], eax
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    cmp     eax, AV1_BLOCK_WALK_MIN_DIM
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     [rsp + AV1_TILE_WALK_HEIGHT], eax
+    shr     eax, 3
+    mul     dword [rsp + AV1_TILE_WALK_PLANE_WIDTH]
+    test    edx, edx
+    jnz     .corrupt
+    shl     eax, 7
+    jc      .corrupt
+    cmp     r14d, eax
+    jb      .no_space
+    xor     ebx, ebx
+.row_loop:
+    cmp     ebx, [rsp + AV1_TILE_WALK_HEIGHT]
+    jae     .ok
+    mov     [rsp + AV1_TILE_WALK_BLOCK_Y], ebx
+    xor     r15d, r15d
+.col_loop:
+    cmp     r15d, [rsp + AV1_TILE_WALK_WIDTH]
+    jae     .next_row
+    mov     [rsp + AV1_TILE_WALK_BLOCK_X], r15d
+    call    .prepare_encode_edges
+    lea     rdi, [rsp + AV1_TILE_WALK_PRED]
+    mov     esi, AV1_BLOCK_DIM_8
+    xor     edx, edx
+    cmp     dword [rsp + AV1_TILE_WALK_BLOCK_X], 0
+    je      .left_ready
+    lea     rdx, [rsp + AV1_TILE_WALK_LEFT]
+.left_ready:
+    xor     ecx, ecx
+    cmp     dword [rsp + AV1_TILE_WALK_BLOCK_Y], 0
+    je      .above_ready
+    lea     rcx, [rsp + AV1_TILE_WALK_ABOVE]
+.above_ready:
+    mov     r8d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
+    call    er_av1_block_predict_8x8
+    test    edx, edx
+    jnz     .done
+    call    .source_block_ptr
+    lea     rdi, [rsp + AV1_TILE_WALK_RESID]
+    mov     rsi, rax
+    mov     edx, [rsp + AV1_TILE_WALK_WIDTH]
+    lea     rcx, [rsp + AV1_TILE_WALK_PRED]
+    mov     r8d, AV1_BLOCK_DIM_8
+    call    er_av1_block_residual_sub_8x8
+    test    edx, edx
+    jnz     .done
+    lea     rdi, [rsp + AV1_TILE_WALK_DEQUANT]
+    lea     rsi, [rsp + AV1_TILE_WALK_RESID]
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_forward_tx_8x8
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + AV1_TILE_WALK_COUNT]
+    shl     eax, 7
+    lea     rdi, [r13 + rax]
+    lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT]
+    mov     edx, [rsp + AV1_TILE_WALK_QSTEP]
+    call    er_av1_block_quant_8x8
+    test    edx, edx
+    jnz     .done
+    inc     dword [rsp + AV1_TILE_WALK_COUNT]
+    add     r15d, AV1_BLOCK_DIM_8
+    jmp     .col_loop
+.next_row:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .row_loop
+.ok:
+    mov     eax, [rsp + AV1_TILE_WALK_COUNT]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free AV1_TILE_WALK_STACK_SIZE
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+.source_block_ptr:
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
+    mov     rdx, [r12 + AV1_IMAGE_Y_PTR]
+    add     rax, rdx
+    ret
+
+.prepare_encode_edges:
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_Y]
+    mul     dword [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    add     eax, [rsp + 8 + AV1_TILE_WALK_BLOCK_X]
+    mov     rdx, [r12 + AV1_IMAGE_Y_PTR]
+    lea     r10, [rdx + rax]
+    cmp     dword [rsp + 8 + AV1_TILE_WALK_BLOCK_X], 0
+    je      .above
+    lea     rdx, [rsp + 8 + AV1_TILE_WALK_LEFT]
+    mov     ecx, AV1_BLOCK_DIM_8
+    mov     r9d, [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    lea     rax, [r10 - 1]
+.left_loop:
+    mov     sil, [rax]
+    mov     [rdx], sil
+    add     rax, r9
+    inc     rdx
+    dec     ecx
+    jnz     .left_loop
+.above:
+    cmp     dword [rsp + 8 + AV1_TILE_WALK_BLOCK_Y], 0
+    je      .edges_done
+    mov     rax, r10
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_WIDTH]
+    sub     rax, rdx
+    lea     rdx, [rsp + 8 + AV1_TILE_WALK_ABOVE]
+    mov     ecx, AV1_BLOCK_DIM_8
+.above_loop:
+    mov     sil, [rax]
+    mov     [rdx], sil
+    inc     rax
+    inc     rdx
+    dec     ecx
+    jnz     .above_loop
+.edges_done:
+    ret
+
+; er_av1_tile_encode_intra8x8_420(image_desc, coeff_out, coeff_cap, qstep, mode)
+; Encodes quantized Y, U, and V 8x8 coefficients into one contiguous stream.
+er_fn er_av1_tile_encode_intra8x8_420
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc AV1_TILE_WALK_STACK_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    cmp     ecx, AV1_QUANT_STEP_MIN
+    jb      .invalid_param
+    cmp     ecx, AV1_QUANT_STEP_MAX
+    ja      .invalid_param
+    cmp     r8d, AV1_PRED_MODE_MAX_SUPPORTED
+    ja      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     [rsp + AV1_TILE_WALK_QSTEP], ecx
+    mov     [rsp + AV1_TILE_WALK_CHROMA_INDEX], r8d
+    mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
+    mov     rdi, r12
+    call    er_av1_image_validate_420
+    test    edx, edx
+    jnz     .done
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     ebx, eax
+    shr     ebx, 3
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    shr     eax, 3
+    mul     ebx
+    test    edx, edx
+    jnz     .corrupt
+    mov     r15d, eax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    cmp     eax, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    mov     ebx, eax
+    shr     ebx, 3
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    shr     eax, 1
+    cmp     eax, AV1_BLOCK_DIM_8
+    jb      .invalid_param
+    test    eax, AV1_BLOCK_DIM_8 - 1
+    jnz     .unsupported
+    shr     eax, 3
+    mul     ebx
+    test    edx, edx
+    jnz     .corrupt
+    add     eax, eax
+    jc      .corrupt
+    add     eax, r15d
+    jc      .corrupt
+    mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
+    shl     eax, 7
+    jc      .corrupt
+    cmp     r14d, eax
+    jb      .no_space
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, r14d
+    mov     ecx, [rsp + AV1_TILE_WALK_QSTEP]
+    mov     r8d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
+    call    er_av1_tile_encode_intra8x8_luma
+    test    edx, edx
+    jnz     .done
+    mov     [rsp + AV1_TILE_WALK_COUNT], eax
+    mov     rax, [r12 + AV1_IMAGE_U_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
+    mov     eax, [r12 + AV1_IMAGE_WIDTH]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_WIDTH], eax
+    mov     eax, [r12 + AV1_IMAGE_HEIGHT]
+    shr     eax, 1
+    mov     [rsp + AV1_TILE_WALK_PLANE_HEIGHT], eax
+    call    .encode_chroma_plane
+    test    edx, edx
+    jnz     .done
+    mov     rax, [r12 + AV1_IMAGE_V_PTR]
+    mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
+    call    .encode_chroma_plane
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + AV1_TILE_WALK_COUNT]
+    cmp     eax, [rsp + AV1_TILE_WALK_PLANE_LEN]
+    jne     .corrupt
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free AV1_TILE_WALK_STACK_SIZE
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+.encode_chroma_plane:
+    xor     ebx, ebx
+.chroma_row_loop:
+    cmp     ebx, [rsp + 8 + AV1_TILE_WALK_PLANE_HEIGHT]
+    jae     .chroma_ok
+    xor     r15d, r15d
+.chroma_col_loop:
+    cmp     r15d, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    jae     .chroma_next_row
+    lea     rdi, [rsp + 8 + AV1_TILE_WALK_PRED]
+    mov     esi, AV1_BLOCK_DIM_8
+    xor     edx, edx
+    xor     ecx, ecx
+    mov     r8d, AV1_PRED_MODE_DC
+    call    er_av1_block_predict_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    mov     eax, ebx
+    mul     dword [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    add     eax, r15d
+    mov     rsi, [rsp + 8 + AV1_TILE_WALK_PLANE_PTR]
+    add     rsi, rax
+    lea     rdi, [rsp + 8 + AV1_TILE_WALK_RESID]
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
+    lea     rcx, [rsp + 8 + AV1_TILE_WALK_PRED]
+    mov     r8d, AV1_BLOCK_DIM_8
+    call    er_av1_block_residual_sub_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    lea     rdi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
+    lea     rsi, [rsp + 8 + AV1_TILE_WALK_RESID]
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    call    er_av1_block_forward_tx_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    mov     eax, [rsp + 8 + AV1_TILE_WALK_COUNT]
+    shl     eax, 7
+    lea     rdi, [r13 + rax]
+    lea     rsi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
+    mov     edx, [rsp + 8 + AV1_TILE_WALK_QSTEP]
+    call    er_av1_block_quant_8x8
+    test    edx, edx
+    jnz     .chroma_ret
+    inc     dword [rsp + 8 + AV1_TILE_WALK_COUNT]
+    add     r15d, AV1_BLOCK_DIM_8
+    jmp     .chroma_col_loop
+.chroma_next_row:
+    add     ebx, AV1_BLOCK_DIM_8
+    jmp     .chroma_row_loop
+.chroma_ok:
+    er_ok
+.chroma_ret:
+    ret
 
 ; er_av1_tile_decode_intra8x8_luma(ctx, image_desc, cdfs, qstep, disable_update)
 ; Walks an 8-bit luma tile in 8x8 blocks and reconstructs into image_desc Y.

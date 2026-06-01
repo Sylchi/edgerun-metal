@@ -36,7 +36,6 @@ missing_export_name: db "missing"
 MISSING_EXPORT_NAME_LEN equ 7
 
 SECTION .bss
-test_fail: resq 1
 saved_rax: resq 1
 saved_rdx: resq 1
 runtime_a: resb RUNTIME_SIZE
@@ -51,7 +50,6 @@ global _start
 _start:
 
     call    jit_debug_init
-    mov     qword [rel test_fail], 0
 
     ; er_fn_call requires a successfully loaded module for the same runtime.
     mov     byte [rel exec_storage_module_valid], 0

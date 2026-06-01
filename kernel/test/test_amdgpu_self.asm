@@ -26,9 +26,7 @@ extern er_amdgpu_validate_timing
 %define AMDGPU_TEST_PCI_BAR0 0x10
 %define AMDGPU_TEST_PCI_BAR2 0x18
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 align 16
 bar0: resb AMDGPU_TEST_BAR0_SIZE
 align 4096

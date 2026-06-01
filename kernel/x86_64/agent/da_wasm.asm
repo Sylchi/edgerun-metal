@@ -193,10 +193,14 @@ _wasm_import_da_surface_register:
     ; [3-4] rect_count (LE u16), overwritten after clamp when nonzero
     mov     word [rdi + LOCAL_CELL_PAYLOAD + 3], 0
     ; [5-36] app hash (32 bytes)
+    push    rcx
+    push    r8
     lea     rsi, [rel da_wasm_app_hash]
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 5]
     mov     edx, 32
     call    er_memcpy
+    pop     r8
+    pop     rcx
 
     ; If rect_count > 0, copy rect data from WASM memory
     test    r8d, r8d
@@ -306,10 +310,16 @@ _wasm_import_da_surface_update:
 
     mov     byte [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_TYPE_OFF], DA_MSG_SURFACE_UPDATE
     mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_FLAGS_OFF], r13b
+    push    rcx
+    push    r8
+    push    r9
     lea     rsi, [rel da_wasm_app_hash]
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_HASH_OFF]
     mov     edx, 32
     call    er_memcpy
+    pop     r9
+    pop     r8
+    pop     rcx
 
     mov     rdi, rbp
     sub     rdi, LOCAL_CELL_SIZE
@@ -346,7 +356,11 @@ _wasm_import_da_surface_update:
     mov     rdi, rbp
     sub     rdi, LOCAL_CELL_SIZE
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
+    push    r8
+    push    r9
     call    er_memcpy
+    pop     r9
+    pop     r8
 .rect_done:
 
     ; Clamp and copy icon payload after rect bytes.

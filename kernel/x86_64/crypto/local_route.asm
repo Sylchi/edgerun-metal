@@ -746,96 +746,40 @@ er_fn er_local_cell_poll
 ; Linear memory offsets (passed as i32) need conversion to host pointers.
 ; ==================================================================
 
-; _wasm_memory_ptr_checked(rdi=offset, esi=len) -> rax=host ptr
-; Rejects null runtime, overflow, and ranges outside linear memory.
-_wasm_memory_ptr_checked:
-    mov     r8, [er_wasm_runtime_ptr]
-    test    r8, r8
-    jz      .no_mem
-    mov     eax, edi
-    mov     ecx, esi
-    mov     r9, rax
-    add     r9, rcx
-    jc      .bad
-    cmp     r9, [r8 + RUNTIME_MEMORY_LEN_OFF]
-    ja      .bad
-    mov     rax, [r8 + RUNTIME_MEMORY_PTR_OFF]
-    add     rax, rdi
-    er_ok
-    ret
-.no_mem:
-    mov     eax, -1
-    er_err  ERROR_NOT_PRESENT
-    ret
-.bad:
+; er_wasm_local_cell_send(rdi=dest_hash_ptr(i32), rsi=cell_ptr(i32)) -> i32
+_wasm_import_local_cell_send:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
     ret
 
-; er_wasm_local_cell_send(rdi=dest_hash_ptr(i32), rsi=cell_ptr(i32)) -> i32
-_wasm_import_local_cell_send:
-    push    rsi
-    mov     esi, 32
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     .send_fail
-    mov     r11, rax
-    pop     rdi
-    mov     esi, LOCAL_CELL_SIZE
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     rdi, r11
-    mov     rsi, rax
-    jmp     er_route_send
-.send_fail:
-    add     rsp, 8
-_wasm_import_ret_fail:
-    ret
-
 ; er_wasm_local_cell_recv(rdi=slot_id(i32), rsi=out_cell_ptr(i32)) -> i32
 _wasm_import_local_cell_recv:
-    mov     r10d, edi
-    mov     rdi, rsi
-    mov     esi, LOCAL_CELL_SIZE
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     edi, r10d
-    mov     rsi, rax
-    jmp     er_local_cell_recv
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_local_route_register(rdi=hash_ptr(i32)) -> i32 (slot_id)
 _wasm_import_local_route_register:
-    mov     esi, 32
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     rdi, rax
-    jmp     er_local_route_register
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_local_route_lookup(rdi=hash_ptr(i32)) -> i32 (slot_id or -1)
 _wasm_import_local_route_lookup:
-    mov     esi, 32
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     rdi, rax
-    jmp     er_local_route_lookup
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_local_route_unregister(rdi=slot_id(i32)) -> i32
 _wasm_import_local_route_unregister:
-    jmp     er_local_route_unregister
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_local_cell_available(rdi=slot_id(i32)) -> i32 (count)
 _wasm_import_local_cell_available:
-    call    er_local_route_get_ring
-    test    edx, edx
-    jnz     .error
-    mov     rdi, rax
-    jmp     er_local_ring_available
-.error:
-    xor     eax, eax
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
     ret
 
 ; ==================================================================
@@ -844,42 +788,27 @@ _wasm_import_local_cell_available:
 
 ; er_wasm_circuit_open(rdi=dest_hash_ptr(i32), rsi=own_slot(i32)) -> i32 (fd)
 _wasm_import_circuit_open:
-    mov     r10d, esi        ; save own_slot (raw i32, not an offset)
-    mov     esi, 32
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     rdi, rax
-    mov     esi, r10d
-    jmp     er_local_open_circuit
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_circuit_send(rdi=fd(i32), rsi=cell_ptr(i32)) -> i32
 _wasm_import_circuit_send:
-    mov     r10d, edi
-    mov     rdi, rsi
-    mov     esi, LOCAL_CELL_SIZE
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     edi, r10d
-    mov     rsi, rax
-    jmp     er_local_send_cell
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_circuit_recv(rdi=fd(i32), rsi=out_cell_ptr(i32)) -> i32
 _wasm_import_circuit_recv:
-    mov     r10d, edi
-    mov     rdi, rsi
-    mov     esi, LOCAL_CELL_SIZE
-    call    _wasm_memory_ptr_checked
-    test    edx, edx
-    jnz     _wasm_import_ret_fail
-    mov     edi, r10d
-    mov     rsi, rax
-    jmp     er_local_recv_cell
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; er_wasm_circuit_close(rdi=fd(i32)) -> i32
 _wasm_import_circuit_close:
-    jmp     er_local_close_circuit
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    ret
 
 ; ==================================================================
 ; Host import table

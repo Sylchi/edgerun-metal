@@ -112,9 +112,7 @@ tq_expected_6:
 tq_clip_miss:
     dd 0x41200000, 0x41200000, 0x40800000, 0x40800000  ; (10, 10, 4, 4) — no overlap
 
-SECTION .bss
-total:      resq 1
-passed:     resq 1
+TEST_BSS_TOTAL_PASSED
 rect_buf:   resd RS*4
 vtx_buf:    resd VS*4
 icon_buf:   resd IS*4

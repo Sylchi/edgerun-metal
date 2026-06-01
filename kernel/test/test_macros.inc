@@ -22,6 +22,13 @@ total:  resq 1
 passed: resq 1
 %endmacro
 
+%macro TEST_BSS_TOTAL_PASSED_FAILED 0
+SECTION .bss
+total:  resq 1
+passed: resq 1
+failed: resq 1
+%endmacro
+
 %macro TEST_BSS_PASSED_FAILED 0
 SECTION .bss
 passed: resq 1
@@ -32,6 +39,38 @@ failed: resq 1
 SECTION .data
 passed: dq 0
 failed: dq 0
+%endmacro
+
+%macro TEST_DATA_TOTAL_PASSED_FAILED 0
+SECTION .data
+total:  dq 0
+passed: dq 0
+failed: dq 0
+%endmacro
+
+; Emit a short debug label to stdout without disturbing caller registers.
+%macro TEST_DEBUG_LABEL 1
+    jmp     %%done
+%%str: db %1, 10
+%%end:
+%%done:
+    push    rcx
+    push    r11
+    push    rdi
+    push    rsi
+    push    rdx
+    push    rax
+    mov     rdi, 1
+    lea     rsi, [rel %%str]
+    mov     rdx, %%end - %%str
+    mov     rax, 1
+    syscall
+    pop     rax
+    pop     rdx
+    pop     rsi
+    pop     rdi
+    pop     r11
+    pop     rcx
 %endmacro
 
 ; Pass if eax == edx (32-bit)
@@ -149,6 +188,11 @@ failed: dq 0
 ; Assert dword at %1 equals %2.
 %macro ASSERT_DWORD 2
     ASSERT_EQ dword %1, %2
+%endmacro
+
+; Assert qword at %1 equals %2.
+%macro ASSERT_QWORD 2
+    ASSERT_EQ qword %1, %2
 %endmacro
 
 ; Assert byte at %1 equals %2.

@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/av1_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_av1_sequence_encode_reduced_still
 extern er_av1_sequence_decode_reduced_still
@@ -11,9 +12,7 @@ extern er_av1_frame_encode
 extern er_av1_frame_decode_reduced_still
 extern er_av1_frame_encode_reduced_still
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 seq:    resb AV1_SEQ_SIZE
 frame:  resb AV1_FRAME_SIZE
 seqbuf: resb 16
