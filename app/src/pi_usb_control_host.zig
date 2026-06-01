@@ -49,11 +49,9 @@ const DevicePath = struct {
     }
 };
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
-    const args = try init.minimal.args.toSlice(allocator);
-    defer allocator.free(args);
+pub fn main() !void {}
 
+fn run(args: []const [:0]const u8, io: std.Io, allocator: std.mem.Allocator) !void {
     const options = try parseOptions(args);
     const request = makeProtocolRequest(options) orelse return error.InvalidArguments;
     if (options.dry_run) {
@@ -66,7 +64,7 @@ pub fn main(init: std.process.Init) !void {
         });
         return;
     }
-    const dev = try findOrWaitDevice(init.io, allocator, options.wait, options.wait_timeout_ms);
+    const dev = try findOrWaitDevice(io, allocator, options.wait, options.wait_timeout_ms);
     std.debug.print("found Edgerun Pi control device at {s}\n", .{dev.slice()});
     try transact(dev.slice(), request);
 }

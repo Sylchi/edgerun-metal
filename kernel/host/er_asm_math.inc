@@ -6,6 +6,33 @@ er_fn match_math_hash_mov
     call    token_eq
     test    eax, eax
     jz      .bad
+    lea     rdi, [rel tok_rdx]
+    mov     esi, tok_rdx_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .rax_mem_rdi
+    pop     r11
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    lea     rdi, [rel tok_rax]
+    mov     esi, tok_rax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .bad
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0x48
+    call    append_text_byte
+    mov     edi, 0x89
+    call    append_text_byte
+    mov     edi, 0xc2
+    call    append_text_byte
+    jmp     .yes
+.rax_mem_rdi:
+    pop     r14
     lea     rdi, [rel tok_rax]
     mov     esi, tok_rax_len
     push    r14

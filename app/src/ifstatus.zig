@@ -51,13 +51,14 @@ fn getIP(sock_fd: posix.fd_t, ifname: []const u8, buf: []u8) []const u8 {
     return std.fmt.bufPrint(buf, "{d}.{d}.{d}.{d}", .{ ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3] }) catch "bad-ip";
 }
 
-pub fn main(init: std.process.Init) !void {
+pub fn main() !void {
+    const io: std.Io = .{};
     var iface_count: usize = 0;
-    const dir0 = std.Io.Dir.openDirAbsolute(init.io, "/sys/class/net", .{ .iterate = true }) catch return error.DirectoryFailed;
-    defer dir0.close(init.io);
+    const dir0 = std.Io.Dir.openDirAbsolute(io, "/sys/class/net", .{ .iterate = true }) catch return error.DirectoryFailed;
+    defer dir0.close(io);
     {
         var iter = dir0.iterate();
-        while (try iter.next(init.io)) |entry| {
+        while (try iter.next(io)) |entry| {
             if (!bytes.eql(entry.name, "lo")) iface_count += 1;
         }
     }
@@ -100,19 +101,19 @@ pub fn main(init: std.process.Init) !void {
 
     var idx: usize = 2;
     {
-        var dir = std.Io.Dir.openDirAbsolute(init.io, "/sys/class/net", .{ .iterate = true }) catch return error.DirectoryFailed;
-        defer dir.close(init.io);
+        var dir = std.Io.Dir.openDirAbsolute(io, "/sys/class/net", .{ .iterate = true }) catch return error.DirectoryFailed;
+        defer dir.close(io);
         var iter = dir.iterate();
-        while (try iter.next(init.io)) |entry| {
+        while (try iter.next(io)) |entry| {
             if (bytes.eql(entry.name, "lo")) continue;
             if (idx >= node_count) break;
 
             const ifname = entry.name;
             const ip = getIP(sock_fd, ifname, &ip_buf);
-            const state = readSysfs(init.io, "operstate", ifname, &state_buf) catch "?";
-            const mac = readSysfs(init.io, "address", ifname, &mac_buf) catch "??:??:??:??:??:??";
-            const rx = readIntSysfs(init.io, "statistics/rx_bytes", ifname, &num_buf);
-            const tx = readIntSysfs(init.io, "statistics/tx_bytes", ifname, &num_buf);
+            const state = readSysfs(io, "operstate", ifname, &state_buf) catch "?";
+            const mac = readSysfs(io, "address", ifname, &mac_buf) catch "??:??:??:??:??:??";
+            const rx = readIntSysfs(io, "statistics/rx_bytes", ifname, &num_buf);
+            const tx = readIntSysfs(io, "statistics/tx_bytes", ifname, &num_buf);
             const rx_fmt = formatBytes(rx, &rx_fmt_buf);
             const tx_fmt = formatBytes(tx, &tx_fmt_buf);
 

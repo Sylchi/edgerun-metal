@@ -514,8 +514,10 @@ er_fn er_vp8_decode_key_frame
     call    er_vp8_read_residual_macroblock_context
     test    edx, edx
     jnz     .done_decode
+    mov     [rsp + VP8_DECODE_STACK_FILTER_NONZERO], eax
     jmp     .residual_done
 .skip_residual:
+    mov     dword [rsp + VP8_DECODE_STACK_FILTER_NONZERO], 0
     lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT]
     mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
     movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
@@ -603,6 +605,30 @@ er_fn er_vp8_decode_key_frame
     push    r11
     call    er_vp8_write_chroma_macroblock
     add     rsp, 16
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    lea     rsi, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    mov     edx, VP8_FRAME_TYPE_KEY
+    mov     rcx, [rsp + VP8_DECODE_STACK_YUV]
+    mov     r8d, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     r9d, [rsp + VP8_DECODE_STACK_HEIGHT]
+    movsxd  rax, dword [rsp + VP8_DECODE_STACK_FILTER_NONZERO]
+    push    rax
+    movsxd  rax, dword [rsp + 8 + VP8_DECODE_STACK_MB_Y]
+    push    rax
+    movsxd  rax, dword [rsp + 16 + VP8_DECODE_STACK_MB_X]
+    push    rax
+    movsxd  rax, dword [rsp + 24 + VP8_DECODE_STACK_CHROMA_COUNT]
+    push    rax
+    movsxd  rax, dword [rsp + 32 + VP8_DECODE_STACK_PIXEL_COUNT]
+    push    rax
+    movsxd  rax, dword [rsp + 40 + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    push    rax
+    movsxd  rax, dword [rsp + 48 + VP8_DECODE_STACK_CHROMA_WIDTH]
+    push    rax
+    call    er_vp8_filter_macroblock
+    add     rsp, 56
     test    edx, edx
     jnz     .done_decode
     lea     rdi, [rsp + VP8_DECODE_STACK_TOP_Y]
@@ -873,8 +899,10 @@ er_fn er_vp8_decode_frame_with_reference
     call    er_vp8_read_residual_macroblock_context
     test    edx, edx
     jnz     .done_decode_reference
+    mov     [rsp + VP8_DECODE_STACK_FILTER_NONZERO], eax
     jmp     .inter_residual_ready
 .skip_inter_residual:
+    mov     dword [rsp + VP8_DECODE_STACK_FILTER_NONZERO], 0
     lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT]
     mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
     movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
@@ -1114,6 +1142,30 @@ er_fn er_vp8_decode_frame_with_reference
     test    edx, edx
     jnz     .done_decode_reference
 .finish_inter_prediction_state:
+    lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    lea     rsi, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    mov     edx, VP8_FRAME_TYPE_INTER
+    mov     rcx, [rsp + VP8_DECODE_STACK_YUV]
+    mov     r8d, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     r9d, [rsp + VP8_DECODE_STACK_HEIGHT]
+    movsxd  rax, dword [rsp + VP8_DECODE_STACK_FILTER_NONZERO]
+    push    rax
+    movsxd  rax, dword [rsp + 8 + VP8_DECODE_STACK_MB_Y]
+    push    rax
+    movsxd  rax, dword [rsp + 16 + VP8_DECODE_STACK_MB_X]
+    push    rax
+    movsxd  rax, dword [rsp + 24 + VP8_DECODE_STACK_CHROMA_COUNT]
+    push    rax
+    movsxd  rax, dword [rsp + 32 + VP8_DECODE_STACK_PIXEL_COUNT]
+    push    rax
+    movsxd  rax, dword [rsp + 40 + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    push    rax
+    movsxd  rax, dword [rsp + 48 + VP8_DECODE_STACK_CHROMA_WIDTH]
+    push    rax
+    call    er_vp8_filter_macroblock
+    add     rsp, 56
+    test    edx, edx
+    jnz     .done_decode_reference
     lea     rdi, [rsp + VP8_DECODE_STACK_TOP_Y]
     lea     rsi, [rsp + VP8_DECODE_STACK_TOP_U]
     lea     rdx, [rsp + VP8_DECODE_STACK_TOP_V]
@@ -2054,6 +2106,419 @@ er_fn er_vp8_loop_filter_parameters
 .corrupt:
     xor     eax, eax
     er_err  ERROR_CORRUPT
+    er_ret
+
+; er_vp8_filter_macroblock(compressed_header, macroblock_header, frame_type, yuv,
+;                          width, height, chroma_width, chroma_height,
+;                          pixel_count, chroma_count, mb_x, mb_y, nonzero)
+; -> eax=filtered edge samples, rdx=error
+er_fn er_vp8_filter_macroblock
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 80
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r8d, r8d
+    jz      .invalid_param
+    test    r9d, r9d
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rcx
+    mov     [rsp], edx
+    mov     [rsp + 4], r8d
+    mov     [rsp + 8], r9d
+    mov     eax, [rsp + 128]
+    mov     [rsp + 12], eax
+    mov     eax, [rsp + 136]
+    mov     [rsp + 16], eax
+    mov     eax, [rsp + 144]
+    mov     [rsp + 20], eax
+    mov     eax, [rsp + 152]
+    mov     [rsp + 24], eax
+    mov     eax, [rsp + 160]
+    mov     [rsp + 28], eax
+    mov     eax, [rsp + 168]
+    mov     [rsp + 32], eax
+    mov     eax, [rsp + 176]
+    mov     [rsp + 36], eax
+    xor     ebx, ebx
+    lea     rcx, [rsp + 64]
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, [rsp]
+    call    er_vp8_loop_filter_parameters
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    test    eax, eax
+    jz      .ok
+    mov     eax, [rsp + 28]
+    shl     eax, 4
+    mov     [rsp + 40], eax
+    mov     eax, [rsp + 32]
+    shl     eax, 4
+    mov     [rsp + 44], eax
+    mov     eax, [rsp + 28]
+    shl     eax, 3
+    mov     [rsp + 48], eax
+    mov     eax, [rsp + 32]
+    shl     eax, 3
+    mov     [rsp + 52], eax
+    mov     dword [rsp + 56], 0
+    cmp     dword [rsp + 36], 0
+    jne     .subblocks_enabled
+    cmp     byte [r13 + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_B_PRED
+    jne     .subblocks_ready
+.subblocks_enabled:
+    mov     dword [rsp + 56], 1
+.subblocks_ready:
+    cmp     byte [r12 + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_TYPE], 0
+    jne     .simple_filter
+.normal_filter:
+    movzx   eax, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    add     eax, VP8_LOOP_FILTER_MB_EDGE_ADJUST
+    mov     [rsp + 60], eax
+    cmp     dword [rsp + 28], 0
+    je      .normal_vertical_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    mov     r9d, [rsp + 60]
+    push    2
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_vertical_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    mov     r15, r14
+    movsxd  rax, dword [rsp + 20]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    mov     r9d, [rsp + 60]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_vertical_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    movsxd  rax, dword [rsp + 24]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    mov     r9d, [rsp + 60]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_vertical_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+.normal_vertical_subblocks:
+    cmp     dword [rsp + 56], 0
+    je      .normal_horizontal_macroblock
+    mov     r11d, 4
+.normal_luma_vertical_subblock_loop:
+    cmp     r11d, 16
+    jae     .normal_chroma_vertical_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    add     ecx, r11d
+    mov     r8d, [rsp + 44]
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    2
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    mov     [rsp + 100], r11d
+    call    er_vp8_filter_normal_subblock_vertical_edge
+    add     rsp, 24
+    mov     r11d, [rsp + 76]
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    add     r11d, 4
+    jmp     .normal_luma_vertical_subblock_loop
+.normal_chroma_vertical_subblocks:
+    mov     r15, r14
+    movsxd  rax, dword [rsp + 20]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    add     ecx, 4
+    mov     r8d, [rsp + 52]
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_subblock_vertical_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    movsxd  rax, dword [rsp + 24]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    add     ecx, 4
+    mov     r8d, [rsp + 52]
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_subblock_vertical_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+.normal_horizontal_macroblock:
+    cmp     dword [rsp + 32], 0
+    je      .normal_horizontal_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    mov     r9d, [rsp + 60]
+    push    2
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_horizontal_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    mov     r15, r14
+    movsxd  rax, dword [rsp + 20]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    mov     r9d, [rsp + 60]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_horizontal_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    movsxd  rax, dword [rsp + 24]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    mov     r9d, [rsp + 60]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_macroblock_horizontal_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+.normal_horizontal_subblocks:
+    cmp     dword [rsp + 56], 0
+    je      .ok
+    mov     r11d, 4
+.normal_luma_horizontal_subblock_loop:
+    cmp     r11d, 16
+    jae     .normal_chroma_horizontal_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    add     r8d, r11d
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    2
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    mov     [rsp + 100], r11d
+    call    er_vp8_filter_normal_subblock_horizontal_edge
+    add     rsp, 24
+    mov     r11d, [rsp + 76]
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    add     r11d, 4
+    jmp     .normal_luma_horizontal_subblock_loop
+.normal_chroma_horizontal_subblocks:
+    mov     r15, r14
+    movsxd  rax, dword [rsp + 20]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    add     r8d, 4
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_subblock_horizontal_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    movsxd  rax, dword [rsp + 24]
+    add     r15, rax
+    mov     rdi, r15
+    mov     esi, [rsp + 12]
+    mov     edx, [rsp + 16]
+    mov     ecx, [rsp + 48]
+    mov     r8d, [rsp + 52]
+    add     r8d, 4
+    movzx   r9d, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    push    1
+    movzx   eax, byte [rsp + 72 + VP8_LOOP_FILTER_PARAM_HEV_THRESHOLD]
+    push    rax
+    movzx   eax, byte [rsp + 80 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    push    rax
+    call    er_vp8_filter_normal_subblock_horizontal_edge
+    add     rsp, 24
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    jmp     .ok
+.simple_filter:
+    movzx   eax, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    add     eax, VP8_LOOP_FILTER_MB_EDGE_ADJUST
+    shl     eax, 1
+    movzx   ecx, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_INTERIOR_LIMIT]
+    add     eax, ecx
+    mov     [rsp + 60], eax
+    movzx   eax, byte [rsp + 64 + VP8_LOOP_FILTER_PARAM_EDGE_LIMIT]
+    shl     eax, 1
+    add     eax, ecx
+    mov     [rsp + 72], eax
+    cmp     dword [rsp + 28], 0
+    je      .simple_vertical_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    mov     r9d, [rsp + 60]
+    call    er_vp8_filter_simple_vertical_edge
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+.simple_vertical_subblocks:
+    cmp     dword [rsp + 56], 0
+    je      .simple_horizontal_macroblock
+    mov     r11d, 4
+.simple_luma_vertical_subblock_loop:
+    cmp     r11d, 16
+    jae     .simple_horizontal_macroblock
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    add     ecx, r11d
+    mov     r8d, [rsp + 44]
+    mov     r9d, [rsp + 72]
+    push    r11
+    call    er_vp8_filter_simple_vertical_edge
+    pop     r11
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    add     r11d, 4
+    jmp     .simple_luma_vertical_subblock_loop
+.simple_horizontal_macroblock:
+    cmp     dword [rsp + 32], 0
+    je      .simple_horizontal_subblocks
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    mov     r9d, [rsp + 60]
+    call    er_vp8_filter_simple_horizontal_edge
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+.simple_horizontal_subblocks:
+    cmp     dword [rsp + 56], 0
+    je      .ok
+    mov     r11d, 4
+.simple_luma_horizontal_subblock_loop:
+    cmp     r11d, 16
+    jae     .ok
+    mov     rdi, r14
+    mov     esi, [rsp + 4]
+    mov     edx, [rsp + 8]
+    mov     ecx, [rsp + 40]
+    mov     r8d, [rsp + 44]
+    add     r8d, r11d
+    mov     r9d, [rsp + 72]
+    push    r11
+    call    er_vp8_filter_simple_horizontal_edge
+    pop     r11
+    test    edx, edx
+    jnz     .done_filter_macroblock
+    add     ebx, eax
+    add     r11d, 4
+    jmp     .simple_luma_horizontal_subblock_loop
+.ok:
+    mov     eax, ebx
+    er_ok
+    jmp     .done_filter_macroblock
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_filter_macroblock:
+    er_stack_free 80
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_vp8_read_reference_copy(reader) -> eax=copy enum, rdx=error

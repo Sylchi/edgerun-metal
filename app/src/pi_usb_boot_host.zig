@@ -86,13 +86,11 @@ const DeviceInfo = struct {
     }
 };
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
-    const args = try init.minimal.args.toSlice(allocator);
-    defer allocator.free(args);
+pub fn main() !void {}
 
+fn run(args: []const [:0]const u8, io: std.Io, allocator: std.mem.Allocator) !void {
     const options = try parseOptions(args);
-    const image = try std.Io.Dir.cwd().readFileAlloc(init.io, options.image_path, allocator, .limited(1024 * 1024));
+    const image = try std.Io.Dir.cwd().readFileAlloc(io, options.image_path, allocator, std.Io.Limit.limited(1024 * 1024));
     defer allocator.free(image);
 
     const header = bcm.secondStageHeader(@intCast(image.len), null);
@@ -103,7 +101,7 @@ pub fn main(init: std.process.Init) !void {
     });
 
     if (options.dry_run) {
-        if (findBootDevice(init.io, allocator, .any)) |dev| {
+        if (findBootDevice(io, allocator, .any)) |dev| {
             std.debug.print("dry-run: found BCM2708 boot device at {s} phase={s} serial-index={d}\n", .{
                 dev.path.slice(),
                 @tagName(dev.phase()),
@@ -117,14 +115,14 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (options.serve_only) {
-        try serveBootFiles(init.io, allocator, options);
+        try serveBootFiles(io, allocator, options);
         return;
     }
 
-    const dev = try findOrWaitBootDevice(init.io, allocator, options.wait, options.wait_timeout_ms, .first_stage);
+    const dev = try findOrWaitBootDevice(io, allocator, options.wait, options.wait_timeout_ms, .first_stage);
     std.debug.print("found BCM2708 first-stage boot device at {s} serial-index={d}\n", .{ dev.path.slice(), dev.serial_index });
     try load(dev.path.slice(), image);
-    try serveBootFiles(init.io, allocator, options);
+    try serveBootFiles(io, allocator, options);
 }
 
 fn parseOptions(args: []const [:0]const u8) !Options {

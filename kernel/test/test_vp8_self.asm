@@ -32,6 +32,7 @@ extern er_vp8_build_dequant
 extern er_vp8_parse_segmentation_header
 extern er_vp8_parse_loop_filter_header
 extern er_vp8_loop_filter_parameters
+extern er_vp8_filter_macroblock
 extern er_vp8_parse_compressed_key_frame_header
 extern er_vp8_parse_compressed_inter_frame_header
 extern er_vp8_read_key_macroblock_header
@@ -2696,6 +2697,74 @@ _start:
     cmp     byte [rel frame_y + 9 * VP8_TEST_FRAME_WIDTH], 83
     jne     .fail_macroblock_geometry
     cmp     byte [rel frame_y + 10 * VP8_TEST_FRAME_WIDTH], 84
+    jne     .fail_macroblock_geometry
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     edx, VP8_COMPRESSED_HEADER_SIZE
+    call    er_vp8_memset
+    mov     rdi, macroblock_header
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_HEADER_SIZE
+    call    er_vp8_memset
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_LOOP_FILTER + VP8_LOOP_FILTER_LEVEL], 20
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_PREDICTION], VP8_MACROBLOCK_PREDICTION_INTRA
+    mov     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_DC
+    xor     ecx, ecx
+.fill_macroblock_filter_orchestrator_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES + VP8_TEST_FRAME_UV_BYTES * 2
+    jae     .paint_macroblock_filter_orchestrator_right
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_macroblock_filter_orchestrator_plane
+.paint_macroblock_filter_orchestrator_right:
+    xor     r8d, r8d
+.paint_macroblock_filter_orchestrator_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_macroblock_filter_orchestrator
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    add     eax, 16
+    xor     ecx, ecx
+.paint_macroblock_filter_orchestrator_col:
+    cmp     ecx, 4
+    jae     .paint_macroblock_filter_orchestrator_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_macroblock_filter_orchestrator_col
+.paint_macroblock_filter_orchestrator_next_row:
+    inc     r8d
+    jmp     .paint_macroblock_filter_orchestrator_row
+.call_macroblock_filter_orchestrator:
+    mov     rdi, compressed_header
+    mov     rsi, macroblock_header
+    mov     edx, VP8_FRAME_TYPE_KEY
+    mov     rcx, frame_y
+    mov     r8d, VP8_TEST_FRAME_WIDTH
+    mov     r9d, VP8_TEST_FRAME_HEIGHT
+    push    0
+    push    0
+    push    1
+    push    VP8_TEST_FRAME_UV_BYTES
+    push    VP8_TEST_FRAME_Y_BYTES
+    push    VP8_TEST_CHROMA_HEIGHT
+    push    VP8_TEST_CHROMA_WIDTH
+    call    er_vp8_filter_macroblock
+    add     rsp, 56
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 13], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 14], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 15], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 16], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 17], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 18], 83
     jne     .fail_macroblock_geometry
     inc     qword [rel passed]
     jmp     .coeff_tables

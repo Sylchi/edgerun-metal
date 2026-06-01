@@ -544,14 +544,21 @@ pub const Io = struct {
             pub fn deinit(_: *Walker) void {}
         };
 
+        pub const IterEntry = struct { name: []const u8 };
+        pub const Iterator = struct {
+            pub fn next(_: *Iterator, _: Io) !?IterEntry { return null; }
+        };
+
         pub const Stat = struct { size: u64 = 0 };
 
         pub fn cwd() Dir { return .{}; }
         pub fn close(_: Dir, _: Io) void {}
         pub fn createDirPath(_: Dir, _: Io, _: []const u8) !void {}
         pub fn createFile(_: Dir, _: Io, _: []const u8, _: anytype) !File { return .{}; }
+        pub fn iterate(_: Dir) Iterator { return .{}; }
         pub fn openDir(_: Dir, _: Io, _: []const u8, _: anytype) !Dir { return .{}; }
         pub fn openDirAbsolute(_: Io, _: []const u8, _: anytype) !Dir { return .{}; }
+        pub fn readFile(_: Dir, _: Io, _: []const u8, out: []u8) ![]u8 { return out[0..0]; }
         pub fn statFile(_: Dir, _: Io, _: []const u8, _: anytype) !Stat { return .{}; }
         pub fn walk(_: Dir, _: mem.Allocator) !Walker { return .{}; }
         pub fn readFileAlloc(_: Dir, _: Io, _: []const u8, allocator: mem.Allocator, _: anytype) ![]u8 { return allocator.alloc(u8, 0); }
@@ -637,6 +644,8 @@ pub const os = struct {
             status.* = 0;
             return 0;
         }
+        pub fn socket(_: i32, _: i32, _: i32) isize { return -1; }
+        pub fn ioctl(_: i32, _: u32, _: usize) usize { return 1; }
         pub fn errno(result: anytype) E { return if (result < 0) .FAILURE else .SUCCESS; }
     };
     pub const uefi = struct {};

@@ -14,22 +14,6 @@ pub fn build(b: *std.Build) void {
         asm_std_obj = cmd.addOutputFileArg("asm_std.o");
     }
 
-    const media_video_dump = b.addExecutable(.{
-        .name = "edgerun-media-video-dump",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/media_video_dump.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    addBootstrapStd(b, media_video_dump, asm_std_obj);
-
-    const run_media_video_dump = b.addRunArtifact(media_video_dump);
-    if (b.args) |args| run_media_video_dump.addArgs(args);
-    const media_video_dump_step = b.step("media-video-dump", "Decode a VP8 IVF/WebM file to PPM frames");
-    media_video_dump_step.dependOn(&run_media_video_dump.step);
-
     const wayland_window = b.addExecutable(.{
         .name = "edgerun-wayland-window",
         .root_module = b.createModule(.{
@@ -82,53 +66,6 @@ pub fn build(b: *std.Build) void {
     const immutable_kernel_gop_smoke_step = b.step("immutable-kernel-gop-smoke-efi", "Build the UEFI native renderer GOP smoke");
     immutable_kernel_gop_smoke_step.dependOn(&install_immutable_kernel_gop_smoke.step);
 
-    const ifstatus = b.addExecutable(.{
-        .name = "edgerun-ifstatus",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ifstatus.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    addBootstrapStd(b, ifstatus, asm_std_obj);
-
-    const run_ifstatus = b.addRunArtifact(ifstatus);
-    if (b.args) |args| run_ifstatus.addArgs(args);
-    const ifstatus_step = b.step("ifstatus", "Publish network interface status as codec bytes to stdout");
-    ifstatus_step.dependOn(&run_ifstatus.step);
-
-    const pi_usb_boot_host = b.addExecutable(.{
-        .name = "edgerun-pi-usb-boot-host",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/pi_usb_boot_host.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    addBootstrapStd(b, pi_usb_boot_host, asm_std_obj);
-
-    const pi_usb_load = b.addRunArtifact(pi_usb_boot_host);
-    if (b.args) |args| pi_usb_load.addArgs(args);
-    const pi_usb_load_step = b.step("pi-usb-load", "Load the Pi Zero W v1.1 bootcode over Linux usbfs without external dependencies");
-    pi_usb_load_step.dependOn(&pi_usb_load.step);
-
-    const pi_usb_control_host = b.addExecutable(.{
-        .name = "edgerun-pi-usb-control-host",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/pi_usb_control_host.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    addBootstrapStd(b, pi_usb_control_host, asm_std_obj);
-
-    const pi_usb_control = b.addRunArtifact(pi_usb_control_host);
-    if (b.args) |args| pi_usb_control.addArgs(args);
-    const pi_usb_control_step = b.step("pi-usb-control", "Send Edgerun Pi USB control commands over Linux usbfs without external dependencies");
-    pi_usb_control_step.dependOn(&pi_usb_control.step);
 }
 
 fn addBootstrapStd(b: *std.Build, compile: *std.Build.Step.Compile, asm_std_obj: ?std.Build.LazyPath) void {

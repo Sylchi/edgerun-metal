@@ -6,10 +6,11 @@ const max_input_bytes: usize = 64 * 1024 * 1024;
 const default_max_frames: usize = 16;
 const output_name_len: usize = 64;
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
-    const args = try init.minimal.args.toSlice(allocator);
-    defer allocator.free(args);
+pub fn main() !void {
+    try run(&.{}, .{}, std.heap.page_allocator);
+}
+
+fn run(args: []const []const u8, io: std.Io, allocator: std.mem.Allocator) !void {
     if (args.len < 3 or args.len > 4) return error.InvalidArgument;
 
     const input_path = args[1];
@@ -20,7 +21,7 @@ pub fn main(init: std.process.Init) !void {
         default_max_frames;
     if (max_frames == 0) return error.InvalidArgument;
 
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, allocator, .limited(max_input_bytes));
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(io, input_path, allocator, std.Io.Limit.limited(max_input_bytes));
     defer allocator.free(bytes);
 
     var decoder = try video.Decoder.init(bytes);
@@ -34,14 +35,14 @@ pub fn main(init: std.process.Init) !void {
     const scratch = try allocator.alloc(u8, scratch_len);
     defer allocator.free(scratch);
 
-    try std.Io.Dir.cwd().createDirPath(init.io, output_dir);
-    var output = try std.Io.Dir.cwd().openDir(init.io, output_dir, .{});
-    defer output.close(init.io);
+    try std.Io.Dir.cwd().createDirPath(io, output_dir);
+    var output = try std.Io.Dir.cwd().openDir(io, output_dir, .{});
+    defer output.close(io);
 
     var decoded: usize = 0;
     while (decoded < max_frames) : (decoded += 1) {
         const frame = (try decoder.nextFrame(pixels, scratch)) orelse break;
-        try writeFramePpm(init.io, output, frame.index, header.width, header.height, pixels);
+        try writeFramePpm(io, output, frame.index, header.width, header.height, pixels);
     }
     if (decoded == 0) return error.NoFramesDecoded;
 }

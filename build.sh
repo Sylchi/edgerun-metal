@@ -1738,6 +1738,42 @@ cmd_build_dashboard() {
   -femit-bin="../${BUILD_DIR}/app/edgerun-build-dashboard")
 }
 
+cmd_media_video_dump() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/media_video_dump.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-media-video-dump")
+}
+
+cmd_pi_usb_load() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/pi_usb_boot_host.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-pi-usb-boot-host")
+}
+
+cmd_pi_usb_control() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/pi_usb_control_host.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-pi-usb-control-host")
+}
+
+cmd_ifstatus() {
+ mkdir -p "${BUILD_DIR}/app"
+ (cd app && zig build-exe -ODebug \
+  --dep er_std \
+  -Mroot=src/ifstatus.zig \
+  -Mer_std=src/std.zig \
+  -femit-bin="../${BUILD_DIR}/app/edgerun-ifstatus")
+}
+
 cmd_tpm_real_check_build() {
  mkdir -p "${BUILD_DIR}/app"
  (cd app && zig build-exe -ODebug \
@@ -1761,6 +1797,10 @@ cmd_app() {
  cmd_chat_preview
  cmd_jc3248_frame
  cmd_build_dashboard
+ cmd_media_video_dump
+ cmd_ifstatus
+ cmd_pi_usb_load
+ cmd_pi_usb_control
 }
 
 cmd_test() {
@@ -2389,6 +2429,10 @@ EdgeRun build targets:
   chat-preview       Build and run chat preview renderer without app/build.zig
   jc3248-frame       Build and run JC3248 frame renderer without app/build.zig
   build-dashboard    Build dashboard renderer without app/build.zig
+  media-video-dump   Build media video dump tool without app/build.zig
+  ifstatus           Build interface status publisher without app/build.zig
+  pi-usb-load        Build Pi USB boot host without app/build.zig
+  pi-usb-control     Build Pi USB control host without app/build.zig
   tpm-real-check     Build real TPM checker without app/build.zig
   real-tpm           Build and run real TPM checker against /dev/tpmrm0
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
@@ -2449,6 +2493,10 @@ case "${1:-help}" in
 	chat-preview)   cmd_chat_preview ;;
 	jc3248-frame)   cmd_jc3248_frame ;;
 	build-dashboard) cmd_build_dashboard ;;
+	media-video-dump) cmd_media_video_dump ;;
+	ifstatus)       cmd_ifstatus ;;
+	pi-usb-load)    cmd_pi_usb_load ;;
+	pi-usb-control) cmd_pi_usb_control ;;
 	tpm-real-check) cmd_tpm_real_check_build ;;
 	real-tpm)       cmd_real_tpm ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;
