@@ -116,6 +116,7 @@ KERNEL_ASM_SRCS="
 	media/av1_sequence.asm
 	media/av1_frame.asm
 	media/av1_tile.asm
+	media/av1_block.asm
 	media/av1_reduced.asm
 	agent/http_agent.asm
 	agent/da.asm
@@ -355,6 +356,7 @@ cmd_test() {
 	cmd_test_av1_sequence
 	cmd_test_av1_frame
 	cmd_test_av1_tile
+	cmd_test_av1_block
 	cmd_test_av1_reduced
 	cmd_test_x25519
 	cmd_test_wasm_compiler
@@ -465,6 +467,10 @@ cmd_test_av1_frame() {
 
 cmd_test_av1_tile() {
 	build_test "test_av1_tile_self" "${TEST_DIR}/test_av1_tile_self.asm" "media/av1_bits" "media/av1_tile"
+}
+
+cmd_test_av1_block() {
+	build_test "test_av1_block_self" "${TEST_DIR}/test_av1_block_self.asm" "media/av1_bits" "media/av1_block"
 }
 
 cmd_test_av1_reduced() {
@@ -979,6 +985,7 @@ EdgeRun build targets:
   test-av1-sequence   Run AV1 reduced-still sequence header test (self-hosted ASM)
   test-av1-frame      Run AV1 reduced-still frame header test (self-hosted ASM)
   test-av1-tile       Run AV1 single-tile group test (self-hosted ASM)
+  test-av1-block      Run AV1 block syntax entropy test (self-hosted ASM)
   test-av1-reduced    Run AV1 reduced-still stream decode/encode test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
   bench-tor-hs        Run hidden-service local self-connect benchmark
@@ -1047,6 +1054,7 @@ case "${1:-help}" in
 	test-av1-sequence) cmd_test_av1_sequence ;;
 	test-av1-frame)  cmd_test_av1_frame ;;
 	test-av1-tile)   cmd_test_av1_tile ;;
+	test-av1-block)  cmd_test_av1_block ;;
 	test-av1-reduced) cmd_test_av1_reduced ;;
 	bench-tor)      cmd_bench_tor ;;
 	bench-tor-hs)   cmd_bench_tor_hs ;;

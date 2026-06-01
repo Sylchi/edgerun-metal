@@ -120,26 +120,52 @@ verify the receipt
 
 ## What Is Real In This Repo
 
-- A Zig core for canonical objects, identities, deterministic clocks,
-  append-only storage, sealed movement, grants, manifests, and receipts.
-- A deterministic x86_64 ASM EdgeRun WASM interpreter for running app code
-  without WASI or a fake host filesystem.
-- A host-side x86_64 ASM WASM compiler emitter. The first committed slice emits
-  deterministic exported integer modules into caller-owned memory, compiles
-  `export name = signed_i32;` and `export name = a + b;` source buffers, and
-  proves the result through the canonical interpreter.
-- App containment tests for host-mediated spawn, reclaim, and child-memory
-  boundaries.
-- App authoring is converging on host-side compilation to WASM followed by the
-  canonical interpreter/JIT path. There is no browser app-runtime contract.
-- A shared app render contract consumed by web host, CPU software rendering,
-  Wayland, GLES, and DRM/GBM host paths.
-- Repo-owned font, SVG icon, image, video, and audio decode/render paths.
-- QEMU-smoked immutable-kernel work for boot resources, memory contracts, WASM
-  launch, work receipts, registry routing, `ExitBootServices`, and TPM/swtpm
-  verification.
-- Raspberry Pi Zero W v1.1 kernel and USB boot tooling for real hardware
-  bring-up.
+- `./build.sh test` passes the current self-hosted ASM test surface: runtime,
+  drivers, HTTP/TLS/Tor, local routing, AV1 reduced media paths, WASM compiler,
+  WASM JIT, recursion validation, float opcodes, and Pi emulator checks.
+- `./build.sh kernel` builds the x86_64 kernel image with the current host-side
+  ASM stack: drivers, TPM, local cells/routes/circuits, DA, WASM interpreter,
+  WASM compiler/JIT pieces, Tor pieces, media codecs, and framebuffer/render IR.
+- A Zig app-side core exists for canonical objects, identities, deterministic
+  clocks, append-only storage, sealed movement, grants, manifests, receipts,
+  and UI/component authoring.
+- The host-side x86_64 ASM WASM compiler now has tested source-to-WASM slices,
+  including the `test-wasm-compiler` path. It is not yet the full app compiler.
+- The local cell/router layer is implemented as the kernel identity transport:
+  fixed cells, SPSC rings, route registration, async handler polling, circuit
+  helpers, and WASM import wrappers.
+- The DA has a kernel-side surface registry, layer composition, focus tracking,
+  and cell-dispatched surface/app messages. The remaining work is to close the
+  full app loop through one canonical object/cell/receipt path.
+- Raspberry Pi Zero W v1.1, ESP32 serial boot, AMDGPU, Intel GPU, storage,
+  networking, and media paths have real build/test slices, but several still
+  need hardware validation or deeper production behavior.
+
+## Current Unification Path
+
+The project is being consolidated around one critical loop:
+
+```text
+source object
+  -> host-side compiler emits WASM
+  -> canonical interpreter/JIT runs it
+  -> app communicates by identity-routed cells
+  -> DA/storage/network enforce grants
+  -> receipts become canonical objects
+```
+
+Work that does not advance this loop should delete duplication, remove stale
+alternate models, or move behavior behind the existing object/cell/receipt
+contracts.
+
+Temporary gaps still present:
+
+- `./build.sh kernel` still invokes Cargo for the signing WASM guest. That is a
+  bootstrap dependency to eliminate, not a permanent host-side production model.
+- App authoring still uses Zig until the host-side compiler replaces enough of
+  the source-to-WASM path.
+- Some hardware paths are probe/test slices; the kernel should keep one explicit
+  path per device class and delete placeholders as real behavior lands.
 
 
 ## Core Model
@@ -322,6 +348,7 @@ A single app broadcasts its scene to multiple UI hosts. Each renders independent
 
 ```sh
 ./build.sh test
+./build.sh kernel
 ```
 
 Focused checks:
@@ -341,6 +368,10 @@ Focused checks:
 ./build.sh test-fe-mul
 ./build.sh test-spi-flash
 ./build.sh test-tor
+./build.sh test-tor-cell
+./build.sh test-tor-hs
+./build.sh test-local-route
+./build.sh test-av1-reduced
 ./build.sh test-x25519
 ```
 

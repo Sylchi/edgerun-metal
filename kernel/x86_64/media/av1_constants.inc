@@ -231,6 +231,45 @@ AV1_TILE_ENTRY_ROW                  equ 12
 AV1_TILE_ENTRY_COL                  equ 16
 AV1_TILE_ENTRY_SIZE                 equ 24
 
+AV1_BLOCK_PARTITION                 equ 0
+AV1_BLOCK_Y_MODE                    equ 1
+AV1_BLOCK_SKIP                      equ 2
+AV1_BLOCK_TX_SIZE                   equ 3
+AV1_BLOCK_SIZE                      equ 8
+AV1_BLOCK_WALK_MIN_DIM              equ 8
+
+AV1_BLOCK_CDFS_PARTITION            equ 0
+AV1_BLOCK_CDFS_Y_MODE               equ 16
+AV1_BLOCK_CDFS_SKIP                 equ 48
+AV1_BLOCK_CDFS_TX_SIZE              equ 56
+AV1_BLOCK_CDFS_COEFF_NONZERO       equ 64
+AV1_BLOCK_CDFS_COEFF_LEVEL         equ 72
+AV1_BLOCK_CDFS_SIZE                 equ 88
+
+AV1_BLOCK_PARTITION_SYMBOLS_W8      equ 4
+AV1_BLOCK_Y_MODE_SYMBOLS            equ 13
+AV1_BLOCK_SKIP_SYMBOLS              equ 2
+AV1_BLOCK_TX_SIZE_SYMBOLS_8X8       equ 2
+AV1_BLOCK_COEFF_NONZERO_SYMBOLS     equ 2
+AV1_BLOCK_COEFF_LEVEL_SYMBOLS       equ 4
+
+AV1_BLOCK_DIM_8                     equ 8
+AV1_BLOCK_PIXELS_8X8                equ 64
+AV1_PIXEL_MID_8                     equ 128
+AV1_PIXEL_MAX_8                     equ 255
+AV1_COEFF_MIN_16                    equ -32768
+AV1_COEFF_MAX_16                    equ 32767
+AV1_QUANT_STEP_MIN                  equ 1
+AV1_QUANT_STEP_MAX                  equ 255
+AV1_PRED_MODE_DC                    equ 0
+AV1_PRED_MODE_V                     equ 1
+AV1_PRED_MODE_H                     equ 2
+AV1_TX_TYPE_IDTX                    equ 0
+AV1_TX_TYPE_DCT_DCT                 equ 1
+AV1_TX_TYPE_DC_ONLY                 equ 2
+AV1_TX_TYPE_MAX                     equ 2
+AV1_TX_DCT_SCALE_BITS               equ 12
+
 AV1_IMAGE_WIDTH                     equ 0
 AV1_IMAGE_HEIGHT                    equ 4
 AV1_IMAGE_Y_PTR                     equ 8

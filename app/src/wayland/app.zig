@@ -68,18 +68,30 @@ fn renderNativeWorkspaceScene(scene: *ui.Scene, collector: *interaction.Collecto
 
 fn renderWorkspaceSystem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
     const app = component.renderer(scene, collector, hardwareRenderOptions(state));
-    try app.fill(bounds, @import("../ui/theme.zig").Palette.bg, 0.0);
-    const shell = app.workspaceShell(bounds, .{ .sidebar_w = 292.0 });
+    const design = @import("../ui/theme.zig");
+    const shell = try app.workspaceSurface(bounds, .{
+        .shell = .{ .sidebar_w = 292.0 },
+        .background = design.Palette.bg,
+        .top = .{
+            .title = "EdgeRun workspace",
+            .detail = lensDetail(active_lens),
+            .trailing_top = "active lens",
+            .trailing_bottom = lensTitle(active_lens),
+            .fill = design.workspace_sidebar_bg,
+            .detail_color = design.Palette.muted,
+        },
+        .status = .{
+            .text = locationStatus(state.location),
+            .fill = design.workspace_status_bg,
+        },
+    });
     try renderWorkspaceLensRail(app, shell.rail, active_lens);
-    try renderWorkspaceLensTop(app, shell.top, active_lens, state);
     try renderWorkspaceLensSidebar(app, shell.sidebar, state, active_lens);
-    try renderWorkspaceLensMain(scene, collector, shell.main, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
-    try app.workspaceStatusBar(shell.status, .{ .text = locationStatus(state.location), .fill = @import("../ui/theme.zig").workspace_status_bg });
+    try renderWorkspaceLensMain(app, scene, collector, shell.main, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
 }
 
 fn renderWorkspaceLensRail(app: component.View, bounds: ui.Rect, active_lens: WorkspaceLens) !void {
     const design = @import("../ui/theme.zig");
-    try app.fill(bounds, design.workspace_rail_bg, 0.0);
     const specs = [_]component.IconButtonSpec{
         .{ .id = @intFromEnum(WorkspaceLens.agent), .label = "Agent", .icon = .ai_agent, .variant = if (active_lens == .agent) .primary else .ghost },
         .{ .id = @intFromEnum(WorkspaceLens.pipeline), .label = "Pipeline", .icon = .git_branch, .variant = if (active_lens == .pipeline) .primary else .ghost },
@@ -87,35 +99,29 @@ fn renderWorkspaceLensRail(app: component.View, bounds: ui.Rect, active_lens: Wo
         .{ .id = @intFromEnum(WorkspaceLens.chat), .label = "Chat", .icon = .message_2, .variant = if (active_lens == .chat) .primary else .ghost },
         .{ .id = @intFromEnum(WorkspaceLens.network), .label = "Network", .icon = .network, .variant = if (active_lens == .network) .primary else .ghost },
     };
-    try app.actionToolbar(ui.Rect.init(bounds.x + 6.0, bounds.y + design.workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - design.workspace_rail_pad)), .{
-        .specs = &specs,
-        .direction = .column,
+    try app.workspaceRail(bounds, .{
+        .actions = &specs,
+        .fill = design.workspace_rail_bg,
+        .pad_top = design.workspace_rail_pad,
         .button_h = design.workspace_icon_button,
         .gap = 8.0,
     });
 }
 
-fn renderWorkspaceLensTop(app: component.View, bounds: ui.Rect, active_lens: WorkspaceLens, state: AppState) !void {
-    try app.workspaceTopBar(bounds, .{
-        .title = "EdgeRun workspace",
-        .detail = lensDetail(active_lens),
-        .trailing_top = "active lens",
-        .trailing_bottom = lensTitle(active_lens),
-        .fill = @import("../ui/theme.zig").workspace_sidebar_bg,
-        .detail_color = @import("../ui/theme.zig").Palette.muted,
-    });
-    _ = state;
-}
-
 fn renderWorkspaceLensSidebar(app: component.View, bounds: ui.Rect, state: AppState, active_lens: WorkspaceLens) !void {
     const design = @import("../ui/theme.zig");
-    try app.fill(bounds, design.workspace_sidebar_bg, 0.0);
-    try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
     const nav_h: f32 = 116.0;
+    const body = try app.workspaceSidebarChrome(bounds, .{
+        .fill = design.workspace_sidebar_bg,
+        .border = design.Palette.border,
+        .body_y = nav_h,
+        .title = "",
+        .detail = "",
+    });
     var nav_rows = app.column(ui.Rect.init(bounds.x + 12.0, bounds.y + 12.0, bounds.w - 24.0, nav_h - 18.0), 6.0);
     for (app_location.topLevelBindings()) |binding| {
         const row = nav_rows.take(44.0);
-        try app_chrome.renderNavItem(app.scene, app.collector.?, .{
+        try app_chrome.renderNavItemView(app, .{
             .kind = .workspace_sidebar,
             .binding = binding,
             .bounds = row,
@@ -129,7 +135,7 @@ fn renderWorkspaceLensSidebar(app: component.View, bounds: ui.Rect, state: AppSt
         lensItem(.chat, active_lens),
         lensItem(.network, active_lens),
     };
-    try app.panelList(ui.Rect.init(bounds.x + 12.0, bounds.y + nav_h, bounds.w - 24.0, @max(1.0, bounds.h - nav_h - 12.0)), .{
+    try app.panelList(ui.Rect.init(bounds.x + 12.0, body.y, bounds.w - 24.0, @max(1.0, bounds.y + bounds.h - body.y - 12.0)), .{
         .title = "EDGERUN",
         .detail = "workspace objects",
         .icon = .layout_dashboard,
@@ -140,9 +146,9 @@ fn renderWorkspaceLensSidebar(app: component.View, bounds: ui.Rect, state: AppSt
     });
 }
 
-fn renderWorkspaceLensMain(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
-    if (try scene.pushClip(bounds)) {
-        defer scene.popClip();
+fn renderWorkspaceLensMain(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
+    if (try app.pushClip(bounds)) {
+        defer app.popClip();
         const content = bounds.insetUniform(12.0);
         switch (active_lens) {
             .agent => try app_agent.render(scene, collector, content, state.agent),

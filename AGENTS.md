@@ -58,7 +58,7 @@ The repository has two code worlds separated by a hard boundary:
   - `agent/` — agent protocol, display agent (da.asm)
   - `ui/` — ui_core, render_ir, sw_fb
   - `object/` — object.asm, object_constants.inc
-- `kernel/test/` — test files. To be migrated from C to self-hosted ASM runners.
+- `kernel/test/` — self-hosted ASM test runners and minimal platform stubs.
 - `kernel/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
 - `kernel/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
 - `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
@@ -69,15 +69,14 @@ The repository has two code worlds separated by a hard boundary:
 
 ### Build tools (minimum to bootstrap)
 - `yasm` (or `nasm`) — assembler for the DSL. Long-term goal: own assembler.
-- `make` — build orchestrator. Long-term goal: own build system.
 - `ld` / `objcopy` (binutils) — linker. Long-term goal: own linker.
 
-### Current test-time dependencies (being phased out)
-- `cc` (gcc/clang) — used to compile C test harness + link ASM objects into freestanding static binaries.
-- C startup crt0 stubs via `-ffreestanding -nostdlib`.
-- `zig` — full Zig compiler + std lib (DEPRECATED as host-side build dependency; still needed for app-side Zig→WASM compilation until the self-hosted WASM compiler replaces this path).
+### Current bootstrap dependencies to eliminate
+- `cargo` / Rust — currently builds the signing WASM guest used by `./build.sh kernel`.
+- `zig` — app-side authoring compiler until the self-hosted source-to-WASM path replaces enough of it.
 
-- `qemu-system-x86_64` — kernel test environment.
+- `qemu-system-x86_64` and `qemu-system-arm` — emulator test environments.
+- `arm-none-eabi-as`, `arm-none-eabi-ld`, `arm-none-eabi-objcopy` — Pi Zero W build/test tools.
 
 ## Required Commands
 
@@ -85,21 +84,16 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 
 - Full repository check:
   - `./build.sh test` (all ASM tests)
-- ASM module tests (builds and runs):
-  - `./build.sh test-ctype`
-  - `./build.sh test-math`
-  - `./build.sh test-runtime`
-  - `./build.sh test-serial`
+- Focused tests are listed by `./build.sh help`. Important unification checks include:
+  - `./build.sh test-wasm-compiler`
   - `./build.sh test-wasm-jit`
   - `./build.sh test-wasm-float`
   - `./build.sh test-recursion-valid`
   - `./build.sh test-recursion-invalid`
-  - `./build.sh test-tpm`
-  - `./build.sh test-blake3`
-  - `./build.sh test-acpi`
-  - `./build.sh test-preimage`
-  - `./build.sh test-bytes`
-  - `./build.sh test` (all of the above)
+  - `./build.sh test-local-route`
+  - `./build.sh test-render-ir`
+  - `./build.sh test-av1-reduced`
+  - `./build.sh test-tor`
 - ASM kernel build:
   - `./build.sh kernel`
   - `./build.sh kernel-hello` (build + QEMU launch)
@@ -108,12 +102,12 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 - View targets:
   - `./build.sh help`
 
-## C To ASM Porting Rules
+## Host-Side ASM Rules
 
 - All new production code must be written in the project's ASM DSL (`macros.inc`).
-- Port existing C test harnesses to pure ASM self-hosted test runners (no `main()` from C).
-- When porting, update Makefile rules to assemble and link directly via ld without the C compiler bridge.
-- Keep behavior and tests coherent across the Makefile and module-local tests.
+- Do not add C test harnesses or C startup bridges.
+- Build and link ASM tests directly through `build.sh` and `ld`.
+- Keep behavior and tests coherent across `build.sh` and module-local tests.
 - Do not reintroduce C compatibility wrappers or shims at the ASM boundary.
 - The WASM interpreter in `kernel/x86_64/wasm/wasm_run.asm` is the canonical implementation.
 

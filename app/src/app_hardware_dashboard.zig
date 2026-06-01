@@ -409,8 +409,8 @@ pub const State = struct {
             try self.renderStacked(app, outer);
         }
         self.refreshSelectedRegion(collector.written());
-        try self.renderSelectionOverlay(scene, bounds);
-        try self.renderContextAndEditor(app, scene, bounds);
+        try self.renderSelectionOverlay(app, bounds);
+        try self.renderContextAndEditor(app, bounds);
     }
 
     fn detail(self: *const State, row: usize) []const u8 {
@@ -458,15 +458,18 @@ pub const State = struct {
     }
 
     fn renderHeader(self: *State, app: component_union.View, bounds: ui.Rect) !void {
-        try app.selectableElevatedAt(bounds, select_header_id, "", "");
-        try app.gradient(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 7 }, ui.Color.clear, 12.0);
-        const chip = ui.Rect.init(bounds.x + 20.0, bounds.y + 20.0, 36.0, 36.0);
-        try app.fill(chip, hardware_accent_dim, 9.0);
-        try app.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), .device_desktop, app.options.style.accent);
-        try app.title(ui.Rect.init(bounds.x + 72.0, bounds.y + 17.0, @max(1.0, bounds.w - 330.0), 22.0), "Hardware Command Center");
-        try app.muted(ui.Rect.init(bounds.x + 72.0, bounds.y + 46.0, @max(1.0, bounds.w - 330.0), 16.0), fittedText(self.detail(0), @max(1.0, bounds.w - 330.0)));
-        try app.badgeAt(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 24.0, 150.0, 28.0), self.statusLabel(), .secondary);
-        try app.iconButtonAt(ui.Rect.init(bounds.x + bounds.w - 54.0, bounds.y + 21.0, 34.0, 34.0), refresh_now_button_id, "Refresh", .reload, .outline);
+        const badges = [_]component_union.HeaderBadge{
+            .{ .label = self.statusLabel(), .variant = .secondary, .width = 150.0 },
+        };
+        try app.pageHeader(bounds, .{
+            .id = select_header_id,
+            .title = "Hardware Command Center",
+            .detail = fittedText(self.detail(0), @max(1.0, bounds.w - 330.0)),
+            .icon = .device_desktop,
+            .accent = hardware_accent_dim,
+            .badges = &badges,
+            .trailing_action = .{ .id = refresh_now_button_id, .label = "Refresh", .icon = .reload, .variant = .outline },
+        });
     }
 
     fn renderMetrics(self: *State, app: component_union.View, bounds: ui.Rect, gap: f32) !void {
@@ -625,78 +628,57 @@ pub const State = struct {
         });
     }
 
-    fn renderSelectionOverlay(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
+    fn renderSelectionOverlay(self: *State, app: component_union.View, bounds: ui.Rect) !void {
         _ = bounds;
         const selected = self.selected_component orelse return;
-        const progress = self.selectionProgress();
-        if (self.selected_emphasis) try scene.pushOverlayRect(selected.bounds, scaleAlpha(hardware_selection_fill, progress), .fill, 12.0, 0.0);
-        try scene.pushOverlayRect(selected.bounds.insetUniform(-2.0), scaleAlpha(hardware_selection, progress), .border, 14.0, 0.0);
+        try app.selectionOverlay(selected.bounds, hardware_selection, hardware_selection_fill, self.selectionProgress(), self.selected_emphasis);
     }
 
-    fn renderContextAndEditor(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
-        if (self.context_open) try self.renderContextMenu(app, scene, bounds);
-        if (self.editor_open) try self.renderEditor(app, scene, bounds);
+    fn renderContextAndEditor(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        if (self.context_open) try self.renderContextMenu(app, bounds);
+        if (self.editor_open) try self.renderEditor(app, bounds);
     }
 
-    fn renderContextMenu(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
-        const mark = scene.cursor();
-        const menu_w: f32 = 220.0;
-        const menu_h: f32 = 118.0;
-        const x = std.math.clamp(self.context_x, bounds.x + 8.0, bounds.x + bounds.w - menu_w - 8.0);
-        const y = std.math.clamp(self.context_y, bounds.y + 8.0, bounds.y + bounds.h - menu_h - 8.0);
-        const menu = ui.Rect.init(x, y, menu_w, menu_h);
-        _ = try app.floatingPanel(menu, .{
+    fn renderContextMenu(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        try app.contextActionPanel(bounds, .{
+            .x = self.context_x,
+            .y = self.context_y,
+            .title = selectedComponentLabel(self.selected_component),
+            .detail = "Context menu",
+            .primary_id = context_open_editor_id,
+            .primary_label = "Open editor",
+            .secondary_id = context_close_id,
+            .secondary_label = "Close",
             .fill = editor_panel,
             .border = app.options.style.border,
             .shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 },
-            .radius = 12.0,
-            .shadow_outset = 2.0,
+            .progress = self.contextProgress(),
         });
-        try app.title(ui.Rect.init(menu.x + 14.0, menu.y + 12.0, menu.w - 28.0, 18.0), selectedComponentLabel(self.selected_component));
-        try app.muted(ui.Rect.init(menu.x + 14.0, menu.y + 36.0, menu.w - 28.0, 16.0), "Context menu");
-        try app.buttonAt(ui.Rect.init(menu.x + 12.0, menu.y + 66.0, 118.0, 34.0), context_open_editor_id, "Open editor", .primary);
-        try app.buttonAt(ui.Rect.init(menu.x + 138.0, menu.y + 66.0, 70.0, 34.0), context_close_id, "Close", .outline);
-        const progress = self.contextProgress();
-        scene.applyOpacitySince(mark, progress);
-        scene.translateSince(mark, 0.0, (1.0 - progress) * 8.0);
-        scene.promoteSinceToOverlay(mark);
     }
 
-    fn renderEditor(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
-        const mark = scene.cursor();
-        const panel_w = @min(360.0, @max(300.0, bounds.w * 0.24));
-        const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(398.0, bounds.h - 36.0));
-        const inner = try app.floatingPanel(panel, .{
+    fn renderEditor(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        const switches = [_]component_union.EditorSwitchSpec{
+            .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis },
+            .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows },
+        };
+        try app.propertyEditorPanel(bounds, .{
+            .title = "Component Editor",
+            .detail = selectedComponentLabel(self.selected_component),
+            .close_id = editor_close_id,
+            .preview_detail = selectedComponentLabel(self.selected_component),
+            .section_title = "Accent",
+            .section_detail = accentName(self.accent_index),
+            .prev_id = editor_accent_prev_id,
+            .prev_label = "Accent -",
+            .next_id = editor_accent_next_id,
+            .next_label = "Accent +",
+            .switches = &switches,
             .fill = editor_panel,
             .border = app.options.style.border,
             .shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 82 },
-            .radius = 14.0,
-            .shadow_outset = 1.0,
             .scrim = editor_scrim,
-            .scrim_height = 76.0,
+            .progress = self.editorProgress(),
         });
-        try app.boldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), "Component Editor", app.options.style.text);
-        try app.iconButtonAt(ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0), editor_close_id, "Close editor", .x, .outline);
-        try app.muted(ui.Rect.init(inner.x, inner.y + 31.0, inner.w, 17.0), selectedComponentLabel(self.selected_component));
-        try app.muted(ui.Rect.init(inner.x, inner.y + 54.0, inner.w, 17.0), "Live changes apply immediately.");
-
-        const preview = ui.Rect.init(inner.x, inner.y + 86.0, inner.w, 74.0);
-        try app.subtleAt(preview, "Selected", selectedComponentLabel(self.selected_component));
-
-        const accent_y = inner.y + 184.0;
-        try app.title(ui.Rect.init(inner.x, accent_y, inner.w, 20.0), "Accent");
-        try app.muted(ui.Rect.init(inner.x, accent_y + 25.0, inner.w, 18.0), accentName(self.accent_index));
-        const button_w = (inner.w - 10.0) * 0.5;
-        try app.buttonAt(ui.Rect.init(inner.x, accent_y + 52.0, button_w, 34.0), editor_accent_prev_id, "Accent -", .outline);
-        try app.buttonAt(ui.Rect.init(inner.x + button_w + 10.0, accent_y + 52.0, button_w, 34.0), editor_accent_next_id, "Accent +", .primary);
-
-        try app.line(ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0));
-        try app.switchAt(ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0), editor_emphasis_switch_id, "Selected emphasis", self.selected_emphasis);
-        try app.switchAt(ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0), compact_rows_switch_id, "Compact inventory", self.compact_rows);
-        const progress = self.editorProgress();
-        scene.applyOpacitySince(mark, progress);
-        scene.translateSince(mark, (1.0 - progress) * 18.0, 0.0);
-        scene.promoteSinceToOverlay(mark);
     }
 
     fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {
@@ -895,12 +877,6 @@ fn transitionProgress(frame: u64, opened_at: u64) f32 {
     const elapsed = if (frame >= opened_at) frame - opened_at + 1 else 1;
     const unit = @min(@as(f32, 1.0), @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(State.transition_frames)));
     return ui.easingSample(.ease_out, unit);
-}
-
-fn scaleAlpha(color: ui.Color, unit: f32) ui.Color {
-    var out = color;
-    out.a = @intFromFloat(@round(@as(f32, @floatFromInt(color.a)) * ui.clampUnit(unit)));
-    return out;
 }
 
 fn isEditorControl(id: u32) bool {

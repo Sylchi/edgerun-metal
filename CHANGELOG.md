@@ -1,5 +1,15 @@
 # Changelog
 
+## Current Verification Snapshot — 2026-06-01
+- `./build.sh test` passes on the current working tree.
+- `./build.sh kernel` builds `.build/kernel/kernel.elf` and `.build/kernel/kernel.bin`.
+- Historical entries below are preserved as session records. Older notes that
+  call `test-wasm-compiler`, TPM hash, or broad test failures "pre-existing"
+  should not be read as current blockers without re-running `build.sh`.
+- Current consolidation focus: close the source-object → host-side compiler →
+  WASM interpreter/JIT → identity-routed cells → DA/storage/network → receipt
+  object loop, while deleting stale parallel paths.
+
 ## Session 1 — Build system & test cleanup
 - `make check` now includes `asm-test` and `crypto-test` (was Zig-only).
 - Added `asm-test-wasm` to the top-level `asm-test` target.

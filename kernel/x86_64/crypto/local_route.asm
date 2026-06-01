@@ -12,7 +12,7 @@
 ;   er_local_cell_send()     — send cell to an identity by hash
 ;   er_local_cell_send_to_slot() — send cell to slot directly
 ;   er_local_cell_recv()     — receive cell from own mailbox
-;   er_local_cell_poll()     — main loop polling stub
+;   er_local_cell_poll()     — poll registered async handlers
 ;
 ; All functions use the two-register return convention:
 ;   eax = primary value, edx = 0 on success, error code on failure
@@ -443,7 +443,7 @@ er_fn er_local_cell_send_to_slot
     jz      .enqueue
 
     mov     rdi, r12
-    mov     esi, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    mov     esi, [r12 + LOCAL_CELL_PAYLOAD + AGENT_PAYLOAD_SENDER_SLOT]
     call    rcx
     jmp     .done
 
@@ -518,7 +518,7 @@ er_fn er_local_cell_poll
 
     ; Dispatch: handler(rdi=cell_ptr, rsi=sender_slot_id)
     mov     rdi, rsp
-    lea     rsi, [rsp + LOCAL_CELL_PAYLOAD + 2]
+    lea     rsi, [rsp + LOCAL_CELL_PAYLOAD + AGENT_PAYLOAD_SENDER_SLOT]
     mov     esi, [rsi]          ; sender slot_id from payload
     call    rbx
     inc     r14d

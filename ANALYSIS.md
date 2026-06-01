@@ -1,7 +1,16 @@
 # Performance & Consolidation Analysis
 
-Generated: 2026-05-31
-Total source: ~159K lines across 371 files (kernel 60K, app 98K)
+Updated: 2026-06-01
+
+Verified current baseline:
+
+- `./build.sh test` passes.
+- `./build.sh kernel` builds `.build/kernel/kernel.elf` and `.build/kernel/kernel.bin`.
+- Older notes about `test-wasm-compiler` hanging or TPM hash failures are historical,
+  not current blockers.
+
+This file tracks consolidation targets. Treat line counts as directional because
+multiple agents are actively changing the tree.
 
 ## Performance Optimizations
 
@@ -15,25 +24,16 @@ each with full frame push/pop/ret (~15 cycles each → ~50 cycles per opcode).
 Inlining eliminates 147 call sites in macro-generated handlers. Combined with
 register-cached dispatch state, compute-bound WASM workloads see 2-3× improvement.
 
-### 2. Power-of-2 Division → Shift/And (10× per site)
+### 2. Power-of-2 Division → Shift/And
 
 | File | Line | Divisor | Replacement | Impact |
 |------|------|---------|-------------|--------|
 | `blake3.asm` | 752, 800, 973 | 1024 (2^10) | `shr 10` + `and 1023` | Hot path |
-| `local_cell.asm` | 72, 128 | 64 (2^6) | `and 63` | Every ring access |
+| `local_cell.asm` | ring slot math | 64 (2^6) | `and 63` | Landed; keep regression coverage |
 | `render_ir.asm` | 849 | 8 (2^3) | `shr 3` + `and 7` | Validation |
 | `render_ir.asm` | 831, 867, 885 | 15, 9, 6 | Not power-of-2; keep `div` | No change |
 
-### 3. Ring Buffer Slot Bug (local_cell.asm:72, 128)
-
-Line 72 computes `head / 64` (quotient from `div`) but the comment says `head % 64`
-(remainder). For a 64-slot ring buffer, the quotient gives slot 0 for heads 0-63,
-slot 1 for heads 64-127, etc. — writing 64 values to the same slot before moving on.
-This means only the last of every 64 writes survives.
-
-Fixed to use `head & 63` (correct modulo) while optimizing away the `div`.
-
-### 4. Future: WASM JIT As Default
+### 3. Future: WASM JIT As Default
 
 The self-hosted WASM JIT already exists. The source-to-WASM compiler is now
 starting as host-side ASM emitter primitives under `kernel/x86_64/wasm/`.
@@ -41,6 +41,16 @@ Making JIT execution the default after validation gives 10-50x speedup on
 compute-heavy workloads.
 
 ## Consolidation Opportunities
+
+### Unification Path
+
+| Area | Direction | Stop Condition |
+|------|-----------|----------------|
+| App compiler | Keep moving source/TSX parsing and WASM emission into `kernel/x86_64/wasm/` | Kernel can compile the app-authoring subset without Zig |
+| Signing guest | Replace Cargo-built signing WASM in `cmd_signing_wasm` with repo-owned compiler/runtime output | `./build.sh kernel` has no Cargo dependency |
+| DA/app bridge | Route all app UI updates through local cells and DA surface messages | No parallel browser/native-only app runtime contract |
+| Object authority | Reconcile Zig object/grant concepts with ASM object serialization and route enforcement | Kernel checks the same requirements app code declares |
+| Hardware bring-up | Keep one explicit path per device class | Probe-only placeholders are either completed or removed |
 
 ### Kernel-Side (~500 lines)
 
@@ -58,7 +68,7 @@ compute-heavy workloads.
 
 | Area | Est. Savings | Description |
 |------|:---:|-------------|
-| Duplicate files | ~1,500 | `app_*.zig` == `route/*.zig` exact copies |
+| Duplicate app/route surfaces | ~1,500 | Remove exact-copy app entry points or make one canonical owner |
 | Component serialization boilerplate | ~550-825 | 55+ components share identical toObject/writeRecord/fromView |
 | `encodedId` wrappers | ~50 | 7 near-identical wrappers |
 | `Point` struct | ~30 | 4 identical definitions |

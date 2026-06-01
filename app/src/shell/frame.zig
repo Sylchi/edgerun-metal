@@ -39,48 +39,54 @@ pub fn contentHeight(width: f32, state: State) f32 {
 
 fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
-    try app.fill(bounds, design.Palette.bg, 0.0);
-    const shell = app.workspaceShell(bounds, .{});
-    try renderWorkspaceRail(app, scene, collector, shell.rail, state.location);
-    try renderWorkspaceTop(app, shell.top, state);
-    try renderWorkspaceSidebar(app, scene, collector, shell.sidebar, state);
+    const shell = try app.workspaceSurface(bounds, .{
+        .background = design.Palette.bg,
+        .top = .{
+            .title = statusText(state.location),
+            .fill = design.workspace_sidebar_bg,
+        },
+        .status = .{
+            .text = statusText(state.location),
+            .fill = design.workspace_status_bg,
+        },
+    });
+    try renderWorkspaceRail(app, shell.rail, state.location);
+    try renderWorkspaceSidebar(app, shell.sidebar, state);
     try renderWorkspaceMain(app, scene, collector, shell.main, state);
-    try renderWorkspaceStatus(app, shell.status, state);
 }
 
-fn renderWorkspaceTop(app: component.View, bounds: ui.Rect, state: State) !void {
-    try app.workspaceTopBar(bounds, .{
-        .title = statusText(state.location),
-        .fill = design.workspace_sidebar_bg,
+fn renderWorkspaceRail(app: component.View, bounds: ui.Rect, active: app_location.Location) !void {
+    const items = app_location.topLevelWorkspaceBindings();
+    var specs: [8]component.IconButtonValueSpec = undefined;
+    for (items, 0..) |item, index| {
+        specs[index] = .{
+            .id = item.id,
+            .label = item.rail_label,
+            .icon = item.icon,
+            .variant = if (std.meta.eql(active, item.location)) .primary else .ghost,
+        };
+    }
+    try app.workspaceRailValues(bounds, .{
+        .actions = specs[0..items.len],
+        .fill = design.workspace_rail_bg,
+        .pad_top = design.workspace_rail_pad,
+        .button_h = design.workspace_icon_button,
+        .gap = 8.0,
     });
 }
 
-fn renderWorkspaceRail(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_location.Location) !void {
-    try app.fill(bounds, design.workspace_rail_bg, 0.0);
-    const items = app_location.topLevelWorkspaceBindings();
-    var rail = app.column(ui.Rect.init(bounds.x + 6.0, bounds.y + design.workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - design.workspace_rail_pad)), 8.0);
-    for (items) |item| {
-        const item_bounds = rail.take(design.workspace_icon_button);
-        try app_chrome.renderNavItem(scene, collector, .{
-            .kind = .workspace_rail,
-            .binding = item,
-            .bounds = item_bounds,
-            .active = std.meta.eql(active, item.location),
-        });
-        if (std.meta.eql(active, item.location)) try app.fill(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, 0.0);
-    }
-}
-
-fn renderWorkspaceSidebar(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try app.fill(bounds, design.workspace_sidebar_bg, 0.0);
-    try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
-    try app.title(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN");
-    try app.muted(ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview");
-    var rows_cursor = app.column(ui.Rect.init(bounds.x + 10.0, bounds.y + 68.0, bounds.w - 20.0, @max(1.0, bounds.h - 68.0)), 4.0);
+fn renderWorkspaceSidebar(app: component.View, bounds: ui.Rect, state: State) !void {
+    const body = try app.workspaceSidebarChrome(bounds, .{
+        .title = "EDGERUN",
+        .detail = "preview",
+        .fill = design.workspace_sidebar_bg,
+        .border = design.Palette.border,
+    });
+    var rows_cursor = app.column(body, 4.0);
     const rows = app_location.topLevelBindings();
     for (rows) |row| {
         const row_bounds = rows_cursor.take(42.0);
-        try app_chrome.renderNavItem(scene, collector, .{
+        try app_chrome.renderNavItemView(app, .{
             .kind = .workspace_sidebar,
             .binding = row,
             .bounds = row_bounds,
@@ -91,14 +97,10 @@ fn renderWorkspaceSidebar(app: component.View, scene: *ui.Scene, collector: *int
 
 fn renderWorkspaceMain(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, _: State) !void {
     try app.fill(bounds, design.workspace_main_bg, 0.0);
-    if (try scene.pushClip(bounds)) {
-        defer scene.popClip();
+    if (try app.pushClip(bounds)) {
+        defer app.popClip();
         try app_agent.render(scene, collector, shiftedPageBounds(bounds), .{});
     }
-}
-
-fn renderWorkspaceStatus(app: component.View, bounds: ui.Rect, state: State) !void {
-    try app.workspaceStatusBar(bounds, .{ .text = statusText(state.location), .fill = design.workspace_status_bg });
 }
 
 fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {
@@ -162,6 +164,15 @@ test "host render callers do not bypass the shared app frame builder" {
     try expectNoDirectAppRenderImports(@embedFile("../drm_gbm_host.zig"));
 }
 
+test "workspace callers use component workspace surface and nav view paths" {
+    try expectUsesWorkspaceSurface(@embedFile("frame.zig"));
+    try expectUsesWorkspaceSurface(@embedFile("../wayland/app.zig"));
+    try expectUsesWorkspaceSurface(@embedFile("../app_encrypted_chat.zig"));
+    try expectNoLegacyNavWrapper(@embedFile("../ui/chrome.zig"));
+    try expectNoLegacyNavWrapper(@embedFile("frame.zig"));
+    try expectNoLegacyNavWrapper(@embedFile("../wayland/app.zig"));
+}
+
 fn expectNoDirectAppRenderImports(source: []const u8) !void {
     const forbidden = [_][]const u8{
         "component_gallery.renderComponentGallery(",
@@ -169,6 +180,17 @@ fn expectNoDirectAppRenderImports(source: []const u8) !void {
     for (forbidden) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, source, needle) == null);
     }
+}
+
+fn expectUsesWorkspaceSurface(source: []const u8) !void {
+    try std.testing.expect(std.mem.indexOf(u8, source, ".workspaceSurface(") != null);
+}
+
+fn expectNoLegacyNavWrapper(source: []const u8) !void {
+    const wrapper_decl = "pub fn render" ++ "NavItem(";
+    const raw_scene_call = "render" ++ "NavItem(scene";
+    try std.testing.expect(std.mem.indexOf(u8, source, wrapper_decl) == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, raw_scene_call) == null);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

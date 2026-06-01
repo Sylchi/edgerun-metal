@@ -14,6 +14,9 @@ extern er_av1_symbol_init
 extern er_av1_symbol_read_symbol
 extern er_av1_symbol_read_bool
 extern er_av1_symbol_read_literal
+extern er_av1_symbol_read_ns
+extern er_av1_symbol_decode_subexp
+extern er_av1_symbol_exit
 extern er_av1_sequence_decode
 extern er_av1_sequence_encode
 extern er_av1_sequence_decode_reduced_still
@@ -31,6 +34,8 @@ SECTION .data
 bit_src:     db 0xb1
 sym_zero:    db 0x00
 sym_one:     db 0xff
+sym_trail_good: db 0x80
+sym_trail_bad_padding: db 0xc0
 bad_profile: db 0x20
 short_seq:   db 0x18
 cdf4:        dw 8192, 16384, 24576, AV1_CDF_PROB_TOP
@@ -294,8 +299,110 @@ _start:
     test    eax, eax
     jnz     .fail_symbol_bool_literal
     inc     qword [rel passed]
-    jmp     .symbol_invalid
+    jmp     .symbol_ns_zero
 .fail_symbol_bool_literal:
+    inc     qword [rel failed]
+
+.symbol_ns_zero:
+    mov     rdi, symctx
+    mov     rsi, sym_zero
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_ns_zero
+    mov     rdi, symctx
+    mov     esi, 5
+    call    er_av1_symbol_read_ns
+    test    edx, edx
+    jnz     .fail_symbol_ns_zero
+    test    eax, eax
+    jnz     .fail_symbol_ns_zero
+    inc     qword [rel passed]
+    jmp     .symbol_ns_one
+.fail_symbol_ns_zero:
+    inc     qword [rel failed]
+
+.symbol_ns_one:
+    mov     rdi, symctx
+    mov     rsi, sym_one
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_ns_one
+    mov     rdi, symctx
+    mov     esi, 1
+    call    er_av1_symbol_read_ns
+    test    edx, edx
+    jnz     .fail_symbol_ns_one
+    test    eax, eax
+    jnz     .fail_symbol_ns_one
+    inc     qword [rel passed]
+    jmp     .symbol_ns_invalid
+.fail_symbol_ns_one:
+    inc     qword [rel failed]
+
+.symbol_ns_invalid:
+    mov     rdi, symctx
+    xor     esi, esi
+    call    er_av1_symbol_read_ns
+    test    eax, eax
+    jnz     .fail_symbol_ns_invalid
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_symbol_ns_invalid
+    inc     qword [rel passed]
+    jmp     .symbol_subexp_zero
+.fail_symbol_ns_invalid:
+    inc     qword [rel failed]
+
+.symbol_subexp_zero:
+    mov     rdi, symctx
+    mov     rsi, sym_zero
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_subexp_zero
+    mov     rdi, symctx
+    mov     esi, 16
+    call    er_av1_symbol_decode_subexp
+    test    edx, edx
+    jnz     .fail_symbol_subexp_zero
+    test    eax, eax
+    jnz     .fail_symbol_subexp_zero
+    inc     qword [rel passed]
+    jmp     .symbol_subexp_one
+.fail_symbol_subexp_zero:
+    inc     qword [rel failed]
+
+.symbol_subexp_one:
+    mov     rdi, symctx
+    mov     rsi, sym_one
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_subexp_one
+    mov     rdi, symctx
+    mov     esi, 16
+    call    er_av1_symbol_decode_subexp
+    test    edx, edx
+    jnz     .fail_symbol_subexp_one
+    cmp     eax, 15
+    jne     .fail_symbol_subexp_one
+    inc     qword [rel passed]
+    jmp     .symbol_subexp_invalid
+.fail_symbol_subexp_one:
+    inc     qword [rel failed]
+
+.symbol_subexp_invalid:
+    mov     rdi, symctx
+    xor     esi, esi
+    call    er_av1_symbol_decode_subexp
+    test    eax, eax
+    jnz     .fail_symbol_subexp_invalid
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_symbol_subexp_invalid
+    inc     qword [rel passed]
+    jmp     .symbol_invalid
+.fail_symbol_subexp_invalid:
     inc     qword [rel failed]
 
 .symbol_invalid:
@@ -325,8 +432,83 @@ _start:
     cmp     edx, ERROR_CORRUPT
     jne     .fail_symbol_invalid
     inc     qword [rel passed]
-    jmp     .sequence_encode
+    jmp     .symbol_exit_good
 .fail_symbol_invalid:
+    inc     qword [rel failed]
+
+.symbol_exit_good:
+    mov     rdi, symctx
+    mov     rsi, sym_trail_good
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_exit_good
+    mov     rdi, symctx
+    call    er_av1_symbol_exit
+    test    edx, edx
+    jnz     .fail_symbol_exit_good
+    cmp     eax, 8
+    jne     .fail_symbol_exit_good
+    cmp     dword [rel symctx + AV1_SYMBOL_POS], 8
+    jne     .fail_symbol_exit_good
+    inc     qword [rel passed]
+    jmp     .symbol_exit_bad_marker
+.fail_symbol_exit_good:
+    inc     qword [rel failed]
+
+.symbol_exit_bad_marker:
+    mov     rdi, symctx
+    mov     rsi, sym_zero
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_exit_bad_marker
+    mov     rdi, symctx
+    call    er_av1_symbol_exit
+    test    eax, eax
+    jnz     .fail_symbol_exit_bad_marker
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_symbol_exit_bad_marker
+    inc     qword [rel passed]
+    jmp     .symbol_exit_bad_padding
+.fail_symbol_exit_bad_marker:
+    inc     qword [rel failed]
+
+.symbol_exit_bad_padding:
+    mov     rdi, symctx
+    mov     rsi, sym_trail_bad_padding
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_exit_bad_padding
+    mov     rdi, symctx
+    call    er_av1_symbol_exit
+    test    eax, eax
+    jnz     .fail_symbol_exit_bad_padding
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_symbol_exit_bad_padding
+    inc     qword [rel passed]
+    jmp     .symbol_exit_bad_maxbits
+.fail_symbol_exit_bad_padding:
+    inc     qword [rel failed]
+
+.symbol_exit_bad_maxbits:
+    mov     rdi, symctx
+    mov     rsi, sym_trail_good
+    mov     edx, 1
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .fail_symbol_exit_bad_maxbits
+    mov     dword [rel symctx + AV1_SYMBOL_MAX_BITS], -15
+    mov     rdi, symctx
+    call    er_av1_symbol_exit
+    test    eax, eax
+    jnz     .fail_symbol_exit_bad_maxbits
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_symbol_exit_bad_maxbits
+    inc     qword [rel passed]
+    jmp     .sequence_encode
+.fail_symbol_exit_bad_maxbits:
     inc     qword [rel failed]
 
 .sequence_encode:

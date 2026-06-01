@@ -490,5 +490,221 @@ er_fn er_av1_symbol_read_literal
     er_pop  rbx, r12, r13
     er_ret
 
+; er_av1_symbol_read_ns(ctx, n) -> eax=value in 0..n-1, rdx=error
+; rdi=ctx, esi=n
+er_fn er_av1_symbol_read_ns
+    er_push rbx, r12, r13, r14
+    test    rdi, rdi
+    jz      .invalid_param
+    test    esi, esi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    bsr     ecx, esi
+    mov     r14d, ecx
+    inc     r14d
+    mov     ebx, 1
+    mov     ecx, r14d
+    shl     ebx, cl
+    sub     ebx, r13d
+    mov     rdi, r12
+    mov     esi, r14d
+    dec     esi
+    call    er_av1_symbol_read_literal
+    test    edx, edx
+    jnz     .done
+    cmp     eax, ebx
+    jb      .return_value
+    mov     r14d, eax
+    mov     rdi, r12
+    call    er_av1_symbol_read_bool
+    test    edx, edx
+    jnz     .done
+    lea     eax, [r14 * 2 + rax]
+    sub     eax, ebx
+.return_value:
+    cmp     eax, r13d
+    jae     .corrupt
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_av1_symbol_decode_subexp(ctx, num_syms) -> eax=value, rdx=error
+; rdi=ctx, esi=num_syms
+er_fn er_av1_symbol_decode_subexp
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    test    esi, esi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    xor     ebx, ebx
+    xor     r14d, r14d
+.loop:
+    test    ebx, ebx
+    jz      .first_bucket
+    mov     r15d, ebx
+    add     r15d, 2
+    jo      .invalid_param
+    jmp     .have_b2
+.first_bucket:
+    mov     r15d, 3
+.have_b2:
+    cmp     r15d, 31
+    ja      .invalid_param
+    mov     eax, 1
+    mov     ecx, r15d
+    shl     eax, cl
+    mov     ecx, eax
+    imul    ecx, 3
+    jo      .invalid_param
+    add     ecx, r14d
+    jc      .invalid_param
+    cmp     r13d, ecx
+    ja      .more_bucket
+    mov     esi, r13d
+    sub     esi, r14d
+    jz      .invalid_param
+    mov     rdi, r12
+    call    er_av1_symbol_read_ns
+    test    edx, edx
+    jnz     .done
+    add     eax, r14d
+    er_ok
+    jmp     .done
+.more_bucket:
+    mov     rdi, r12
+    call    er_av1_symbol_read_bool
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .read_bucket
+    mov     eax, 1
+    mov     ecx, r15d
+    shl     eax, cl
+    add     r14d, eax
+    jc      .invalid_param
+    inc     ebx
+    jmp     .loop
+.read_bucket:
+    mov     rdi, r12
+    mov     esi, r15d
+    call    er_av1_symbol_read_literal
+    test    edx, edx
+    jnz     .done
+    add     eax, r14d
+    cmp     eax, r13d
+    jae     .corrupt
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_symbol_exit(ctx) -> eax=padding_end_bit, rdx=error
+; rdi=ctx
+er_fn er_av1_symbol_exit
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, [r12 + AV1_SYMBOL_MAX_BITS]
+    cmp     r13d, -14
+    jl      .corrupt
+    mov     ebx, [r12 + AV1_SYMBOL_POS]
+    mov     ecx, r13d
+    add     ecx, AV1_CDF_PROB_BITS
+    cmp     ecx, AV1_CDF_PROB_BITS
+    jle     .have_trailing_span
+    mov     ecx, AV1_CDF_PROB_BITS
+.have_trailing_span:
+    mov     r14d, ebx
+    sub     r14d, ecx
+    jc      .corrupt
+    mov     r15d, ebx
+    test    r13d, r13d
+    jle     .have_padding_end
+    add     r15d, r13d
+    jc      .corrupt
+.have_padding_end:
+    test    r15d, 7
+    jnz     .corrupt
+    mov     eax, [r12 + AV1_SYMBOL_LEN]
+    shl     eax, 3
+    jc      .corrupt
+    cmp     r15d, eax
+    ja      .corrupt
+    mov     r13d, r14d
+    call    .bit_at
+    test    edx, edx
+    jnz     .done
+    cmp     eax, 1
+    jne     .corrupt
+    inc     r13d
+.padding_loop:
+    cmp     r13d, r15d
+    jae     .success
+    call    .bit_at
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jnz     .corrupt
+    inc     r13d
+    jmp     .padding_loop
+.success:
+    mov     [r12 + AV1_SYMBOL_POS], r15d
+    mov     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+.bit_at:
+    mov     eax, [r12 + AV1_SYMBOL_LEN]
+    shl     eax, 3
+    jc      .bit_corrupt
+    cmp     r13d, eax
+    jae     .bit_corrupt
+    mov     ecx, r13d
+    shr     ecx, 3
+    mov     rdx, [r12 + AV1_SYMBOL_BUF]
+    movzx   eax, byte [rdx + rcx]
+    mov     ecx, r13d
+    and     ecx, 7
+    xor     ecx, 7
+    shr     eax, cl
+    and     eax, 1
+    er_ok
+    ret
+.bit_corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    ret
+
 SECTION .data
 av1_bool_cdf: dw AV1_CDF_BOOL_SPLIT, AV1_CDF_PROB_TOP, 0

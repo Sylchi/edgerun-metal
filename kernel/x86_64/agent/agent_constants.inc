@@ -1,10 +1,14 @@
 ; Agent protocol constants — message types, flags, well-known identities
 ;
 ; Agent messages are carried inside cell payloads (251 bytes).
-; The payload format:
-;   Byte 0:     Agent message type
-;   Byte 1:     Agent message flags
-;   Bytes 2+:   Agent message body
+; The object-native payload envelope is fixed:
+;   Byte 0:       Agent message type
+;   Byte 1:       Agent message flags
+;   Bytes 2..5:   Sender route slot id
+;   Bytes 6..37:  Request object id
+;   Bytes 38..69: Input object id
+;   Bytes 70..101: Grant or receipt object id
+;   Bytes 102..250: Small inline arguments
 
 ; ==================================================================
 ; Agent message types (byte 0 of agent cell payload)
@@ -12,6 +16,28 @@
 AGENT_MSG_REQUEST     equ 1
 AGENT_MSG_RESPONSE    equ 2
 AGENT_MSG_ERROR       equ 3
+AGENT_MSG_STAGE_START equ 4
+AGENT_MSG_STAGE_RESULT equ 5
+AGENT_MSG_TOOL_REQUEST equ 6
+AGENT_MSG_TOOL_RESULT equ 7
+AGENT_MSG_APPROVAL_REQUEST equ 8
+AGENT_MSG_APPROVAL_RESULT equ 9
+AGENT_MSG_RECEIPT     equ 10
+
+; ==================================================================
+; Agent payload envelope offsets
+; ==================================================================
+AGENT_PAYLOAD_MSG_TYPE equ 0
+AGENT_PAYLOAD_FLAGS    equ 1
+AGENT_PAYLOAD_SENDER_SLOT equ 2
+AGENT_PAYLOAD_REQUEST_OBJECT equ 6
+AGENT_PAYLOAD_INPUT_OBJECT equ 38
+AGENT_PAYLOAD_GRANT_OR_RECEIPT equ 70
+AGENT_PAYLOAD_INLINE_ARGS equ 102
+
+AGENT_PAYLOAD_SENDER_SLOT_SIZE equ 4
+AGENT_PAYLOAD_OBJECT_ID_SIZE equ 32
+AGENT_PAYLOAD_INLINE_ARGS_SIZE equ 149
 
 ; ==================================================================
 ; Agent message flags (byte 1 of agent cell payload)

@@ -264,6 +264,11 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rbx, rax
     cmp     rbx, r13
     jae     .parse_error
+    cmp     byte [rbx], '!'
+    jne     .leading_not_done
+    inc     rbx
+    jmp     .leading_wrapper_loop
+.leading_not_done:
     cmp     byte [rbx], '('
     jne     .expect_root_tag
     inc     qword [rbp - 128]
@@ -302,12 +307,38 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     inc     rbx
     jmp     .text_loop
 .brace_child:
+    cmp     qword [rbp - 96], 0
+    je      .skip_brace_child
+    inc     qword [rbp - 88]
+    mov     r10, [rbp - 112]
+    test    r10, r10
+    jz      .skip_brace_child
+    mov     r11, r14
+    dec     r11
+    lea     r9, [rbp - WASMC_TSX_STACK_INDEX_OFF]
+    mov     r11, [r9 + r11 * 8]
+    imul    r11, r11, WASMC_TSX_NODE_STRIDE
+    inc     qword [r10 + r11 + WASMC_TSX_NODE_TEXT_COUNT]
+.skip_brace_child:
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_balanced_braces
     test    rdx, rdx
     jnz     .parse_error
-    mov     rbx, rax
+    mov     [rbp - 152], rax
+    cmp     qword [rbp - 112], 0
+    jne     .brace_child_done
+    lea     rdi, [rbx + 1]
+    mov     rsi, [rbp - 152]
+    dec     rsi
+    call    _er_tsx_scan_inner_stats
+    test    rdx, rdx
+    jnz     .parse_error
+    add     r15, rcx
+    add     [rbp - 80], r8
+    add     [rbp - 88], r9
+.brace_child_done:
+    mov     rbx, [rbp - 152]
     jmp     .loop
 .finish_text_node:
     cmp     qword [rbp - 96], 0
@@ -441,7 +472,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     cmp     byte [rbx], '>'
     je      .open_done
     cmp     byte [rbx], '/'
-    je      .self_close
+    je      .attr_slash
     cmp     byte [rbx], '{'
     je      .spread_attr
     mov     rdi, rbx
@@ -482,12 +513,69 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     jne     .parse_error
     jmp     .brace_attr
 
+.attr_slash:
+    lea     r9, [rbx + 1]
+    cmp     r9, r13
+    jae     .parse_error
+    cmp     byte [r9], '>'
+    je      .self_close
+    cmp     byte [r9], '/'
+    je      .attr_line_comment
+    cmp     byte [r9], '*'
+    je      .attr_block_comment
+    jmp     .parse_error
+.attr_line_comment:
+    lea     rbx, [rbx + 2]
+.attr_line_comment_loop:
+    cmp     rbx, r13
+    jae     .parse_error
+    movzx   eax, byte [rbx]
+    cmp     al, 10
+    je      .attr_line_comment_done
+    cmp     al, 13
+    je      .attr_line_comment_done
+    inc     rbx
+    jmp     .attr_line_comment_loop
+.attr_line_comment_done:
+    inc     rbx
+    jmp     .attr_loop
+.attr_block_comment:
+    lea     rbx, [rbx + 2]
+.attr_block_comment_loop:
+    lea     r9, [rbx + 1]
+    cmp     r9, r13
+    jae     .parse_error
+    cmp     byte [rbx], '*'
+    jne     .attr_block_comment_next
+    cmp     byte [r9], '/'
+    je      .attr_block_comment_done
+.attr_block_comment_next:
+    inc     rbx
+    jmp     .attr_block_comment_loop
+.attr_block_comment_done:
+    lea     rbx, [rbx + 2]
+    jmp     .attr_loop
+
 .spread_attr:
     mov     rdi, rbx
     mov     rsi, r13
     call    _er_tsx_skip_balanced_braces
     test    rdx, rdx
     jnz     .parse_error
+    mov     [rbp - 152], rax
+    cmp     qword [rbp - 112], 0
+    jne     .spread_attr_count
+    lea     rdi, [rbx + 1]
+    mov     rsi, [rbp - 152]
+    dec     rsi
+    call    _er_tsx_scan_inner_stats
+    test    rdx, rdx
+    jnz     .parse_error
+    add     r15, rcx
+    add     [rbp - 80], r8
+    add     [rbp - 88], r9
+.spread_attr_count:
+    mov     rax, [rbp - 152]
     mov     rbx, rax
     inc     qword [rbp - 80]
     mov     r10, [rbp - 112]
@@ -510,6 +598,7 @@ er_fn _er_wasmc_parse_tsx_tree_mode
 .brace_attr:
     mov     qword [rbp - 144], 1
     inc     rbx
+    mov     [rbp - 160], rbx
 .brace_loop:
     cmp     rbx, r13
     jae     .parse_error
@@ -537,6 +626,20 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     inc     rbx
     cmp     qword [rbp - 144], 0
     jnz     .brace_loop
+    mov     [rbp - 152], rbx
+    cmp     qword [rbp - 112], 0
+    jne     .brace_attr_done
+    mov     rdi, [rbp - 160]
+    mov     rsi, [rbp - 152]
+    dec     rsi
+    call    _er_tsx_scan_inner_stats
+    test    rdx, rdx
+    jnz     .parse_error
+    add     r15, rcx
+    add     [rbp - 80], r8
+    add     [rbp - 88], r9
+.brace_attr_done:
+    mov     rbx, [rbp - 152]
     jmp     .attr_loop
 .brace_quoted:
     mov     rdi, rbx
@@ -733,6 +836,12 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     mov     rbx, rax
     mov     r10, [rbp - 128]
 .trailing_wrapper_loop:
+    mov     rdi, rbx
+    mov     rsi, r13
+    call    _er_tsx_skip_trailing_assertions
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     rbx, rax
     test    r10, r10
     jz      .trailing_semicolon
     cmp     rbx, r13
@@ -790,6 +899,21 @@ er_fn _er_wasmc_parse_tsx_tree_mode
     pop     r12
     pop     rbx
     pop     rbp
+    ret
+
+; _er_tsx_scan_inner_stats(start=rdi, end_exclusive=rsi)
+; Returns rcx=elements, r8=attributes, r9=text nodes, rdx=0/error.
+er_fn _er_tsx_scan_inner_stats
+    cmp     rsi, rdi
+    jbe     .empty
+    sub     rsi, rdi
+    call    er_wasmc_scan_tsx_source
+    ret
+.empty:
+    xor     ecx, ecx
+    xor     r8d, r8d
+    xor     r9d, r9d
+    xor     edx, edx
     ret
 
 ; _er_tsx_parse_name(cursor=rdi, end=rsi)
@@ -885,6 +1009,8 @@ er_fn _er_tsx_source_context_allows_root
     je      .true
     cmp     dl, '('
     je      .true
+    cmp     dl, ')'
+    je      .true
     cmp     dl, '['
     je      .true
     cmp     dl, '{'
@@ -917,75 +1043,227 @@ er_fn _er_tsx_source_context_allows_root
     je      .maybe_throw
     cmp     dl, 't'
     je      .maybe_await
+    cmp     dl, 'o'
+    je      .maybe_do
+    cmp     dl, 'f'
+    je      .maybe_of
+    cmp     dl, 'g'
+    je      .maybe_using
     jmp     .false
 .maybe_return:
     mov     r8, rax
     sub     r8, 5
     cmp     r8, rsi
-    jb      .false
+    jb      .maybe_in
     cmp     byte [r8], 'r'
-    jne     .false
+    jne     .maybe_in
     cmp     byte [r8 + 1], 'e'
-    jne     .false
+    jne     .maybe_in
     cmp     byte [r8 + 2], 't'
-    jne     .false
+    jne     .maybe_in
     cmp     byte [r8 + 3], 'u'
-    jne     .false
+    jne     .maybe_in
     cmp     byte [r8 + 4], 'r'
+    jne     .maybe_in
+    jmp     .keyword_boundary
+.maybe_in:
+    mov     r8, rax
+    dec     r8
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'i'
     jne     .false
     jmp     .keyword_boundary
 .maybe_yield:
     mov     r8, rax
     sub     r8, 4
     cmp     r8, rsi
-    jb      .false
+    jb      .maybe_void
     cmp     byte [r8], 'y'
-    jne     .false
+    jne     .maybe_void
     cmp     byte [r8 + 1], 'i'
-    jne     .false
+    jne     .maybe_void
     cmp     byte [r8 + 2], 'e'
-    jne     .false
+    jne     .maybe_void
     cmp     byte [r8 + 3], 'l'
+    jne     .maybe_void
+    jmp     .keyword_boundary
+.maybe_void:
+    mov     r8, rax
+    sub     r8, 3
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'v'
+    jne     .false
+    cmp     byte [r8 + 1], 'o'
+    jne     .false
+    cmp     byte [r8 + 2], 'i'
     jne     .false
     jmp     .keyword_boundary
 .maybe_case:
     mov     r8, rax
     sub     r8, 3
     cmp     r8, rsi
-    jb      .false
+    jb      .maybe_else
     cmp     byte [r8], 'c'
-    jne     .false
+    jne     .maybe_else
     cmp     byte [r8 + 1], 'a'
-    jne     .false
+    jne     .maybe_else
     cmp     byte [r8 + 2], 's'
+    jne     .maybe_else
+    jmp     .keyword_boundary
+.maybe_else:
+    mov     r8, rax
+    sub     r8, 3
+    cmp     r8, rsi
+    jb      .maybe_delete
+    cmp     byte [r8], 'e'
+    jne     .maybe_delete
+    cmp     byte [r8 + 1], 'l'
+    jne     .maybe_delete
+    cmp     byte [r8 + 2], 's'
+    jne     .maybe_delete
+    jmp     .keyword_boundary
+.maybe_delete:
+    mov     r8, rax
+    sub     r8, 5
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'd'
+    jne     .false
+    cmp     byte [r8 + 1], 'e'
+    jne     .false
+    cmp     byte [r8 + 2], 'l'
+    jne     .false
+    cmp     byte [r8 + 3], 'e'
+    jne     .false
+    cmp     byte [r8 + 4], 't'
     jne     .false
     jmp     .keyword_boundary
 .maybe_throw:
     mov     r8, rax
     sub     r8, 4
     cmp     r8, rsi
-    jb      .false
+    jb      .maybe_new
     cmp     byte [r8], 't'
-    jne     .false
+    jne     .maybe_new
     cmp     byte [r8 + 1], 'h'
-    jne     .false
+    jne     .maybe_new
     cmp     byte [r8 + 2], 'r'
-    jne     .false
+    jne     .maybe_new
     cmp     byte [r8 + 3], 'o'
+    jne     .maybe_new
+    jmp     .keyword_boundary
+.maybe_new:
+    mov     r8, rax
+    sub     r8, 2
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'n'
+    jne     .false
+    cmp     byte [r8 + 1], 'e'
     jne     .false
     jmp     .keyword_boundary
 .maybe_await:
     mov     r8, rax
     sub     r8, 4
     cmp     r8, rsi
-    jb      .false
+    jb      .maybe_default
     cmp     byte [r8], 'a'
-    jne     .false
+    jne     .maybe_default
     cmp     byte [r8 + 1], 'w'
-    jne     .false
+    jne     .maybe_default
     cmp     byte [r8 + 2], 'a'
-    jne     .false
+    jne     .maybe_default
     cmp     byte [r8 + 3], 'i'
+    jne     .maybe_default
+    jmp     .keyword_boundary
+.maybe_default:
+    mov     r8, rax
+    sub     r8, 6
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'd'
+    jne     .false
+    cmp     byte [r8 + 1], 'e'
+    jne     .false
+    cmp     byte [r8 + 2], 'f'
+    jne     .false
+    cmp     byte [r8 + 3], 'a'
+    jne     .false
+    cmp     byte [r8 + 4], 'u'
+    jne     .false
+    cmp     byte [r8 + 5], 'l'
+    jne     .false
+    jmp     .keyword_boundary
+.maybe_do:
+    mov     r8, rax
+    dec     r8
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'd'
+    jne     .false
+    jmp     .keyword_boundary
+.maybe_of:
+    mov     r8, rax
+    sub     r8, 9
+    cmp     r8, rsi
+    jb      .maybe_typeof
+    cmp     byte [r8], 'i'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 1], 'n'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 2], 's'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 3], 't'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 4], 'a'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 5], 'n'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 6], 'c'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 7], 'e'
+    jne     .maybe_typeof
+    cmp     byte [r8 + 8], 'o'
+    jne     .maybe_typeof
+    jmp     .keyword_boundary
+.maybe_typeof:
+    mov     r8, rax
+    sub     r8, 5
+    cmp     r8, rsi
+    jb      .short_of
+    cmp     byte [r8], 't'
+    jne     .short_of
+    cmp     byte [r8 + 1], 'y'
+    jne     .short_of
+    cmp     byte [r8 + 2], 'p'
+    jne     .short_of
+    cmp     byte [r8 + 3], 'e'
+    jne     .short_of
+    cmp     byte [r8 + 4], 'o'
+    jne     .short_of
+    jmp     .keyword_boundary
+.short_of:
+    mov     r8, rax
+    dec     r8
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'o'
+    jne     .false
+    jmp     .keyword_boundary
+.maybe_using:
+    mov     r8, rax
+    sub     r8, 4
+    cmp     r8, rsi
+    jb      .false
+    cmp     byte [r8], 'u'
+    jne     .false
+    cmp     byte [r8 + 1], 's'
+    jne     .false
+    cmp     byte [r8 + 2], 'i'
+    jne     .false
+    cmp     byte [r8 + 3], 'n'
     jne     .false
 .keyword_boundary:
     mov     r9, r8
@@ -1068,6 +1346,230 @@ er_fn _er_tsx_skip_quoted_source
 .bad:
     xor     eax, eax
     mov     edx, ERROR_PARSE
+    ret
+
+; _er_tsx_skip_trailing_assertions(cursor=rdi, end=rsi)
+; Skips trailing "as Type" and "satisfies Type" expression assertions.
+er_fn _er_tsx_skip_trailing_assertions
+    push    rbx
+    push    r12
+    mov     rbx, rdi
+    mov     r12, rsi
+.loop:
+    mov     rdi, rbx
+    mov     rsi, r12
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r12
+    jae     .success
+    cmp     byte [rbx], '!'
+    jne     .keyword_probe
+    inc     rbx
+    jmp     .loop
+.keyword_probe:
+    lea     r9, [rbx + 2]
+    cmp     r9, r12
+    ja      .success
+    cmp     byte [rbx], 'a'
+    jne     .try_satisfies
+    cmp     byte [rbx + 1], 's'
+    jne     .success
+    mov     rbx, r9
+    jmp     .keyword_done
+.try_satisfies:
+    lea     r9, [rbx + 9]
+    cmp     r9, r12
+    ja      .success
+    cmp     byte [rbx], 's'
+    jne     .success
+    cmp     byte [rbx + 1], 'a'
+    jne     .success
+    cmp     byte [rbx + 2], 't'
+    jne     .success
+    cmp     byte [rbx + 3], 'i'
+    jne     .success
+    cmp     byte [rbx + 4], 's'
+    jne     .success
+    cmp     byte [rbx + 5], 'f'
+    jne     .success
+    cmp     byte [rbx + 6], 'i'
+    jne     .success
+    cmp     byte [rbx + 7], 'e'
+    jne     .success
+    cmp     byte [rbx + 8], 's'
+    jne     .success
+    mov     rbx, r9
+.keyword_done:
+    cmp     rbx, r12
+    jae     .bad
+    movzx   eax, byte [rbx]
+    call    _er_tsx_is_name_continue
+    test    eax, eax
+    jnz     .success
+    mov     rdi, rbx
+    mov     rsi, r12
+    call    _er_tsx_skip_trailing_type_expr
+    test    rdx, rdx
+    jnz     .bad
+    mov     rbx, rax
+    jmp     .loop
+.success:
+    mov     rax, rbx
+    xor     edx, edx
+    pop     r12
+    pop     rbx
+    ret
+.bad:
+    xor     eax, eax
+    mov     edx, ERROR_PARSE
+    pop     r12
+    pop     rbx
+    ret
+
+; _er_tsx_skip_trailing_type_expr(cursor=rdi, end=rsi)
+; Returns before enclosing ")" / ";" / EOF after an assertion type.
+er_fn _er_tsx_skip_trailing_type_expr
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    mov     rbx, rdi
+    mov     r12, rsi
+    xor     r13d, r13d
+    xor     r14d, r14d
+    mov     rdi, rbx
+    mov     rsi, r12
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r12
+    jae     .bad
+.loop:
+    cmp     rbx, r12
+    jae     .success
+    movzx   eax, byte [rbx]
+    cmp     al, '"'
+    je      .quoted
+    cmp     al, 39
+    je      .quoted
+    cmp     al, '`'
+    je      .quoted
+    cmp     al, '{'
+    je      .braced
+    cmp     al, '/'
+    je      .slash
+    cmp     al, '<'
+    je      .angle_inc
+    cmp     al, '>'
+    je      .angle_dec
+    cmp     al, '('
+    je      .paren_inc
+    cmp     al, ')'
+    je      .maybe_done_paren
+    cmp     al, ';'
+    je      .maybe_done_semicolon
+    inc     rbx
+    jmp     .loop
+.quoted:
+    mov     rdi, rbx
+    mov     rsi, r12
+    call    _er_tsx_skip_quoted_source
+    test    rdx, rdx
+    jnz     .bad
+    mov     rbx, rax
+    jmp     .loop
+.braced:
+    mov     rdi, rbx
+    mov     rsi, r12
+    call    _er_tsx_skip_balanced_braces
+    test    rdx, rdx
+    jnz     .bad
+    mov     rbx, rax
+    jmp     .loop
+.slash:
+    lea     r9, [rbx + 1]
+    cmp     r9, r12
+    jae     .bad
+    cmp     byte [r9], '/'
+    je      .line_comment
+    cmp     byte [r9], '*'
+    je      .block_comment
+    inc     rbx
+    jmp     .loop
+.line_comment:
+    lea     rbx, [rbx + 2]
+.line_loop:
+    cmp     rbx, r12
+    jae     .success
+    movzx   eax, byte [rbx]
+    cmp     al, 10
+    je      .success
+    cmp     al, 13
+    je      .success
+    inc     rbx
+    jmp     .line_loop
+.block_comment:
+    lea     rbx, [rbx + 2]
+.block_loop:
+    lea     r9, [rbx + 1]
+    cmp     r9, r12
+    jae     .bad
+    cmp     byte [rbx], '*'
+    jne     .block_next
+    cmp     byte [r9], '/'
+    je      .block_done
+.block_next:
+    inc     rbx
+    jmp     .block_loop
+.block_done:
+    lea     rbx, [rbx + 2]
+    jmp     .loop
+.angle_inc:
+    inc     r13
+    inc     rbx
+    jmp     .loop
+.angle_dec:
+    test    r13, r13
+    jz      .advance
+    cmp     byte [rbx - 1], '='
+    je      .advance
+    dec     r13
+.advance:
+    inc     rbx
+    jmp     .loop
+.paren_inc:
+    inc     r14
+    inc     rbx
+    jmp     .loop
+.maybe_done_paren:
+    test    r13, r13
+    jnz     .advance
+    test    r14, r14
+    jz      .success
+    dec     r14
+    inc     rbx
+    jmp     .loop
+.maybe_done_semicolon:
+    test    r13, r13
+    jnz     .advance
+    test    r14, r14
+    jz      .success
+    inc     rbx
+    jmp     .loop
+.success:
+    mov     rax, rbx
+    xor     edx, edx
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.bad:
+    xor     eax, eax
+    mov     edx, ERROR_PARSE
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
     ret
 
 ; _er_tsx_scan_template_source(cursor=rdi, end=rsi)

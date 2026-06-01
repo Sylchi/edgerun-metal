@@ -57,10 +57,13 @@ const table_component = @import("Table.zig");
 const tabs_component = @import("Tabs.zig");
 const textarea_component = @import("Textarea.zig");
 const text_component = @import("Text.zig");
+const timeline_component = @import("Timeline.zig");
 const toast_component = @import("Toast.zig");
 const toggle_component = @import("Toggle.zig");
 const toggle_group_component = @import("ToggleGroup.zig");
 const tooltip_component = @import("Tooltip.zig");
+const semantic_component = @import("Semantic.zig");
+const workspace_component = @import("Workspace.zig");
 
 pub const Error = common.Error;
 pub const RenderOptions = common.RenderOptions;
@@ -419,6 +422,25 @@ pub fn renderer(scene: *ui.Scene, collector: ?*interaction.Collector, options: R
     return .{ .scene = scene, .collector = collector, .options = options };
 }
 
+fn clampUnit(value: f32) f32 {
+    if (value < 0.0) return 0.0;
+    if (value > 1.0) return 1.0;
+    return value;
+}
+
+fn colorWithAlphaUnit(color: ui.Color, unit: f32) ui.Color {
+    var out = color;
+    out.a = @as(u8, @intFromFloat(@round(@as(f32, @floatFromInt(color.a)) * clampUnit(unit))));
+    return out;
+}
+
+fn headerBadgesWidth(badges: []const HeaderBadge) f32 {
+    if (badges.len == 0) return 0.0;
+    var width: f32 = 0.0;
+    for (badges) |badge_value| width += badge_value.width + 10.0;
+    return width;
+}
+
 pub const SectionProps = struct {
     title: []const u8,
     detail: []const u8 = "",
@@ -452,88 +474,21 @@ pub const SegmentMapProps = struct {
     radius: f32 = 8.0,
 };
 
-pub const TimelineBlock = struct {
-    id: u32,
-    start: f32,
-    end: f32,
-    value: f32,
-    color: ui.Color,
-    selected: bool = false,
-};
-
-pub const TimelineLaneProps = struct {
-    label: []const u8,
-    lane_index: usize,
-    lane_count: usize,
-    blocks: []const TimelineBlock,
-    border: ui.Color,
-    label_color: ui.Color,
-};
-
-pub const TimelineViewportLane = struct {
-    label: []const u8,
-    blocks: []const TimelineBlock,
-};
-
-pub const TimelineViewportMark = struct {
-    at: f32,
-    label: []const u8,
-};
-
-pub const TimelineViewportControls = struct {
-    pan_left_id: u32,
-    pan_right_id: u32,
-    zoom_out_id: u32,
-    zoom_in_id: u32,
-    reset_id: u32,
-};
-
-pub const TimelineViewportAction = enum {
-    pan_left,
-    pan_right,
-    zoom_out,
-    zoom_in,
-    reset,
-};
-
-pub const TimelineViewportState = struct {
-    offset: f32 = 0.0,
-    scale: f32 = 1.0,
-};
-
-pub const TimelineViewportProps = struct {
-    title: []const u8 = "",
-    detail: []const u8 = "",
-    lanes: []const TimelineViewportLane,
-    marks: []const TimelineViewportMark = &.{},
-    viewport: TimelineViewportState = .{},
-    controls: ?TimelineViewportControls = null,
-    fill: ?ui.Color = null,
-    border: ?ui.Color = null,
-    axis_color: ?ui.Color = null,
-    label_color: ?ui.Color = null,
-    label_w: f32 = 82.0,
-    inset: f32 = 14.0,
-    radius: f32 = 8.0,
-};
+pub const TimelineBlock = timeline_component.Block;
+pub const TimelineLaneProps = timeline_component.LaneProps;
+pub const TimelineViewportLane = timeline_component.ViewportLane;
+pub const TimelineViewportMark = timeline_component.ViewportMark;
+pub const TimelineViewportControls = timeline_component.ViewportControls;
+pub const TimelineViewportAction = timeline_component.ViewportAction;
+pub const TimelineViewportState = timeline_component.ViewportState;
+pub const TimelineViewportProps = timeline_component.ViewportProps;
 
 pub fn timelineViewportActionForHit(hit_id: u32, controls: TimelineViewportControls) ?TimelineViewportAction {
-    if (hit_id == controls.pan_left_id) return .pan_left;
-    if (hit_id == controls.pan_right_id) return .pan_right;
-    if (hit_id == controls.zoom_out_id) return .zoom_out;
-    if (hit_id == controls.zoom_in_id) return .zoom_in;
-    if (hit_id == controls.reset_id) return .reset;
-    return null;
+    return timeline_component.actionForHit(hit_id, controls);
 }
 
 pub fn applyTimelineViewportAction(state: *TimelineViewportState, action: TimelineViewportAction) void {
-    switch (action) {
-        .pan_left => panTimelineViewport(state, -1.0),
-        .pan_right => panTimelineViewport(state, 1.0),
-        .zoom_out => zoomTimelineViewport(state, 0.75),
-        .zoom_in => zoomTimelineViewport(state, 1.35),
-        .reset => state.* = .{},
-    }
+    timeline_component.applyAction(state, action);
 }
 
 pub const ControlGroupProps = struct {
@@ -615,28 +570,21 @@ pub const PanelScaffoldProps = struct {
     header_gap: f32 = 16.0,
 };
 
-pub const WorkspaceTopBarProps = struct {
-    title: []const u8,
-    detail: []const u8 = "",
-    trailing_top: []const u8 = "",
-    trailing_bottom: []const u8 = "",
-    fill: ?ui.Color = null,
-    detail_color: ?ui.Color = null,
-    trailing_w: f32 = 210.0,
-    inset_x: f32 = 16.0,
-};
-
-pub const WorkspaceStatusBarProps = struct {
-    text: []const u8,
-    fill: ui.Color,
-    color: ui.Color = .{ .r = 255, .g = 255, .b = 255 },
-    inset_x: f32 = 12.0,
-};
+pub const WorkspaceTopBarProps = workspace_component.TopBarProps;
+pub const WorkspaceStatusBarProps = workspace_component.StatusBarProps;
+pub const WorkspaceSurfaceProps = workspace_component.SurfaceProps;
 
 pub const IconButtonSpec = struct {
     id: u32,
     label: []const u8,
     icon: ui_icon.Icon,
+    variant: ButtonVariant = .outline,
+};
+
+pub const IconButtonValueSpec = struct {
+    id: u32,
+    label: []const u8,
+    icon: Icon,
     variant: ButtonVariant = .outline,
 };
 
@@ -678,86 +626,133 @@ pub const PanelListProps = struct {
     items: []const PanelListItem = &.{},
 };
 
-pub const SemanticKind = enum {
-    identity,
-    metric,
-    resource,
-    path,
-    event,
-    action,
-    artifact,
-    warning,
-    dependency,
-    timeline,
-};
-
-pub const SemanticImportance = enum {
-    primary,
-    normal,
-    support,
-    background,
-};
-
-pub const SemanticState = enum {
-    neutral,
-    active,
-    good,
-    warning,
-    bad,
-    blocked,
-    private,
-    pending,
-};
-
-pub const SemanticMode = enum {
-    overview,
-    inspect,
-    compare,
-    schedule,
-    timeline,
-    debug,
-};
-
-pub const SemanticFocus = enum {
-    general,
-    resources,
-    paths,
-    dependencies,
-    privacy,
-    errors,
-};
-
-pub const SemanticDensity = enum {
-    compact,
-    normal,
-    expanded,
-};
-
-pub const SemanticIntent = struct {
-    mode: SemanticMode = .overview,
-    focus: SemanticFocus = .general,
-    density: SemanticDensity = .normal,
-};
-
-pub const SemanticItem = struct {
-    id: u32 = 0,
-    kind: SemanticKind,
+pub const HeaderBadge = struct {
     label: []const u8,
-    value: []const u8 = "",
-    detail: []const u8 = "",
-    importance: SemanticImportance = .normal,
-    state: SemanticState = .neutral,
-    progress: ?f32 = null,
-    selected: bool = false,
+    variant: BadgeVariant = .outline,
     accent: ?ui.Color = null,
+    width: f32 = 96.0,
 };
 
-pub const SemanticViewProps = struct {
+pub const PageHeaderProps = struct {
+    title: []const u8,
+    detail: []const u8 = "",
+    icon: ?ui_icon.Icon = null,
+    id: ?u32 = null,
+    variant: SurfaceVariant = .elevated,
+    selected: bool = false,
+    fill: ?ui.Color = null,
+    border: ?ui.Color = null,
+    accent: ?ui.Color = null,
+    detail_color: ?ui.Color = null,
+    badges: []const HeaderBadge = &.{},
+    trailing_action: ?IconButtonSpec = null,
+    inset: f32 = 20.0,
+    radius: f32 = 12.0,
+};
+
+pub const WorkspaceRailProps = struct {
+    actions: []const IconButtonSpec,
+    fill: ui.Color,
+    pad_x: f32 = 6.0,
+    pad_top: f32 = 12.0,
+    button_h: f32 = 36.0,
+    gap: f32 = 8.0,
+};
+
+pub const WorkspaceRailValueProps = struct {
+    actions: []const IconButtonValueSpec,
+    fill: ui.Color,
+    pad_x: f32 = 6.0,
+    pad_top: f32 = 12.0,
+    button_h: f32 = 36.0,
+    gap: f32 = 8.0,
+};
+
+pub const WorkspaceSidebarChromeProps = struct {
     title: []const u8 = "",
     detail: []const u8 = "",
-    intent: SemanticIntent = .{},
-    items: []const SemanticItem,
+    fill: ui.Color,
+    border: ui.Color,
+    inset_x: f32 = 16.0,
+    title_y: f32 = 14.0,
+    detail_y: f32 = 36.0,
+    body_y: f32 = 68.0,
+    right_border_w: f32 = 1.0,
 };
+
+pub const ComposeBarProps = struct {
+    actions: []const IconButtonSpec,
+    textarea_id: u32,
+    textarea_value: []const u8,
+    send_id: u32,
+    send_label: []const u8 = "Send",
+    send_icon: ui_icon.Icon = .send,
+    send_variant: ButtonVariant = .outline,
+    footer: []const u8 = "",
+    fill: ?ui.Color = null,
+    separator: ?ui.Color = null,
+    height: f32 = 74.0,
+    inset_x: f32 = 18.0,
+    toolbar_w: f32 = 120.0,
+    toolbar_button_w: f32 = 34.0,
+    toolbar_gap: f32 = 6.0,
+    textarea_gap: f32 = 6.0,
+    send_w: f32 = 44.0,
+};
+
+pub const ContextActionPanelProps = struct {
+    x: f32,
+    y: f32,
+    title: []const u8,
+    detail: []const u8 = "",
+    primary_id: u32,
+    primary_label: []const u8,
+    secondary_id: u32,
+    secondary_label: []const u8,
+    fill: ?ui.Color = null,
+    border: ?ui.Color = null,
+    shadow: ui.Color = .{ .r = 0, .g = 0, .b = 0, .a = 96 },
+    progress: f32 = 1.0,
+    w: f32 = 220.0,
+    h: f32 = 118.0,
+};
+
+pub const EditorSwitchSpec = struct {
+    id: u32,
+    label: []const u8,
+    checked: bool,
+};
+
+pub const PropertyEditorPanelProps = struct {
+    title: []const u8,
+    detail: []const u8,
+    close_id: u32,
+    preview_title: []const u8 = "Selected",
+    preview_detail: []const u8,
+    section_title: []const u8,
+    section_detail: []const u8,
+    prev_id: u32,
+    prev_label: []const u8,
+    next_id: u32,
+    next_label: []const u8,
+    switches: []const EditorSwitchSpec = &.{},
+    fill: ?ui.Color = null,
+    border: ?ui.Color = null,
+    shadow: ui.Color = .{ .r = 0, .g = 0, .b = 0, .a = 82 },
+    scrim: ?ui.Color = null,
+    progress: f32 = 1.0,
+    panel_w: f32 = 360.0,
+};
+
+pub const SemanticKind = semantic_component.Kind;
+pub const SemanticImportance = semantic_component.Importance;
+pub const SemanticState = semantic_component.State;
+pub const SemanticMode = semantic_component.Mode;
+pub const SemanticFocus = semantic_component.Focus;
+pub const SemanticDensity = semantic_component.Density;
+pub const SemanticIntent = semantic_component.Intent;
+pub const SemanticItem = semantic_component.Item;
+pub const SemanticViewProps = semantic_component.ViewProps;
 
 pub const StackCursor = struct {
     bounds: ui.Rect,
@@ -817,20 +812,8 @@ pub const Split = struct {
     second: ui.Rect,
 };
 
-pub const WorkspaceShellProps = struct {
-    rail_w: f32 = 48.0,
-    sidebar_w: f32 = 260.0,
-    top_h: f32 = 56.0,
-    status_h: f32 = 24.0,
-};
-
-pub const WorkspaceShell = struct {
-    rail: ui.Rect,
-    top: ui.Rect,
-    sidebar: ui.Rect,
-    main: ui.Rect,
-    status: ui.Rect,
-};
+pub const WorkspaceShellProps = workspace_component.ShellProps;
+pub const WorkspaceShell = workspace_component.Shell;
 
 pub const ResponsivePanesProps = struct {
     breakpoint: f32 = 980.0,
@@ -848,9 +831,13 @@ pub const ResponsivePanes = struct {
     stacked: bool,
 };
 
-pub const TimelineMark = struct {
-    x: f32,
-    label: []const u8,
+pub const TimelineMark = timeline_component.Mark;
+
+pub const OverlayMotion = struct {
+    opacity: f32 = 1.0,
+    dx: f32 = 0.0,
+    dy: f32 = 0.0,
+    promote: bool = true,
 };
 
 pub const Grid = struct {
@@ -952,6 +939,14 @@ pub const View = struct {
         try collector.addHit(bounds, kind, id);
     }
 
+    pub fn pushClip(self: View, bounds: ui.Rect) ui.RenderError!bool {
+        return self.scene.pushClip(bounds);
+    }
+
+    pub fn popClip(self: View) void {
+        self.scene.popClip();
+    }
+
     pub fn buttonHit(self: View, bounds: ui.Rect, id: u32) interaction.Error!void {
         try self.hit(bounds, .button, id);
     }
@@ -978,6 +973,26 @@ pub const View = struct {
 
     pub fn icon(self: View, bounds: ui.Rect, icon_value: ui_icon.Icon, color: ui.Color) ui.RenderError!void {
         try Icon.named(icon_value).renderColor(self.scene, bounds, color);
+    }
+
+    pub fn overlayRect(self: View, bounds: ui.Rect, color: ui.Color, mode: ui.RectMode, radius: f32, shadow: f32) ui.RenderError!void {
+        try self.scene.pushOverlayRect(bounds, color, mode, radius, shadow);
+    }
+
+    pub fn selectionOverlay(self: View, bounds: ui.Rect, border: ui.Color, fill_color: ui.Color, progress_unit: f32, emphasized: bool) ui.RenderError!void {
+        const unit = clampUnit(progress_unit);
+        if (emphasized) try self.overlayRect(bounds, colorWithAlphaUnit(fill_color, unit), .fill, 12.0, 0.0);
+        try self.overlayRect(bounds.insetUniform(-2.0), colorWithAlphaUnit(border, unit), .border, 14.0, 0.0);
+    }
+
+    pub fn overlayMark(self: View) ui.Cursor {
+        return self.scene.cursor();
+    }
+
+    pub fn applyOverlayMotion(self: View, mark: ui.Cursor, motion: OverlayMotion) void {
+        self.scene.applyOpacitySince(mark, motion.opacity);
+        self.scene.translateSince(mark, motion.dx, motion.dy);
+        if (motion.promote) self.scene.promoteSinceToOverlay(mark);
     }
 
     pub fn fill(self: View, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
@@ -1091,22 +1106,15 @@ pub const View = struct {
 
     pub fn workspaceShell(self: View, bounds: ui.Rect, props: WorkspaceShellProps) WorkspaceShell {
         _ = self;
-        const rail_w = @min(bounds.w, @max(0.0, props.rail_w));
-        const status_h = @min(bounds.h, @max(0.0, props.status_h));
-        const top_h = @min(@max(0.0, bounds.h - status_h), @max(0.0, props.top_h));
-        const body_h = @max(primitives.min_extent, bounds.h - top_h - status_h);
-        const body_y = bounds.y + top_h;
-        const rail_h = @max(primitives.min_extent, bounds.h - status_h);
-        const content_x = bounds.x + rail_w;
-        const content_w = @max(primitives.min_extent, bounds.w - rail_w);
-        const sidebar_w = @min(content_w, @max(0.0, props.sidebar_w));
-        return .{
-            .rail = ui.Rect.init(bounds.x, bounds.y, rail_w, rail_h),
-            .top = ui.Rect.init(content_x, bounds.y, content_w, top_h),
-            .sidebar = ui.Rect.init(content_x, body_y, sidebar_w, body_h),
-            .main = ui.Rect.init(content_x + sidebar_w, body_y, @max(primitives.min_extent, content_w - sidebar_w), body_h),
-            .status = ui.Rect.init(bounds.x, bounds.y + bounds.h - status_h, bounds.w, status_h),
-        };
+        return workspace_component.shell(bounds, props);
+    }
+
+    pub fn workspaceSurface(self: View, bounds: ui.Rect, props: WorkspaceSurfaceProps) ui.RenderError!WorkspaceShell {
+        try self.fill(bounds, props.background, 0.0);
+        const shell = self.workspaceShell(bounds, props.shell);
+        try self.workspaceTopBar(shell.top, props.top);
+        try self.workspaceStatusBar(shell.status, props.status);
+        return shell;
     }
 
     pub fn responsivePanes(self: View, bounds: ui.Rect, props: ResponsivePanesProps) ResponsivePanes {
@@ -1370,6 +1378,150 @@ pub const View = struct {
         }
     }
 
+    pub fn pageHeader(self: View, bounds: ui.Rect, props: PageHeaderProps) (ui.RenderError || interaction.Error)!void {
+        if (props.id) |id| {
+            try self.interactiveWithControl(selectableCard(id, "", "", props.variant), bounds, .{ .active = props.selected });
+        } else if (props.fill) |fill_color| {
+            try self.fill(bounds, fill_color, props.radius);
+            if (props.border) |border_color| try self.stroke(bounds, border_color, props.radius);
+        } else {
+            try self.drawWithControl(card("", "", props.variant), bounds, .{ .active = props.selected });
+        }
+        if (props.fill == null) {
+            if (props.border) |border_color| try self.stroke(bounds, border_color, props.radius);
+        }
+
+        const inner = bounds.insetUniform(props.inset);
+        var text_x = inner.x;
+        if (props.icon) |icon_value| {
+            const chip = ui.Rect.init(inner.x, inner.y, 36.0, 36.0);
+            try self.fill(chip, props.accent orelse self.options.style.row, 9.0);
+            try self.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), icon_value, self.options.style.accent);
+            text_x += 52.0;
+        }
+
+        const action_w: f32 = if (props.trailing_action != null) 44.0 else 0.0;
+        const badges_w = headerBadgesWidth(props.badges);
+        const reserved = action_w + badges_w + if (badges_w > 0.0 and action_w > 0.0) @as(f32, 10.0) else @as(f32, 0.0);
+        const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x - reserved);
+        try self.strongText(ui.Rect.init(text_x, inner.y - 2.0, text_w, 24.0), props.title, self.options.style.text);
+        if (props.detail.len != 0) {
+            try self.text(ui.Rect.init(text_x, inner.y + 28.0, text_w, 18.0), props.detail, props.detail_color orelse self.options.style.muted);
+        }
+
+        var x = inner.x + inner.w - action_w;
+        if (props.trailing_action) |action| {
+            try self.iconButtonAt(ui.Rect.init(x, inner.y + 1.0, 34.0, 34.0), action.id, action.label, action.icon, action.variant);
+            x -= 10.0;
+        }
+        var badge_index = props.badges.len;
+        while (badge_index > 0) {
+            badge_index -= 1;
+            const badge_value = props.badges[badge_index];
+            x -= badge_value.width;
+            const badge_app = if (badge_value.accent) |accent_color| self.withAccent(accent_color) else self;
+            try badge_app.badgeAt(ui.Rect.init(x, inner.y + 4.0, badge_value.width, 28.0), badge_value.label, badge_value.variant);
+            x -= 10.0;
+        }
+    }
+
+    pub fn workspaceRail(self: View, bounds: ui.Rect, props: WorkspaceRailProps) (ui.RenderError || interaction.Error)!void {
+        try self.fill(bounds, props.fill, 0.0);
+        try self.actionToolbar(ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), .{
+            .specs = props.actions,
+            .direction = .column,
+            .button_h = props.button_h,
+            .gap = props.gap,
+        });
+    }
+
+    pub fn workspaceRailValues(self: View, bounds: ui.Rect, props: WorkspaceRailValueProps) (ui.RenderError || interaction.Error)!void {
+        try self.fill(bounds, props.fill, 0.0);
+        var column_cursor = self.column(ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), props.gap);
+        for (props.actions) |action| {
+            try self.iconButtonValueAt(column_cursor.take(props.button_h), action.id, action.label, action.icon, action.variant);
+        }
+    }
+
+    pub fn workspaceSidebarChrome(self: View, bounds: ui.Rect, props: WorkspaceSidebarChromeProps) ui.RenderError!ui.Rect {
+        try self.fill(bounds, props.fill, 0.0);
+        if (props.right_border_w > 0.0) {
+            try self.fill(ui.Rect.init(bounds.x + bounds.w - props.right_border_w, bounds.y, props.right_border_w, bounds.h), props.border, 0.0);
+        }
+        const text_w = @max(primitives.min_extent, bounds.w - props.inset_x * 2.0);
+        if (props.title.len != 0) try self.title(ui.Rect.init(bounds.x + props.inset_x, bounds.y + props.title_y, text_w, 16.0), props.title);
+        if (props.detail.len != 0) try self.muted(ui.Rect.init(bounds.x + props.inset_x, bounds.y + props.detail_y, text_w, 14.0), props.detail);
+        return ui.Rect.init(bounds.x + props.inset_x - 6.0, bounds.y + props.body_y, @max(primitives.min_extent, bounds.w - (props.inset_x - 6.0) * 2.0), @max(primitives.min_extent, bounds.h - props.body_y));
+    }
+
+    pub fn composeBar(self: View, bounds: ui.Rect, props: ComposeBarProps) (ui.RenderError || interaction.Error)!void {
+        if (props.fill) |fill_color| try self.fill(bounds, fill_color, 0.0);
+        try self.line(ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0));
+        const tool_y = bounds.y + @max(0.0, (bounds.h - 38.0) * 0.5);
+        try self.actionToolbar(ui.Rect.init(bounds.x + props.inset_x, tool_y, props.toolbar_w, 38.0), .{
+            .specs = props.actions,
+            .button_w = props.toolbar_button_w,
+            .gap = props.toolbar_gap,
+        });
+        const textarea_x = bounds.x + props.inset_x + props.toolbar_w + props.textarea_gap;
+        const send_x = bounds.x + bounds.w - props.inset_x - props.send_w;
+        try self.textareaAt(ui.Rect.init(textarea_x, bounds.y + 15.0, @max(primitives.min_extent, send_x - textarea_x - props.textarea_gap), 44.0), props.textarea_id, "", props.textarea_value);
+        try self.iconButtonAt(ui.Rect.init(send_x, tool_y, props.send_w, 38.0), props.send_id, props.send_label, props.send_icon, props.send_variant);
+        if (props.footer.len != 0) try self.muted(ui.Rect.init(bounds.x + props.inset_x, bounds.y + bounds.h - 18.0, @max(primitives.min_extent, props.toolbar_w + 40.0), 14.0), props.footer);
+    }
+
+    pub fn contextActionPanel(self: View, container: ui.Rect, props: ContextActionPanelProps) (ui.RenderError || interaction.Error)!void {
+        const mark = self.overlayMark();
+        const x = std.math.clamp(props.x, container.x + 8.0, container.x + container.w - props.w - 8.0);
+        const y = std.math.clamp(props.y, container.y + 8.0, container.y + container.h - props.h - 8.0);
+        const panel_bounds = ui.Rect.init(x, y, props.w, props.h);
+        _ = try self.floatingPanel(panel_bounds, .{
+            .fill = props.fill,
+            .border = props.border,
+            .shadow = props.shadow,
+            .radius = 12.0,
+            .shadow_outset = 2.0,
+        });
+        try self.title(ui.Rect.init(panel_bounds.x + 14.0, panel_bounds.y + 12.0, panel_bounds.w - 28.0, 18.0), props.title);
+        if (props.detail.len != 0) try self.muted(ui.Rect.init(panel_bounds.x + 14.0, panel_bounds.y + 36.0, panel_bounds.w - 28.0, 16.0), props.detail);
+        try self.buttonAt(ui.Rect.init(panel_bounds.x + 12.0, panel_bounds.y + 66.0, 118.0, 34.0), props.primary_id, props.primary_label, .primary);
+        try self.buttonAt(ui.Rect.init(panel_bounds.x + 138.0, panel_bounds.y + 66.0, 70.0, 34.0), props.secondary_id, props.secondary_label, .outline);
+        self.applyOverlayMotion(mark, .{ .opacity = props.progress, .dy = (1.0 - props.progress) * 8.0 });
+    }
+
+    pub fn propertyEditorPanel(self: View, container: ui.Rect, props: PropertyEditorPanelProps) (ui.RenderError || interaction.Error)!void {
+        const mark = self.overlayMark();
+        const panel_w = @min(props.panel_w, @max(300.0, container.w * 0.24));
+        const panel_bounds = ui.Rect.init(container.x + container.w - panel_w - 18.0, container.y + 18.0, panel_w, @min(398.0, container.h - 36.0));
+        const inner = try self.floatingPanel(panel_bounds, .{
+            .fill = props.fill,
+            .border = props.border,
+            .shadow = props.shadow,
+            .radius = 14.0,
+            .shadow_outset = 1.0,
+            .scrim = props.scrim,
+            .scrim_height = 76.0,
+        });
+        try self.boldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), props.title, self.options.style.text);
+        try self.iconButtonAt(ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0), props.close_id, "Close editor", .x, .outline);
+        try self.muted(ui.Rect.init(inner.x, inner.y + 31.0, inner.w, 17.0), props.detail);
+        try self.muted(ui.Rect.init(inner.x, inner.y + 54.0, inner.w, 17.0), "Live changes apply immediately.");
+        try self.subtleAt(ui.Rect.init(inner.x, inner.y + 86.0, inner.w, 74.0), props.preview_title, props.preview_detail);
+        const section_y = inner.y + 184.0;
+        try self.title(ui.Rect.init(inner.x, section_y, inner.w, 20.0), props.section_title);
+        try self.muted(ui.Rect.init(inner.x, section_y + 25.0, inner.w, 18.0), props.section_detail);
+        const button_w = (inner.w - 10.0) * 0.5;
+        try self.buttonAt(ui.Rect.init(inner.x, section_y + 52.0, button_w, 34.0), props.prev_id, props.prev_label, .outline);
+        try self.buttonAt(ui.Rect.init(inner.x + button_w + 10.0, section_y + 52.0, button_w, 34.0), props.next_id, props.next_label, .primary);
+        try self.line(ui.Rect.init(inner.x, section_y + 106.0, inner.w, 1.0));
+        var switch_y = section_y + 122.0;
+        for (props.switches) |switch_value| {
+            try self.switchAt(ui.Rect.init(inner.x, switch_y, inner.w, 32.0), switch_value.id, switch_value.label, switch_value.checked);
+            switch_y += 40.0;
+        }
+        self.applyOverlayMotion(mark, .{ .opacity = props.progress, .dx = (1.0 - props.progress) * 18.0 });
+    }
+
     pub fn section(self: View, bounds: ui.Rect, props: SectionProps) ui.RenderError!void {
         const text_x = if (props.icon != null) bounds.x + 42.0 else bounds.x;
         const text_w = @max(primitives.min_extent, bounds.x + bounds.w - text_x);
@@ -1514,9 +1666,9 @@ pub const View = struct {
         const axis = ui.Rect.init(inner.x + label_w, axis_y + 14.0, @max(primitives.min_extent, inner.w - label_w), @max(primitives.min_extent, inner.y + inner.h - axis_y - 18.0));
         var mapped_marks: [16]TimelineMark = undefined;
         var mapped_mark_count: usize = 0;
-        const window = timelineWindow(props.viewport.offset, props.viewport.scale);
+        const window = timeline_component.window(props.viewport.offset, props.viewport.scale);
         for (props.marks) |mark| {
-            const x = timelineUnitInWindow(mark.at, window.start, window.end) orelse continue;
+            const x = timeline_component.unitInWindow(mark.at, window.start, window.end) orelse continue;
             if (mapped_mark_count >= mapped_marks.len) break;
             mapped_marks[mapped_mark_count] = .{ .x = x, .label = mark.label };
             mapped_mark_count += 1;
@@ -1528,7 +1680,7 @@ pub const View = struct {
             var mapped_blocks: [32]TimelineBlock = undefined;
             var mapped_count: usize = 0;
             for (lane.blocks) |block_value| {
-                const mapped = timelineBlockInWindow(block_value, window.start, window.end) orelse continue;
+                const mapped = timeline_component.blockInWindow(block_value, window.start, window.end) orelse continue;
                 if (mapped_count >= mapped_blocks.len) break;
                 mapped_blocks[mapped_count] = mapped;
                 mapped_count += 1;
@@ -1624,7 +1776,7 @@ pub const View = struct {
             try self.panelScaffold(bounds, .{
                 .title = props.title,
                 .detail = props.detail,
-                .header_gap = semanticHeaderGap(props.intent.density),
+                .header_gap = semantic_component.headerGap(props.intent.density),
             })
         else
             bounds;
@@ -1634,15 +1786,15 @@ pub const View = struct {
             return;
         }
 
-        var stack = self.column(content_bounds, semanticGap(props.intent.density));
-        const primary_slots = semanticPrimarySlots(content_bounds, props);
+        var stack = self.column(content_bounds, semantic_component.gap(props.intent.density));
+        const primary_slots = semantic_component.primarySlots(content_bounds, props);
         if (primary_slots > 0) {
-            const primary_h = semanticPrimaryHeight(props.intent.density);
+            const primary_h = semantic_component.primaryHeight(props.intent.density);
             const primary_area = stack.take(primary_h);
-            const grid_value = self.grid(primary_area, primary_slots, semanticGap(props.intent.density), primary_h);
+            const grid_value = self.grid(primary_area, primary_slots, semantic_component.gap(props.intent.density), primary_h);
             var rendered_primary: usize = 0;
             for (props.items) |item| {
-                if (!semanticPromotes(item, props.intent)) continue;
+                if (!semantic_component.promotes(item, props.intent)) continue;
                 if (rendered_primary >= primary_slots) break;
                 try self.semanticCard(grid_value.item(rendered_primary), item);
                 rendered_primary += 1;
@@ -1650,9 +1802,9 @@ pub const View = struct {
         }
 
         var row_count: usize = 0;
-        const row_h = semanticRowHeight(props.intent.density);
+        const row_h = semantic_component.rowHeight(props.intent.density);
         for (props.items) |item| {
-            if (semanticPromotes(item, props.intent) and row_count < primary_slots) {
+            if (semantic_component.promotes(item, props.intent) and row_count < primary_slots) {
                 row_count += 1;
                 continue;
             }
@@ -1664,29 +1816,29 @@ pub const View = struct {
     pub fn semanticCard(self: View, bounds: ui.Rect, item: SemanticItem) (ui.RenderError || interaction.Error)!void {
         const accent_color = semanticAccent(self, item);
         try self.withAccent(accent_color).metricCard(bounds, .{
-            .id = semanticControlId(item),
+            .id = semantic_component.controlId(item),
             .title = item.label,
-            .detail = semanticDetail(item),
-            .value = semanticValue(item),
-            .icon = semanticIcon(item.kind),
+            .detail = semantic_component.detail(item),
+            .value = semantic_component.value(item),
+            .icon = semantic_component.icon(item.kind),
             .progress = item.progress,
             .selected = item.selected,
         });
-        try self.badgeAt(semanticBadgeBounds(bounds, semanticStateLabel(item.state)), semanticStateLabel(item.state), semanticBadgeVariant(item.state));
+        try self.badgeAt(semantic_component.badgeBounds(bounds, semantic_component.stateLabel(item.state)), semantic_component.stateLabel(item.state), semantic_component.badgeVariant(item.state));
     }
 
     pub fn semanticRow(self: View, bounds: ui.Rect, item: SemanticItem, intent: SemanticIntent) (ui.RenderError || interaction.Error)!void {
         const accent_color = semanticAccent(self, item);
         if (item.kind == .action and item.id != 0 and intent.mode == .schedule) {
-            try self.buttonIconAt(bounds.withHeightCentered(@min(bounds.h, 36.0)), item.id, item.label, if (item.state == .good) .primary else .outline, semanticIcon(item.kind));
+            try self.buttonIconAt(bounds.withHeightCentered(@min(bounds.h, 36.0)), item.id, item.label, if (item.state == .good) .primary else .outline, semantic_component.icon(item.kind));
             return;
         }
 
-        const detail_text = semanticRowDetail(item);
+        const detail_text = semantic_component.rowDetail(item);
         if (item.id != 0) {
-            try self.withAccent(accent_color).selectableRow(bounds, item.id, item.label, detail_text, semanticIcon(item.kind), item.selected);
+            try self.withAccent(accent_color).selectableRow(bounds, item.id, item.label, detail_text, semantic_component.icon(item.kind), item.selected);
         } else {
-            try self.drawWithControl(rowItemIcon(0, item.label, detail_text, semanticIcon(item.kind)), bounds, .{ .active = item.selected });
+            try self.drawWithControl(rowItemIcon(0, item.label, detail_text, semantic_component.icon(item.kind)), bounds, .{ .active = item.selected });
         }
         if (item.progress) |value| {
             const bar_w = @min(70.0, @max(30.0, bounds.w * 0.22));
@@ -1694,181 +1846,6 @@ pub const View = struct {
         }
     }
 };
-
-fn semanticControlId(item: SemanticItem) ?u32 {
-    return if (item.id == 0) null else item.id;
-}
-
-const TimelineWindow = struct {
-    start: f32,
-    end: f32,
-};
-
-fn timelineWindow(offset: f32, scale: f32) TimelineWindow {
-    const width = 1.0 / @max(0.05, scale);
-    const start = @max(0.0, @min(1.0, offset));
-    return .{ .start = start, .end = @max(start + 0.01, start + width) };
-}
-
-fn panTimelineViewport(state: *TimelineViewportState, direction: f32) void {
-    const window_w = 1.0 / @max(0.05, state.scale);
-    const max_offset = @max(0.0, 1.0 - window_w);
-    state.offset = @max(0.0, @min(max_offset, state.offset + direction * window_w * 0.25));
-}
-
-fn zoomTimelineViewport(state: *TimelineViewportState, factor: f32) void {
-    const previous_scale = @max(0.05, state.scale);
-    const previous_w = 1.0 / previous_scale;
-    const center = state.offset + previous_w * 0.5;
-    state.scale = @max(1.0, @min(6.0, state.scale * factor));
-    const next_w = 1.0 / state.scale;
-    const max_offset = @max(0.0, 1.0 - next_w);
-    state.offset = @max(0.0, @min(max_offset, center - next_w * 0.5));
-}
-
-fn timelineUnitInWindow(value: f32, start: f32, end: f32) ?f32 {
-    if (end <= start) return null;
-    if (value < start or value > end) return null;
-    return ui.clampUnit((value - start) / (end - start));
-}
-
-fn timelineBlockInWindow(block_value: TimelineBlock, start: f32, end: f32) ?TimelineBlock {
-    if (end <= start) return null;
-    const block_start = @max(start, block_value.start);
-    const block_end = @min(end, @max(block_value.start, block_value.end));
-    if (block_end <= block_start) return null;
-    return .{
-        .id = block_value.id,
-        .start = ui.clampUnit((block_start - start) / (end - start)),
-        .end = ui.clampUnit((block_end - start) / (end - start)),
-        .value = block_value.value,
-        .color = block_value.color,
-        .selected = block_value.selected,
-    };
-}
-
-fn semanticPromotes(item: SemanticItem, intent: SemanticIntent) bool {
-    if (item.importance == .primary) return true;
-    return switch (intent.focus) {
-        .resources => item.kind == .resource and item.importance != .background,
-        .paths => item.kind == .path and item.importance != .background,
-        .dependencies => item.kind == .dependency and item.importance != .background,
-        .privacy => item.state == .private,
-        .errors => item.state == .bad or item.state == .blocked or item.kind == .warning,
-        .general => false,
-    };
-}
-
-fn semanticPrimarySlots(bounds: ui.Rect, props: SemanticViewProps) usize {
-    if (bounds.h < 150.0) return 0;
-    var count: usize = 0;
-    for (props.items) |item| {
-        if (semanticPromotes(item, props.intent)) count += 1;
-    }
-    if (count == 0) return 0;
-    const max_slots: usize = if (bounds.w >= 720.0) 3 else if (bounds.w >= 440.0) 2 else 1;
-    return @min(count, max_slots);
-}
-
-fn semanticPrimaryHeight(density: SemanticDensity) f32 {
-    return switch (density) {
-        .compact => 88.0,
-        .normal => 104.0,
-        .expanded => 122.0,
-    };
-}
-
-fn semanticRowHeight(density: SemanticDensity) f32 {
-    return switch (density) {
-        .compact => 36.0,
-        .normal => 44.0,
-        .expanded => 54.0,
-    };
-}
-
-fn semanticGap(density: SemanticDensity) f32 {
-    return switch (density) {
-        .compact => 6.0,
-        .normal => 10.0,
-        .expanded => 14.0,
-    };
-}
-
-fn semanticHeaderGap(density: SemanticDensity) f32 {
-    return switch (density) {
-        .compact => 8.0,
-        .normal => 12.0,
-        .expanded => 16.0,
-    };
-}
-
-fn semanticDetail(item: SemanticItem) []const u8 {
-    if (item.detail.len != 0) return item.detail;
-    return semanticKindLabel(item.kind);
-}
-
-fn semanticValue(item: SemanticItem) []const u8 {
-    if (item.value.len != 0) return item.value;
-    return semanticStateLabel(item.state);
-}
-
-fn semanticRowDetail(item: SemanticItem) []const u8 {
-    if (item.value.len != 0 and item.detail.len != 0) return item.detail;
-    if (item.value.len != 0) return item.value;
-    if (item.detail.len != 0) return item.detail;
-    return semanticStateLabel(item.state);
-}
-
-fn semanticKindLabel(kind: SemanticKind) []const u8 {
-    return switch (kind) {
-        .identity => "identity",
-        .metric => "metric",
-        .resource => "resource",
-        .path => "path",
-        .event => "event",
-        .action => "action",
-        .artifact => "artifact",
-        .warning => "warning",
-        .dependency => "dependency",
-        .timeline => "timeline",
-    };
-}
-
-fn semanticStateLabel(state: SemanticState) []const u8 {
-    return switch (state) {
-        .neutral => "neutral",
-        .active => "active",
-        .good => "good",
-        .warning => "warning",
-        .bad => "bad",
-        .blocked => "blocked",
-        .private => "private",
-        .pending => "pending",
-    };
-}
-
-fn semanticIcon(kind: SemanticKind) ui_icon.Icon {
-    return switch (kind) {
-        .identity => .user,
-        .metric => .chart_bar,
-        .resource => .database,
-        .path => .folder,
-        .event => .activity,
-        .action => .send,
-        .artifact => .archive,
-        .warning => .alert_triangle,
-        .dependency => .git_branch,
-        .timeline => .clock,
-    };
-}
-
-fn semanticBadgeVariant(state: SemanticState) BadgeVariant {
-    return switch (state) {
-        .good, .active => .secondary,
-        .warning, .bad, .blocked => .default,
-        .private, .pending, .neutral => .outline,
-    };
-}
 
 fn semanticAccent(self: View, item: SemanticItem) ui.Color {
     if (item.accent) |color| return color;
@@ -1878,12 +1855,6 @@ fn semanticAccent(self: View, item: SemanticItem) ui.Color {
         .bad, .blocked => ui.Color{ .r = 242, .g = 103, .b = 103 },
         .neutral => self.options.style.accent,
     };
-}
-
-fn semanticBadgeBounds(bounds: ui.Rect, label: []const u8) ui.Rect {
-    const desired = @as(f32, @floatFromInt(label.len)) * 7.4 + 28.0;
-    const width = @min(@max(54.0, desired), @max(54.0, bounds.w - 20.0));
-    return ui.Rect.init(bounds.x + bounds.w - width - 12.0, bounds.y + 12.0, width, 22.0);
 }
 
 pub fn textNode(value: []const u8) ui.Node {
@@ -2208,6 +2179,28 @@ test "component renderer provides layout cursors and message bubbles" {
     try std.testing.expectEqual(ui.Rect.init(48, 56, 260, 620), shell.sidebar);
     try std.testing.expectEqual(ui.Rect.init(308, 56, 692, 620), shell.main);
     try std.testing.expectEqual(ui.Rect.init(0, 676, 1000, 24), shell.status);
+
+    var surface_commands: [128]ui.Command = undefined;
+    var surface_scene = ui.Scene.init(&surface_commands);
+    const surface_app = renderer(&surface_scene, null, .{});
+    const surface = try surface_app.workspaceSurface(ui.Rect.init(0, 0, 1000, 700), .{
+        .background = ui.Color{ .r = 1, .g = 2, .b = 3 },
+        .top = .{
+            .title = "Workspace",
+            .detail = "semantic shell",
+            .trailing_top = "mode",
+            .trailing_bottom = "agent",
+            .fill = ui.Color{ .r = 4, .g = 5, .b = 6 },
+        },
+        .status = .{
+            .text = "ready",
+            .fill = ui.Color{ .r = 7, .g = 8, .b = 9 },
+        },
+    });
+    try std.testing.expectEqual(shell.rail, surface.rail);
+    try std.testing.expect(component_test.hasText(surface_scene.written(), "Workspace"));
+    try std.testing.expect(component_test.hasText(surface_scene.written(), "semantic shell"));
+    try std.testing.expect(component_test.hasText(surface_scene.written(), "ready"));
 
     const wide_panes = app.responsivePanes(ui.Rect.init(0, 0, 1000, 300), .{
         .first_w = 200.0,

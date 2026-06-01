@@ -5,6 +5,8 @@
 %include "x86_64/media/av1_constants.inc"
 
 extern er_av1_tile_group_decode_single
+extern er_av1_tile_entries_validate_entropy
+extern er_av1_tile_group_decode_entropy
 extern er_av1_tile_group_decode
 extern er_av1_tile_group_decode_uniform
 extern er_av1_tile_group_encode_single
@@ -32,6 +34,9 @@ decoded_v: resb 2
 
 SECTION .data
 tile: db 0xaa, 0xbb, 0xcc
+entropy_tiles_good: db 0x80, 0x80
+entropy_tiles_bad_marker: db 0x00
+entropy_tiles_bad_padding: db 0xc0
 tile0: db 0x10, 0x11
 tile1: db 0x20, 0x21, 0x22
 tile2: db 0x30
@@ -714,8 +719,131 @@ _start:
     cmp     edx, ERROR_CORRUPT
     jne     .fail_raw_validate_bad_len
     inc     qword [rel passed]
-    jmp     .done
+    jmp     .entropy_validate_setup
 .fail_raw_validate_bad_len:
+    inc     qword [rel failed]
+
+.entropy_validate_setup:
+    mov     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 0
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 1
+    mov     qword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_OFFSET], 1
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 1
+    jmp     .entropy_validate_good
+
+.entropy_validate_good:
+    mov     rdi, entropy_tiles_good
+    mov     esi, 2
+    mov     rdx, entries
+    mov     ecx, 2
+    call    er_av1_tile_entries_validate_entropy
+    cmp     eax, 2
+    jne     .fail_entropy_validate_good
+    test    edx, edx
+    jnz     .fail_entropy_validate_good
+    inc     qword [rel passed]
+    jmp     .entropy_validate_bad_marker
+.fail_entropy_validate_good:
+    inc     qword [rel failed]
+
+.entropy_validate_bad_marker:
+    mov     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 0
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 1
+    mov     rdi, entropy_tiles_bad_marker
+    mov     esi, 1
+    mov     rdx, entries
+    mov     ecx, 1
+    call    er_av1_tile_entries_validate_entropy
+    test    eax, eax
+    jnz     .fail_entropy_validate_bad_marker
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_entropy_validate_bad_marker
+    inc     qword [rel passed]
+    jmp     .entropy_validate_bad_padding
+.fail_entropy_validate_bad_marker:
+    inc     qword [rel failed]
+
+.entropy_validate_bad_padding:
+    mov     rdi, entropy_tiles_bad_padding
+    mov     esi, 1
+    mov     rdx, entries
+    mov     ecx, 1
+    call    er_av1_tile_entries_validate_entropy
+    test    eax, eax
+    jnz     .fail_entropy_validate_bad_padding
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_entropy_validate_bad_padding
+    inc     qword [rel passed]
+    jmp     .entropy_validate_no_data
+.fail_entropy_validate_bad_padding:
+    inc     qword [rel failed]
+
+.entropy_validate_no_data:
+    mov     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 1
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 1
+    mov     rdi, entropy_tiles_good
+    mov     esi, 1
+    mov     rdx, entries
+    mov     ecx, 1
+    call    er_av1_tile_entries_validate_entropy
+    test    eax, eax
+    jnz     .fail_entropy_validate_no_data
+    cmp     edx, ERROR_NO_DATA
+    jne     .fail_entropy_validate_no_data
+    inc     qword [rel passed]
+    jmp     .entropy_group_setup
+.fail_entropy_validate_no_data:
+    inc     qword [rel failed]
+
+.entropy_group_setup:
+    mov     byte [rel tileinfo + AV1_TILE_INFO_UNIFORM], 1
+    mov     byte [rel tileinfo + AV1_TILE_INFO_COLS_LOG2], 0
+    mov     byte [rel tileinfo + AV1_TILE_INFO_ROWS_LOG2], 0
+    mov     byte [rel tileinfo + AV1_TILE_INFO_TILE_SIZE_BYTES], 1
+    mov     dword [rel tileinfo + AV1_TILE_INFO_COLS], 1
+    mov     dword [rel tileinfo + AV1_TILE_INFO_ROWS], 1
+    mov     dword [rel tileinfo + AV1_TILE_INFO_COUNT], 1
+    jmp     .entropy_group_decode_good
+
+.entropy_group_decode_good:
+    mov     rdi, entropy_tiles_good
+    mov     esi, 1
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 1
+    call    er_av1_tile_group_decode_entropy
+    cmp     eax, 1
+    jne     .fail_entropy_group_decode_good
+    test    edx, edx
+    jnz     .fail_entropy_group_decode_good
+    cmp     dword [rel desc + AV1_TILE_GROUP_START], 0
+    jne     .fail_entropy_group_decode_good
+    cmp     dword [rel desc + AV1_TILE_GROUP_END], 0
+    jne     .fail_entropy_group_decode_good
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 0
+    jne     .fail_entropy_group_decode_good
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 1
+    jne     .fail_entropy_group_decode_good
+    inc     qword [rel passed]
+    jmp     .entropy_group_decode_bad
+.fail_entropy_group_decode_good:
+    inc     qword [rel failed]
+
+.entropy_group_decode_bad:
+    mov     rdi, entropy_tiles_bad_marker
+    mov     esi, 1
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 1
+    call    er_av1_tile_group_decode_entropy
+    test    eax, eax
+    jnz     .fail_entropy_group_decode_bad
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_entropy_group_decode_bad
+    inc     qword [rel passed]
+    jmp     .done
+.fail_entropy_group_decode_bad:
     inc     qword [rel failed]
 
 .done:

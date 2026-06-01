@@ -95,7 +95,7 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
 
 pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
     const binding = app_location.topLevelBinding(props.button);
-    try renderNavItem(scene, collector, .{
+    try renderNavItemView(component_union.renderer(scene, collector, .{ .style = design.appStyle() }), .{
         .kind = props.kind,
         .binding = binding,
         .bounds = props.bounds,
@@ -151,8 +151,8 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
     try app.buttonIconAt(ui.Rect.init(content.x, bounds.y + 13.0, 118.0, 36.0), logo_binding.id, "EdgeRun", .ghost, .terminal);
 }
 
-pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props: NavProps) (ui.RenderError || interaction.Error)!void {
-    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
+pub fn renderNavItemView(view: component_union.View, props: NavProps) (ui.RenderError || interaction.Error)!void {
+    const app = view.withStyle(design.appStyle());
     switch (props.kind) {
         .top_text => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);

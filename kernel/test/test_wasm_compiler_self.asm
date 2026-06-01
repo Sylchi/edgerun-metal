@@ -320,18 +320,42 @@ tsx_boolean_attr: db "<Input disabled value='x' />"
 TSX_BOOLEAN_ATTR_LEN equ $ - tsx_boolean_attr
 tsx_quoted_lt_attr: db "<Input pattern=",34,"<tag attr='x'>",34," />"
 TSX_QUOTED_LT_ATTR_LEN equ $ - tsx_quoted_lt_attr
+tsx_svg_names: db "<svg:path stroke-width='2' xlink:href={url} />"
+TSX_SVG_NAMES_LEN equ $ - tsx_svg_names
 tsx_deep: db "<A><B><C><D /></C></B></A>"
 TSX_DEEP_LEN equ $ - tsx_deep
 tsx_fragment: db "<><App /><span data-x='1'>text</span></>"
 TSX_FRAGMENT_LEN equ $ - tsx_fragment
 tsx_member_expr: db "<UI.Card data-id={",34,"a<b",34,"}>{items.map(x => <Row key={x.id} />)}</UI.Card>"
 TSX_MEMBER_EXPR_LEN equ $ - tsx_member_expr
+tsx_conditional_expr: db "<App>{ready ? <Ready /> : <Fallback />}</App>"
+TSX_CONDITIONAL_EXPR_LEN equ $ - tsx_conditional_expr
 tsx_spread_attr: db "<Panel {...props} a={/* comment */ `x{y}`} />"
 TSX_SPREAD_ATTR_LEN equ $ - tsx_spread_attr
+tsx_spread_attr_jsx: db "<Panel {...{ icon: <Icon name='x' /> }} />"
+TSX_SPREAD_ATTR_JSX_LEN equ $ - tsx_spread_attr_jsx
+tsx_attr_expr_jsx: db "<Button icon={<Icon name='x' />} />"
+TSX_ATTR_EXPR_JSX_LEN equ $ - tsx_attr_expr_jsx
+tsx_attr_comments: db "<Button /* primary */ disabled // tail",10,"/>"
+TSX_ATTR_COMMENTS_LEN equ $ - tsx_attr_comments
 tsx_expr_comment_child: db "<App>{/* hidden <Tag /> */}{items // comment",10,"}</App>"
 TSX_EXPR_COMMENT_CHILD_LEN equ $ - tsx_expr_comment_child
+tsx_text_before_expr: db "<App>hi{value}there{again}</App>"
+TSX_TEXT_BEFORE_EXPR_LEN equ $ - tsx_text_before_expr
+tsx_entity_text: db "<Text>&nbsp;ready &amp; set</Text>"
+TSX_ENTITY_TEXT_LEN equ $ - tsx_entity_text
 tsx_wrapped: db "  ((<App />));  "
 TSX_WRAPPED_LEN equ $ - tsx_wrapped
+tsx_as_assertion: db "(<App /> as JSX.Element)"
+TSX_AS_ASSERTION_LEN equ $ - tsx_as_assertion
+tsx_satisfies_assertion: db "<App /> satisfies { node: JSX.Element };"
+TSX_SATISFIES_ASSERTION_LEN equ $ - tsx_satisfies_assertion
+tsx_non_null_assertion: db "(<App />)! as JSX.Element;"
+TSX_NON_NULL_ASSERTION_LEN equ $ - tsx_non_null_assertion
+tsx_non_null_only: db "<App />!"
+TSX_NON_NULL_ONLY_LEN equ $ - tsx_non_null_only
+tsx_leading_not: db "!(<App />)"
+TSX_LEADING_NOT_LEN equ $ - tsx_leading_not
 tsx_raw_text: db "<script>if (a < b) { draw(); }</script>"
 TSX_RAW_TEXT_LEN equ $ - tsx_raw_text
 tsx_regex_attr: db "<App matcher={/}/} />"
@@ -359,9 +383,21 @@ tsx_source_file:
     db "const view = <App foo=",34,"x",34," />;",10
     db "function render() { return (<Panel><Child /></Panel>); }",10
     db "function* g() { yield <Yielded />; }",10
+    db "void <VoidView />;",10
     db "switch (kind) { case <CaseView />: break; }",10
+    db "const kind = typeof <Typed />;",10
     db "async function h() { await <Awaited />; }",10
+    db "export default <DefaultView />;",10
     db "function fail() { throw <Thrown />; }",10
+    db "do <LoopBody />; while (again);",10
+    db "for (const item of <Items />) { item; }",10
+    db "if (name in <Registry />) { name; }",10
+    db "delete <Disposable />.field;",10
+    db "const ok = value instanceof <Ctor />;",10
+    db "using resource = <Resource />;",10
+    db "const instance = new <Constructed />;",10
+    db "if (ready) /(<StillNo \/>)/.test(text);",10
+    db "if (ready) <Ready />; else <Fallback />;",10
     db "<Statement />;",10
 TSX_SOURCE_FILE_LEN equ $ - tsx_source_file
 tsx_mismatch: db "<App><Body /></Panel>"
@@ -381,15 +417,27 @@ wasm_compile_tsx_valid_cases:
     dq tsx_nested, TSX_NESTED_LEN, 3, 2, 1
     dq tsx_boolean_attr, TSX_BOOLEAN_ATTR_LEN, 1, 2, 0
     dq tsx_quoted_lt_attr, TSX_QUOTED_LT_ATTR_LEN, 1, 1, 0
+    dq tsx_svg_names, TSX_SVG_NAMES_LEN, 1, 2, 0
     dq tsx_deep, TSX_DEEP_LEN, 4, 0, 0
     dq tsx_fragment, TSX_FRAGMENT_LEN, 3, 1, 1
-    dq tsx_member_expr, TSX_MEMBER_EXPR_LEN, 1, 1, 0
+    dq tsx_member_expr, TSX_MEMBER_EXPR_LEN, 2, 2, 0
+    dq tsx_conditional_expr, TSX_CONDITIONAL_EXPR_LEN, 3, 0, 0
     dq tsx_spread_attr, TSX_SPREAD_ATTR_LEN, 1, 2, 0
+    dq tsx_spread_attr_jsx, TSX_SPREAD_ATTR_JSX_LEN, 2, 2, 0
+    dq tsx_attr_expr_jsx, TSX_ATTR_EXPR_JSX_LEN, 2, 2, 0
+    dq tsx_attr_comments, TSX_ATTR_COMMENTS_LEN, 1, 1, 0
     dq tsx_expr_comment_child, TSX_EXPR_COMMENT_CHILD_LEN, 1, 0, 0
+    dq tsx_text_before_expr, TSX_TEXT_BEFORE_EXPR_LEN, 1, 0, 2
+    dq tsx_entity_text, TSX_ENTITY_TEXT_LEN, 1, 0, 1
     dq tsx_wrapped, TSX_WRAPPED_LEN, 1, 0, 0
+    dq tsx_as_assertion, TSX_AS_ASSERTION_LEN, 1, 0, 0
+    dq tsx_satisfies_assertion, TSX_SATISFIES_ASSERTION_LEN, 1, 0, 0
+    dq tsx_non_null_assertion, TSX_NON_NULL_ASSERTION_LEN, 1, 0, 0
+    dq tsx_non_null_only, TSX_NON_NULL_ONLY_LEN, 1, 0, 0
+    dq tsx_leading_not, TSX_LEADING_NOT_LEN, 1, 0, 0
     dq tsx_raw_text, TSX_RAW_TEXT_LEN, 1, 0, 1
     dq tsx_regex_attr, TSX_REGEX_ATTR_LEN, 1, 1, 0
-    dq tsx_regex_child, TSX_REGEX_CHILD_LEN, 1, 0, 0
+    dq tsx_regex_child, TSX_REGEX_CHILD_LEN, 2, 0, 0
     dq tsx_generic_tag, TSX_GENERIC_TAG_LEN, 1, 1, 0
     dq tsx_nested_generic_tag, TSX_NESTED_GENERIC_TAG_LEN, 1, 0, 0
     dq tsx_generic_comment_tag, TSX_GENERIC_COMMENT_TAG_LEN, 1, 0, 0
@@ -1185,9 +1233,9 @@ _start:
     call    er_wasmc_scan_tsx_source
     test    rdx, rdx
     jnz     .fail
-    cmp     rax, 9
+    cmp     rax, 21
     jne     .fail
-    cmp     rcx, 10
+    cmp     rcx, 22
     jne     .fail
     cmp     r8, 1
     jne     .fail

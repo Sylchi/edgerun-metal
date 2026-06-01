@@ -385,11 +385,20 @@ pub const State = struct {
 };
 
 fn renderHeader(app: component.View, bounds: ui.Rect, state: State) Error!void {
-    try app.strongText(ui.Rect.init(bounds.x, bounds.y, bounds.w, 26.0), "User-Scheduled Pipeline", pipeline_text);
-    try app.text(ui.Rect.init(bounds.x, bounds.y + 32.0, bounds.w, 18.0), "load data, spend RAM and ticks deliberately, commit only useful results", pipeline_muted);
-    const chip_y = bounds.y + 56.0;
-    try app.withAccent(if (state.committed) pipeline_commit else pipeline_ram).badgeAt(ui.Rect.init(bounds.x, chip_y, 118.0, 24.0), state.stateLabel(), .default);
-    try app.withAccent(if (state.model_enabled) pipeline_model else pipeline_muted).badgeAt(ui.Rect.init(bounds.x + 128.0, chip_y, 104.0, 24.0), if (state.model_enabled) "model allowed" else "model gated", .default);
+    const badges = [_]component.HeaderBadge{
+        .{ .label = state.stateLabel(), .variant = .default, .accent = if (state.committed) pipeline_commit else pipeline_ram, .width = 118.0 },
+        .{ .label = if (state.model_enabled) "model allowed" else "model gated", .variant = .default, .accent = if (state.model_enabled) pipeline_model else pipeline_muted, .width = 104.0 },
+    };
+    try app.withTextColor(pipeline_text).pageHeader(bounds, .{
+        .title = "User-Scheduled Pipeline",
+        .detail = "load data, spend RAM and ticks deliberately, commit only useful results",
+        .variant = .subtle,
+        .fill = ui.Color.clear,
+        .border = ui.Color.clear,
+        .detail_color = pipeline_muted,
+        .badges = &badges,
+        .inset = 0.0,
+    });
 }
 
 fn graphNodeBounds(bounds: ui.Rect, index: usize) ui.Rect {

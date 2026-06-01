@@ -10,6 +10,8 @@ extern er_av1_bits_read
 extern er_av1_bits_write_init
 extern er_av1_bits_write
 extern er_av1_bits_bytes_written
+extern er_av1_symbol_init
+extern er_av1_symbol_exit
 
 %macro tile_write_bits 2
     mov     rdi, rsp
@@ -793,6 +795,126 @@ er_fn er_av1_tile_info_decode
 .done:
     er_stack_free AV1_BITS_SIZE
     er_pop  rbx, r12
+    er_ret
+
+; er_av1_tile_entries_validate_entropy(payload, len, tile_entries, entry_count)
+; Validates each tile entry as an entropy-coded tile payload with OBU trailing bits.
+; rdi=tile-group payload base, esi=payload len, rdx=entries, ecx=entry_count.
+er_fn er_av1_tile_entries_validate_entropy
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc AV1_SYMBOL_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    ecx, ecx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rdx
+    mov     r14d, esi
+    mov     r15d, ecx
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, r15d
+    jae     .ok
+    imul    eax, ebx, AV1_TILE_ENTRY_SIZE
+    lea     r11, [r13 + rax]
+    mov     r8, [r11 + AV1_TILE_ENTRY_OFFSET]
+    mov     r9d, [r11 + AV1_TILE_ENTRY_LEN]
+    test    r9d, r9d
+    jz      .invalid_param
+    mov     eax, r14d
+    cmp     r8, rax
+    ja      .no_data
+    mov     rax, r8
+    add     rax, r9
+    jc      .corrupt
+    mov     edx, r14d
+    cmp     rax, rdx
+    ja      .no_data
+    lea     rsi, [r12 + r8]
+    mov     edx, r9d
+    mov     rdi, rsp
+    call    er_av1_symbol_init
+    test    edx, edx
+    jnz     .done
+    mov     rdi, rsp
+    call    er_av1_symbol_exit
+    test    edx, edx
+    jnz     .done
+    inc     ebx
+    jmp     .loop
+.ok:
+    mov     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.no_data:
+    xor     eax, eax
+    er_err  ERROR_NO_DATA
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free AV1_SYMBOL_SIZE
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_av1_tile_group_decode_entropy(payload, len, tile_info_desc, tile_group_desc, tile_entries, entry_cap)
+; Decodes a tile group and validates every decoded tile payload with the entropy decoder lifecycle.
+; rdi=payload, esi=len, rdx=tile_info_desc, rcx=tile_group_desc, r8=entries, r9d=entry_cap.
+er_fn er_av1_tile_group_decode_entropy
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 8
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     ebx, esi
+    mov     r13, rcx
+    mov     r14, r8
+    mov     r15d, r9d
+    mov     [rsp], rdx
+    call    er_av1_tile_group_decode
+    test    edx, edx
+    jnz     .done
+    mov     r9d, [r13 + AV1_TILE_GROUP_END]
+    sub     r9d, [r13 + AV1_TILE_GROUP_START]
+    jc      .corrupt
+    inc     r9d
+    cmp     r9d, r15d
+    ja      .invalid_param
+    mov     rdi, r12
+    mov     esi, ebx
+    mov     rdx, r14
+    mov     ecx, r9d
+    call    er_av1_tile_entries_validate_entropy
+    test    edx, edx
+    jnz     .done
+    mov     eax, [r13 + AV1_TILE_GROUP_DATA_OFFSET]
+    add     eax, [r13 + AV1_TILE_GROUP_DATA_LEN]
+    jc      .corrupt
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_av1_tile_group_decode_single(payload, len, desc) -> eax=bytes_consumed, rdx=error
