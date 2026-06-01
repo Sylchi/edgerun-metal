@@ -65,14 +65,14 @@ pub fn build(b: *std.Build) void {
         .description = "Run encrypted chat app state tests",
         .default_step = test_step,
     });
-    const chat_ui_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/app_encrypted_chat.zig",
         .step = "chat-ui-test",
         .description = "Run encrypted chat app UI tests",
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
-    const pipeline_ui_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/app_pipeline_dashboard.zig",
         .step = "pipeline-ui-test",
         .description = "Run user-scheduled pipeline UI tests",
@@ -144,7 +144,7 @@ pub fn build(b: *std.Build) void {
         .default_step = test_step,
         .suite_step = media_test_step,
     });
-    const ui_core_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/ui_core_test.zig",
         .step = "ui-core-test",
         .description = "Run Zig UI core tests",
@@ -157,7 +157,7 @@ pub fn build(b: *std.Build) void {
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
-    const component_gallery_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/component_gallery_test.zig",
         .step = "component-gallery-test",
         .description = "Run canonical component gallery tests",
@@ -210,7 +210,7 @@ pub fn build(b: *std.Build) void {
     const wayland_window_step = b.step("wayland-window", "Open a native Wayland shm window using canonical UI IR");
     wayland_window_step.dependOn(&run_wayland_window.step);
 
-    const wayland_window_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/wayland_window_host.zig",
         .step = "wayland-window-test",
         .description = "Run native Wayland host protocol tests",
@@ -245,7 +245,7 @@ pub fn build(b: *std.Build) void {
     const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
     drm_gbm_window_step.dependOn(&run_drm_gbm_window.step);
 
-    const drm_gbm_tests = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/drm_gbm_host.zig",
         .step = "drm-gbm-test",
         .description = "Run DRM/GBM host tests",
@@ -400,28 +400,6 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| pi_usb_control.addArgs(args);
     const pi_usb_control_step = b.step("pi-usb-control", "Send Edgerun Pi USB control commands over Linux usbfs without external dependencies");
     pi_usb_control_step.dependOn(&pi_usb_control.step);
-
-    const gen_icon_objects = b.addExecutable(.{
-        .name = "gen-icon-objects",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/gen_icon_objects.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    const run_gen_icon_objects = b.addRunArtifact(gen_icon_objects);
-
-    const gen_icon_objects_step = b.step("gen-icon-objects", "Convert Tabler SVG icons to pre-compiled IR canonical objects");
-    gen_icon_objects_step.dependOn(&run_gen_icon_objects.step);
-    // Test compilation needs the generated files in src/gen/
-    chat_ui_tests.step.dependOn(&run_gen_icon_objects.step);
-    pipeline_ui_tests.step.dependOn(&run_gen_icon_objects.step);
-    ui_core_tests.step.dependOn(&run_gen_icon_objects.step);
-    component_gallery_tests.step.dependOn(&run_gen_icon_objects.step);
-    drm_gbm_tests.step.dependOn(&run_gen_icon_objects.step);
-    wayland_window_tests.step.dependOn(&run_gen_icon_objects.step);
-    test_step.dependOn(&run_gen_icon_objects.step);
 }
 
 fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.LazyPath, runtime_obj: ?std.Build.LazyPath) void {

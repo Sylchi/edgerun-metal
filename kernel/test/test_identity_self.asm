@@ -15,9 +15,7 @@ public_key:
     db 7
     times 31 db 3
 
-SECTION .bss
-passed: resq 1
-failed: resq 1
+TEST_BSS_PASSED_FAILED
 source: resb IDENTITY_SOURCE_SIZE
 out_id: resb ID_SIZE
 

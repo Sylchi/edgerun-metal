@@ -15,6 +15,25 @@
 ; Expects: qword [rel passed] and qword [rel total] in .bss
 ; ------------------------------------------------------------------
 
+; Standard counter layouts for self-hosted tests.
+%macro TEST_BSS_TOTAL_PASSED 0
+SECTION .bss
+total:  resq 1
+passed: resq 1
+%endmacro
+
+%macro TEST_BSS_PASSED_FAILED 0
+SECTION .bss
+passed: resq 1
+failed: resq 1
+%endmacro
+
+%macro TEST_DATA_PASSED_FAILED 0
+SECTION .data
+passed: dq 0
+failed: dq 0
+%endmacro
+
 ; Pass if eax == edx (32-bit)
 %macro TEST 0
     cmp     eax, edx
@@ -56,6 +75,34 @@
     mov     eax, dword %1
     mov     edx, dword %2
     TEST
+%endmacro
+
+; Call %1 with edi=%2. Pass if eax == %3.
+; Expects: qword [rel passed] and qword [rel total].
+%macro TEST_CALL_EAX 3
+    mov     edi, %2
+    call    %1
+    cmp     eax, %3
+    jne     %%fail
+    inc     qword [rel passed]
+%%fail:
+    inc     qword [rel total]
+%endmacro
+
+; Compare two zero-terminated strings through er_strcmp.
+; Expects: qword [rel passed], [rel failed], and [rel total].
+%macro TEST_STREQ 2
+    lea     rdi, %1
+    lea     rsi, %2
+    call    er_strcmp
+    test    eax, eax
+    jnz     %%fail
+    inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+%%done:
+    inc     qword [rel total]
 %endmacro
 
 ; ------------------------------------------------------------------

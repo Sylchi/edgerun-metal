@@ -53,27 +53,8 @@ extern er_strcmp
 extern er_strlen
 extern er_memset
 
-; -------------------------------------------------------------------
-; Test macro
-; -------------------------------------------------------------------
-%macro TEST_STR 3
-    mov     rdi, %1
-    mov     rsi, %2
-    call    er_strcmp
-    test    eax, eax
-    jnz     .fail_%3
-    inc     qword [test_pass]
-    jmp     .next_%3
-.fail_%3:
-    inc     qword [test_fail]
-.next_%3:
-    inc     qword [test_count]
-%endmacro
-
-section .data
-test_pass:  dq 0
-test_fail:  dq 0
-test_count: dq 0
+TEST_DATA_PASSED_FAILED
+total: dq 0
 
 ; -------------------------------------------------------------------
 ; Entry point
@@ -94,26 +75,20 @@ _start:
     mov     rdi, 0x3f8
     mov     sil, '!'
     call    er_serial_putchar
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_hi]
-    TEST_STR rdi, rsi, putchar
+    TEST_STREQ [rel tx_buf], [rel expected_hi]
 
     ; Test puts
     call    reset_buf
     mov     rdi, 0x3f8
     lea     rsi, [hello_str]
     call    er_serial_puts
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_hello]
-    TEST_STR rdi, rsi, puts
+    TEST_STREQ [rel tx_buf], [rel expected_hello]
 
     ; Test crlf
     call    reset_buf
     mov     rdi, 0x3f8
     call    er_serial_crlf
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_crlf]
-    TEST_STR rdi, rsi, crlf
+    TEST_STREQ [rel tx_buf], [rel expected_crlf]
 
     ; Test puts empty string
     call    reset_buf
@@ -122,122 +97,99 @@ _start:
     call    er_serial_puts
     cmp     qword [tx_count], 0
     jz      .empty_ok
-    inc     qword [test_fail]
+    inc     qword [rel failed]
     jmp     .next_empty
 .empty_ok:
-    inc     qword [test_pass]
+    inc     qword [rel passed]
 .next_empty:
+    inc     qword [rel total]
 
     ; Test puthex32 zero
     call    reset_buf
     mov     rdi, 0x3f8
     xor     esi, esi
     call    er_serial_puthex32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h32_zero]
-    TEST_STR rdi, rsi, hex32_zero
+    TEST_STREQ [rel tx_buf], [rel expected_h32_zero]
 
     ; Test puthex32 deadbeef
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 0xdeadbeef
     call    er_serial_puthex32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h32_dead]
-    TEST_STR rdi, rsi, hex32_dead
+    TEST_STREQ [rel tx_buf], [rel expected_h32_dead]
 
     ; Test puthex32 all ones
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 0xffffffff
     call    er_serial_puthex32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h32_ff]
-    TEST_STR rdi, rsi, hex32_ff
+    TEST_STREQ [rel tx_buf], [rel expected_h32_ff]
 
     ; Test puthex32 12345678
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 0x12345678
     call    er_serial_puthex32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h32_1234]
-    TEST_STR rdi, rsi, hex32_1234
+    TEST_STREQ [rel tx_buf], [rel expected_h32_1234]
 
     ; Test puthex64 zero
     call    reset_buf
     mov     rdi, 0x3f8
     xor     esi, esi
     call    er_serial_puthex64
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h64_zero]
-    TEST_STR rdi, rsi, hex64_zero
+    TEST_STREQ [rel tx_buf], [rel expected_h64_zero]
 
     ; Test puthex64 deadbeefcafebabe
     call    reset_buf
     mov     rdi, 0x3f8
     mov     rsi, 0xdeadbeefcafebabe
     call    er_serial_puthex64
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h64_dead]
-    TEST_STR rdi, rsi, hex64_dead
+    TEST_STREQ [rel tx_buf], [rel expected_h64_dead]
 
     ; Test puthex64 all ones
     call    reset_buf
     mov     rdi, 0x3f8
     mov     rsi, -1
     call    er_serial_puthex64
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_h64_ff]
-    TEST_STR rdi, rsi, hex64_ff
+    TEST_STREQ [rel tx_buf], [rel expected_h64_ff]
 
     ; Test putdec32 zero
     call    reset_buf
     mov     rdi, 0x3f8
     xor     esi, esi
     call    er_serial_putdec32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_d32_zero]
-    TEST_STR rdi, rsi, dec32_zero
+    TEST_STREQ [rel tx_buf], [rel expected_d32_zero]
 
     ; Test putdec32 one
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 1
     call    er_serial_putdec32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_d32_one]
-    TEST_STR rdi, rsi, dec32_one
+    TEST_STREQ [rel tx_buf], [rel expected_d32_one]
 
     ; Test putdec32 42
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 42
     call    er_serial_putdec32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_d32_42]
-    TEST_STR rdi, rsi, dec32_42
+    TEST_STREQ [rel tx_buf], [rel expected_d32_42]
 
     ; Test putdec32 1234567890
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 1234567890
     call    er_serial_putdec32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_d32_large]
-    TEST_STR rdi, rsi, dec32_large
+    TEST_STREQ [rel tx_buf], [rel expected_d32_large]
 
     ; Test putdec32 max uint32
     call    reset_buf
     mov     rdi, 0x3f8
     mov     esi, 0xffffffff
     call    er_serial_putdec32
-    lea     rdi, [tx_buf]
-    lea     rsi, [expected_d32_max]
-    TEST_STR rdi, rsi, dec32_max
+    TEST_STREQ [rel tx_buf], [rel expected_d32_max]
 
     ; Report results
-    TEST_EXIT_QWORD_ZERO [test_fail]
+    TEST_EXIT_FAILED
 
 ; -------------------------------------------------------------------
 ; reset_buf — zero tx_count and the buffer

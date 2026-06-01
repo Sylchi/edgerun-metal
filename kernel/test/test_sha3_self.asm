@@ -6,9 +6,7 @@
 extern er_sha3_256
 extern er_shake256
 
-SECTION .data
-passed: dq 0
-failed: dq 0
+TEST_DATA_PASSED_FAILED
 
 msg_abc: db "abc"
 
