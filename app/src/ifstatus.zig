@@ -5,8 +5,8 @@ const object = @import("object.zig");
 const linux = std.os.linux;
 const posix = std.posix;
 
-const Component = @import("ui/components/Component.zig").Component;
-const Text = @import("ui/components/Text.zig").Text;
+const component = @import("ui/components/Component.zig");
+const Component = component.Component;
 const Stack = @import("ui/components/Stack.zig").Stack(Component);
 
 const SIOCGIFADDR: u32 = 0x8915;
@@ -82,8 +82,8 @@ pub fn main(init: std.process.Init) !void {
     const header_text = store(&storage, &storage_pos, "Network Interfaces");
 
     var components: [66]Component = undefined;
-    components[0] = Component{ .text = Text{ .value = header_text } };
-    components[1] = Component{ .separator = .{} };
+    components[0] = component.text(header_text);
+    components[1] = component.separator();
 
     var ip_buf: [16]u8 = undefined;
     var state_buf: [8]u8 = undefined;
@@ -118,12 +118,12 @@ pub fn main(init: std.process.Init) !void {
 
             const line1_raw = std.fmt.bufPrint(&line_buf, "{s}  {s}  {s}", .{ ifname, ip, state }) catch "iface-error";
             const line1 = store(&storage, &storage_pos, line1_raw);
-            components[idx] = Component{ .text = Text{ .value = line1 } };
+            components[idx] = component.text(line1);
             idx += 1;
 
             const line2_raw = std.fmt.bufPrint(&line_buf, "  mac {s}  rx {s}  tx {s}", .{ mac, rx_fmt, tx_fmt }) catch "stats-error";
             const line2 = store(&storage, &storage_pos, line2_raw);
-            components[idx] = Component{ .text = Text{ .value = line2 } };
+            components[idx] = component.text(line2);
             idx += 1;
         }
     }

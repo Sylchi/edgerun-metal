@@ -14,9 +14,8 @@ const app_dashboard = @import("../app_dashboard.zig");
 const app_hardware_dashboard = @import("../app_hardware_dashboard.zig");
 const app_encrypted_chat = @import("../app_encrypted_chat.zig");
 const app_pipeline_dashboard = @import("../app_pipeline_dashboard.zig");
-const icon_component = @import("../ui/components/Icon.zig");
+const component = @import("../ui/components/Component.zig");
 const ui = @import("../ui/core.zig");
-const text_component = @import("../ui/components/Text.zig");
 const bytes_mod = @import("../bytes.zig");
 
 const surface = @import("surface.zig");
@@ -76,27 +75,28 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
         });
     }
     try renderResizeAffordance(scene, @floatFromInt(width), @floatFromInt(height));
-    try addResizeHits(collector, @floatFromInt(width), @floatFromInt(height));
+    try addResizeHits(scene, collector, @floatFromInt(width), @floatFromInt(height));
 }
 
 fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, width: f32) !void {
+    const app = component.renderer(scene, collector, .{});
     const bounds = ui.Rect.init(0.0, 0.0, width, protocol.client_decor_h);
-    try scene.pushRect(bounds, protocol.client_decor_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(0.0, protocol.client_decor_h - 1.0, width, 1.0), protocol.client_decor_border, .fill, 0.0, 0.0);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(14.0, 8.0, @max(1.0, width - 168.0), 15.0), "EdgeRun Native", protocol.client_decor_text, .start);
+    try app.fill(bounds, protocol.client_decor_bg, 0.0);
+    try app.fill(ui.Rect.init(0.0, protocol.client_decor_h - 1.0, width, 1.0), protocol.client_decor_border, 0.0);
+    try app.text(ui.Rect.init(14.0, 8.0, @max(1.0, width - 168.0), 15.0), "EdgeRun Native", protocol.client_decor_text);
 
     const close = clientDecorButton(width, 0);
     const minimize = clientDecorButton(width, 1);
-    try scene.pushRect(minimize, protocol.client_decor_border, .border, 12.0, 0.0);
-    try scene.pushRect(centeredRect(minimize, protocol.client_decor_minimize_w, protocol.client_decor_minimize_h), protocol.client_decor_dim, .fill, 1.0, 0.0);
-    try collector.addHit(minimize, .button, protocol.client_decor_minimize_id);
+    try app.stroke(minimize, protocol.client_decor_border, 12.0);
+    try app.fill(centeredRect(minimize, protocol.client_decor_minimize_w, protocol.client_decor_minimize_h), protocol.client_decor_dim, 1.0);
+    try app.buttonHit(minimize, protocol.client_decor_minimize_id);
 
-    try scene.pushRect(close, protocol.client_decor_border, .border, 12.0, 0.0);
-    try icon_component.Icon.named(.x).renderColor(scene, centeredRect(close, protocol.client_decor_icon_size, protocol.client_decor_icon_size), protocol.client_decor_dim);
-    try collector.addHit(close, .button, protocol.client_decor_close_id);
+    try app.stroke(close, protocol.client_decor_border, 12.0);
+    try app.icon(centeredRect(close, protocol.client_decor_icon_size, protocol.client_decor_icon_size), .x, protocol.client_decor_dim);
+    try app.buttonHit(close, protocol.client_decor_close_id);
 
     const drag_w = @max(1.0, minimize.x - protocol.client_decor_button_gap - 140.0);
-    try collector.addHit(ui.Rect.init(0.0, 0.0, drag_w, protocol.client_decor_h), .button, protocol.client_decor_drag_id);
+    try app.buttonHit(ui.Rect.init(0.0, 0.0, drag_w, protocol.client_decor_h), protocol.client_decor_drag_id);
 }
 
 fn clientDecorButton(width: f32, index: usize) ui.Rect {
@@ -124,29 +124,31 @@ pub fn activateClientDecorationForState(state: *AppState, client_ptr: ?*client.W
     }
 }
 
-fn addResizeHits(collector: *interaction.Collector, width: f32, height: f32) !void {
+fn addResizeHits(scene: *ui.Scene, collector: *interaction.Collector, width: f32, height: f32) !void {
+    const app = component.renderer(scene, collector, .{});
     const m = protocol.client_decor_resize_margin;
-    try collector.addHit(ui.Rect.init(0.0, 0.0, m, height), .button, protocol.client_decor_resize_left_id);
-    try collector.addHit(ui.Rect.init(@max(0.0, width - m), 0.0, m, height), .button, protocol.client_decor_resize_right_id);
-    try collector.addHit(ui.Rect.init(0.0, 0.0, width, m), .button, protocol.client_decor_resize_top_id);
-    try collector.addHit(ui.Rect.init(0.0, @max(0.0, height - m), width, m), .button, protocol.client_decor_resize_bottom_id);
-    try collector.addHit(ui.Rect.init(0.0, 0.0, m * 2.0, m * 2.0), .button, protocol.client_decor_resize_top_left_id);
-    try collector.addHit(ui.Rect.init(@max(0.0, width - m * 2.0), 0.0, m * 2.0, m * 2.0), .button, protocol.client_decor_resize_top_right_id);
-    try collector.addHit(ui.Rect.init(0.0, @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), .button, protocol.client_decor_resize_bottom_left_id);
-    try collector.addHit(ui.Rect.init(@max(0.0, width - m * 2.0), @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), .button, protocol.client_decor_resize_bottom_right_id);
+    try app.buttonHit(ui.Rect.init(0.0, 0.0, m, height), protocol.client_decor_resize_left_id);
+    try app.buttonHit(ui.Rect.init(@max(0.0, width - m), 0.0, m, height), protocol.client_decor_resize_right_id);
+    try app.buttonHit(ui.Rect.init(0.0, 0.0, width, m), protocol.client_decor_resize_top_id);
+    try app.buttonHit(ui.Rect.init(0.0, @max(0.0, height - m), width, m), protocol.client_decor_resize_bottom_id);
+    try app.buttonHit(ui.Rect.init(0.0, 0.0, m * 2.0, m * 2.0), protocol.client_decor_resize_top_left_id);
+    try app.buttonHit(ui.Rect.init(@max(0.0, width - m * 2.0), 0.0, m * 2.0, m * 2.0), protocol.client_decor_resize_top_right_id);
+    try app.buttonHit(ui.Rect.init(0.0, @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), protocol.client_decor_resize_bottom_left_id);
+    try app.buttonHit(ui.Rect.init(@max(0.0, width - m * 2.0), @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), protocol.client_decor_resize_bottom_right_id);
 }
 
 fn renderResizeAffordance(scene: *ui.Scene, width: f32, height: f32) ui.RenderError!void {
+    const app = component.renderer(scene, null, .{});
     const edge = ui.Color{ .r = 110, .g = 121, .b = 136, .a = 70 };
     const corner = ui.Color{ .r = 166, .g = 181, .b = 198, .a = 130 };
-    try scene.pushRect(ui.Rect.init(0.0, 0.0, width, 1.0), edge, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(0.0, @max(0.0, height - 1.0), width, 1.0), edge, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(0.0, 0.0, 1.0, height), edge, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(@max(0.0, width - 1.0), 0.0, 1.0, height), edge, .fill, 0.0, 0.0);
+    try app.fill(ui.Rect.init(0.0, 0.0, width, 1.0), edge, 0.0);
+    try app.fill(ui.Rect.init(0.0, @max(0.0, height - 1.0), width, 1.0), edge, 0.0);
+    try app.fill(ui.Rect.init(0.0, 0.0, 1.0, height), edge, 0.0);
+    try app.fill(ui.Rect.init(@max(0.0, width - 1.0), 0.0, 1.0, height), edge, 0.0);
     const s: f32 = 18.0;
     const t: f32 = 2.0;
-    try scene.pushRect(ui.Rect.init(width - s, height - t - 5.0, s - 5.0, t), corner, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(width - t - 5.0, height - s, t, s - 5.0), corner, .fill, 0.0, 0.0);
+    try app.fill(ui.Rect.init(width - s, height - t - 5.0, s - 5.0, t), corner, 0.0);
+    try app.fill(ui.Rect.init(width - t - 5.0, height - s, t, s - 5.0), corner, 0.0);
 }
 
 fn resizeEdgeForHit(hit_id: u32) ?u32 {
@@ -394,7 +396,7 @@ pub fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
     return false;
 }
 
-pub fn hasIcon(commands: []const ui.Command, value: icon_component.Icon) bool {
+pub fn hasIcon(commands: []const ui.Command, value: component.Icon) bool {
     return hasIconId(commands, icon_pack.iconId(value.value));
 }
 

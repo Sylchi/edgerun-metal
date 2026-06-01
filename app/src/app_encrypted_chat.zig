@@ -7,8 +7,7 @@ const interaction = @import("ui/interaction.zig");
 const preimage = @import("preimage.zig");
 const ui = @import("ui/core.zig");
 const design = @import("ui/theme.zig");
-const Component = @import("ui/components/Component.zig").Component;
-const IconComponent = @import("ui/components/Icon.zig");
+const component = @import("ui/components/Component.zig");
 
 const RenderOptions = @import("ui/component_common.zig").RenderOptions;
 
@@ -116,8 +115,7 @@ pub const State = struct {
     }
 
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        var render_options = options;
-        render_options.style = self.currentStyle();
+        const render_options = options.withStyle(self.currentStyle());
         if (bounds.w >= 780.0) {
             try self.renderWorkspace(scene, collector, bounds, render_options);
         } else {
@@ -126,7 +124,8 @@ pub const State = struct {
     }
 
     fn renderWorkspace(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        try scene.pushRect(bounds, design.Palette.bg, .fill, 0.0, 0.0);
+        const app = component.renderer(scene, collector, options);
+        try app.fill(bounds, design.Palette.bg, 0.0);
         const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
         const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
         const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
@@ -146,29 +145,26 @@ pub const State = struct {
     }
 
     fn renderContacts(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-        try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, .fill, 0.0, 0.0);
         const inner = bounds.insetUniform(16.0);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 2.0, inner.w, 16.0), "EDGERUN", design.Palette.text);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 14.0), "chat", design.Palette.muted);
+        const app = component.renderer(scene, collector, options);
+        try app.fill(bounds, workspace_sidebar_bg, 0.0);
+        try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
+        try app.title(ui.Rect.init(inner.x, inner.y + 2.0, inner.w, 16.0), "EDGERUN");
+        try app.muted(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 14.0), "chat");
 
         const icon_y = inner.y + 54.0;
-        try renderIconButton(scene, collector, ui.Rect.init(inner.x, icon_y, 34.0, 34.0), create_route_button_id, "Create route", .link_plus, options);
-        try renderIconButton(scene, collector, ui.Rect.init(inner.x + 42.0, icon_y, 34.0, 34.0), import_button_id, "Import", .download, options);
-        try renderIconButton(scene, collector, ui.Rect.init(inner.x + 84.0, icon_y, 34.0, 34.0), seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, options);
-        try renderIconButton(scene, collector, ui.Rect.init(inner.x + 126.0, icon_y, 34.0, 34.0), theme_button_id, "Theme", .moon, options);
+        try app.renderIconButtonNamed(ui.Rect.init(inner.x, icon_y, 34.0, 34.0), create_route_button_id, "Create route", .link_plus, .outline);
+        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 42.0, icon_y, 34.0, 34.0), import_button_id, "Import", .download, .outline);
+        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 84.0, icon_y, 34.0, 34.0), seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, .outline);
+        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 126.0, icon_y, 34.0, 34.0), theme_button_id, "Theme", .moon, .outline);
 
         if (self.own_route_len != 0) {
-            try (Component{ .card = .{
-                .title = "my onion route",
-                .detail = self.ownRouteBytes(),
-                .variant = .subtle,
-            } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0), options);
+            try app.interactive(component.subtle("my onion route", self.ownRouteBytes()), ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0));
         }
 
         var y = inner.y + 150.0;
         if (self.chat.contact_count == 0) {
-            try (Component{ .empty = .{ .title = "No contacts", .detail = "Import a route to begin." } }).render(scene, ui.Rect.init(inner.x, y, inner.w, @min(150.0, @max(96.0, inner.y + inner.h - y))), options);
+            try app.draw(component.empty("No contacts", "Import a route to begin."), ui.Rect.init(inner.x, y, inner.w, @min(150.0, @max(96.0, inner.y + inner.h - y))));
             return;
         }
         var index: usize = 0;
@@ -176,21 +172,23 @@ pub const State = struct {
             const contact = &self.chat.contacts[index];
             const row = ui.Rect.init(inner.x, y, inner.w, 64.0);
             const detail = std.fmt.bufPrint(&self.route_buf, "{s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
-            try renderRow(scene, collector, row, contact_row_base_id + @as(u32, @intCast(index)), contact.nameBytes(), detail, index == self.selected_index, options);
+            try app.selectableRow(row, contact_row_base_id + @as(u32, @intCast(index)), contact.nameBytes(), detail, .message_2, index == self.selected_index);
             y += 68.0;
         }
     }
 
     fn renderConversation(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        try scene.pushRect(bounds, workspace_main_bg, .fill, 0.0, 0.0);
+        const app = component.renderer(scene, null, options);
+        try app.fill(bounds, workspace_main_bg, 0.0);
         const selected = self.selectedContact() orelse {
-            try (Component{ .empty = .{ .title = "No contact", .detail = "Import a route to begin." } }).render(scene, bounds.insetUniform(18.0), options);
+            try app.draw(component.empty("No contact", "Import a route to begin."), bounds.insetUniform(18.0));
             return;
         };
+        const active_app = component.renderer(scene, collector, options);
 
         const import_y = bounds.y + 18.0;
         if (bounds.h >= 620.0) {
-            try renderTextarea(scene, collector, ui.Rect.init(bounds.x + 18.0, import_y, bounds.w - 36.0, 40.0), import_textarea_id, self.import_preview, options);
+            try active_app.renderTextareaValue(ui.Rect.init(bounds.x + 18.0, import_y, bounds.w - 36.0, 40.0), import_textarea_id, "", self.import_preview);
         }
 
         const compose_h: f32 = 74.0;
@@ -198,20 +196,21 @@ pub const State = struct {
         const list_y = if (bounds.h >= 620.0) import_y + 58.0 else bounds.y + 18.0;
         try self.renderMessages(scene, ui.Rect.init(bounds.x, list_y, bounds.w, @max(1.0, compose_y - list_y)), selected.id, options);
 
-        try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, compose_y, bounds.w, 1.0), options);
+        try app.line(ui.Rect.init(bounds.x, compose_y, bounds.w, 1.0));
         const tool_y = compose_y + 18.0;
-        try renderIconButton(scene, collector, ui.Rect.init(bounds.x + 18.0, tool_y, 34.0, 38.0), image_button_id, "Image", .photo, options);
-        try renderIconButton(scene, collector, ui.Rect.init(bounds.x + 58.0, tool_y, 34.0, 38.0), video_button_id, "Video", .video, options);
-        try renderIconButton(scene, collector, ui.Rect.init(bounds.x + 98.0, tool_y, 34.0, 38.0), emoji_button_id, "Emoji", .mood_smile, options);
-        try renderTextarea(scene, collector, ui.Rect.init(bounds.x + 144.0, compose_y + 15.0, @max(1.0, bounds.w - 230.0), 44.0), compose_textarea_id, self.compose, options);
-        try renderSendButton(scene, collector, ui.Rect.init(bounds.x + bounds.w - 68.0, compose_y + 18.0, 44.0, 38.0), send_button_id, options);
+        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 18.0, tool_y, 34.0, 38.0), image_button_id, "Image", .photo, .outline);
+        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 58.0, tool_y, 34.0, 38.0), video_button_id, "Video", .video, .outline);
+        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 98.0, tool_y, 34.0, 38.0), emoji_button_id, "Emoji", .mood_smile, .outline);
+        try active_app.renderTextareaValue(ui.Rect.init(bounds.x + 144.0, compose_y + 15.0, @max(1.0, bounds.w - 230.0), 44.0), compose_textarea_id, "", self.compose);
+        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + bounds.w - 68.0, compose_y + 18.0, 44.0, 38.0), send_button_id, "Send", .send, .outline);
 
         const msg_text = std.fmt.bufPrint(&self.message_count_buf, "{d} messages", .{self.visibleMessageCount(selected.id)}) catch "messages";
-        try scene.pushText(ui.Rect.init(bounds.x + 18.0, bounds.y + bounds.h - 18.0, 160.0, 14.0), msg_text, options.style.muted);
+        try app.muted(ui.Rect.init(bounds.x + 18.0, bounds.y + bounds.h - 18.0, 160.0, 14.0), msg_text);
     }
 
     fn renderMessages(self: *State, scene: *ui.Scene, bounds: ui.Rect, contact_id: identity.Id, options: RenderOptions) !void {
-        try scene.pushRect(bounds, workspace_main_bg, .fill, 0.0, 0.0);
+        const app = component.renderer(scene, null, options);
+        try app.fill(bounds, workspace_main_bg, 0.0);
         var y = bounds.y + 12.0;
         var index: usize = 0;
         while (index < self.chat.message_count and y + 44.0 <= bounds.y + bounds.h) : (index += 1) {
@@ -224,10 +223,23 @@ pub const State = struct {
             const bubble_w = @min(bounds.w * 0.68, @max(min_bubble_w, @as(f32, @floatFromInt(message.body_len)) * 7.2 + 30.0));
             const x = if (outbound) bounds.x + bounds.w - bubble_w - 24.0 else bounds.x + 24.0;
             const bubble = ui.Rect.init(x, y, bubble_w, bubble_h);
-            try scene.pushRect(bubble, if (outbound) ui.Color{ .r = 15, .g = 95, .b = 160 } else options.style.row, .fill, 5.0, 0.0);
-            try scene.pushRect(bubble, if (outbound) ui.Color{ .r = 58, .g = 177, .b = 255, .a = 190 } else options.style.border, .border, 5.0, 0.0);
-            try scene.pushWrappedText(bubble.insetUniform(11.0), message.bodyBytes(), options.style.text, .{ .line_height = 16.0, .average_char_width = 7.0, .max_lines = 2 });
-            if (message.media_kind != .none) try renderMediaPreview(scene, ui.Rect.init(bubble.x + 10.0, bubble.y + 42.0, bubble.w - 20.0, 66.0), message, options);
+            const media_label = switch (message.media_kind) {
+                .image => "image",
+                .video => "video",
+                .none => "",
+            };
+            const media_icon: ?@import("ui/icon.zig").Icon = switch (message.media_kind) {
+                .image => .photo,
+                .video => .video,
+                .none => null,
+            };
+            try app.messageBubble(bubble, .{
+                .body = message.bodyBytes(),
+                .outbound = outbound,
+                .media_label = media_label,
+                .media_detail = if (message.media_kind == .none) "" else message.mediaRefBytes(),
+                .media_icon = media_icon,
+            });
             y += bubble_h + 8.0;
         }
     }
@@ -322,93 +334,40 @@ pub const State = struct {
     }
 };
 
-fn renderPanel(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) !void {
-    try scene.pushRect(bounds, options.style.panel, .fill, 0.0, 0.0);
-}
-
-fn renderIconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, label: []const u8, icon: @import("ui/icon.zig").Icon, options: RenderOptions) !void {
-    try (Component{ .icon_button = .{
-        .id = id,
-        .label = label,
-        .icon = IconComponent.Icon.named(icon),
-        .variant = .outline,
-    } }).renderInteractive(scene, collector, bounds, .{ .style = options.style });
-}
-
-fn renderSendButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, options: RenderOptions) !void {
-    try renderIconButton(scene, collector, bounds, id, "Send", .send, options);
-}
-
-fn renderTextarea(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, value: []const u8, options: RenderOptions) !void {
-    try (Component{ .textarea = .{
-        .id = id,
-        .placeholder = "",
-        .value = value,
-    } }).renderInteractive(scene, collector, bounds, .{ .style = options.style });
-}
-
-fn renderMediaPreview(scene: *ui.Scene, bounds: ui.Rect, message: *const encrypted_chat.Message, options: RenderOptions) !void {
-    const icon_kind: @import("ui/icon.zig").Icon = switch (message.media_kind) {
-        .image => .photo,
-        .video => .video,
-        .none => return,
-    };
-    const label = switch (message.media_kind) {
-        .image => "image",
-        .video => "video",
-        .none => return,
-    };
-    try (Component{ .card = .{
-        .title = label,
-        .detail = message.mediaRefBytes(),
-        .variant = .subtle,
-    } }).render(scene, bounds, options);
-    try IconComponent.Icon.named(icon_kind).renderColor(scene, ui.Rect.init(bounds.x + bounds.w - 28.0, bounds.y + 10.0, 18.0, 18.0), options.style.accent);
-}
-
-fn renderRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, title: []const u8, detail: []const u8, selected: bool, options: RenderOptions) !void {
-    try (Component{ .row_item = .{
-        .id = id,
-        .title = title,
-        .detail = detail,
-        .leading_icon = IconComponent.IconSlot.named(.leading, .message_2),
-    } }).renderInteractive(scene, collector, bounds, .{
-        .style = options.style,
-        .control = .{ .active = selected },
-    });
-}
-
 fn renderRail(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-    try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
+    const app = component.renderer(scene, collector, options);
+    try app.fill(bounds, workspace_rail_bg, 0.0);
     const route_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 12.0, bounds.w - 12.0, 36.0);
     const import_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 56.0, bounds.w - 12.0, 36.0);
     const seal_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 100.0, bounds.w - 12.0, 36.0);
     const theme_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 144.0, bounds.w - 12.0, 36.0);
-    try renderIconButton(scene, collector, route_rect, create_route_button_id, "Create route", .link_plus, options);
-    try renderIconButton(scene, collector, import_rect, import_button_id, "Import", .download, options);
-    try renderIconButton(scene, collector, seal_rect, seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, options);
-    try renderIconButton(scene, collector, theme_rect, theme_button_id, "Theme", .moon, options);
+    try app.renderIconButtonNamed(route_rect, create_route_button_id, "Create route", .link_plus, .outline);
+    try app.renderIconButtonNamed(import_rect, import_button_id, "Import", .download, .outline);
+    try app.renderIconButtonNamed(seal_rect, seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, .outline);
+    try app.renderIconButtonNamed(theme_rect, theme_button_id, "Theme", .moon, .outline);
 }
 
 fn renderTop(self: *State, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) !void {
     const selected = self.selectedContact();
-    try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), options);
+    const app = component.renderer(scene, null, options);
+    try app.fill(bounds, workspace_sidebar_bg, 0.0);
+    try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
     const title = if (selected) |contact| contact.nameBytes() else "Chat";
-    try scene.pushStrongText(ui.Rect.init(bounds.x + 16.0, bounds.y + 13.0, bounds.w - 260.0, 18.0), title, design.Palette.text);
-    try scene.pushText(ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 260.0, 14.0), self.status, design.Palette.dim);
+    try app.title(ui.Rect.init(bounds.x + 16.0, bounds.y + 13.0, bounds.w - 260.0, 18.0), title);
+    try app.text(ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 260.0, 14.0), self.status, design.Palette.dim);
     if (selected) |contact| {
         const remote = std.fmt.bufPrint(&self.remote_buf, "remote {s}", .{contact.routeBytes()}) catch contact.routeBytes();
         const local = std.fmt.bufPrint(&self.route_buf, "local {s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
-        try scene.pushText(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 13.0, 210.0, 14.0), remote, design.Palette.muted);
-        try scene.pushText(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 32.0, 210.0, 14.0), local, design.Palette.muted);
+        try app.muted(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 13.0, 210.0, 14.0), remote);
+        try app.muted(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 32.0, 210.0, 14.0), local);
     }
 }
 
 fn renderStatus(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
-    try scene.pushRect(bounds, workspace_status_bg, .fill, 0.0, 0.0);
+    const app = component.renderer(scene, null, .{});
+    try app.fill(bounds, workspace_status_bg, 0.0);
     const text = if (self.sealed) "chat: sealed" else "chat: active";
-    try scene.pushText(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), text, ui.Color{ .r = 255, .g = 255, .b = 255 });
+    try app.text(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), text, ui.Color{ .r = 255, .g = 255, .b = 255 });
 }
 
 fn messengerDarkStyle() ui.Style {

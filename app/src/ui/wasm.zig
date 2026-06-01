@@ -1,5 +1,6 @@
 const std = @import("std");
-const Component = @import("components/Component.zig").Component;
+const component = @import("components/Component.zig");
+const Component = component.Component;
 const ui = @import("core.zig");
 const clock = @import("../clock.zig");
 const common = @import("component_common.zig");
@@ -113,7 +114,7 @@ export fn er_ui_wasm_measure(idx: u32, w: f32, h: f32) u64 {
 export fn er_ui_wasm_new_text(slot: u32, value_ptr: [*]const u8, value_len: u32) i32 {
     if (slot >= max_components or !slots_valid[slot]) return -1;
     const value = stringFromWasm(value_ptr, value_len);
-    slots[slot] = Component{ .text = .{ .value = value } };
+    slots[slot] = component.text(value);
     slots_valid[slot] = true;
     return 0;
 }
@@ -122,7 +123,11 @@ export fn er_ui_wasm_new_button(slot: u32, id: u32, label_ptr: [*]const u8, labe
     if (slot >= max_components or !slots_valid[slot]) return -1;
     const label = stringFromWasm(label_ptr, label_len);
     slots[slot] = Component.fromNode(ui.buttonDetailNode(
-        id, label, @intCast(variant), @intCast(leading_icon), @intCast(trailing_icon),
+        id,
+        label,
+        @intCast(variant),
+        @intCast(leading_icon),
+        @intCast(trailing_icon),
     )) catch return -1;
     return 0;
 }
@@ -131,8 +136,7 @@ export fn er_ui_wasm_new_row_item(slot: u32, id: u32, title_ptr: [*]const u8, ti
     if (slot >= max_components or !slots_valid[slot]) return -1;
     const title = stringFromWasm(title_ptr, title_len);
     const detail = stringFromWasm(detail_ptr, detail_len);
-    const node = ui.Node{ .row_item = .{ .id = id, .title = title, .detail = detail } };
-    slots[slot] = Component.fromNode(node) catch return -1;
+    slots[slot] = component.rowItem(id, title, detail);
     return 0;
 }
 

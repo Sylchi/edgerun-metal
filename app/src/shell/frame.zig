@@ -7,8 +7,7 @@ const app_chrome = @import("../ui/chrome.zig");
 const app_location = @import("../location.zig");
 const design = @import("../ui/theme.zig");
 const ui = @import("../ui/core.zig");
-const text_component = @import("../ui/components/Text.zig");
-const Component = @import("../ui/components/Component.zig").Component;
+const component = @import("../ui/components/Component.zig");
 const workspace_rail_w: f32 = 48.0;
 const workspace_sidebar_w: f32 = 260.0;
 const workspace_top_h: f32 = 56.0;
@@ -50,7 +49,8 @@ pub fn contentHeight(width: f32, state: State) f32 {
 }
 
 fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try scene.pushRect(bounds, design.Palette.bg, .fill, 0.0, 0.0);
+    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+    try app.fill(bounds, design.Palette.bg, 0.0);
     const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
     const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
     const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
@@ -65,49 +65,51 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
 
 fn renderWorkspaceTop(scene: *ui.Scene, _collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     _ = _collector;
-    try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), .{ .style = design.appStyle() });
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.location), design.Palette.text, .start);
+    const app = component.renderer(scene, null, .{ .style = design.appStyle() });
+    try app.fill(bounds, workspace_sidebar_bg, 0.0);
+    try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
+    try app.body(ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.location));
 }
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_location.Location) !void {
-    try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
+    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+    try app.fill(bounds, workspace_rail_bg, 0.0);
     const items = app_location.topLevelWorkspaceBindings();
-    var y = bounds.y + workspace_rail_pad;
+    var rail = app.column(ui.Rect.init(bounds.x + 6.0, bounds.y + workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - workspace_rail_pad)), 8.0);
     for (items) |item| {
-        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
+        const item_bounds = rail.take(workspace_icon_button);
         try app_chrome.renderNavItem(scene, collector, .{
             .kind = .workspace_rail,
             .binding = item,
             .bounds = item_bounds,
             .active = std.meta.eql(active, item.location),
         });
-        if (std.meta.eql(active, item.location)) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, .fill, 0.0, 0.0);
-        y += workspace_icon_button + 8.0;
+        if (std.meta.eql(active, item.location)) try app.fill(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, 0.0);
     }
 }
 
 fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, .fill, 0.0, 0.0);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.Palette.text, .start);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview", design.Palette.muted, .start);
-    var y = bounds.y + 68.0;
+    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+    try app.fill(bounds, workspace_sidebar_bg, 0.0);
+    try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
+    try app.title(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN");
+    try app.muted(ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview");
+    var rows_cursor = app.column(ui.Rect.init(bounds.x + 10.0, bounds.y + 68.0, bounds.w - 20.0, @max(1.0, bounds.h - 68.0)), 4.0);
     const rows = app_location.topLevelBindings();
     for (rows) |row| {
-        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
+        const row_bounds = rows_cursor.take(42.0);
         try app_chrome.renderNavItem(scene, collector, .{
             .kind = .workspace_sidebar,
             .binding = row,
             .bounds = row_bounds,
             .active = std.meta.eql(state.location, row.location),
         });
-        y += 46.0;
     }
 }
 
 fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, _: State) !void {
-    try scene.pushRect(bounds, workspace_main_bg, .fill, 0.0, 0.0);
+    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
+    try app.fill(bounds, workspace_main_bg, 0.0);
     if (try scene.pushClip(bounds)) {
         defer scene.popClip();
         try app_agent.render(scene, collector, shiftedPageBounds(bounds), .{});
@@ -115,8 +117,9 @@ fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, boun
 }
 
 fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    try scene.pushRect(bounds, workspace_status_bg, .fill, 0.0, 0.0);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.location), ui.Color{ .r = 255, .g = 255, .b = 255 }, .start);
+    const app = component.renderer(scene, null, .{ .style = design.appStyle() });
+    try app.fill(bounds, workspace_status_bg, 0.0);
+    try app.text(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.location), ui.Color{ .r = 255, .g = 255, .b = 255 });
 }
 
 fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {

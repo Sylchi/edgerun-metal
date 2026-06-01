@@ -110,6 +110,13 @@ KERNEL_ASM_SRCS="
 	crypto/local_cell.asm
 	crypto/local_route.asm
 	crypto/local_circuit.asm
+	media/av1_bits.asm
+	media/av1_obu.asm
+	media/av1_ivf.asm
+	media/av1_sequence.asm
+	media/av1_frame.asm
+	media/av1_tile.asm
+	media/av1_reduced.asm
 	agent/http_agent.asm
 	agent/da.asm
 	agent/da_wasm.asm
@@ -309,9 +316,7 @@ build_test() {
 	for dep; do
 		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
 		local dep_src="${ASM_DIR}/${dep}.asm"
-		if [ ! -f "$dep_obj" ]; then
-			elf64 "$dep_src" "$dep_obj"
-		fi
+		elf64 "$dep_src" "$dep_obj"
 		extra_o="$extra_o $dep_obj"
 	done
 	ld -nostdlib -static -o "$bin" "$obj" $extra_o
@@ -345,6 +350,12 @@ cmd_test() {
 	cmd_test_tor_hs
 	cmd_test_tor_hs_app
 	cmd_test_local_route
+	cmd_test_av1_obu
+	cmd_test_av1_ivf
+	cmd_test_av1_sequence
+	cmd_test_av1_frame
+	cmd_test_av1_tile
+	cmd_test_av1_reduced
 	cmd_test_x25519
 	cmd_test_wasm_compiler
 	cmd_test_wasm_jit
@@ -353,64 +364,33 @@ cmd_test() {
 	cmd_test_wasm_float
 }
 
-cmd_test_recursion_valid() {
-	local name="test_recursion_valid"
+build_test_ldscript() {
+	local name="$1"; shift
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name}"
+	local bin="${ASM_BUILD}/${name%_self}"
 	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	local dep_obj="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$dep_obj" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj" "$@"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+cmd_test_recursion_valid() {
+	build_test_ldscript "test_recursion_valid"
 }
 
 cmd_test_recursion_invalid() {
-	local name="test_recursion_invalid"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	local dep_obj="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$dep_obj" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_ldscript "test_recursion_invalid"
 }
 
 cmd_test_wasm_jit() {
-	local name="test_wasm_jit_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	local dep_obj="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$dep_obj" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_ldscript "test_wasm_jit_self"
 }
 
 cmd_test_wasm_compiler() {
-	local name="test_wasm_compiler_self"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	local dep_obj="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$dep_obj" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_ldscript "test_wasm_compiler_self"
 }
 
 cmd_test_ctype() {
@@ -460,22 +440,35 @@ cmd_test_http() {
 }
 
 cmd_test_wasm_float() {
-	local name="test_wasm_float"
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name}"
-	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	local dep_obj="${ASM_BUILD}/runtime.o"
-	if [ ! -f "$dep_obj" ]; then
-		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
-	fi
-	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_test_ldscript "test_wasm_float"
 }
 
 cmd_test_sw_fb() {
 	build_test "test_sw_fb_self" "${TEST_DIR}/test_sw_fb_self.asm" "ui/sw_fb"
+}
+
+cmd_test_av1_obu() {
+	build_test "test_av1_obu_self" "${TEST_DIR}/test_av1_obu_self.asm" "media/av1_obu"
+}
+
+cmd_test_av1_ivf() {
+	build_test "test_av1_ivf_self" "${TEST_DIR}/test_av1_ivf_self.asm" "media/av1_ivf"
+}
+
+cmd_test_av1_sequence() {
+	build_test "test_av1_sequence_self" "${TEST_DIR}/test_av1_sequence_self.asm" "media/av1_bits" "media/av1_sequence"
+}
+
+cmd_test_av1_frame() {
+	build_test "test_av1_frame_self" "${TEST_DIR}/test_av1_frame_self.asm" "media/av1_bits" "media/av1_sequence" "media/av1_frame"
+}
+
+cmd_test_av1_tile() {
+	build_test "test_av1_tile_self" "${TEST_DIR}/test_av1_tile_self.asm" "media/av1_tile"
+}
+
+cmd_test_av1_reduced() {
+	build_test "test_av1_reduced_self" "${TEST_DIR}/test_av1_reduced_self.asm" "media/av1_bits" "media/av1_obu" "media/av1_ivf" "media/av1_sequence" "media/av1_frame" "media/av1_tile" "media/av1_reduced"
 }
 
 cmd_test_render_ir() {
@@ -981,6 +974,12 @@ EdgeRun build targets:
   test-tor-cell       Run Tor cell EXTEND2 helper test (self-hosted ASM)
   test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
   test-local-route    Run local cell route queue/dispatch test (self-hosted ASM)
+  test-av1-obu        Run AV1 OBU header codec test (self-hosted ASM)
+  test-av1-ivf        Run AV1 IVF container parser test (self-hosted ASM)
+  test-av1-sequence   Run AV1 reduced-still sequence header test (self-hosted ASM)
+  test-av1-frame      Run AV1 reduced-still frame header test (self-hosted ASM)
+  test-av1-tile       Run AV1 single-tile group test (self-hosted ASM)
+  test-av1-reduced    Run AV1 reduced-still stream decode/encode test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
   bench-tor-hs        Run hidden-service local self-connect benchmark
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
@@ -1043,6 +1042,12 @@ case "${1:-help}" in
 	test-tor-hs)    cmd_test_tor_hs ;;
 	test-tor-hs-app) cmd_test_tor_hs_app ;;
 	test-local-route) cmd_test_local_route ;;
+	test-av1-obu)    cmd_test_av1_obu ;;
+	test-av1-ivf)    cmd_test_av1_ivf ;;
+	test-av1-sequence) cmd_test_av1_sequence ;;
+	test-av1-frame)  cmd_test_av1_frame ;;
+	test-av1-tile)   cmd_test_av1_tile ;;
+	test-av1-reduced) cmd_test_av1_reduced ;;
 	bench-tor)      cmd_bench_tor ;;
 	bench-tor-hs)   cmd_bench_tor_hs ;;
 	test-x25519)     cmd_test_x25519 ;;

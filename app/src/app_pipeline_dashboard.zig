@@ -4,8 +4,7 @@ const interaction = @import("ui/interaction.zig");
 const ui = @import("ui/core.zig");
 const ui_runtime = @import("ui/runtime.zig");
 const common = @import("ui/component_common.zig");
-const Component = @import("ui/components/Component.zig").Component;
-const icon_component = @import("ui/components/Icon.zig");
+const component = @import("ui/components/Component.zig");
 const icon = @import("ui/icon.zig");
 
 pub const Error = ui.RenderError || interaction.Error || error{NoSpace};
@@ -152,9 +151,9 @@ pub const State = struct {
     }
 
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
-        var render_options = options;
-        render_options.style = pipelineStyle();
-        try scene.pushGradientRect(bounds, pipeline_bg_top, pipeline_bg_bottom, 0.0);
+        const render_options = options.withStyle(pipelineStyle());
+        const app = component.renderer(scene, collector, render_options);
+        try app.gradient(bounds, pipeline_bg_top, pipeline_bg_bottom, 0.0);
 
         const outer = bounds.insetUniform(18.0);
         try renderHeader(scene, collector, outer, self.*, render_options);
@@ -181,9 +180,12 @@ pub const State = struct {
 
     fn renderFilesystem(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
         try panel(scene, bounds);
+        const app = component.renderer(scene, collector, options);
         const inner = bounds.insetUniform(14.0);
-        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w, 20.0), "filesystem", pipeline_text);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 16.0), "choose one path to stage into RAM", pipeline_muted);
+        try app.section(ui.Rect.init(inner.x, inner.y, inner.w, 42.0), .{
+            .title = "filesystem",
+            .detail = "choose one path to stage into RAM",
+        });
 
         const map_h = @min(132.0, @max(86.0, inner.h * 0.24));
         try self.renderDiskMap(scene, collector, ui.Rect.init(inner.x, inner.y + 50.0, inner.w, map_h));
@@ -194,52 +196,59 @@ pub const State = struct {
         const row_h = @max(36.0, @min(58.0, (available_h - row_gap * @as(f32, @floatFromInt(fs_path_count - 1))) / @as(f32, @floatFromInt(fs_path_count))));
         for (fs_paths, 0..) |path, index| {
             const row = ui.Rect.init(inner.x, row_top + @as(f32, @floatFromInt(index)) * (row_h + row_gap), inner.w, row_h);
-            try self.renderPathRow(scene, collector, row, path, index, options);
+            try self.pathRow(scene, collector, row, path, index, options);
         }
     }
 
     fn renderDiskMap(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) Error!void {
-        try scene.pushRect(bounds, colorWithAlpha(pipeline_row, 120), .fill, 8.0, 0.0);
-        try scene.pushRect(bounds, pipeline_border, .border, 8.0, 0.0);
-        const inner = bounds.insetUniform(8.0);
-        var x = inner.x;
-        const gap: f32 = 5.0;
+        const app = component.renderer(scene, collector, .{ .style = pipelineStyle() });
+        var segments: [fs_path_count]component.Segment = undefined;
         for (fs_paths, 0..) |path, index| {
-            const remaining = @max(1.0, inner.x + inner.w - x);
-            const w = if (index == fs_path_count - 1) remaining else @max(18.0, inner.w * path.size_unit * 0.28);
-            const h = @max(18.0, inner.h * @max(0.28, path.hotness));
-            const y = inner.y + inner.h - h;
             const selected = index == self.selected_path;
-            const block = ui.Rect.init(x, y, @max(1.0, @min(w, remaining)), h);
-            try scene.pushRect(block, if (selected) path.color() else colorWithAlpha(path.color(), 135), .fill, 5.0, 0.0);
-            try scene.pushRect(block, if (selected) pipeline_text else colorWithAlpha(pipeline_border, 180), .border, 5.0, 0.0);
-            try collector.addHit(block, .button, path_base_id + @as(u32, @intCast(index)));
-            x += w + gap;
-            if (x >= inner.x + inner.w) break;
+            segments[index] = .{
+                .id = path_base_id + @as(u32, @intCast(index)),
+                .weight = path.size_unit,
+                .height = @max(0.28, path.hotness),
+                .color = if (selected) path.color() else colorWithAlpha(path.color(), 135),
+                .selected = selected,
+            };
         }
+        try app.segmentMap(bounds, .{
+            .segments = &segments,
+            .background = colorWithAlpha(pipeline_row, 120),
+            .border = colorWithAlpha(pipeline_border, 180),
+            .selected_border = pipeline_text,
+        });
     }
 
-    fn renderPathRow(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, path: FsPath, index: usize, options: common.RenderOptions) Error!void {
-        _ = options;
+    fn pathRow(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, path: FsPath, index: usize, options: common.RenderOptions) Error!void {
+        const app = component.renderer(scene, collector, options);
         const selected = index == self.selected_path;
-        const fill = if (selected) ui.Color{ .r = 39, .g = 45, .b = 51, .a = 238 } else pipeline_row;
-        try scene.pushRect(bounds, fill, .fill, 7.0, 0.0);
-        try scene.pushRect(bounds, if (selected) path.color() else pipeline_border, .border, 7.0, 0.0);
-        try collector.addHit(bounds, .button, path_base_id + @as(u32, @intCast(index)));
-
-        const marker = ui.Rect.init(bounds.x + 9.0, bounds.y + 9.0, 7.0, bounds.h - 18.0);
-        try scene.pushRect(marker, path.color(), .fill, 4.0, 0.0);
-        try scene.pushStrongText(ui.Rect.init(bounds.x + 24.0, bounds.y + 7.0, @max(1.0, bounds.w - 92.0), 16.0), shortPath(path.path), pipeline_text);
-        try scene.pushText(ui.Rect.init(bounds.x + 24.0, bounds.y + 27.0, @max(1.0, bounds.w - 92.0), 14.0), path.role, pipeline_muted);
-        try scene.pushText(ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + 8.0, 56.0, 14.0), path.size_label, pipeline_muted);
-        try resourceBar(scene, ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + bounds.h - 16.0, 50.0, 6.0), path.ram_fit, if (path.ram_fit < 0.5) pipeline_reject else pipeline_ram, .{ .style = pipelineStyle() });
+        try app.pathRow(bounds, .{
+            .id = path_base_id + @as(u32, @intCast(index)),
+            .title = shortPath(path.path),
+            .detail = path.role,
+            .trailing = path.size_label,
+            .progress = path.ram_fit,
+            .accent = path.color(),
+            .progress_color = if (path.ram_fit < 0.5) pipeline_reject else pipeline_ram,
+            .selected = selected,
+            .fill = pipeline_row,
+            .selected_fill = ui.Color{ .r = 39, .g = 45, .b = 51, .a = 238 },
+            .border = pipeline_border,
+            .text = pipeline_text,
+            .muted = pipeline_muted,
+        });
     }
 
     fn renderGraph(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
         try panel(scene, bounds);
+        const app = component.renderer(scene, collector, options);
         const inner = bounds.insetUniform(16.0);
-        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w, 20.0), "pipeline graph and timeline", pipeline_text);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 16.0), "dependencies, RAM lifetime, tick spend, and durable writes share one time axis", pipeline_muted);
+        try app.section(ui.Rect.init(inner.x, inner.y, inner.w, 42.0), .{
+            .title = "pipeline graph and timeline",
+            .detail = "dependencies, RAM lifetime, tick spend, and durable writes share one time axis",
+        });
 
         const canvas_y = inner.y + 58.0;
         const canvas_h = @max(1.0, inner.h - 58.0);
@@ -250,59 +259,61 @@ pub const State = struct {
     }
 
     fn renderDependencyGraph(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
-        try scene.pushRect(bounds, colorWithAlpha(pipeline_row, 120), .fill, 8.0, 0.0);
-        try scene.pushRect(bounds, pipeline_border, .border, 8.0, 0.0);
+        const app = component.renderer(scene, collector, options);
+        try app.fill(bounds, colorWithAlpha(pipeline_row, 120), 8.0);
+        try app.stroke(bounds, pipeline_border, 8.0);
         const graph = bounds.insetUniform(14.0);
         var node_bounds: [stage_count]ui.Rect = undefined;
-        for (stages, 0..) |stage, index| {
+        for (0..stage_count) |index| {
             node_bounds[index] = graphNodeBounds(graph, index);
-            try self.renderNode(scene, collector, node_bounds[index], stage, index, options);
         }
         for (edges) |edge| {
             try renderEdge(scene, node_bounds[edge.from], node_bounds[edge.to], if (edge.to == self.selected_stage or edge.from == self.selected_stage) stages[edge.to].accent() else colorWithAlpha(pipeline_border, 180));
         }
         for (stages, 0..) |stage, index| {
             const node = node_bounds[index];
-            try self.renderNode(scene, collector, node, stage, index, options);
+            try self.pipelineNode(scene, collector, node, stage, index, options);
         }
     }
 
-    fn renderNode(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, stage: Stage, index: usize, options: common.RenderOptions) Error!void {
-        _ = options;
+    fn pipelineNode(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, stage: Stage, index: usize, options: common.RenderOptions) Error!void {
+        const app = component.renderer(scene, collector, options);
         const selected = index == self.selected_stage;
-        const fill = if (selected) ui.Color{ .r = 39, .g = 45, .b = 51, .a = 238 } else pipeline_row;
-        try scene.pushRect(bounds, fill, .fill, 8.0, 0.0);
-        try scene.pushRect(bounds, if (selected) stage.accent() else pipeline_border, .border, 8.0, 0.0);
-        try collector.addHit(bounds, .button, base_id + 100 + @as(u32, @intCast(index)));
-
-        const marker = ui.Rect.init(bounds.x + 10.0, bounds.y + 10.0, 8.0, bounds.h - 20.0);
-        try scene.pushRect(marker, stage.accent(), .fill, 5.0, 0.0);
-        try scene.pushStrongText(ui.Rect.init(bounds.x + 28.0, bounds.y + 10.0, bounds.w - 36.0, 18.0), stage.label, pipeline_text);
-        try scene.pushText(ui.Rect.init(bounds.x + 28.0, bounds.y + 32.0, bounds.w - 36.0, 16.0), stage.detail, pipeline_muted);
+        try app.pipelineNode(bounds, .{
+            .id = base_id + 100 + @as(u32, @intCast(index)),
+            .title = stage.label,
+            .detail = stage.detail,
+            .accent = stage.accent(),
+            .selected = selected,
+            .fill = pipeline_row,
+            .selected_fill = ui.Color{ .r = 39, .g = 45, .b = 51, .a = 238 },
+            .border = pipeline_border,
+            .text = pipeline_text,
+            .muted = pipeline_muted,
+        });
     }
 
     fn renderTimeline(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
-        try scene.pushRect(bounds, colorWithAlpha(pipeline_row, 120), .fill, 8.0, 0.0);
-        try scene.pushRect(bounds, pipeline_border, .border, 8.0, 0.0);
+        const app = component.renderer(scene, collector, options);
+        try app.fill(bounds, colorWithAlpha(pipeline_row, 120), 8.0);
+        try app.stroke(bounds, pipeline_border, 8.0);
         const inner = bounds.insetUniform(14.0);
         const label_w = @min(82.0, inner.w * 0.24);
         const axis = ui.Rect.init(inner.x + label_w, inner.y + 26.0, @max(1.0, inner.w - label_w), @max(1.0, inner.h - 38.0));
-        try scene.pushText(ui.Rect.init(inner.x, inner.y, inner.w, 16.0), "resource timeline", pipeline_text);
+        try app.text(ui.Rect.init(inner.x, inner.y, inner.w, 16.0), "resource timeline", pipeline_text);
         try renderTimeAxis(scene, axis);
         try self.renderResourceLane(scene, collector, axis, 0, "RAM", pipeline_ram, .ram, options);
         try self.renderResourceLane(scene, collector, axis, 1, "ticks", pipeline_ticks, .ticks, options);
         try self.renderResourceLane(scene, collector, axis, 2, "storage", pipeline_storage, .storage, options);
         const gate_x = axis.x + axis.w * stages[3].start;
-        try scene.pushRect(ui.Rect.init(gate_x, axis.y, 2.0, axis.h), colorWithAlpha(pipeline_model, if (self.model_enabled) 190 else 70), .fill, 0.0, 0.0);
-        try scene.pushText(ui.Rect.init(gate_x + 5.0, axis.y, 76.0, 14.0), if (self.model_enabled) "model ok" else "model gate", if (self.model_enabled) pipeline_model else pipeline_muted);
+        try app.fill(ui.Rect.init(gate_x, axis.y, 2.0, axis.h), colorWithAlpha(pipeline_model, if (self.model_enabled) 190 else 70), 0.0);
+        try app.text(ui.Rect.init(gate_x + 5.0, axis.y, 76.0, 14.0), if (self.model_enabled) "model ok" else "model gate", if (self.model_enabled) pipeline_model else pipeline_muted);
     }
 
     fn renderResourceLane(self: *State, scene: *ui.Scene, collector: *interaction.Collector, axis: ui.Rect, lane_index: usize, label: []const u8, color: ui.Color, comptime resource: ResourceLane, options: common.RenderOptions) Error!void {
-        _ = options;
-        const lane_h = @max(1.0, (axis.h - 16.0) / 3.0);
-        const y = axis.y + 18.0 + @as(f32, @floatFromInt(lane_index)) * lane_h;
-        try scene.pushText(ui.Rect.init(axis.x - 78.0, y + 4.0, 68.0, 16.0), label, pipeline_muted);
-        try scene.pushRect(ui.Rect.init(axis.x, y + lane_h - 6.0, axis.w, 1.0), colorWithAlpha(pipeline_border, 130), .fill, 0.0, 0.0);
+        const app = component.renderer(scene, collector, options);
+        var blocks: [stage_count]component.TimelineBlock = undefined;
+        var count: usize = 0;
         for (stages, 0..) |stage, index| {
             const raw = switch (resource) {
                 .ram => stage.ram * self.ram_budget,
@@ -310,55 +321,69 @@ pub const State = struct {
                 .storage => stage.storage,
             };
             if (raw <= 0.001) continue;
-            const start_x = axis.x + axis.w * stage.start;
-            const w = @max(4.0, axis.w * @max(0.02, stage.end - stage.start));
-            const h = @max(5.0, (lane_h - 18.0) * ui.clampUnit(raw));
-            const block = ui.Rect.init(start_x, y + lane_h - 8.0 - h, w, h);
-            const fill = if (index == self.selected_stage) color else colorWithAlpha(color, 150);
-            try scene.pushRect(block, fill, .fill, 4.0, 0.0);
-            try collector.addHit(ui.Rect.init(start_x, y, w, lane_h - 4.0), .button, base_id + 100 + @as(u32, @intCast(index)));
+            const selected = index == self.selected_stage;
+            blocks[count] = .{
+                .id = base_id + 100 + @as(u32, @intCast(index)),
+                .start = stage.start,
+                .end = @max(stage.start + 0.02, stage.end),
+                .value = ui.clampUnit(raw),
+                .color = if (selected) color else colorWithAlpha(color, 150),
+                .selected = selected,
+            };
+            count += 1;
         }
+        try app.timelineLane(axis, .{
+            .label = label,
+            .lane_index = lane_index,
+            .lane_count = 3,
+            .blocks = blocks[0..count],
+            .border = colorWithAlpha(pipeline_border, 130),
+            .label_color = pipeline_muted,
+        });
     }
 
     fn renderInspector(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: common.RenderOptions) Error!void {
         try panel(scene, bounds);
+        const app = component.renderer(scene, collector, options);
         const inner = bounds.insetUniform(16.0);
         const stage = stages[self.selected_stage];
         const path = fs_paths[self.selected_path];
-        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w, 20.0), "scheduler controls", pipeline_text);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 16.0), "stage budgets are explicit before work starts", pipeline_muted);
+        try app.section(ui.Rect.init(inner.x, inner.y, inner.w, 42.0), .{
+            .title = "scheduler controls",
+            .detail = "stage budgets are explicit before work starts",
+        });
 
         var y = inner.y + 58.0;
-        try labelValue(scene, "path", shortPath(path.path), inner.x, y, inner.w);
+        try app.labelValue(ui.Rect.init(inner.x, y, inner.w, 18.0), "path", shortPath(path.path), 96.0);
         y += 30.0;
-        try labelValue(scene, "selected", stage.label, inner.x, y, inner.w);
+        try app.labelValue(ui.Rect.init(inner.x, y, inner.w, 18.0), "selected", stage.label, 96.0);
         y += 30.0;
-        try labelValue(scene, "state", self.stateLabel(), inner.x, y, inner.w);
+        try app.labelValue(ui.Rect.init(inner.x, y, inner.w, 18.0), "state", self.stateLabel(), 96.0);
         y += 42.0;
 
-        try scene.pushText(ui.Rect.init(inner.x, y, inner.w, 16.0), "RAM fit for chosen path", pipeline_muted);
+        try app.text(ui.Rect.init(inner.x, y, inner.w, 16.0), "RAM fit for chosen path", pipeline_muted);
         y += 22.0;
         try resourceBar(scene, ui.Rect.init(inner.x, y, inner.w, 12.0), path.ram_fit * self.ram_budget, if (path.ram_fit < 0.5) pipeline_reject else pipeline_ram, options);
         y += 28.0;
-        try scene.pushText(ui.Rect.init(inner.x, y, inner.w, 16.0), if (path.private) "private local path" else "shared or cache path", if (path.private) pipeline_ram else pipeline_storage);
+        try app.text(ui.Rect.init(inner.x, y, inner.w, 16.0), if (path.private) "private local path" else "shared or cache path", if (path.private) pipeline_ram else pipeline_storage);
         y += 34.0;
 
-        try (Component{ .slider = .{ .id = ram_slider_id, .label = "RAM grant", .value = self.ram_budget } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 44.0), options);
+        try app.interactive(component.slider(ram_slider_id, "RAM grant", self.ram_budget), ui.Rect.init(inner.x, y, inner.w, 44.0));
         y += 58.0;
-        try (Component{ .slider = .{ .id = tick_slider_id, .label = "Tick budget", .value = self.tick_budget } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 44.0), options);
+        try app.interactive(component.slider(tick_slider_id, "Tick budget", self.tick_budget), ui.Rect.init(inner.x, y, inner.w, 44.0));
         y += 62.0;
 
-        try scene.pushText(ui.Rect.init(inner.x, y, inner.w, 16.0), "volatile work", pipeline_muted);
+        try app.text(ui.Rect.init(inner.x, y, inner.w, 16.0), "volatile work", pipeline_muted);
         y += 22.0;
         try resourceBar(scene, ui.Rect.init(inner.x, y, inner.w, 12.0), volatileRatio(), pipeline_model, options);
         y += 34.0;
 
         const model_label = if (self.model_enabled) "model stage on" else "model stage off";
-        try (Component{ .button = .{ .id = model_toggle_id, .label = model_label, .variant = .outline, .icon_slot = icon_component.IconSlot.named(.leading, icon.Icon.cpu) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+        try app.interactive(component.buttonIcon(model_toggle_id, model_label, .outline, icon.Icon.cpu), ui.Rect.init(inner.x, y, inner.w, 34.0));
         y += 46.0;
-        try (Component{ .button = .{ .id = commit_button_id, .label = "Commit useful result", .variant = .primary, .icon_slot = icon_component.IconSlot.named(.leading, icon.Icon.database_export) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+        try app.interactive(component.buttonIcon(commit_button_id, "Commit useful result", .primary, icon.Icon.database_export), ui.Rect.init(inner.x, y, inner.w, 34.0));
         y += 42.0;
-        try (Component{ .button = .{ .id = discard_button_id, .label = "Discard volatile work", .variant = .outline, .icon_slot = icon_component.IconSlot.named(.leading, icon.Icon.trash) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+        try app.interactive(component.buttonIcon(discard_button_id, "Discard volatile work", .outline, icon.Icon.trash), ui.Rect.init(inner.x, y, inner.w, 34.0));
     }
 
     fn stateLabel(self: State) []const u8 {
@@ -370,16 +395,18 @@ pub const State = struct {
 
 fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, options: common.RenderOptions) Error!void {
     _ = collector;
-    try scene.pushStrongText(ui.Rect.init(bounds.x, bounds.y, bounds.w, 26.0), "User-Scheduled Pipeline", pipeline_text);
-    try scene.pushText(ui.Rect.init(bounds.x, bounds.y + 32.0, bounds.w, 18.0), "load data, spend RAM and ticks deliberately, commit only useful results", pipeline_muted);
+    const app = component.renderer(scene, null, options);
+    try app.strongText(ui.Rect.init(bounds.x, bounds.y, bounds.w, 26.0), "User-Scheduled Pipeline", pipeline_text);
+    try app.text(ui.Rect.init(bounds.x, bounds.y + 32.0, bounds.w, 18.0), "load data, spend RAM and ticks deliberately, commit only useful results", pipeline_muted);
     const chip_y = bounds.y + 56.0;
     try badge(scene, ui.Rect.init(bounds.x, chip_y, 118.0, 24.0), state.stateLabel(), if (state.committed) pipeline_commit else pipeline_ram, options);
     try badge(scene, ui.Rect.init(bounds.x + 128.0, chip_y, 104.0, 24.0), if (state.model_enabled) "model allowed" else "model gated", if (state.model_enabled) pipeline_model else pipeline_muted, options);
 }
 
 fn panel(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try scene.pushRect(bounds, pipeline_panel, .fill, 8.0, 0.0);
-    try scene.pushRect(bounds, pipeline_border, .border, 8.0, 0.0);
+    const app = component.renderer(scene, null, .{});
+    try app.fill(bounds, pipeline_panel, 8.0);
+    try app.stroke(bounds, pipeline_border, 8.0);
 }
 
 fn graphNodeBounds(bounds: ui.Rect, index: usize) ui.Rect {
@@ -393,6 +420,7 @@ fn graphNodeBounds(bounds: ui.Rect, index: usize) ui.Rect {
 }
 
 fn renderEdge(scene: *ui.Scene, from: ui.Rect, to: ui.Rect, color: ui.Color) ui.RenderError!void {
+    const app = component.renderer(scene, null, .{});
     const x0 = from.x + from.w;
     const y0 = from.y + from.h * 0.5;
     const x1 = to.x;
@@ -401,22 +429,24 @@ fn renderEdge(scene: *ui.Scene, from: ui.Rect, to: ui.Rect, color: ui.Color) ui.
     try renderLineRect(scene, x0, y0, mid_x, y0, color);
     try renderLineRect(scene, mid_x, y0, mid_x, y1, color);
     try renderLineRect(scene, mid_x, y1, x1, y1, color);
-    try scene.pushRect(ui.Rect.init(x1 - 5.0, y1 - 4.0, 8.0, 8.0), color, .fill, 2.0, 0.0);
+    try app.fill(ui.Rect.init(x1 - 5.0, y1 - 4.0, 8.0, 8.0), color, 2.0);
 }
 
 fn renderLineRect(scene: *ui.Scene, x0: f32, y0: f32, x1: f32, y1: f32, color: ui.Color) ui.RenderError!void {
+    const app = component.renderer(scene, null, .{});
     const thickness: f32 = 2.0;
     if (@abs(x1 - x0) >= @abs(y1 - y0)) {
         const left = @min(x0, x1);
-        try scene.pushRect(ui.Rect.init(left, y0 - thickness * 0.5, @max(thickness, @abs(x1 - x0)), thickness), color, .fill, 0.0, 0.0);
+        try app.fill(ui.Rect.init(left, y0 - thickness * 0.5, @max(thickness, @abs(x1 - x0)), thickness), color, 0.0);
     } else {
         const top = @min(y0, y1);
-        try scene.pushRect(ui.Rect.init(x0 - thickness * 0.5, top, thickness, @max(thickness, @abs(y1 - y0))), color, .fill, 0.0, 0.0);
+        try app.fill(ui.Rect.init(x0 - thickness * 0.5, top, thickness, @max(thickness, @abs(y1 - y0))), color, 0.0);
     }
 }
 
 fn renderTimeAxis(scene: *ui.Scene, axis: ui.Rect) ui.RenderError!void {
-    try scene.pushRect(ui.Rect.init(axis.x, axis.y + 12.0, axis.w, 1.0), colorWithAlpha(pipeline_border, 160), .fill, 0.0, 0.0);
+    const app = component.renderer(scene, null, .{});
+    try app.fill(ui.Rect.init(axis.x, axis.y + 12.0, axis.w, 1.0), colorWithAlpha(pipeline_border, 160), 0.0);
     const marks = [_]struct { x: f32, label: []const u8 }{
         .{ .x = 0.0, .label = "load" },
         .{ .x = 0.33, .label = "derive" },
@@ -425,26 +455,19 @@ fn renderTimeAxis(scene: *ui.Scene, axis: ui.Rect) ui.RenderError!void {
     };
     for (marks) |mark| {
         const x = axis.x + axis.w * mark.x;
-        try scene.pushRect(ui.Rect.init(x, axis.y + 7.0, 1.0, 11.0), colorWithAlpha(pipeline_border, 180), .fill, 0.0, 0.0);
-        try scene.pushText(ui.Rect.init(x - 22.0, axis.y - 7.0, 64.0, 14.0), mark.label, pipeline_muted);
+        try app.fill(ui.Rect.init(x, axis.y + 7.0, 1.0, 11.0), colorWithAlpha(pipeline_border, 180), 0.0);
+        try app.text(ui.Rect.init(x - 22.0, axis.y - 7.0, 64.0, 14.0), mark.label, pipeline_muted);
     }
 }
 
 fn badge(scene: *ui.Scene, bounds: ui.Rect, text: []const u8, color: ui.Color, options: common.RenderOptions) ui.RenderError!void {
-    var badge_options = options;
-    badge_options.style.accent = color;
-    try (Component{ .badge = .{ .label = text, .variant = .default } }).render(scene, bounds, badge_options);
+    const app = component.renderer(scene, null, options.withAccent(color));
+    try app.draw(component.badge(text, .default), bounds);
 }
 
 fn resourceBar(scene: *ui.Scene, bounds: ui.Rect, value: f32, color: ui.Color, options: common.RenderOptions) ui.RenderError!void {
-    var bar_options = options;
-    bar_options.style.accent = color;
-    try (Component{ .progress = .{ .value = value } }).render(scene, bounds, bar_options);
-}
-
-fn labelValue(scene: *ui.Scene, label: []const u8, value: []const u8, x: f32, y: f32, w: f32) ui.RenderError!void {
-    try scene.pushText(ui.Rect.init(x, y, 92.0, 16.0), label, pipeline_muted);
-    try scene.pushStrongText(ui.Rect.init(x + 96.0, y, @max(1.0, w - 96.0), 18.0), value, pipeline_text);
+    const app = component.renderer(scene, null, options.withAccent(color));
+    try app.draw(component.progress(value), bounds);
 }
 
 fn shortPath(path: []const u8) []const u8 {

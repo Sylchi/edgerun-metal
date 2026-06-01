@@ -1754,7 +1754,7 @@ test "manifest spawn transfers declared memory and storage to child" {
             .memory_bytes = 16,
             .storage_bytes = 288,
             .storage_slots = 2,
-            .storage_justification = .{ 't' } ** 64,
+            .storage_justification = .{'t'} ** 64,
         },
     };
     const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
@@ -2977,9 +2977,9 @@ test "app publishes stack ui as one canonical render object" {
     var app = App.initFromHostSlice(app_id, BoundedArena.init(.{ .base = &host_memory }), 2048, 8).?;
 
     const children = [_]Component{
-        .{ .text = .{ .value = "Objects" } },
-        .{ .row_item = .{ .id = 7, .title = "Storage", .detail = "canonical" } },
-        .{ .button = .{ .id = 8, .label = "Render" } },
+        component_union.text("Objects"),
+        component_union.rowItem(7, "Storage", "canonical"),
+        component_union.buttonText(8, "Render", .primary),
     };
     const stack = Stack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
 

@@ -1,13 +1,10 @@
 const std = @import("std");
-const icon_component = @import("components/Icon.zig");
 const component_union = @import("components/Component.zig");
 const interaction = @import("interaction.zig");
 const ui = @import("core.zig");
 const ui_component_common = @import("component_common.zig");
-const text_component = @import("components/Text.zig");
 const design = @import("theme.zig");
 const app_location = @import("../location.zig");
-const Component = component_union.Component;
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;
@@ -40,8 +37,8 @@ pub const NavProps = struct {
     bounds: ui.Rect,
     active: bool,
     label: ?[]const u8 = null,
-    icon: ?icon_component.Icon = null,
-    icon_slot: ?icon_component.IconSlot = null,
+    icon: ?component_union.Icon = null,
+    icon_slot: ?component_union.IconSlot = null,
     variant: ?ui_component_common.ButtonVariant = null,
 };
 
@@ -52,7 +49,7 @@ pub const ActionNavProps = struct {
     active: bool = false,
     enabled: bool = true,
     control_size: ?ui_component_common.ControlSize = null,
-    icon_slot: ?icon_component.IconSlot = null,
+    icon_slot: ?component_union.IconSlot = null,
     variant: ?ui_component_common.ButtonVariant = null,
 };
 
@@ -62,8 +59,8 @@ pub const RouteNavProps = struct {
     bounds: ui.Rect,
     active: bool,
     label: ?[]const u8 = null,
-    icon: ?icon_component.Icon = null,
-    icon_slot: ?icon_component.IconSlot = null,
+    icon: ?component_union.Icon = null,
+    icon_slot: ?component_union.IconSlot = null,
     variant: ?ui_component_common.ButtonVariant = null,
 };
 
@@ -74,7 +71,7 @@ pub const ActionRouteNavProps = struct {
     active: bool = false,
     enabled: bool = true,
     control_size: ?ui_component_common.ControlSize = null,
-    icon_slot: ?icon_component.IconSlot = null,
+    icon_slot: ?component_union.IconSlot = null,
     variant: ?ui_component_common.ButtonVariant = null,
 };
 
@@ -83,17 +80,16 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
         .active = props.active,
         .disabled = !props.enabled,
     };
-    const button = Component{ .button = .{
-        .id = props.id,
-        .label = props.label,
-        .variant = props.variant orelse activeVariant(props.active, .secondary, .outline),
-        .icon_slot = props.icon_slot orelse .none,
-    } };
-    try button.renderInteractive(scene, collector, props.bounds, .{
-        .style = design.appStyle(),
-        .control = control,
-        .control_size = props.control_size orelse .default,
-    });
+    const app = component_union.renderer(scene, collector, .{})
+        .withStyle(design.appStyle())
+        .withControl(control)
+        .withControlSize(props.control_size orelse .default);
+    try app.interactive(component_union.button(
+        props.id,
+        props.label,
+        props.variant orelse activeVariant(props.active, .secondary, .outline),
+        props.icon_slot orelse .none,
+    ), props.bounds);
 }
 
 pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
@@ -139,84 +135,51 @@ pub fn headerMode(content_w: f32) HeaderMode {
 
 pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
     const logo_binding = app_location.subNavBinding(.logo);
+    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
 
-    try fill(scene, bounds, palette.bg, 0.0);
-    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), .{ .style = design.appStyle() });
+    try app.fill(bounds, palette.bg, 0.0);
+    try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
 
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
-    try fill(scene, logo, palette.primary, 7.0);
-    try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
-    try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
-    try collector.addHit(ui.Rect.init(logo.x, logo.y, 148.0, logo.h), .button, logo_binding.id);
+    try app.interactive(
+        component_union.button(logo_binding.id, "EdgeRun", .ghost, component_union.IconSlot.named(.leading, .terminal)),
+        ui.Rect.init(content.x, bounds.y + 13.0, 148.0, 36.0),
+    );
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
     const logo_binding = app_location.subNavBinding(.logo);
+    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
 
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
-    try fill(scene, logo, palette.primary, 7.0);
-    try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
-    try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
-    try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_binding.id);
+    try app.interactive(
+        component_union.button(logo_binding.id, "EdgeRun", .ghost, component_union.IconSlot.named(.leading, .terminal)),
+        ui.Rect.init(content.x, bounds.y + 13.0, 118.0, 36.0),
+    );
 }
 
 pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props: NavProps) (ui.RenderError || interaction.Error)!void {
+    const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
     switch (props.kind) {
         .top_text => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.row_title;
-            const component = Component{ .button = .{
-                .id = props.binding.id,
-                .label = label,
-                .variant = variant,
-                .icon_slot = props.icon_slot orelse .none,
-            } };
-            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
+            try app.interactive(component_union.button(props.binding.id, label, variant, props.icon_slot orelse .none), props.bounds);
         },
         .top_icon => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.icon.label;
             const icon = props.icon orelse props.binding.icon;
-            const component = Component{ .icon_button = .{
-                .id = props.binding.id,
-                .label = label,
-                .icon = icon,
-                .variant = variant,
-            } };
-            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
+            try app.interactive(component_union.iconButton(props.binding.id, label, icon, variant), props.bounds);
         },
         .workspace_rail => {
             const icon = props.icon orelse props.binding.icon;
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
-            const component = Component{ .icon_button = .{
-                .id = props.binding.id,
-                .label = props.binding.rail_label,
-                .icon = icon,
-                .variant = variant,
-            } };
-            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
+            try app.interactive(component_union.iconButton(props.binding.id, props.binding.rail_label, icon, variant), props.bounds);
         },
         .workspace_sidebar => {
             const title = props.label orelse props.binding.row_title;
-            const component = Component{ .row_item = .{
-                .id = props.binding.id,
-                .title = title,
-                .detail = props.binding.row_detail,
-            } };
-            try component.renderInteractive(scene, collector, props.bounds, .{
-                .style = design.appStyle(),
-                .control = .{ .active = props.active },
-            });
+            try app.interactiveWithControl(component_union.rowItem(props.binding.id, title, props.binding.row_detail), props.bounds, .{ .active = props.active });
         },
     }
-}
-
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, radius, 0.0);
-}
-
-fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, w, h), value, color, .start);
 }
 
 fn navWidth(value: []const u8) f32 {

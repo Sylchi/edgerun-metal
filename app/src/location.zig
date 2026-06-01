@@ -1,6 +1,6 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const icon_component = @import("ui/components/Icon.zig");
+const component = @import("ui/components/Component.zig");
 
 pub const ObjectId = [32]u8;
 pub const object_id_bytes = 32;
@@ -177,7 +177,7 @@ pub const TopLevelBinding = struct {
     button: MainButton,
     id: u32,
     location: Location,
-    icon: icon_component.Icon,
+    icon: component.Icon,
     rail_label: []const u8,
     row_title: []const u8,
     row_detail: []const u8,
@@ -188,7 +188,7 @@ const top_level_bindings = [_]TopLevelBinding{
         .button = .source_workspace,
         .id = source_workspace_button_id,
         .location = .{ .object = source_workspace_location_object },
-        .icon = icon_component.Icon.named(.code),
+        .icon = component.Icon.named(.code),
         .rail_label = "Source",
         .row_title = "Source",
         .row_detail = "object workspace",
@@ -197,7 +197,7 @@ const top_level_bindings = [_]TopLevelBinding{
         .button = .app_preview,
         .id = app_preview_button_id,
         .location = .{ .object = app_preview_location_object },
-        .icon = icon_component.Icon.named(.eye),
+        .icon = component.Icon.named(.eye),
         .rail_label = "Preview",
         .row_title = "Preview",
         .row_detail = "app surface object",

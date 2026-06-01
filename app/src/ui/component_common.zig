@@ -164,6 +164,42 @@ pub const RenderOptions = struct {
         next.control = self.control.merge(self.interaction.controlFor(value));
         return next;
     }
+
+    pub fn withStyle(self: RenderOptions, style: ui.Style) RenderOptions {
+        var next = self;
+        next.style = style;
+        return next;
+    }
+
+    pub fn withAccent(self: RenderOptions, color: ui.Color) RenderOptions {
+        var next = self;
+        next.style.accent = color;
+        return next;
+    }
+
+    pub fn withTextColor(self: RenderOptions, color: ui.Color) RenderOptions {
+        var next = self;
+        next.style.text = color;
+        return next;
+    }
+
+    pub fn withControl(self: RenderOptions, control: ControlState) RenderOptions {
+        var next = self;
+        next.control = control;
+        return next;
+    }
+
+    pub fn withMergedControl(self: RenderOptions, control: ControlState) RenderOptions {
+        var next = self;
+        next.control = self.control.merge(control);
+        return next;
+    }
+
+    pub fn withControlSize(self: RenderOptions, size: ControlSize) RenderOptions {
+        var next = self;
+        next.control_size = size;
+        return next;
+    }
 };
 
 pub const ControlState = struct {
@@ -195,6 +231,15 @@ pub const ComponentFlags = struct {
     readonly: bool = false,
     invalid: bool = false,
     loading: bool = false,
+
+    pub fn merge(self: ComponentFlags, other: ComponentFlags) ComponentFlags {
+        return .{
+            .disabled = self.disabled or other.disabled,
+            .readonly = self.readonly or other.readonly,
+            .invalid = self.invalid or other.invalid,
+            .loading = self.loading or other.loading,
+        };
+    }
 
     pub fn apply(self: ComponentFlags, options: RenderOptions) RenderOptions {
         var next = options;

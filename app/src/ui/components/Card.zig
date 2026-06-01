@@ -2,6 +2,7 @@ const std = @import("std");
 const bytes = @import("../../bytes.zig");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
@@ -17,12 +18,18 @@ const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Card = struct {
+    id: ?u32 = null,
+    flags: common.ComponentFlags = .{},
     title: []const u8,
     detail: []const u8,
     variant: common.SurfaceVariant = .panel,
 
     pub fn node(self: Card) ui.Node {
         return ui.cardVariantNode(self.title, self.detail, variantTag(self.variant));
+    }
+
+    pub fn accessibility(self: Card) common.Accessibility {
+        return .{ .role = if (self.id == null) .generic else .button, .label = self.title, .control_id = self.id };
     }
 
     pub fn render(self: Card, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -51,6 +58,11 @@ pub const Card = struct {
             }
         }
         try component_primitives.renderControlStateOverlay(scene, bounds, options, radiusFor(self.variant));
+    }
+
+    pub fn collectInteractions(self: Card, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        const id = self.id orelse return;
+        return common.collectHit(collector, bounds, .button, id);
     }
 
     pub fn measure(self: Card, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

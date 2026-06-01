@@ -4,6 +4,7 @@ const ui = @import("core.zig");
 pub const Error = error{
     InteractionBudgetExceeded,
     InvalidInteractionBounds,
+    MissingInteractionCollector,
 };
 
 pub const Region = struct {

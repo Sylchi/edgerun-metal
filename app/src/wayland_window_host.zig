@@ -18,7 +18,7 @@ const app_location = @import("location.zig");
 const app_native_input = @import("input/native.zig");
 const app_dashboard = @import("app_dashboard.zig");
 const app_hardware_dashboard = @import("app_hardware_dashboard.zig");
-const icon_component = @import("ui/components/Icon.zig");
+const component = @import("ui/components/Component.zig");
 const ui = @import("ui/core.zig");
 const text_component = @import("ui/components/Text.zig");
 
@@ -694,7 +694,7 @@ test "wayland host renders client side decoration above app content" {
     try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false, null, false, null, false, null, false);
 
     try std.testing.expect(hasText(scene.written(), "EDGERUN"));
-    try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.x)));
+    try std.testing.expect(hasIcon(scene.written(), component.Icon.named(.x)));
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 

@@ -15,8 +15,7 @@ pub fn renderNode(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, n
     switch (node) {
         .rect => |rect| try scene.pushRect(bounds, rect.color, .fill, 0.0, 0.0),
         .text => |text| {
-            var component_options = options;
-            if (text.color) |color| component_options.style.text = color;
+            const component_options = if (text.color) |color| options.withTextColor(color) else options;
             try (Text{ .value = text.value }).render(scene, bounds, component_options);
         },
         .slot => |slot| try renderNode(Component, scene, bounds, slot.child.*, options),
