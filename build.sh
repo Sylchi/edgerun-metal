@@ -118,6 +118,7 @@ KERNEL_ASM_SRCS="
 	ui/sw_fb.asm
 	wasm/wasm_interpreter.asm
 	wasm/wasm_compiler.asm
+	wasm/tsx_parser.asm
 	wasm/wasm_test_data.asm
 	wasm/da_wasm_test.asm
 	wasm/edgerun_signing_wasm.asm

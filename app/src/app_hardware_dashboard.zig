@@ -64,7 +64,6 @@ const hardware_selection = ui.Color{ .r = 161, .g = 161, .b = 170, .a = 150 };
 const hardware_selection_fill = ui.Color{ .r = 161, .g = 161, .b = 170, .a = 7 };
 const editor_panel = ui.Color{ .r = 24, .g = 24, .b = 27, .a = 246 };
 const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 24 };
-const subtle_divider = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 7 };
 
 fn hardwareStyle(accent: ui.Color) ui.Style {
     return .{
@@ -208,7 +207,6 @@ pub const State = struct {
     const editor_accent_next_id: u32 = 91_084;
     const editor_emphasis_switch_id: u32 = 91_085;
     const profile_input_id: u32 = 91_090;
-    const profile_cycle_button_id: u32 = 91_091;
     const note_textarea_id: u32 = 91_092;
     const note_append_button_id: u32 = 91_093;
     const note_clear_button_id: u32 = 91_094;
@@ -249,7 +247,7 @@ pub const State = struct {
             editor_accent_prev_id => self.shiftAccent(-1),
             editor_accent_next_id => self.shiftAccent(1),
             editor_emphasis_switch_id => self.selected_emphasis = !self.selected_emphasis,
-            profile_input_id, profile_cycle_button_id => self.cycleProfile(),
+            profile_input_id => self.cycleProfile(),
             note_textarea_id, note_append_button_id => self.appendNote(),
             note_clear_button_id => self.clearNote(),
             else => {},
@@ -532,14 +530,11 @@ pub const State = struct {
         if (y + 108.0 <= inner.y + inner.h) {
             try scene.pushStrongText(ui.Rect.init(inner.x, y, inner.w, 20.0), "Profile", options.style.text);
             y += 28.0;
-            try (Component{ .input = .{
+            try (Component{ .select = .{
                 .id = profile_input_id,
-                .placeholder = "Dashboard profile",
-                .value = profileName(self.profile_index),
-                .icon_slot = IconComponent.IconSlot.named(.leading, .edit),
-            } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
-            y += 44.0;
-            try (Component{ .button = .{ .id = profile_cycle_button_id, .label = "Cycle profile", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+                .label = profileName(self.profile_index),
+                .icon_slot = IconComponent.IconSlot.named(.trailing, .adjustments),
+            } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 40.0), options);
         }
     }
 
@@ -700,7 +695,7 @@ pub const State = struct {
         try (Component{ .button = .{ .id = editor_accent_prev_id, .label = "Accent -", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 52.0, button_w, 34.0), options);
         try (Component{ .button = .{ .id = editor_accent_next_id, .label = "Accent +", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + button_w + 10.0, accent_y + 52.0, button_w, 34.0), options);
 
-        try scene.pushRect(ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0), subtle_divider, .fill, 0.0, 0.0);
+        try (Component{ .separator = .{} }).render(scene, ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0), options);
         try (Component{ .switch_control = .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0), options);
         try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0), options);
         const progress = self.editorProgress();

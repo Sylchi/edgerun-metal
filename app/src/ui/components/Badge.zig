@@ -87,7 +87,7 @@ fn alphaPaint(color: ui.Color, text_color: ui.Color) BadgePaint {
 
 fn labelBounds(bounds: ui.Rect) ui.Rect {
     const resolved_padding = @min(badge_padding_x, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(component_primitives.min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
+    return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5 + badge_text_y_offset, @max(component_primitives.min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
 }
 
 pub const badge_height: f32 = tokens.Component.badge_height;
@@ -95,6 +95,7 @@ pub const badge_text_height: f32 = tokens.Component.badge_text_height;
 pub const badge_padding_x: f32 = tokens.Component.badge_padding_x;
 const badge_fill_alpha: u8 = 48;
 const badge_min_width: f32 = 28.0;
+const badge_text_y_offset: f32 = 1.0;
 const badge_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
 
 pub fn variantTag(variant: common.BadgeVariant) u16 {
@@ -143,6 +144,18 @@ test "badge component renders reference variants" {
     try std.testing.expect(component_test.hasBorderAt(scene.written(), ui.Rect.init(0, 32, 84, badge_height)));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 64, 84, badge_height)));
     try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
+}
+
+test "badge component optically centers label text" {
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try (Badge{ .label = "Ready" }).render(&scene, ui.Rect.init(0, 0, 84, badge_height), .{});
+
+    const text = component_test.textCommand(scene.written(), "Ready").?.text;
+    try std.testing.expectEqual(ui.TextAlign.center, text.alignment);
+    try std.testing.expectEqual(@as(f32, badge_text_height), text.origin.h);
+    try std.testing.expectApproxEqAbs((badge_height - badge_text_height) * 0.5 + badge_text_y_offset, text.origin.y, 0.001);
 }
 
 test "badge component measurement respects at-most constraints" {

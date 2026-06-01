@@ -100,7 +100,7 @@ pub const WaylandCommitSink = struct {
 
     fn submit(context: *anyopaque, commit: renderer_native_present.WaylandCommit) bool {
         const self: *WaylandCommitSink = @ptrCast(@alignCast(context));
-        self.submitted = commit.surface_id == protocol.surface_id and commit.buffer_id == protocol.wl_buffer_id and commit.dirty_tiles.len != 0;
+        self.submitted = commit.surface_id == protocol.surface_id and commit.buffer_id != 0 and commit.dirty_tiles.len != 0;
         return self.submitted;
     }
 };
@@ -201,6 +201,7 @@ pub const Surface = struct {
     width: u32,
     height: u32,
     present: @import("options.zig").PresentMode,
+    drm_device: []const u8,
     dmabuf_fd: ?posix.fd_t,
     shm: protocol.ShmBuffer,
     pixels: []ui.Color,
@@ -242,6 +243,7 @@ pub const Surface = struct {
         self.width = width;
         self.height = height;
         self.present = options.present;
+        self.drm_device = options.drm_device;
         self.dmabuf_fd = options.dmabuf_fd;
         self.shm = shm;
         self.pixels = pixels;
@@ -271,10 +273,52 @@ pub const Surface = struct {
         allocator.destroy(self);
     }
 
+    pub fn resize(self: *Surface, client_ptr: *client.WaylandClient, width_in: u32, height_in: u32) !void {
+        const width = @max(width_in, protocol.min_window_width);
+        const height = @max(height_in, protocol.min_window_height);
+        if (width == self.width and height == self.height) return;
+        if (self.present == .gpu_dmabuf and self.dmabuf_fd != null) return error.ExternalDmabufResizeUnsupported;
+
+        const stride = width * @sizeOf(u32);
+        const old_buffer_id = self.shm.buffer_id;
+        if (self.present == .gpu_dmabuf) try client_ptr.sendDestroyBuffer(protocol.dmabuf_wl_buffer_id);
+
+        const next_shm = try client_ptr.createShmBuffer(@as(usize, stride) * height, width, height, stride);
+        errdefer next_shm.deinit();
+        const next_pixels = try self.allocator.alloc(ui.Color, @as(usize, width) * height);
+        errdefer self.allocator.free(next_pixels);
+        const next_base_pixels = try self.allocator.alloc(ui.Color, @as(usize, width) * height);
+        errdefer self.allocator.free(next_base_pixels);
+
+        var next_drm_buffer: ?linux_drm.DumbBuffer = if (self.present == .gpu_dmabuf)
+            try linux_drm.DumbBuffer.createExported(self.drm_device, width, height, .xrgb8888)
+        else
+            null;
+        errdefer if (next_drm_buffer) |*buffer| buffer.deinit();
+
+        if (self.drm_buffer) |*buffer| buffer.deinit();
+        self.allocator.free(self.base_pixels);
+        self.allocator.free(self.pixels);
+        self.shm.deinit();
+        try client_ptr.sendDestroyBuffer(old_buffer_id);
+
+        self.width = width;
+        self.height = height;
+        self.shm = next_shm;
+        self.pixels = next_pixels;
+        self.base_pixels = next_base_pixels;
+        self.base_pixels_ready = false;
+        self.cursor_damage = null;
+        self.ir_storage = .{};
+        self.gpu_recorder = .{};
+        self.gpu_buffer_device = .{};
+        self.drm_buffer = next_drm_buffer;
+    }
+
     pub fn waylandSurface(self: *const Surface) renderer_native_present.NativeSurface {
         return .{ .wayland = .{
             .surface_id = protocol.surface_id,
-            .buffer_id = protocol.wl_buffer_id,
+            .buffer_id = self.shm.buffer_id,
             .width = self.width,
             .height = self.height,
             .stride = self.width,
@@ -396,7 +440,7 @@ pub const Surface = struct {
             },
         }
         packXrgb8888(self.shm.memory, self.pixels);
-        try client_ptr.attachCommit(self.width, self.height);
+        try client_ptr.attachCommit(self.shm.buffer_id, self.width, self.height);
     }
 
     pub fn renderCursorOnly(
@@ -417,7 +461,7 @@ pub const Surface = struct {
         self.cursor_damage = try self.renderCursorOverlay(new_x, new_y, new_kind);
         const final_damage = unionPixelRect(damage, self.cursor_damage) orelse damage;
         packXrgb8888Rect(self.shm.memory, self.shm.stride, self.width, self.height, self.pixels, final_damage);
-        try client_ptr.attachCommitRect(final_damage);
+        try client_ptr.attachCommitRect(self.shm.buffer_id, final_damage);
     }
 
     pub fn renderCursorOverlay(self: *Surface, hover_x: f32, hover_y: f32, kind: app_cursor.Kind) !?protocol.PixelRect {
@@ -450,5 +494,4 @@ pub const Surface = struct {
         const receipt = try software_surface.renderIr(buffers, resources);
         if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
-
 };

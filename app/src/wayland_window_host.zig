@@ -72,6 +72,7 @@ pub const xdg_surface_ack_configure = protocol.xdg_surface_ack_configure;
 pub const xdg_toplevel_set_title = protocol.xdg_toplevel_set_title;
 pub const xdg_toplevel_set_app_id = protocol.xdg_toplevel_set_app_id;
 pub const xdg_toplevel_move = protocol.xdg_toplevel_move;
+pub const xdg_toplevel_resize = protocol.xdg_toplevel_resize;
 pub const xdg_toplevel_set_minimized = protocol.xdg_toplevel_set_minimized;
 pub const xdg_decoration_manager_get_toplevel_decoration = protocol.xdg_decoration_manager_get_toplevel_decoration;
 pub const xdg_toplevel_decoration_set_mode = protocol.xdg_toplevel_decoration_set_mode;
@@ -150,6 +151,7 @@ pub const makeGetToplevel = messages.makeGetToplevel;
 pub const makeSetTitle = messages.makeSetTitle;
 pub const makeSetAppId = messages.makeSetAppId;
 pub const makeMove = messages.makeMove;
+pub const makeResize = messages.makeResize;
 pub const makeSetMinimized = messages.makeSetMinimized;
 pub const makeGetToplevelDecoration = messages.makeGetToplevelDecoration;
 pub const makeSetServerSideDecoration = messages.makeSetServerSideDecoration;
@@ -364,6 +366,15 @@ test "wayland xdg toplevel client chrome messages encode move and minimize" {
     try std.testing.expectEqual(@as(u32, seat_id), std.mem.readInt(u32, move_msg[8..12], .little));
     try std.testing.expectEqual(@as(u32, 77), std.mem.readInt(u32, move_msg[12..16], .little));
 
+    var resize_buffer: [64]u8 = undefined;
+    const resize_msg = try makeResize(&resize_buffer, 91, protocol.xdg_toplevel_resize_edge_bottom_right);
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_id), std.mem.readInt(u32, resize_msg[0..4], .little));
+    try std.testing.expectEqual(@as(u16, xdg_toplevel_resize), std.mem.readInt(u16, resize_msg[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 20), std.mem.readInt(u16, resize_msg[6..8], .little));
+    try std.testing.expectEqual(@as(u32, seat_id), std.mem.readInt(u32, resize_msg[8..12], .little));
+    try std.testing.expectEqual(@as(u32, 91), std.mem.readInt(u32, resize_msg[12..16], .little));
+    try std.testing.expectEqual(protocol.xdg_toplevel_resize_edge_bottom_right, std.mem.readInt(u32, resize_msg[16..20], .little));
+
     var minimize_buffer: [64]u8 = undefined;
     const minimize = try makeSetMinimized(&minimize_buffer);
     try std.testing.expectEqual(@as(u32, xdg_toplevel_id), std.mem.readInt(u32, minimize[0..4], .little));
@@ -500,6 +511,7 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .width = 320,
         .height = 240,
         .present = .gpu_dmabuf,
+        .drm_device = "/dev/dri/card0",
         .dmabuf_fd = 19,
         .shm = undefined,
         .pixels = &.{},
@@ -523,6 +535,7 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
         .width = 320,
         .height = 240,
         .present = .gpu_dmabuf,
+        .drm_device = "/dev/dri/card0",
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
@@ -621,7 +634,7 @@ test "wayland host renders the source app scene through the shared frame" {
     var dash_state: app_dashboard.State = .{};
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
         .location = app_location.locationForButton(.source_workspace),
-    }, &dash_state, false, null, false, null, false);
+    }, &dash_state, false, null, false, null, false, null, false);
     try std.testing.expect(hasText(scene.written(), "workspace"));
     try std.testing.expect(scene.written().len > 0);
 }
@@ -633,7 +646,7 @@ test "wayland host renders frontend location through canonical ir" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_b: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_location.locationForButton(.app_preview) }, &dash_b, false, null, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_location.locationForButton(.app_preview) }, &dash_b, false, null, false, null, false, null, false);
     try std.testing.expect(scene.written().len > 0);
 }
 
@@ -644,7 +657,7 @@ test "wayland host renders current docs routes through the shared app frame" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_c: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_location.locationForButton(.app_preview) }, &dash_c, false, null, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_location.locationForButton(.app_preview) }, &dash_c, false, null, false, null, false, null, false);
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
 }
@@ -656,7 +669,7 @@ test "wayland host packs docs overview location at launch size" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_d: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .location = app_location.locationForButton(.app_preview) }, &dash_d, false, null, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .location = app_location.locationForButton(.app_preview) }, &dash_d, false, null, false, null, false, null, false);
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
@@ -678,7 +691,7 @@ test "wayland host renders client side decoration above app content" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_c: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false, null, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false, null, false, null, false, null, false);
 
     try std.testing.expect(hasText(scene.written(), "EDGERUN"));
     try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.x)));
@@ -749,7 +762,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_c: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false, null, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false, null, false, null, false, null, false);
     try std.testing.expect(state.runtime.hovered == null);
 
     const backend = try hitRect(collector.written(), app_location.source_workspace_button_id);
@@ -783,6 +796,7 @@ test "wayland native app supplies compositor routed hit to input runtime" {
         .width = 1280,
         .height = 800,
         .present = .cpu,
+        .drm_device = "/dev/dri/card0",
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
@@ -799,7 +813,7 @@ test "wayland native app supplies compositor routed hit to input runtime" {
     };
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
-    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware, &app.chat_app, app.chat);
+    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware, &app.chat_app, app.chat, &app.pipeline_app, app.pipeline);
     app.region_len = collector.written().len;
 
     const backend = try hitRect(app.regionSlice(), app_location.source_workspace_button_id);
@@ -822,6 +836,7 @@ test "wayland host appends scene cursor from native hover state" {
         .width = 1280,
         .height = 800,
         .present = .cpu,
+        .drm_device = "/dev/dri/card0",
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
@@ -838,7 +853,7 @@ test "wayland host appends scene cursor from native hover state" {
     };
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
-    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware, &app.chat_app, app.chat);
+    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware, &app.chat_app, app.chat, &app.pipeline_app, app.pipeline);
     app.region_len = collector.written().len;
     const backend = try hitRect(app.regionSlice(), app_location.source_workspace_button_id);
     app.state.hover_x = backend.x + backend.w * 0.5;
@@ -865,6 +880,7 @@ test "wayland host renders vector cursor overlay through native pipeline" {
         .width = 64,
         .height = 64,
         .present = .cpu,
+        .drm_device = "/dev/dri/card0",
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &pixels,

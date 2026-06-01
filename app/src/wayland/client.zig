@@ -14,6 +14,7 @@ pub const WaylandClient = struct {
     read_buffer: [max_socket_read_bytes]u8 = undefined,
     read_len: usize = 0,
     object_kinds: [128]protocol.ObjectKind = [_]protocol.ObjectKind{.unknown} ** 128,
+    next_object_id: u32 = protocol.dynamic_object_id_start,
 
     pub fn connect(io: std.Io, path: []const u8) !WaylandClient {
         const address = try std.Io.net.UnixAddress.init(path);
@@ -115,10 +116,12 @@ pub const WaylandClient = struct {
         try messages.truncateFd(fd, bytes);
         const mapped = try posix.mmap(null, bytes, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
         errdefer posix.munmap(mapped);
-        try self.sendCreatePool(fd, @intCast(bytes));
-        try self.sendCreateBuffer(width, height, stride);
-        try self.send(messages.makeDestroyPool);
-        return .{ .fd = fd, .memory = mapped, .width = width, .height = height, .stride = stride };
+        const pool_id = try self.allocObject(.unknown);
+        const buffer_id = try self.allocObject(.unknown);
+        try self.sendCreatePool(fd, pool_id, @intCast(bytes));
+        try self.sendCreateBuffer(pool_id, buffer_id, width, height, stride);
+        try self.sendDestroyPool(pool_id);
+        return .{ .fd = fd, .pool_id = pool_id, .buffer_id = buffer_id, .memory = mapped, .width = width, .height = height, .stride = stride };
     }
 
     pub fn createDmabufBuffer(self: *WaylandClient, import: protocol.DmabufImport) !void {
@@ -139,14 +142,14 @@ pub const WaylandClient = struct {
         self.state.dmabuf_bound = true;
     }
 
-    pub fn attachCommit(self: *WaylandClient, width: u32, height: u32) !void {
-        try self.sendAttach(protocol.wl_buffer_id);
+    pub fn attachCommit(self: *WaylandClient, buffer_id: u32, width: u32, height: u32) !void {
+        try self.sendAttach(buffer_id);
         try self.sendDamage(width, height);
         try self.send(messages.makeSurfaceCommit);
     }
 
-    pub fn attachCommitRect(self: *WaylandClient, rect: protocol.PixelRect) !void {
-        try self.sendAttach(protocol.wl_buffer_id);
+    pub fn attachCommitRect(self: *WaylandClient, buffer_id: u32, rect: protocol.PixelRect) !void {
+        try self.sendAttach(buffer_id);
         try self.sendDamageRect(rect);
         try self.send(messages.makeSurfaceCommit);
     }
@@ -192,6 +195,12 @@ pub const WaylandClient = struct {
         try messages.writeAll(self.fd, try messages.makeMove(&buffer, serial));
     }
 
+    pub fn sendResize(self: WaylandClient, serial: u32, edges: u32) !void {
+        if (!self.state.xdg_available) return;
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeResize(&buffer, serial, edges));
+    }
+
     pub fn sendMinimize(self: WaylandClient) !void {
         if (!self.state.xdg_available) return;
         var buffer: [max_message_bytes]u8 = undefined;
@@ -218,15 +227,33 @@ pub const WaylandClient = struct {
         try messages.writeAll(self.fd, try messages.makeAttach(&buffer, buffer_id));
     }
 
-    fn sendCreatePool(self: WaylandClient, fd: posix.fd_t, bytes: i32) !void {
+    fn sendCreatePool(self: WaylandClient, fd: posix.fd_t, pool_id: u32, bytes: i32) !void {
         var buffer: [max_message_bytes]u8 = undefined;
-        const msg = try messages.makeCreatePool(&buffer, bytes);
+        const msg = try messages.makeCreatePoolWithId(&buffer, pool_id, bytes);
         try messages.sendFd(self.fd, msg, fd);
     }
 
-    fn sendCreateBuffer(self: WaylandClient, width: u32, height: u32, stride: u32) !void {
+    fn sendCreateBuffer(self: WaylandClient, pool_id: u32, buffer_id: u32, width: u32, height: u32, stride: u32) !void {
         var buffer: [max_message_bytes]u8 = undefined;
-        try messages.writeAll(self.fd, try messages.makeCreateBuffer(&buffer, width, height, stride));
+        try messages.writeAll(self.fd, try messages.makeCreateBufferWithId(&buffer, pool_id, buffer_id, width, height, stride));
+    }
+
+    pub fn sendDestroyBuffer(self: WaylandClient, buffer_id: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeDestroyBuffer(&buffer, buffer_id));
+    }
+
+    fn sendDestroyPool(self: WaylandClient, pool_id: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeDestroyPoolWithId(&buffer, pool_id));
+    }
+
+    fn allocObject(self: *WaylandClient, kind: protocol.ObjectKind) !u32 {
+        const id = self.next_object_id;
+        if (id >= self.object_kinds.len) return error.WaylandObjectBudgetExceeded;
+        self.next_object_id += 1;
+        self.object_kinds[id] = kind;
+        return id;
     }
 
     fn sendDmabufAddPlane(self: WaylandClient, import: protocol.DmabufImport) !void {

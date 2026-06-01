@@ -134,6 +134,21 @@ pub fn build(b: *std.Build) void {
     chat_ui_test_step.dependOn(&run_chat_ui_tests.step);
     test_step.dependOn(&run_chat_ui_tests.step);
 
+    const pipeline_ui_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/app_pipeline_dashboard.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| pipeline_ui_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| pipeline_ui_tests.root_module.addObjectFile(obj);
+
+    const run_pipeline_ui_tests = b.addRunArtifact(pipeline_ui_tests);
+    const pipeline_ui_test_step = b.step("pipeline-ui-test", "Run user-scheduled pipeline UI tests");
+    pipeline_ui_test_step.dependOn(&run_pipeline_ui_tests.step);
+    test_step.dependOn(&run_pipeline_ui_tests.step);
+
     const sdk_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/sdk.zig"),
@@ -286,22 +301,6 @@ pub fn build(b: *std.Build) void {
     const run_chat_preview = b.addRunArtifact(chat_preview);
     const chat_preview_step = b.step("chat-preview", "Render encrypted chat UI preview PPM");
     chat_preview_step.dependOn(&run_chat_preview.step);
-
-    const ui_bench = b.addExecutable(.{
-        .name = "edgerun-ui-bench-zig",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_bench.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = strip_release,
-        }),
-    });
-    if (math_obj) |obj| ui_bench.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_bench.root_module.addObjectFile(obj);
-
-    const run_ui_bench = b.addRunArtifact(ui_bench);
-    const ui_bench_step = b.step("ui-bench", "Benchmark the Zig UI software renderer");
-    ui_bench_step.dependOn(&run_ui_bench.step);
 
     const wayland_window = b.addExecutable(.{
         .name = "edgerun-wayland-window",

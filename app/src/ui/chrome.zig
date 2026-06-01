@@ -141,7 +141,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     const logo_binding = app_location.subNavBinding(.logo);
 
     try fill(scene, bounds, palette.bg, 0.0);
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
+    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), .{ .style = design.appStyle() });
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);

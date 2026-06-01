@@ -21,6 +21,7 @@ pub const dmabuf_params_id: u32 = 15;
 pub const dmabuf_wl_buffer_id: u32 = 16;
 pub const xdg_decoration_manager_id: u32 = 17;
 pub const xdg_toplevel_decoration_id: u32 = 18;
+pub const dynamic_object_id_start: u32 = 12;
 
 pub const wl_display_sync: u16 = 0;
 pub const wl_display_get_registry: u16 = 1;
@@ -34,6 +35,7 @@ pub const wl_shm_pool_destroy: u16 = 1;
 pub const wl_surface_attach: u16 = 1;
 pub const wl_surface_damage_buffer: u16 = 2;
 pub const wl_surface_commit: u16 = 6;
+pub const wl_buffer_destroy: u16 = 0;
 pub const xdg_wm_base_get_xdg_surface: u16 = 2;
 pub const xdg_wm_base_pong: u16 = 3;
 pub const xdg_surface_get_toplevel: u16 = 1;
@@ -41,6 +43,7 @@ pub const xdg_surface_ack_configure: u16 = 4;
 pub const xdg_toplevel_set_title: u16 = 2;
 pub const xdg_toplevel_set_app_id: u16 = 3;
 pub const xdg_toplevel_move: u16 = 5;
+pub const xdg_toplevel_resize: u16 = 6;
 pub const xdg_toplevel_set_minimized: u16 = 13;
 pub const xdg_decoration_manager_get_toplevel_decoration: u16 = 1;
 pub const xdg_toplevel_decoration_set_mode: u16 = 1;
@@ -59,6 +62,7 @@ pub const wl_pointer_axis_event: u16 = 4;
 pub const wl_seat_capabilities_event: u16 = 0;
 pub const xdg_wm_base_ping_event: u16 = 0;
 pub const xdg_surface_configure_event: u16 = 0;
+pub const xdg_toplevel_configure_event: u16 = 0;
 pub const xdg_toplevel_close_event: u16 = 1;
 
 pub const wl_shm_format_xrgb8888: u32 = 1;
@@ -70,6 +74,14 @@ pub const wl_pointer_button_released: u32 = 0;
 pub const wl_pointer_axis_vertical_scroll: u32 = 0;
 pub const wl_seat_capability_pointer: u32 = 1;
 pub const xdg_toplevel_decoration_mode_server_side: u32 = 2;
+pub const xdg_toplevel_resize_edge_top: u32 = 1;
+pub const xdg_toplevel_resize_edge_bottom: u32 = 2;
+pub const xdg_toplevel_resize_edge_left: u32 = 4;
+pub const xdg_toplevel_resize_edge_top_left: u32 = 5;
+pub const xdg_toplevel_resize_edge_bottom_left: u32 = 6;
+pub const xdg_toplevel_resize_edge_right: u32 = 8;
+pub const xdg_toplevel_resize_edge_top_right: u32 = 9;
+pub const xdg_toplevel_resize_edge_bottom_right: u32 = 10;
 
 pub const fixed_scale: f32 = 256.0;
 pub const wl_pointer_button_right: u32 = 0x111;
@@ -83,6 +95,17 @@ pub const client_decor_minimize_h: f32 = 2.0;
 pub const client_decor_close_id: u32 = 40_000;
 pub const client_decor_minimize_id: u32 = 40_001;
 pub const client_decor_drag_id: u32 = 40_002;
+pub const client_decor_resize_left_id: u32 = 40_003;
+pub const client_decor_resize_right_id: u32 = 40_004;
+pub const client_decor_resize_top_id: u32 = 40_005;
+pub const client_decor_resize_bottom_id: u32 = 40_006;
+pub const client_decor_resize_top_left_id: u32 = 40_007;
+pub const client_decor_resize_top_right_id: u32 = 40_008;
+pub const client_decor_resize_bottom_left_id: u32 = 40_009;
+pub const client_decor_resize_bottom_right_id: u32 = 40_010;
+pub const client_decor_resize_margin: f32 = 14.0;
+pub const min_window_width: u32 = 360;
+pub const min_window_height: u32 = 260;
 
 pub const client_decor_bg = ui.Color{ .r = 24, .g = 24, .b = 27 };
 pub const client_decor_border = ui.Color{ .r = 52, .g = 52, .b = 58 };
@@ -153,6 +176,8 @@ pub const WaylandState = struct {
     registry_done: bool = false,
     configured: bool = false,
     closed: bool = false,
+    configured_width: u32 = 0,
+    configured_height: u32 = 0,
     seat_has_pointer: bool = false,
     dmabuf_bound: bool = false,
     xdg_available: bool = false,
@@ -282,6 +307,8 @@ pub fn dmabufFormat(format: renderer_native_present.PixelFormat) u32 {
 
 pub const ShmBuffer = struct {
     fd: posix.fd_t,
+    pool_id: u32,
+    buffer_id: u32,
     memory: []align(std.heap.page_size_min) u8,
     width: u32,
     height: u32,

@@ -10,9 +10,6 @@ const component_union = @import("ui/components/Component.zig");
 const ui = @import("ui/core.zig");
 const icon_mod = @import("ui/icon.zig");
 const layout_mod = @import("ui/layout.zig");
-const card_component = @import("ui/components/Card.zig");
-const text_component = @import("ui/components/Text.zig");
-const display_component = @import("ui/components/Display.zig");
 
 const W: usize = 1280;
 const H: usize = 720;
@@ -100,15 +97,15 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
     alloc.free(loc_str);
 
     const mod_names = comptime [_]struct { name: []const u8, dir: []const u8 }{
-        .{ .name = "wasm",   .dir = "kernel/x86_64/wasm" },
+        .{ .name = "wasm", .dir = "kernel/x86_64/wasm" },
         .{ .name = "driver", .dir = "kernel/x86_64/drv" },
         .{ .name = "crypto", .dir = "kernel/x86_64/crypto" },
-        .{ .name = "rt",     .dir = "kernel/x86_64/rt" },
-        .{ .name = "net",    .dir = "kernel/x86_64/net" },
-        .{ .name = "tpm",    .dir = "kernel/x86_64/tpm" },
-        .{ .name = "ui",     .dir = "kernel/x86_64/ui" },
+        .{ .name = "rt", .dir = "kernel/x86_64/rt" },
+        .{ .name = "net", .dir = "kernel/x86_64/net" },
+        .{ .name = "tpm", .dir = "kernel/x86_64/tpm" },
+        .{ .name = "ui", .dir = "kernel/x86_64/ui" },
         .{ .name = "object", .dir = "kernel/x86_64/object" },
-        .{ .name = "pi",     .dir = "kernel/arm/pi" },
+        .{ .name = "pi", .dir = "kernel/arm/pi" },
     };
     const modules = try alloc.alloc(ModuleLoc, mod_names.len);
     for (mod_names, modules) |entry, *m| {
@@ -151,10 +148,16 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
         .stdout_limit = std.Io.Limit.limited(512),
     }) catch {
         return BuildData{
-            .git_hash = git_hash, .branch = branch, .commit_count = commit_count,
-            .asm_files = asm_files, .inc_files = inc_files, .total_loc = total_loc,
+            .git_hash = git_hash,
+            .branch = branch,
+            .commit_count = commit_count,
+            .asm_files = asm_files,
+            .inc_files = inc_files,
+            .total_loc = total_loc,
             .artifacts = try alloc.dupe(Artifact, &.{}),
-            .modules = modules, .tests = tests, .commits = try alloc.dupe([]const u8, &.{}),
+            .modules = modules,
+            .tests = tests,
+            .commits = try alloc.dupe([]const u8, &.{}),
         };
     };
     defer alloc.free(cmt_result.stderr);
@@ -188,9 +191,15 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
     }
 
     return BuildData{
-        .git_hash = git_hash, .branch = branch, .commit_count = commit_count,
-        .asm_files = asm_files, .inc_files = inc_files, .total_loc = total_loc,
-        .artifacts = artifacts, .modules = modules, .tests = tests,
+        .git_hash = git_hash,
+        .branch = branch,
+        .commit_count = commit_count,
+        .asm_files = asm_files,
+        .inc_files = inc_files,
+        .total_loc = total_loc,
+        .artifacts = artifacts,
+        .modules = modules,
+        .tests = tests,
         .commits = try commit_list.toOwnedSlice(alloc),
     };
 }
@@ -247,12 +256,14 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     const header = ui.Node{
         .stack = .{
-            .axis = .row, .gap = 8, .cross_align = .start,
+            .axis = .row,
+            .gap = 8,
+            .cross_align = .start,
             .children = &.{
                 .{ .icon = .{ .label = "", .icon = iconTag(.dashboard) } },
-                (text_component.Text{ .value = "Build Dashboard" }).node(),
-                (text_component.Text{ .value = data.branch }).node(),
-                (text_component.Text{ .value = data.git_hash }).node(),
+                component_union.textNode("Build Dashboard"),
+                component_union.textNode(data.branch),
+                component_union.textNode(data.git_hash),
             },
         },
     };
@@ -263,10 +274,10 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     const mod_count_str = std.fmt.bufPrint(&buf, "{}", .{data.modules.len}) catch "?";
     const test_count_str = std.fmt.bufPrint(&buf, "{}", .{data.tests.len}) catch "?";
 
-    const c1 = (card_component.Card{ .title = "ASM Files", .detail = total_str, .variant = .elevated }).node();
-    const c2 = (card_component.Card{ .title = "Lines of Code", .detail = loc_str, .variant = .elevated }).node();
-    const c3 = (card_component.Card{ .title = "Subsystems", .detail = mod_count_str, .variant = .elevated }).node();
-    const c4 = (card_component.Card{ .title = "Test Suites", .detail = test_count_str, .variant = .elevated }).node();
+    const c1 = component_union.cardNode("ASM Files", total_str, .elevated);
+    const c2 = component_union.cardNode("Lines of Code", loc_str, .elevated);
+    const c3 = component_union.cardNode("Subsystems", mod_count_str, .elevated);
+    const c4 = component_union.cardNode("Test Suites", test_count_str, .elevated);
 
     var max_size: u64 = 0;
     for (data.artifacts) |a| {
@@ -276,7 +287,7 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     var art_children: [16]ui.Node = undefined;
     var art_count: usize = 0;
-    art_children[art_count] = (text_component.Text{ .value = "Build Artifacts" }).node();
+    art_children[art_count] = component_union.textNode("Build Artifacts");
     art_count += 1;
     for (data.artifacts) |a| {
         if (art_count >= art_children.len) break;
@@ -284,11 +295,13 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
         const sl = sizeLabel(&buf, a.size_bytes);
         art_children[art_count] = ui.Node{
             .stack = .{
-                .axis = .row, .gap = 6, .cross_align = .center,
+                .axis = .row,
+                .gap = 6,
+                .cross_align = .center,
                 .children = &.{
                     .{ .text = .{ .value = a.name } },
                     .{ .text = .{ .value = sl } },
-                    (display_component.Progress{ .value = p }).node(),
+                    component_union.progressNode(p),
                 },
             },
         };
@@ -303,7 +316,7 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     var mod_children: [16]ui.Node = undefined;
     var mod_count: usize = 0;
-    mod_children[mod_count] = (text_component.Text{ .value = "Subsystem LOC" }).node();
+    mod_children[mod_count] = component_union.textNode("Subsystem LOC");
     mod_count += 1;
     for (data.modules) |m| {
         if (mod_count >= mod_children.len) break;
@@ -311,11 +324,13 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
         const ml = std.fmt.bufPrint(&buf, "{}", .{m.loc}) catch "?";
         mod_children[mod_count] = ui.Node{
             .stack = .{
-                .axis = .row, .gap = 6, .cross_align = .center,
+                .axis = .row,
+                .gap = 6,
+                .cross_align = .center,
                 .children = &.{
                     .{ .text = .{ .value = m.name } },
                     .{ .text = .{ .value = ml } },
-                    (display_component.Progress{ .value = p }).node(),
+                    component_union.progressNode(p),
                 },
             },
         };
@@ -324,7 +339,7 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     var test_children: [16]ui.Node = undefined;
     var test_count: usize = 0;
-    test_children[test_count] = (text_component.Text{ .value = "Test Results" }).node();
+    test_children[test_count] = component_union.textNode("Test Results");
     test_count += 1;
     for (data.tests) |t| {
         if (test_count >= test_children.len) break;
@@ -333,7 +348,9 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
         const pl = std.fmt.bufPrint(&buf, "{}/{}", .{ t.passed, t.total }) catch "?";
         test_children[test_count] = ui.Node{
             .stack = .{
-                .axis = .row, .gap = 4, .cross_align = .center,
+                .axis = .row,
+                .gap = 4,
+                .cross_align = .center,
                 .children = &.{
                     .{ .icon = .{ .label = "", .icon = icon_id } },
                     .{ .text = .{ .value = t.name } },
@@ -346,13 +363,15 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     var cmt_children: [16]ui.Node = undefined;
     var cmt_count: usize = 0;
-    cmt_children[cmt_count] = (text_component.Text{ .value = "Recent Commits" }).node();
+    cmt_children[cmt_count] = component_union.textNode("Recent Commits");
     cmt_count += 1;
     for (data.commits) |msg| {
         if (cmt_count >= cmt_children.len) break;
         cmt_children[cmt_count] = ui.Node{
             .stack = .{
-                .axis = .row, .gap = 4, .cross_align = .center,
+                .axis = .row,
+                .gap = 4,
+                .cross_align = .center,
                 .children = &.{
                     .{ .icon = .{ .label = "", .icon = iconTag(.git_commit) } },
                     .{ .text = .{ .value = msg } },

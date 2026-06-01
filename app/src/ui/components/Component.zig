@@ -217,6 +217,30 @@ pub const Component = union(enum) {
 
 pub const registrations = @typeInfo(Component).@"union".fields;
 
+pub fn textNode(value: []const u8) ui.Node {
+    return (Component{ .text = .{ .value = value } }).node();
+}
+
+pub fn cardNode(title: []const u8, detail: []const u8, variant: common.SurfaceVariant) ui.Node {
+    return (Component{ .card = .{ .title = title, .detail = detail, .variant = variant } }).node();
+}
+
+pub fn progressNode(value: f32) ui.Node {
+    return (Component{ .progress = .{ .value = value } }).node();
+}
+
+pub fn badgeNode(label: []const u8, variant: common.BadgeVariant) ui.Node {
+    return (Component{ .badge = .{ .label = label, .variant = variant } }).node();
+}
+
+pub fn emptyNode(title: []const u8, detail: []const u8) ui.Node {
+    return (Component{ .empty = .{ .title = title, .detail = detail } }).node();
+}
+
+pub fn rowItemNode(id: u32, title: []const u8, detail: []const u8) ui.Node {
+    return (Component{ .row_item = .{ .id = id, .title = title, .detail = detail } }).node();
+}
+
 fn componentFromNode(comptime ComponentPayload: type, node_payload: anytype) Error!ComponentPayload {
     if (comptime !@hasDecl(ComponentPayload, "fromNode")) @compileError(@typeName(ComponentPayload) ++ " must own fromNode");
     return ComponentPayload.fromNode(node_payload);

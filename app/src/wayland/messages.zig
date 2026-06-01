@@ -48,15 +48,23 @@ pub fn makeHidePointerCursor(buffer: []u8, serial: u32) ![]const u8 {
 }
 
 pub fn makeCreatePool(buffer: []u8, bytes: i32) ![]const u8 {
+    return makeCreatePoolWithId(buffer, protocol.shm_pool_id, bytes);
+}
+
+pub fn makeCreatePoolWithId(buffer: []u8, pool_id: u32, bytes: i32) ![]const u8 {
     var msg = try protocol.MessageWriter.init(buffer, protocol.shm_id, protocol.wl_shm_create_pool);
-    try msg.putU32(protocol.shm_pool_id);
+    try msg.putU32(pool_id);
     try msg.putI32(bytes);
     return msg.finish();
 }
 
 pub fn makeCreateBuffer(buffer: []u8, width: u32, height: u32, stride: u32) ![]const u8 {
-    var msg = try protocol.MessageWriter.init(buffer, protocol.shm_pool_id, protocol.wl_shm_pool_create_buffer);
-    try msg.putU32(protocol.wl_buffer_id);
+    return makeCreateBufferWithId(buffer, protocol.shm_pool_id, protocol.wl_buffer_id, width, height, stride);
+}
+
+pub fn makeCreateBufferWithId(buffer: []u8, pool_id: u32, buffer_id: u32, width: u32, height: u32, stride: u32) ![]const u8 {
+    var msg = try protocol.MessageWriter.init(buffer, pool_id, protocol.wl_shm_pool_create_buffer);
+    try msg.putU32(buffer_id);
     try msg.putI32(0);
     try msg.putI32(@intCast(width));
     try msg.putI32(@intCast(height));
@@ -65,8 +73,17 @@ pub fn makeCreateBuffer(buffer: []u8, width: u32, height: u32, stride: u32) ![]c
     return msg.finish();
 }
 
+pub fn makeDestroyBuffer(buffer: []u8, buffer_id: u32) ![]const u8 {
+    var msg = try protocol.MessageWriter.init(buffer, buffer_id, protocol.wl_buffer_destroy);
+    return msg.finish();
+}
+
 pub fn makeDestroyPool(buffer: []u8) ![]const u8 {
-    var msg = try protocol.MessageWriter.init(buffer, protocol.shm_pool_id, protocol.wl_shm_pool_destroy);
+    return makeDestroyPoolWithId(buffer, protocol.shm_pool_id);
+}
+
+pub fn makeDestroyPoolWithId(buffer: []u8, pool_id: u32) ![]const u8 {
+    var msg = try protocol.MessageWriter.init(buffer, pool_id, protocol.wl_shm_pool_destroy);
     return msg.finish();
 }
 
@@ -125,6 +142,14 @@ pub fn makeMove(buffer: []u8, serial: u32) ![]const u8 {
     var msg = try protocol.MessageWriter.init(buffer, protocol.xdg_toplevel_id, protocol.xdg_toplevel_move);
     try msg.putU32(protocol.seat_id);
     try msg.putU32(serial);
+    return msg.finish();
+}
+
+pub fn makeResize(buffer: []u8, serial: u32, edges: u32) ![]const u8 {
+    var msg = try protocol.MessageWriter.init(buffer, protocol.xdg_toplevel_id, protocol.xdg_toplevel_resize);
+    try msg.putU32(protocol.seat_id);
+    try msg.putU32(serial);
+    try msg.putU32(edges);
     return msg.finish();
 }
 
@@ -211,6 +236,13 @@ pub fn handleMessage(state: *protocol.WaylandState, kind: protocol.ObjectKind, m
             if (message.opcode == protocol.xdg_surface_configure_event) state.configured = true;
         },
         .xdg_toplevel => {
+            if (message.opcode == protocol.xdg_toplevel_configure_event) {
+                if (message.payload.len < 8) return error.InvalidWaylandMessage;
+                const width = std.mem.readInt(i32, message.payload[0..4], .little);
+                const height = std.mem.readInt(i32, message.payload[4..8], .little);
+                if (width > 0) state.configured_width = @intCast(width);
+                if (height > 0) state.configured_height = @intCast(height);
+            }
             if (message.opcode == protocol.xdg_toplevel_close_event) state.closed = true;
         },
         .seat => {

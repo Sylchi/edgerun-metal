@@ -3,8 +3,10 @@
 
 %define HAVE_ER_WASM_RUNTIME_PTR
 %define ER_WASMC_NO_EXTERN_RUN
+%define ER_TSX_PARSER_NO_EXTERN_WASMC
 %include "x86_64/wasm/wasm_interpreter.asm"
 %include "x86_64/wasm/wasm_compiler.asm"
+%include "x86_64/wasm/tsx_parser.asm"
 %include "x86_64/wasm/wasm_test_data.asm"
 
 LINUX_SYS_EXIT equ 60
@@ -310,6 +312,44 @@ source_if_bad_arm: db "export if_bad_arm = if (1) 42 (0);"
 SOURCE_IF_BAD_ARM_LEN equ $ - source_if_bad_arm
 source_bad: db "export = 1;"
 SOURCE_BAD_LEN equ $ - source_bad
+tsx_single: db "<App />"
+TSX_SINGLE_LEN equ $ - tsx_single
+tsx_nested: db "<App><Title text=",34,"hi",34,"/><Body count={40 + 2}>ok</Body></App>"
+TSX_NESTED_LEN equ $ - tsx_nested
+tsx_boolean_attr: db "<Input disabled value='x' />"
+TSX_BOOLEAN_ATTR_LEN equ $ - tsx_boolean_attr
+tsx_deep: db "<A><B><C><D /></C></B></A>"
+TSX_DEEP_LEN equ $ - tsx_deep
+tsx_mismatch: db "<App><Body /></Panel>"
+TSX_MISMATCH_LEN equ $ - tsx_mismatch
+tsx_unclosed: db "<App><Body /></App"
+TSX_UNCLOSED_LEN equ $ - tsx_unclosed
+tsx_bad_attr: db "<App value={40 + 2 />"
+TSX_BAD_ATTR_LEN equ $ - tsx_bad_attr
+tsx_two_roots: db "<A /><B />"
+TSX_TWO_ROOTS_LEN equ $ - tsx_two_roots
+tsx_top_text: db "text<App />"
+TSX_TOP_TEXT_LEN equ $ - tsx_top_text
+tsx_too_deep: db "<A><B><C><D><E><F><G><H><I><J><K><L><M><N><O><P><Q></Q></P></O></N></M></L></K></J></I></H></G></F></E></D></C></B></A>"
+TSX_TOO_DEEP_LEN equ $ - tsx_too_deep
+wasm_compile_tsx_valid_cases:
+    dq tsx_single, TSX_SINGLE_LEN, 1, 0, 0
+    dq tsx_nested, TSX_NESTED_LEN, 3, 2, 1
+    dq tsx_boolean_attr, TSX_BOOLEAN_ATTR_LEN, 1, 2, 0
+    dq tsx_deep, TSX_DEEP_LEN, 4, 0, 0
+WASM_COMPILE_TSX_VALID_CASE_SIZE equ 40
+wasm_compile_tsx_valid_cases_end:
+WASM_COMPILE_TSX_VALID_CASES equ (wasm_compile_tsx_valid_cases_end - wasm_compile_tsx_valid_cases) / WASM_COMPILE_TSX_VALID_CASE_SIZE
+wasm_compile_tsx_error_cases:
+    dq tsx_mismatch, TSX_MISMATCH_LEN, ERROR_PARSE
+    dq tsx_unclosed, TSX_UNCLOSED_LEN, ERROR_PARSE
+    dq tsx_bad_attr, TSX_BAD_ATTR_LEN, ERROR_PARSE
+    dq tsx_two_roots, TSX_TWO_ROOTS_LEN, ERROR_PARSE
+    dq tsx_top_text, TSX_TOP_TEXT_LEN, ERROR_PARSE
+    dq tsx_too_deep, TSX_TOO_DEEP_LEN, ERROR_NO_SPACE
+WASM_COMPILE_TSX_ERROR_CASE_SIZE equ 24
+wasm_compile_tsx_error_cases_end:
+WASM_COMPILE_TSX_ERROR_CASES equ (wasm_compile_tsx_error_cases_end - wasm_compile_tsx_error_cases) / WASM_COMPILE_TSX_ERROR_CASE_SIZE
 wasm_compile_run_cases:
     dq source_named, SOURCE_NAMED_LEN, 123
     dq source_i32_max, SOURCE_I32_MAX_LEN, 0x7fffffff
@@ -481,6 +521,7 @@ runtime: resb RUNTIME_SIZE
 compiled_wasm: resb 128
 compiled_wasm_b: resb 128
 call_args: resq 2
+tsx_nodes: resb 120
 
 global er_wasm_runtime_ptr
 er_wasm_runtime_ptr: resq 1
@@ -1004,6 +1045,83 @@ _start:
     add     rbx, WASM_COMPILE_RUN_ERROR_CASE_SIZE
     dec     r12d
     jnz     .run_error_loop
+
+    lea     rbx, [rel wasm_compile_tsx_valid_cases]
+    mov     r12d, WASM_COMPILE_TSX_VALID_CASES
+.tsx_valid_loop:
+    mov     rdi, [rbx]
+    mov     rsi, [rbx + 8]
+    call    er_wasmc_parse_tsx
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, [rbx + 16]
+    jne     .fail
+    cmp     rcx, [rbx + 24]
+    jne     .fail
+    cmp     r8, [rbx + 32]
+    jne     .fail
+    add     rbx, WASM_COMPILE_TSX_VALID_CASE_SIZE
+    dec     r12d
+    jnz     .tsx_valid_loop
+
+    lea     rbx, [rel wasm_compile_tsx_error_cases]
+    mov     r12d, WASM_COMPILE_TSX_ERROR_CASES
+.tsx_error_loop:
+    mov     rdi, [rbx]
+    mov     rsi, [rbx + 8]
+    call    er_wasmc_parse_tsx
+    cmp     rdx, [rbx + 16]
+    jne     .fail
+    add     rbx, WASM_COMPILE_TSX_ERROR_CASE_SIZE
+    dec     r12d
+    jnz     .tsx_error_loop
+
+    lea     rdi, [rel tsx_nested]
+    mov     esi, TSX_NESTED_LEN
+    lea     rdx, [rel tsx_nodes]
+    mov     ecx, 3
+    call    er_wasmc_parse_tsx_tree
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 3
+    jne     .fail
+    cmp     rcx, 2
+    jne     .fail
+    cmp     r8, 1
+    jne     .fail
+    lea     rdi, [rel tsx_nested + 1]
+    cmp     [rel tsx_nodes], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 8], 3
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 16], -1
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 24], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 32], 0
+    jne     .fail
+    lea     rdi, [rel tsx_nested + 6]
+    cmp     [rel tsx_nodes + 40], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 48], 5
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 56], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 64], 1
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 72], 0
+    jne     .fail
+    lea     rdi, [rel tsx_nested + 24]
+    cmp     [rel tsx_nodes + 80], rdi
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 88], 4
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 96], 0
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 104], 1
+    jne     .fail
+    cmp     qword [rel tsx_nodes + 112], 1
+    jne     .fail
 
     xor     edi, edi
     mov     eax, LINUX_SYS_EXIT

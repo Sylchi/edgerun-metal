@@ -88,7 +88,6 @@ WASMC_EXPR_IF_PART equ 2
 WASMC_IF_PART_COND equ 1
 WASMC_IF_PART_THEN equ 2
 WASMC_IF_PART_ELSE equ 3
-
 SECTION .rodata
 wasmc_kw_export: db "export"
 WASMC_KW_EXPORT_LEN equ 6

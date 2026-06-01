@@ -6,6 +6,7 @@ const interaction = @import("../interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const layout = @import("../layouts/Types.zig");
+const button_component = @import("Button.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const icon_component = @import("Icon.zig");
@@ -15,6 +16,7 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const Icon = icon_component.Icon;
+const IconButton = button_component.IconButton;
 
 pub const Sheet = struct {
     id: u32,
@@ -31,13 +33,13 @@ pub const Sheet = struct {
         if (options.overlay.isOpen(self.id)) {
             const content = contentBounds(bounds);
             try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
-            try Icon.named(.x).renderColor(scene, closeBounds(bounds), options.style.muted);
+            try closeButton(self.id).render(scene, closeBounds(bounds), options);
         }
     }
 
     pub fn collectInteractions(self: Sheet, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
-        try collector.addHit(closeBounds(bounds), .button, primitives.overlaySecondaryId(self.id));
+        try closeButton(self.id).collectInteractions(collector, closeBounds(bounds));
     }
 
     pub fn measure(self: Sheet, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -86,6 +88,10 @@ fn closeBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(content.x + content.w - sheet_close_inset - sheet_close_size, content.y + sheet_close_inset, sheet_close_size, sheet_close_size);
 }
 
+fn closeButton(id: u32) IconButton {
+    return .{ .id = primitives.overlaySecondaryId(id), .label = "Close sheet", .icon = Icon.named(.x), .variant = .ghost };
+}
+
 const overlay_open_label = "Open";
 const sheet_trigger_y: f32 = 4.0;
 const sheet_trigger_w: f32 = 62.0;
@@ -95,9 +101,9 @@ const sheet_content_w: f32 = 96.0;
 const sheet_content_min_left: f32 = 82.0;
 const sheet_radius: f32 = 8.0;
 const sheet_padding: f32 = 10.0;
-const sheet_close_size: f32 = 12.0;
+const sheet_close_size: f32 = 28.0;
 const sheet_close_inset: f32 = 8.0;
-const sheet_close_space: f32 = 18.0;
+const sheet_close_space: f32 = 34.0;
 const sheet_panel = primitives.TitleDetailPanel{ .radius = sheet_radius, .padding = sheet_padding, .title_y = 10.0, .title_h = 14.0, .detail_y = 29.0, .detail_h = 12.0, .title_right_inset = sheet_close_space };
 
 test "sheet component serializes to canonical object and deserializes" {

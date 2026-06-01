@@ -6,6 +6,7 @@ const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
+const button_component = @import("Button.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const icon_component = @import("Icon.zig");
@@ -16,6 +17,7 @@ const RenderOptions = common.RenderOptions;
 
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
+const IconButton = button_component.IconButton;
 
 pub const Sidebar = struct {
     id: u32,
@@ -31,7 +33,7 @@ pub const Sidebar = struct {
         const rail = railBounds(bounds);
         try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
         try scene.pushRect(rail, options.style.border, .border, sidebar_radius, 0.0);
-        try Icon.named(.menu).renderColor(scene, triggerBounds(bounds), options.style.text);
+        try menuButton(self.id).render(scene, triggerBounds(bounds), options);
         try text_component.Text.renderWrapped(scene, titleBounds(bounds, self.title), self.title, options.style.muted, primitives.textWrap(self.title, sidebar_title_h, sidebar_title_max_lines));
         const item_bounds = itemBounds(bounds, self.title, self.item);
         try scene.pushRect(item_bounds, options.style.row, .fill, sidebar_item_radius, 0.0);
@@ -42,7 +44,7 @@ pub const Sidebar = struct {
     }
 
     pub fn collectInteractions(self: Sidebar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(triggerBounds(bounds), .button, self.id);
+        try menuButton(self.id).collectInteractions(collector, triggerBounds(bounds));
         try collector.addHit(itemBounds(bounds, self.title, self.item), .row_item, common.offsetId(self.id, 1));
     }
 
@@ -89,6 +91,10 @@ fn triggerBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x + sidebar_trigger_x, bounds.y + sidebar_trigger_y, sidebar_trigger_size, sidebar_trigger_size);
 }
 
+fn menuButton(id: u32) IconButton {
+    return .{ .id = id, .label = "Open sidebar", .icon = Icon.named(.menu), .variant = .ghost };
+}
+
 fn itemBounds(bounds: ui.Rect, title: []const u8, item: []const u8) ui.Rect {
     const item_w = @max(primitives.min_extent, sidebar_rail_w - sidebar_item_x * 2.0);
     const title_h = titleBounds(bounds, title).h;
@@ -117,14 +123,14 @@ fn contentBounds(bounds: ui.Rect) ui.Rect {
 const sidebar_rail_w: f32 = 62.0;
 const sidebar_content_gap: f32 = 10.0;
 const sidebar_radius: f32 = 8.0;
-const sidebar_trigger_x: f32 = 8.0;
+const sidebar_trigger_x: f32 = 17.0;
 const sidebar_trigger_y: f32 = 8.0;
-const sidebar_trigger_size: f32 = 16.0;
-const sidebar_title_y: f32 = 10.0;
+const sidebar_trigger_size: f32 = 28.0;
+const sidebar_title_y: f32 = 42.0;
 const sidebar_title_h: f32 = 12.0;
 const sidebar_title_max_lines: usize = 2;
 const sidebar_item_x: f32 = 6.0;
-const sidebar_item_y: f32 = 34.0;
+const sidebar_item_y: f32 = 66.0;
 const sidebar_item_h: f32 = 20.0;
 const sidebar_item_bottom_padding: f32 = 10.0;
 const sidebar_item_radius: f32 = 4.0;

@@ -168,7 +168,7 @@ pub const State = struct {
 
         var y = inner.y + 150.0;
         if (self.chat.contact_count == 0) {
-            try scene.pushText(ui.Rect.init(inner.x, y, inner.w, 18.0), "No contacts", options.style.muted);
+            try (Component{ .empty = .{ .title = "No contacts", .detail = "Import a route to begin." } }).render(scene, ui.Rect.init(inner.x, y, inner.w, @min(150.0, @max(96.0, inner.y + inner.h - y))), options);
             return;
         }
         var index: usize = 0;
@@ -184,7 +184,7 @@ pub const State = struct {
     fn renderConversation(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try scene.pushRect(bounds, workspace_main_bg, .fill, 0.0, 0.0);
         const selected = self.selectedContact() orelse {
-            try renderSectionTitle(scene, bounds.x + 18.0, bounds.y + 18.0, "No Contact", "Import a route to begin", options);
+            try (Component{ .empty = .{ .title = "No contact", .detail = "Import a route to begin." } }).render(scene, bounds.insetUniform(18.0), options);
             return;
         };
 
@@ -198,7 +198,7 @@ pub const State = struct {
         const list_y = if (bounds.h >= 620.0) import_y + 58.0 else bounds.y + 18.0;
         try self.renderMessages(scene, ui.Rect.init(bounds.x, list_y, bounds.w, @max(1.0, compose_y - list_y)), selected.id, options);
 
-        try scene.pushRect(ui.Rect.init(bounds.x, compose_y, bounds.w, 1.0), options.style.border, .fill, 0.0, 0.0);
+        try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, compose_y, bounds.w, 1.0), options);
         const tool_y = compose_y + 18.0;
         try renderIconButton(scene, collector, ui.Rect.init(bounds.x + 18.0, tool_y, 34.0, 38.0), image_button_id, "Image", .photo, options);
         try renderIconButton(scene, collector, ui.Rect.init(bounds.x + 58.0, tool_y, 34.0, 38.0), video_button_id, "Video", .video, options);
@@ -378,11 +378,6 @@ fn renderRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     });
 }
 
-fn renderSectionTitle(scene: *ui.Scene, x: f32, y: f32, title: []const u8, detail: []const u8, options: RenderOptions) !void {
-    try scene.pushStrongText(ui.Rect.init(x, y, 320.0, 20.0), title, options.style.text);
-    try scene.pushText(ui.Rect.init(x, y + 25.0, 360.0, 16.0), detail, options.style.muted);
-}
-
 fn renderRail(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
     const route_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 12.0, bounds.w - 12.0, 36.0);
@@ -398,7 +393,7 @@ fn renderRail(self: *State, scene: *ui.Scene, collector: *interaction.Collector,
 fn renderTop(self: *State, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) !void {
     const selected = self.selectedContact();
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.Palette.border, .fill, 0.0, 0.0);
+    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), options);
     const title = if (selected) |contact| contact.nameBytes() else "Chat";
     try scene.pushStrongText(ui.Rect.init(bounds.x + 16.0, bounds.y + 13.0, bounds.w - 260.0, 18.0), title, design.Palette.text);
     try scene.pushText(ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 260.0, 14.0), self.status, design.Palette.dim);
@@ -408,7 +403,6 @@ fn renderTop(self: *State, scene: *ui.Scene, bounds: ui.Rect, options: RenderOpt
         try scene.pushText(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 13.0, 210.0, 14.0), remote, design.Palette.muted);
         try scene.pushText(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 32.0, 210.0, 14.0), local, design.Palette.muted);
     }
-    _ = options;
 }
 
 fn renderStatus(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
@@ -540,7 +534,7 @@ test "encrypted chat app activation selects imports sends and toggles theme" {
 test "encrypted chat app renders stacked layout and light theme" {
     var state = try State.initDemo();
     state.theme_mode = .light;
-    var commands: [256]ui.Command = undefined;
+    var commands: [384]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     var regions: [64]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);

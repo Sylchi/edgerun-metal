@@ -26,6 +26,7 @@ pub const Options = struct {
     dashboard: bool = false,
     hardware: bool = false,
     chat: bool = false,
+    pipeline: bool = false,
     ui_stream: UiStreamMode = .off,
 };
 
@@ -72,6 +73,8 @@ pub fn parseOptions(args: []const [:0]const u8) !Options {
             options.hardware = true;
         } else if (bytes_mod.eql(arg, "--chat")) {
             options.chat = true;
+        } else if (bytes_mod.eql(arg, "--pipeline")) {
+            options.pipeline = true;
         } else if (bytes_mod.eql(arg, "--ui-stream")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
@@ -98,6 +101,7 @@ pub fn help() void {
         \\  --dashboard         Show network dashboard
         \\  --hardware          Show hardware dashboard
         \\  --chat              Show encrypted chat UI
+        \\  --pipeline          Show user-scheduled pipeline UI
         \\  --ui-stream <mode>  UI BLE stream mode: off, broadcast, receive, both
         \\  --help              Show this help
         \\
@@ -125,6 +129,12 @@ test "parse ui stream modes" {
     try std.testing.expectEqual(UiStreamMode.receive, try parseUiStreamMode("receive"));
     try std.testing.expectEqual(UiStreamMode.both, try parseUiStreamMode("both"));
     try std.testing.expectError(error.InvalidArguments, parseUiStreamMode("mirror"));
+}
+
+test "parse pipeline dashboard mode" {
+    const parsed = try parseOptions(&.{ "edgerun-wayland-window", "--pipeline" });
+    try std.testing.expect(parsed.pipeline);
+    try std.testing.expect(!parsed.dashboard);
 }
 
 pub fn parseHostIp(url: []const u8) ?[]const u8 {

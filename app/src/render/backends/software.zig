@@ -1942,7 +1942,7 @@ fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_ve
 
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
     const distance = roundedOutsideDistance(bounds, radius, x, y);
-    const coverage = math.clampF(-distance / antialias_width, 0.0, 1.0);
+    const coverage = math.clampF((antialias_width - distance) / (antialias_width * 2.0), 0.0, 1.0);
     return @intFromFloat(math.floorF(coverage * 255.0 + 0.5));
 }
 
@@ -2469,7 +2469,10 @@ test "software renderer uses svg iterator for transformed shape elements" {
 
     var iter = icon_vector.Iterator.init(&[_]f32{
         icon_vector.op_paint_current_color,
-        icon_vector.op_circle, 12.0 / 24.0, 12.0 / 24.0, 3.0 / 24.0,
+        icon_vector.op_circle,
+        12.0 / 24.0,
+        12.0 / 24.0,
+        3.0 / 24.0,
     });
     surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255 }, &iter);
 
@@ -2483,10 +2486,10 @@ test "software renderer fills default painted svg shapes" {
     surface.clear(ui.Color.clear);
 
     var iter = icon_vector.Iterator.init(&[_]f32{
-        icon_vector.op_paint_rgba, 0, 0, 0, 255,
-        icon_vector.op_filled_circle, 8.0 / 24.0, 12.0 / 24.0, 4.0 / 24.0,
-        icon_vector.op_paint_rgba, 0, 0, 0, 255,
-        icon_vector.op_filled_round_rect, 14.0 / 24.0, 8.0 / 24.0, 6.0 / 24.0, 8.0 / 24.0, 1.0 / 24.0,
+        icon_vector.op_paint_rgba,    0,          0,           0,          255,
+        icon_vector.op_filled_circle, 8.0 / 24.0, 12.0 / 24.0, 4.0 / 24.0, icon_vector.op_paint_rgba,
+        0,                            0,          0,           255,        icon_vector.op_filled_round_rect,
+        14.0 / 24.0,                  8.0 / 24.0, 6.0 / 24.0,  8.0 / 24.0, 1.0 / 24.0,
     });
     surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 33, .g = 200, .b = 120, .a = 255 }, &iter);
 
@@ -2501,14 +2504,15 @@ test "software renderer honors explicit svg solid paint colors" {
     surface.clear(ui.Color.clear);
 
     var iter = icon_vector.Iterator.init(&[_]f32{
-        icon_vector.op_paint_rgba, 255, 0, 0, 255,
-        icon_vector.op_filled_round_rect, 2.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
-        icon_vector.op_paint_rgba, 0, 0, 255, 255,
-        icon_vector.op_filled_round_rect, 14.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
-        icon_vector.op_paint_rgba, 0, 255, 0, 128,
-        icon_vector.op_filled_round_rect, 2.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
-        icon_vector.op_paint_rgba, 200, 100, 50, 128,
-        icon_vector.op_filled_round_rect, 14.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
+        icon_vector.op_paint_rgba,        255,                              0,                                0,                                255,
+        icon_vector.op_filled_round_rect, 2.0 / 24.0,                       4.0 / 24.0,                       8.0 / 24.0,                       8.0 / 24.0,
+        0,                                icon_vector.op_paint_rgba,        0,                                0,                                255,
+        255,                              icon_vector.op_filled_round_rect, 14.0 / 24.0,                      4.0 / 24.0,                       8.0 / 24.0,
+        8.0 / 24.0,                       0,                                icon_vector.op_paint_rgba,        0,                                255,
+        0,                                128,                              icon_vector.op_filled_round_rect, 2.0 / 24.0,                       14.0 / 24.0,
+        8.0 / 24.0,                       8.0 / 24.0,                       0,                                icon_vector.op_paint_rgba,        200,
+        100,                              50,                               128,                              icon_vector.op_filled_round_rect, 14.0 / 24.0,
+        14.0 / 24.0,                      8.0 / 24.0,                       8.0 / 24.0,                       0,
     });
     surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 20, .g = 200, .b = 20, .a = 255 }, &iter);
 

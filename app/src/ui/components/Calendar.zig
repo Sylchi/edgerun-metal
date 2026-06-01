@@ -5,6 +5,9 @@ const interaction = @import("../interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
+const button_component = @import("Button.zig");
+const icon_component = @import("Icon.zig");
+const icon = @import("../icon.zig");
 const layout = @import("../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,6 +17,7 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const renderControlText = primitives.renderControlText;
+const IconButton = button_component.IconButton;
 
 pub const Calendar = struct {
     id: u32,
@@ -28,8 +32,8 @@ pub const Calendar = struct {
     pub fn render(self: Calendar, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.panel, .fill, calendar_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, calendar_radius, 0.0);
-        try renderNav(scene, navBounds(bounds, 0), "<", options);
-        try renderNav(scene, navBounds(bounds, 1), ">", options);
+        try navButton(self.id, "Previous month", .chevron_left).render(scene, navBounds(bounds, 0), options);
+        try navButton(common.offsetId(self.id, 1), "Next month", .chevron_right).render(scene, navBounds(bounds, 1), options);
         try text_component.Text.renderAligned(scene, captionBounds(bounds), self.month, options.style.text, .center);
 
         for (calendar_weekday_labels, 0..) |label, index| {
@@ -42,8 +46,8 @@ pub const Calendar = struct {
     }
 
     pub fn collectInteractions(self: Calendar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(navBounds(bounds, 0), .button, self.id);
-        try collector.addHit(navBounds(bounds, 1), .button, common.offsetId(self.id, 1));
+        try navButton(self.id, "Previous month", .chevron_left).collectInteractions(collector, navBounds(bounds, 0));
+        try navButton(common.offsetId(self.id, 1), "Next month", .chevron_right).collectInteractions(collector, navBounds(bounds, 1));
         for (0..calendar_day_count) |index| {
             try collector.addHit(dayBounds(bounds, index), .button, self.id + calendar_day_id_offset + @as(u32, @intCast(index)));
         }
@@ -110,9 +114,8 @@ fn gridBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x + (bounds.w - grid_w) * 0.5, bounds.y + calendar_grid_y, grid_w, @max(primitives.min_extent, bounds.h - calendar_grid_y - calendar_padding));
 }
 
-fn renderNav(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, ui.Color.clear, .fill, primitives.control_radius, 0.0);
-    try renderControlText(scene, bounds, calendar_nav_text_padding, calendar_day_text_h, label, options.style.muted, .center);
+fn navButton(id: u32, label: []const u8, icon_value: icon.Icon) IconButton {
+    return .{ .id = id, .label = label, .icon = icon_component.Icon.named(icon_value), .variant = .ghost };
 }
 
 fn renderDay(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
@@ -142,7 +145,6 @@ const calendar_cell_size: f32 = 22.0;
 const calendar_cell_gap: f32 = 2.0;
 const calendar_day_text_h: f32 = 12.0;
 const calendar_day_text_padding: f32 = 2.0;
-const calendar_nav_text_padding: f32 = 4.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
 

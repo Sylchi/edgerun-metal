@@ -8,6 +8,7 @@ const app_location = @import("../location.zig");
 const design = @import("../ui/theme.zig");
 const ui = @import("../ui/core.zig");
 const text_component = @import("../ui/components/Text.zig");
+const Component = @import("../ui/components/Component.zig").Component;
 const workspace_rail_w: f32 = 48.0;
 const workspace_sidebar_w: f32 = 260.0;
 const workspace_top_h: f32 = 56.0;
@@ -65,7 +66,7 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
 fn renderWorkspaceTop(scene: *ui.Scene, _collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     _ = _collector;
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.Palette.border, .fill, 0.0, 0.0);
+    try (Component{ .separator = .{} }).render(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), .{ .style = design.appStyle() });
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.location), design.Palette.text, .start);
 }
 

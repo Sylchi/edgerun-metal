@@ -1,14 +1,11 @@
 const std = @import("std");
 const math = @import("../math.zig");
 const bytes = @import("../bytes.zig");
-const badge_component = @import("../ui/components/Badge.zig");
-const card_component = @import("../ui/components/Card.zig");
-const display_component = @import("../ui/components/Display.zig");
+const common = @import("../ui/component_common.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 const component_union = @import("../ui/components/Component.zig");
 const interaction = @import("../ui/interaction.zig");
 const design = @import("../ui/theme.zig");
-const row_item_component = @import("../ui/components/RowItem.zig");
 const text_component = @import("../ui/components/Text.zig");
 const ui = @import("../ui/core.zig");
 const Component = component_union.Component;
@@ -181,26 +178,26 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     _ = state;
-    try (card_component.Card{
+    try (Component{ .card = .{
         .title = "Owned local agent pipeline",
         .detail = "User gives one request. Dispatcher classifies it; Codebase selects context; Architect compresses the plan; Toolsmith chooses tools; Executor makes one focused patch; Reviewer checks it; Summarizer writes durable memory. Fixed prompts keep devstral-20b cache-friendly on 32k context.",
         .variant = .elevated,
-    }).render(scene, bounds, .{ .style = style });
+    } }).render(scene, bounds, .{ .style = style });
 }
 
 fn renderStatusCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Runtime", .detail = "", .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (Component{ .card = .{ .title = "Runtime", .detail = "", .variant = .panel } }).render(scene, bounds, .{ .style = style });
     const badge_label = if (state.thinking) "pipeline" else if (state.connected) "ready" else "offline";
-    const badge_variant: @TypeOf((badge_component.Badge{ .label = "" }).variant) = if (state.thinking) .default else if (state.connected) .secondary else .outline;
-    try (badge_component.Badge{ .label = badge_label, .variant = badge_variant }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 112.0, 24.0), .{ .style = style });
+    const badge_variant: common.BadgeVariant = if (state.thinking) .default else if (state.connected) .secondary else .outline;
+    try (Component{ .badge = .{ .label = badge_label, .variant = badge_variant } }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 112.0, 24.0), .{ .style = style });
     if (state.thinking) {
         try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
-        try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+        try (Component{ .progress = .{ .value = state.progress } }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
         return;
     }
     if (state.connected) {
         try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
-        try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+        try (Component{ .progress = .{ .value = state.progress } }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
         return;
     }
     const host_notice = if (state.host_launch_requested) host_launch_requested_notice else host_not_connected_notice;
@@ -220,12 +217,12 @@ fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.
     var detail_buf: [128]u8 = undefined;
     const total = pipelineContextUsed(state);
     const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens across {d} fixed-role prompts", .{ total, context_window_tokens, state.agents.len }) catch "32k context budget";
-    try (card_component.Card{ .title = "32k context budget", .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
-    try (display_component.Progress{ .value = math.clampF(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0) }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+    try (Component{ .card = .{ .title = "32k context budget", .detail = detail, .variant = .panel } }).render(scene, bounds, .{ .style = style });
+    try (Component{ .progress = .{ .value = math.clampF(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0) } }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
 }
 
 fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Expert pipeline", .detail = "automatic role chain", .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (Component{ .card = .{ .title = "Expert pipeline", .detail = "automatic role chain", .variant = .panel } }).render(scene, bounds, .{ .style = style });
     var y = bounds.y + 58.0;
     for (state.agents, 0..) |agent, index| {
         var detail_buf: [176]u8 = undefined;
@@ -237,36 +234,36 @@ fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
 }
 
 fn renderTranscript(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Result", .detail = state.assistant.slice(), .variant = .elevated }).render(scene, bounds, .{ .style = style });
+    try (Component{ .card = .{ .title = "Result", .detail = state.assistant.slice(), .variant = .elevated } }).render(scene, bounds, .{ .style = style });
 }
 
 fn renderRows(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, rows: RowList, style: ui.Style) !void {
-    try (card_component.Card{ .title = title, .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (Component{ .card = .{ .title = title, .detail = detail, .variant = .panel } }).render(scene, bounds, .{ .style = style });
     var y = bounds.y + 58.0;
     if (rows.len == 0) {
-        try (row_item_component.RowItem{ .id = 0, .title = "No events yet", .detail = "waiting for pipeline stream" }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
+        try (Component{ .empty = .{ .title = "No events yet", .detail = "waiting for pipeline stream" } }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, @max(96.0, bounds.y + bounds.h - y - 8.0)), .{ .style = style });
         return;
     }
     for (rows.items[0..rows.len]) |row| {
-        try (row_item_component.RowItem{ .id = 0, .title = row.title.slice(), .detail = row.detail.slice() }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
+        try (Component{ .row_item = .{ .id = 0, .title = row.title.slice(), .detail = row.detail.slice() } }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
         y += 46.0;
     }
 }
 
 fn renderOutputRows(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Output", .detail = "stdout, stderr and diff preview", .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (Component{ .card = .{ .title = "Output", .detail = "stdout, stderr and diff preview", .variant = .panel } }).render(scene, bounds, .{ .style = style });
     var y = bounds.y + 58.0;
     var rendered = false;
     rendered = try renderRowGroup(scene, bounds, &y, state.stdout_rows, rendered, style);
     rendered = try renderRowGroup(scene, bounds, &y, state.stderr_rows, rendered, style);
     rendered = try renderRowGroup(scene, bounds, &y, state.diff_rows, rendered, style);
-    if (!rendered) try (row_item_component.RowItem{ .id = 0, .title = "No output yet", .detail = "tool output will appear here" }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
+    if (!rendered) try (Component{ .empty = .{ .title = "No output yet", .detail = "tool output will appear here" } }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, @max(96.0, bounds.y + bounds.h - y - 8.0)), .{ .style = style });
 }
 
 fn renderRowGroup(scene: *ui.Scene, bounds: ui.Rect, y: *f32, rows: RowList, rendered: bool, style: ui.Style) !bool {
     var any = rendered;
     for (rows.items[0..rows.len]) |row| {
-        try (row_item_component.RowItem{ .id = 0, .title = row.title.slice(), .detail = row.detail.slice() }).render(scene, ui.Rect.init(bounds.x + 8.0, y.*, bounds.w - 16.0, 42.0), .{ .style = style });
+        try (Component{ .row_item = .{ .id = 0, .title = row.title.slice(), .detail = row.detail.slice() } }).render(scene, ui.Rect.init(bounds.x + 8.0, y.*, bounds.w - 16.0, 42.0), .{ .style = style });
         y.* += 46.0;
         any = true;
     }

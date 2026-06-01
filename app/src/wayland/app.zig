@@ -13,6 +13,7 @@ const app_native_input = @import("../input/native.zig");
 const app_dashboard = @import("../app_dashboard.zig");
 const app_hardware_dashboard = @import("../app_hardware_dashboard.zig");
 const app_encrypted_chat = @import("../app_encrypted_chat.zig");
+const app_pipeline_dashboard = @import("../app_pipeline_dashboard.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 const ui = @import("../ui/core.zig");
 const text_component = @import("../ui/components/Text.zig");
@@ -43,7 +44,7 @@ pub const unionPixelRect = surface.unionPixelRect;
 pub const fixedToFloat = surface.fixedToFloat;
 pub const appBackground = surface.defaultBackground;
 
-pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool, hardware_state: ?*app_hardware_dashboard.State, hardware_mode: bool, chat_state: ?*app_encrypted_chat.State, chat_mode: bool) !void {
+pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool, hardware_state: ?*app_hardware_dashboard.State, hardware_mode: bool, chat_state: ?*app_encrypted_chat.State, chat_mode: bool, pipeline_state: ?*app_pipeline_dashboard.State, pipeline_mode: bool) !void {
     try renderClientDecoration(scene, collector, @floatFromInt(width));
     const content_y = protocol.client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
@@ -51,29 +52,31 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
     if (dashboard_mode) {
         try dashboard_state.refresh();
         try dashboard_state.render(scene, bounds, .{});
-        return;
-    }
-    if (hardware_mode) {
+    } else if (hardware_mode) {
         if (hardware_state) |hs| {
             try hs.render(scene, collector, bounds, hardwareRenderOptions(state));
         }
-        return;
-    }
-    if (chat_mode) {
+    } else if (chat_mode) {
         if (chat_state) |cs| {
             try cs.render(scene, collector, bounds, hardwareRenderOptions(state));
         }
-        return;
+    } else if (pipeline_mode) {
+        if (pipeline_state) |ps| {
+            try ps.render(scene, collector, bounds, hardwareRenderOptions(state));
+        }
+    } else {
+        try app_frame.render(scene, collector, bounds, .{
+            .location = state.location,
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+            .agent = state.agent,
+            .public_identity = state.public_identity,
+            .public_identity_ready = state.public_identity_ready,
+        });
     }
-    try app_frame.render(scene, collector, bounds, .{
-        .location = state.location,
-        .scroll_y = state.scroll_y,
-        .hover_x = state.hover_x,
-        .hover_y = state.hover_y,
-        .agent = state.agent,
-        .public_identity = state.public_identity,
-        .public_identity_ready = state.public_identity_ready,
-    });
+    try renderResizeAffordance(scene, @floatFromInt(width), @floatFromInt(height));
+    try addResizeHits(collector, @floatFromInt(width), @floatFromInt(height));
 }
 
 fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, width: f32) !void {
@@ -121,6 +124,45 @@ pub fn activateClientDecorationForState(state: *AppState, client_ptr: ?*client.W
     }
 }
 
+fn addResizeHits(collector: *interaction.Collector, width: f32, height: f32) !void {
+    const m = protocol.client_decor_resize_margin;
+    try collector.addHit(ui.Rect.init(0.0, 0.0, m, height), .button, protocol.client_decor_resize_left_id);
+    try collector.addHit(ui.Rect.init(@max(0.0, width - m), 0.0, m, height), .button, protocol.client_decor_resize_right_id);
+    try collector.addHit(ui.Rect.init(0.0, 0.0, width, m), .button, protocol.client_decor_resize_top_id);
+    try collector.addHit(ui.Rect.init(0.0, @max(0.0, height - m), width, m), .button, protocol.client_decor_resize_bottom_id);
+    try collector.addHit(ui.Rect.init(0.0, 0.0, m * 2.0, m * 2.0), .button, protocol.client_decor_resize_top_left_id);
+    try collector.addHit(ui.Rect.init(@max(0.0, width - m * 2.0), 0.0, m * 2.0, m * 2.0), .button, protocol.client_decor_resize_top_right_id);
+    try collector.addHit(ui.Rect.init(0.0, @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), .button, protocol.client_decor_resize_bottom_left_id);
+    try collector.addHit(ui.Rect.init(@max(0.0, width - m * 2.0), @max(0.0, height - m * 2.0), m * 2.0, m * 2.0), .button, protocol.client_decor_resize_bottom_right_id);
+}
+
+fn renderResizeAffordance(scene: *ui.Scene, width: f32, height: f32) ui.RenderError!void {
+    const edge = ui.Color{ .r = 110, .g = 121, .b = 136, .a = 70 };
+    const corner = ui.Color{ .r = 166, .g = 181, .b = 198, .a = 130 };
+    try scene.pushRect(ui.Rect.init(0.0, 0.0, width, 1.0), edge, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(0.0, @max(0.0, height - 1.0), width, 1.0), edge, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(0.0, 0.0, 1.0, height), edge, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(@max(0.0, width - 1.0), 0.0, 1.0, height), edge, .fill, 0.0, 0.0);
+    const s: f32 = 18.0;
+    const t: f32 = 2.0;
+    try scene.pushRect(ui.Rect.init(width - s, height - t - 5.0, s - 5.0, t), corner, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(width - t - 5.0, height - s, t, s - 5.0), corner, .fill, 0.0, 0.0);
+}
+
+fn resizeEdgeForHit(hit_id: u32) ?u32 {
+    return switch (hit_id) {
+        protocol.client_decor_resize_left_id => protocol.xdg_toplevel_resize_edge_left,
+        protocol.client_decor_resize_right_id => protocol.xdg_toplevel_resize_edge_right,
+        protocol.client_decor_resize_top_id => protocol.xdg_toplevel_resize_edge_top,
+        protocol.client_decor_resize_bottom_id => protocol.xdg_toplevel_resize_edge_bottom,
+        protocol.client_decor_resize_top_left_id => protocol.xdg_toplevel_resize_edge_top_left,
+        protocol.client_decor_resize_top_right_id => protocol.xdg_toplevel_resize_edge_top_right,
+        protocol.client_decor_resize_bottom_left_id => protocol.xdg_toplevel_resize_edge_bottom_left,
+        protocol.client_decor_resize_bottom_right_id => protocol.xdg_toplevel_resize_edge_bottom_right,
+        else => null,
+    };
+}
+
 pub fn scrollStateBy(state: *AppState, width: u32, height: u32, delta_y: f32) void {
     const viewport_h = @max(1.0, @as(f32, @floatFromInt(height)) - protocol.client_decor_h);
     app_native_input.scrollBy(state, @floatFromInt(width), viewport_h, delta_y);
@@ -137,9 +179,11 @@ pub const NativeApp = struct {
     dashboard_app: app_dashboard.State = .{},
     hardware_app: app_hardware_dashboard.State = .{},
     chat_app: app_encrypted_chat.State = undefined,
+    pipeline_app: app_pipeline_dashboard.State = .{},
     dashboard: bool = false,
     hardware: bool = false,
     chat: bool = false,
+    pipeline: bool = false,
     ui_stream: @import("options.zig").UiStreamMode = .off,
 
     pub fn create(client_ptr: *client.WaylandClient, allocator: std.mem.Allocator, options: @import("options.zig").Options) !*NativeApp {
@@ -158,11 +202,16 @@ pub const NativeApp = struct {
         self.dashboard_app = .{};
         self.hardware_app = .{};
         self.chat_app = try app_encrypted_chat.State.initDemo();
+        self.pipeline_app = .{};
         self.dashboard = options.dashboard;
         self.hardware = options.hardware;
         self.chat = options.chat;
+        self.pipeline = options.pipeline;
         self.ui_stream = options.ui_stream;
         if (self.hardware) self.hardware_app.refresh();
+        if (client_ptr.state.configured_width != 0 and client_ptr.state.configured_height != 0) {
+            try self.surface.resize(client_ptr, client_ptr.state.configured_width, client_ptr.state.configured_height);
+        }
         return self;
     }
 
@@ -179,7 +228,7 @@ pub const NativeApp = struct {
     pub fn render(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware, &self.chat_app, self.chat);
+        try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware, &self.chat_app, self.chat, &self.pipeline_app, self.pipeline);
         self.region_len = collector.written().len;
         const cursor_kind = self.state.cursorKind();
         if (self.surface.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
@@ -220,6 +269,14 @@ pub const NativeApp = struct {
     }
 
     pub fn handleWaylandInput(self: *NativeApp, client_ptr: *client.WaylandClient, kind: protocol.ObjectKind, message: protocol.Message) !bool {
+        if (kind == .xdg_toplevel and message.opcode == protocol.xdg_toplevel_configure_event) {
+            if (client_ptr.state.configured_width != 0 and client_ptr.state.configured_height != 0) {
+                try self.surface.resize(client_ptr, client_ptr.state.configured_width, client_ptr.state.configured_height);
+                app_native_input.clearHover(&self.state);
+                return true;
+            }
+            return false;
+        }
         if (kind != .pointer) return false;
         switch (message.opcode) {
             protocol.wl_pointer_enter_event => {
@@ -272,9 +329,13 @@ pub const NativeApp = struct {
                         if (self.chat and self.state.last_action_kind == .activated) {
                             self.chat_app.activate(self.state.runtime.hovered);
                         }
+                        if (self.pipeline and self.state.last_action_kind == .activated) {
+                            self.pipeline_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
+                        }
                         try self.activateClientDecoration(client_ptr);
                     } else {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_down);
+                        if (resizeEdgeForHit(self.state.runtime.hoverHitId())) |edge| try client_ptr.sendResize(serial, edge);
                         if (self.state.runtime.hoverHitId() == protocol.client_decor_drag_id) try client_ptr.sendMove(serial);
                     }
                 } else if (button == protocol.wl_pointer_button_right and state == protocol.wl_pointer_button_released) {
