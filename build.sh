@@ -117,7 +117,8 @@ materialize_asm_source() {
 		*.asm.erobj)
 			local out="${ASM_BUILD}/source/${src%.erobj}"
 			mkdir -p "${out%/*}"
-			object_body "$src" > "$out"
+			cmd_er_build >/dev/null
+			"${HOST_BUILD}/er_build" body-to-file "$src" "$out"
 			printf '%s\n' "$out"
 			;;
 		*)
@@ -126,55 +127,31 @@ materialize_asm_source() {
 	esac
 }
 
-object_body() {
-	local path="$1"
-	local magic version kind flags logical_len owners envelopes children body_len file_size reserved
-	magic=$(dd if="$path" bs=8 count=1 2>/dev/null)
-	if [ "$magic" != "EROBJ001" ]; then
-		echo "error: expected EROBJ001 object: ${path}" >&2
-		return 1
-	fi
-	version=$(od -An -tu2 -j 8 -N 2 "$path" | tr -d ' ')
-	kind=$(od -An -tu2 -j 10 -N 2 "$path" | tr -d ' ')
-	flags=$(od -An -tu4 -j 12 -N 4 "$path" | tr -d ' ')
-	logical_len=$(od -An -tu8 -j 16 -N 8 "$path" | tr -d ' ')
-	owners=$(od -An -tu2 -j 24 -N 2 "$path" | tr -d ' ')
-	envelopes=$(od -An -tu2 -j 26 -N 2 "$path" | tr -d ' ')
-	children=$(od -An -tu4 -j 28 -N 4 "$path" | tr -d ' ')
-	body_len=$(od -An -tu8 -j 32 -N 8 "$path" | tr -d ' ')
-	reserved=$(od -An -tx1 -j 132 -N 16 "$path" | tr -d ' \n')
-	file_size=$(stat -c '%s' "$path")
-	if [ "$version" != "1" ] || [ "$kind" != "1" ] || [ "$flags" != "0" ] || \
-		[ "$owners" != "0" ] || [ "$envelopes" != "0" ] || [ "$children" != "0" ] || \
-		[ "$logical_len" != "$body_len" ] || [ "$file_size" -ne $((148 + body_len)) ] || \
-		[ "$reserved" != "00000000000000000000000000000000" ]; then
-		echo "error: invalid build data object: ${path}" >&2
-		return 1
-	fi
-	tail -c +149 "$path"
-}
-
 elf64()   { asm_x86_obj elf64 "$2" "$1"; }
 elf32()   { asm_x86_obj elf32 "$2" "$1"; }
 elf64_dbg() { asm_x86_obj elf64 "$2" "$1" -dX25519_DEBUG; }
 
-# Build object list string from KERNEL_ASM_SRCS with given prefix/suffix
+# Build object list string from the owned x86 source registry with given prefix/suffix
 # Usage: kernel_objs <prefix> <suffix> [extra_objects...]
 kernel_objs() {
 	local prefix="$1" suffix="$2"; shift 2
 	local objs=""
-	for src in ${KERNEL_ASM_SRCS}; do
+	local src
+	while IFS= read -r src; do
+		[ -n "$src" ] || continue
 		local name="$(source_entry_stem "$src")"; name="${name##*/}"
 		objs="${objs} ${ASM_BUILD}/${prefix}_${name}${suffix}"
-	done
+	done < <(kernel_source_entries)
 	for extra; do
 		objs="${objs} ${ASM_BUILD}/${extra}"
 	done
 	echo "${objs}"
 }
 
-# ---- kernel objects (elf32) ----
-KERNEL_ASM_SRCS="$(object_body "${KERNEL_X86_SOURCES}")"
+kernel_source_entries() {
+	cmd_er_build >/dev/null
+	"${HOST_BUILD}/er_build" x86-sources
+}
 
 # ---- assemble_kernel ----
 assemble_kernel() {
@@ -189,7 +166,9 @@ assemble_kernel() {
 
 # ---- assemble_kernel_efi (elf64, for PE32+) ----
 assemble_kernel_efi() {
-	for src in ${KERNEL_ASM_SRCS}; do
+	local src
+	while IFS= read -r src; do
+		[ -n "$src" ] || continue
 		local base="$(source_entry_stem "$src")"
 		local name="${base##*/}"
 		local src_path="${ASM_DIR}/$(source_entry_path "$src")"
@@ -199,7 +178,7 @@ assemble_kernel_efi() {
 		local dst="${ASM_BUILD}/kernel_efi_${name}.o"
 		elf64 "$src_path" "$dst"
 		echo "  AS  ${dst}"
-	done
+	done < <(kernel_source_entries)
 	# kernel_main as ELF64
 	local km_src="${ASM_DIR}/kernel_main.asm"
 	local km_dst="${ASM_BUILD}/kernel_main_efi64.o"
@@ -874,8 +853,9 @@ cmd_test_er_asm_cli() {
  local src_return_fn="${ASM_BUILD}/er_asm_return_fn_probe.asm"
  local src_zero_fn="${ASM_BUILD}/er_asm_zero_fn_probe.asm"
  local src_identity_fn="${ASM_BUILD}/er_asm_identity_fn_probe.asm"
- local src_local_call="${ASM_BUILD}/er_asm_local_call_probe.asm"
- local src_negative="${ASM_BUILD}/er_asm_negative_probe.asm"
+	local src_local_call="${ASM_BUILD}/er_asm_local_call_probe.asm"
+	local src_jz="${ASM_BUILD}/er_asm_jz_probe.asm"
+	local src_negative="${ASM_BUILD}/er_asm_negative_probe.asm"
  local src_and_eax="${ASM_BUILD}/er_asm_and_eax_probe.asm"
  local src_and_edx="${ASM_BUILD}/er_asm_and_edx_probe.asm"
  local src_shr_acc="${ASM_BUILD}/er_asm_shr_acc_probe.asm"
@@ -900,12 +880,13 @@ cmd_test_er_asm_cli() {
  local inc_file="${inc_dir}/exit_defs.inc"
  local bad_src="${ASM_BUILD}/er_asm_bad_exit_probe.asm"
  local bad_u32_src="${ASM_BUILD}/er_asm_bad_u32_probe.asm"
- local bad_hex_src="${ASM_BUILD}/er_asm_bad_hex_probe.asm"
- local bad_dup_equ_src="${ASM_BUILD}/er_asm_bad_dup_equ_probe.asm"
+	local bad_hex_src="${ASM_BUILD}/er_asm_bad_hex_probe.asm"
+	local bad_format_out="${ASM_BUILD}/er_asm_bad_format.o"
+	local bad_dup_equ_src="${ASM_BUILD}/er_asm_bad_dup_equ_probe.asm"
  local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
  local out="${ASM_BUILD}/er_asm_exit_probe.bin"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
-	local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_index_mem" "$src_sized_mem" "$src_test_call" "$src_check_zero" "$src_cmp_below" "$src_test_exit_total" "$src_cmos_macros" "$src_cmos_time" "$src_define_product" "$src_many_defines" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
+	local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_jz" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_index_mem" "$src_sized_mem" "$src_test_call" "$src_check_zero" "$src_cmp_below" "$src_test_exit_total" "$src_cmos_macros" "$src_cmos_time" "$src_define_product" "$src_many_defines" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_format_out" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -1068,12 +1049,23 @@ er_identity:
     mov     eax, edi
     ret
 EOF
- cat > "$src_local_call" <<'EOF'
+	cat > "$src_local_call" <<'EOF'
 [BITS 64]
 section .text
 global _start
 _start:
     call    .done
+    ret
+.done:
+    ret
+EOF
+	cat > "$src_jz" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    jz      .done
+    je      .done
     ret
 .done:
     ret
@@ -1319,9 +1311,10 @@ EOF
  expect_er_asm_bytes "$src_long_named" "b83c000000bf320000000f05" "long global"
  expect_er_asm_bytes "$src_return_fn" "b833000000c3" "return function"
  expect_er_asm_bytes "$src_zero_fn" "31c0c3" "zero function"
- expect_er_asm_bytes "$src_identity_fn" "89f8c3" "identity function"
- expect_er_asm_bytes "$src_local_call" "e801000000c3c3" "local call"
- expect_er_asm_bytes "$src_negative" "b8ffffffffc3" "negative immediate"
+	expect_er_asm_bytes "$src_identity_fn" "89f8c3" "identity function"
+	expect_er_asm_bytes "$src_local_call" "e801000000c3c3" "local call"
+	expect_er_asm_bytes "$src_jz" "0f84070000000f8401000000c3c3" "jz je local branches"
+	expect_er_asm_bytes "$src_negative" "b8ffffffffc3" "negative immediate"
  expect_er_asm_bytes "$src_and_eax" "25ffff0000c3" "and eax immediate"
  expect_er_asm_bytes "$src_and_edx" "81e255555555c3" "and edx immediate"
  expect_er_asm_bytes "$src_shr_acc" "c1e80848c1e820c3" "shr accumulator immediate"
@@ -1344,8 +1337,15 @@ EOF
  expect_er_asm_builds "${ASM_DIR}/wasm/test_table.asm" "test table flat binary"
  expect_er_asm_builds "${ASM_DIR}/rt/math_hash.asm" "math hash flat binary"
  expect_er_asm_builds "kernel/driver/acpi.asm" "acpi flat binary"
- expect_er_asm_reject "$bad_hex_src" "out-of-range hex immediate"
- expect_er_asm_reject "$bad_dup_equ_src" "duplicate equ"
+	expect_er_asm_reject "$bad_hex_src" "out-of-range hex immediate"
+	if "${HOST_BUILD}/er_asm" -f elf64 -o "$bad_format_out" "$src_return_fn" >"$log" 2>&1; then
+		cat "$log" >&2
+		cleanup_er_asm_cli
+		echo "FAIL er-asm-cli: unsupported elf64 format assembled" >&2
+		exit 1
+	fi
+	rm -f "$bad_format_out" "$log"
+	expect_er_asm_reject "$bad_dup_equ_src" "duplicate equ"
  expect_er_asm_reject "$bad_define_tail_src" "trailing define junk"
  expect_er_asm_reject "$bad_u32_src" "out-of-range u32 immediate"
  expect_er_asm_reject "$bad_src" "wrong instruction sequence"
@@ -2327,6 +2327,7 @@ cmd_clean() {
 }
 
 cmd_deps_audit() {
+	cmd_er_build >/dev/null
 	local failed=0
 	local prunes=( -path './.git' -o -path './.build' -o -path './app/.zig-cache' -o -path './app/zig-out' )
 	local manifests
@@ -2365,7 +2366,7 @@ cmd_deps_audit() {
 		\) -print | sort | while IFS= read -r path; do
 		case "$path" in
 			*.erobj)
-				if object_body "$path" >/dev/null 2>&1; then
+				if "${HOST_BUILD}/er_build" validate-object "$path" >/dev/null 2>&1; then
 					:
 				else
 					printf '%s\n' "$path"

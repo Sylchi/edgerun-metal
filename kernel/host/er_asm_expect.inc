@@ -15,42 +15,28 @@ er_fn expect_operand
     ret
 
 er_fn expect_mem_rdi_plus_rcx
-    lea     rdi, [rel tok_mem_rdi_rcx]
-    mov     esi, tok_mem_rdi_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_rcx, tok_mem_rdi_rcx_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rcx_close]
-    mov     esi, tok_rcx_close_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx_close, tok_rcx_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_rdx
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rdx_close]
-    mov     esi, tok_rdx_close_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx_close, tok_rdx_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_minus_one_operand
     call    skip_space_inline
@@ -65,11 +51,9 @@ er_fn expect_minus_one_operand
     cmp     qword [rel imm_u32_value], 1
     jne     .bad
     mov     qword [rel imm_u32_value], -1
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_rdx_minus_one
     call    expect_rsi_plus_rdx_prefix
@@ -78,423 +62,275 @@ er_fn expect_rsi_plus_rdx_minus_one
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_plus_rdx_minus_one
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     test    eax, eax
     jz      .bad
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_plus_rcx_minus_one
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rcx]
-    mov     esi, tok_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx, tok_rcx_len
     test    eax, eax
     jz      .bad
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_rcx_minus_one
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rcx]
-    mov     esi, tok_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx, tok_rcx_len
     test    eax, eax
     jz      .bad
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_minus_one
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_minus_one
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
     call    expect_minus_one_close
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_plus_one
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_r12_plus_one
-    lea     rdi, [rel tok_mem_r12_open]
-    mov     esi, tok_mem_r12_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r12_open, tok_mem_r12_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_one
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_two
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_two_close]
-    mov     esi, tok_two_close_len
-    call    expect_operand
+    er_expect_token_operand tok_two_close, tok_two_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_three
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_three_close]
-    mov     esi, tok_three_close_len
-    call    expect_operand
+    er_expect_token_operand tok_three_close, tok_three_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_r8_plain_mem
-    lea     rdi, [rel tok_mem_r8]
-    mov     esi, tok_mem_r8_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r8, tok_mem_r8_len
     ret
 
 er_fn expect_rdi_plus_r8
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r8_close]
-    mov     esi, tok_r8_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r8_close, tok_r8_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_plus_r8_plus_one
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r8]
-    mov     esi, tok_r8_len
-    call    expect_operand
+    er_expect_token_operand tok_r8, tok_r8_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_r8
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r8_close]
-    mov     esi, tok_r8_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r8_close, tok_r8_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_r9
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r9_close]
-    mov     esi, tok_r9_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_r10
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r10_close]
-    mov     esi, tok_r10_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r10_close, tok_r10_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdi_plus_r9
-    lea     rdi, [rel tok_mem_rdi_open]
-    mov     esi, tok_mem_rdi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r9_close]
-    mov     esi, tok_r9_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdx_plus_r8_times_2
-    lea     rdi, [rel tok_mem_rdx_open]
-    mov     esi, tok_mem_rdx_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r8_times_2_close]
-    mov     esi, tok_r8_times_2_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r8_times_2_close, tok_r8_times_2_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdx_plus_r8_times_2_plus_one
-    lea     rdi, [rel tok_mem_rdx_open]
-    mov     esi, tok_mem_rdx_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r8_times_2]
-    mov     esi, tok_r8_times_2_len
-    call    expect_operand
+    er_expect_token_operand tok_r8_times_2, tok_r8_times_2_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rdx_plus_r9
-    lea     rdi, [rel tok_mem_rdx_open]
-    mov     esi, tok_mem_rdx_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r9_close]
-    mov     esi, tok_r9_close_len
-    call    expect_operand
+    er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rsi_plus_rdx_prefix
-    lea     rdi, [rel tok_mem_rsi_open]
-    mov     esi, tok_mem_rsi_open_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_plus]
-    mov     esi, tok_plus_len
-    call    expect_operand
+    er_expect_token_operand tok_plus, tok_plus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_minus_one_close
-    lea     rdi, [rel tok_minus]
-    mov     esi, tok_minus_len
-    call    expect_operand
+    er_expect_token_operand tok_minus, tok_minus_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_one_close]
-    mov     esi, tok_one_close_len
-    call    expect_operand
+    er_expect_token_operand tok_one_close, tok_one_close_len
     ret
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 ; expect_u32_operand() -> eax=1/0, imm_u32_value=value.
 er_fn expect_u32_operand
@@ -586,8 +422,7 @@ er_fn expect_imm8_operand
     jz      .done
     cmp     qword [rel imm_u32_value], 255
     ja      .bad
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad:
     xor     eax, eax
 .done:
@@ -601,9 +436,7 @@ er_fn expect_imm8_expr_operand
     jz      .plain
     mov     rdx, [rel imm_u32_value]
     push    rdx
-    lea     rdi, [rel tok_minus]
-    mov     esi, tok_minus_len
-    call    expect_operand
+    er_expect_token_operand tok_minus, tok_minus_len
     test    eax, eax
     jz      .bad_pop
     call    expect_imm8_operand
@@ -615,8 +448,7 @@ er_fn expect_imm8_expr_operand
     ja      .bad
     mov     [rel imm_u32_value], rdx
     pop     r11
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad_pop:
     pop     r11
 .plain:
@@ -625,8 +457,7 @@ er_fn expect_imm8_expr_operand
     ret
 .bad:
     pop     r11
-    xor     eax, eax
-    ret
+    er_ret_false
 
 ; expect_u64_operand() -> eax=1/0, imm_u32_value=value.
 er_fn expect_u64_operand
@@ -866,18 +697,14 @@ er_fn match_builtin_error_value
     test    eax, eax
     jz      .no
     mov     [rel imm_u32_value], r8
-    mov     eax, 1
-    ret
+    er_ret_true
 .no:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_rel_label_value
     er_push r10, r11
     call    skip_space_inline
-    lea     rdi, [rel tok_rel_open]
-    mov     esi, tok_rel_open_len
-    call    expect_operand
+    er_expect_token_operand tok_rel_open, tok_rel_open_len
     test    eax, eax
     jz      .bad
     call    skip_space_inline
@@ -920,11 +747,9 @@ er_fn expect_target_operand
     call    skip_operand_token
     cmp     r14, rax
     je      .bad
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 ; expect_char_operand() -> eax=1/0, imm_u32_value=byte.
 er_fn expect_char_operand
@@ -942,11 +767,9 @@ er_fn expect_char_operand
     jne     .bad
     inc     r14
     mov     [rel imm_u32_value], rdx
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 ; expect_equ_operand() -> eax=1/0, imm_u32_value=value.
 er_fn expect_equ_operand
@@ -1020,11 +843,9 @@ er_fn operand_has_hex_prefix
     jne     .no
 .yes:
     add     r14, 2
-    mov     eax, 1
-    ret
+    er_ret_true
 .no:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 ; hex_digit_value(ch=al) -> eax=value, or 16 when invalid.
 er_fn hex_digit_value
@@ -1063,11 +884,9 @@ er_fn expect_comma
     cmp     byte [r14], ','
     jne     .no
     inc     r14
-    mov     eax, 1
-    ret
+    er_ret_true
 .no:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn expect_line_end
     call    skip_space_inline
@@ -1078,8 +897,6 @@ er_fn expect_line_end
     je      .yes
     cmp     al, ';'
     je      .yes
-    xor     eax, eax
-    ret
+    er_ret_false
 .yes:
-    mov     eax, 1
-    ret
+    er_ret_true

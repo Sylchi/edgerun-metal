@@ -216,18 +216,10 @@ er_fn emit_short_branch_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_er_in_al_dx_sym]
-    mov     ecx, tok_er_in_al_dx_sym_len
-    call    token_eq
+    er_match_source_token tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
     test    eax, eax
     jnz     .inline_in_al_dx
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_er_out_dx_al_sym]
-    mov     ecx, tok_er_out_dx_al_sym_len
-    call    token_eq
+    er_match_source_token tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
     test    eax, eax
     jnz     .inline_out_dx_al
     call    expect_line_end
@@ -244,8 +236,7 @@ er_fn emit_short_branch_operand
 .near_offset:
     mov     rax, [rel text_len]
     mov     rbx, rax
-    xor     edi, edi
-    call    append_text_u32
+    er_emit_zero_u32
     mov     r10, r12
     mov     r11, r13
     call    find_label_value
@@ -304,18 +295,10 @@ er_fn emit_call_label_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_er_in_al_dx_sym]
-    mov     ecx, tok_er_in_al_dx_sym_len
-    call    token_eq
+    er_match_source_token tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
     test    eax, eax
     jnz     .inline_in_al_dx
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_er_out_dx_al_sym]
-    mov     ecx, tok_er_out_dx_al_sym_len
-    call    token_eq
+    er_match_source_token tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
     test    eax, eax
     jnz     .inline_out_dx_al
     call    expect_line_end
@@ -324,8 +307,7 @@ er_fn emit_call_label_operand
     er_emit_text_bytes 0xe8
     mov     rax, [rel text_len]
     mov     rbx, rax
-    xor     edi, edi
-    call    append_text_u32
+    er_emit_zero_u32
     mov     r10, r12
     mov     r11, r13
     call    find_label_value

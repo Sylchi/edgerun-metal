@@ -10,6 +10,8 @@
 ;   er_build app-build-steps
 ;   er_build host-tools
 ;   er_build x86-objects
+;   er_build validate-object OBJECT
+;   er_build body-to-file OBJECT OUTPUT
 ;
 ; The runner reads build graph data from EdgeRun EROBJ001 bytes objects instead
 ; of shell-owned text. It is intentionally small and fail-closed.
@@ -61,6 +63,10 @@ _start:
     lea     r13, [rsp + 8]
     mov     rsp, stack_top
 
+    cmp     r12, 4
+    je      .argc4
+    cmp     r12, 3
+    je      .argc3
     cmp     r12, 2
     jne     .usage
     mov     rdi, [r13 + 8]
@@ -110,6 +116,22 @@ _start:
     jnz     .x86_objects
     jmp     .usage
 
+.argc4:
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_body_to_file]
+    call    streq
+    test    eax, eax
+    jnz     .body_to_file
+    jmp     .usage
+
+.argc3:
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_validate_object]
+    call    streq
+    test    eax, eax
+    jnz     .validate_object
+    jmp     .usage
+
 .test_list:
     call    cmd_test_list
     xor     edi, edi
@@ -156,6 +178,19 @@ _start:
 
 .x86_objects:
     call    cmd_x86_objects
+    xor     edi, edi
+    jmp     exit_now
+
+.body_to_file:
+    mov     rdi, [r13 + 16]
+    mov     rsi, [r13 + 24]
+    call    write_object_body_file
+    xor     edi, edi
+    jmp     exit_now
+
+.validate_object:
+    mov     rdi, [r13 + 16]
+    call    cmd_validate_object_path
     xor     edi, edi
     jmp     exit_now
 
@@ -656,6 +691,16 @@ cmd_test_registry:
     call    print_cstr_stdout
     ret
 
+cmd_validate_object_path:
+    call    read_object
+    test    rax, rax
+    js      bad_object
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      bad_object
+    ret
+
 cmd_help:
     lea     rdi, [rel help_top_path]
     call    cmd_write_body
@@ -932,6 +977,8 @@ arg_app_test_roots: db "app-test-roots", 0
 arg_app_build_steps: db "app-build-steps", 0
 arg_host_tools: db "host-tools", 0
 arg_x86_objects: db "x86-objects", 0
+arg_validate_object: db "validate-object", 0
+arg_body_to_file: db "body-to-file", 0
 registry_path: db "kernel/test/registry.erobj", 0
 x86_sources_path: db "kernel/x86_64/kernel_sources.erobj", 0
 pi_sources_path: db "kernel/arm/pi/kernel_sources.erobj", 0
@@ -947,7 +994,7 @@ test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|test-registry|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects|validate-object OBJECT|body-to-file OBJECT OUTPUT", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
 msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next", 10, 0

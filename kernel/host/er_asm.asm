@@ -47,6 +47,7 @@ include_buf:    resb ER_ASM_BUF_SIZE
 text_buf:       resb ER_ASM_TEXT_CAP
 output_path:    resq 1
 source_path:    resq 1
+output_format:  resq 1
 include_dir_ptr: resq ER_ASM_INCLUDE_CAP
 include_dir_count: resq 1
 source_dir_path: resq 1
@@ -140,6 +141,55 @@ global _start
         call    append_text_byte
         %rotate 1
     %endrep
+%endm
+
+%macro er_emit_imm_u32_value 0
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u32
+%endm
+
+%macro er_emit_imm_u64_value 0
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_u64
+%endm
+
+%macro er_emit_imm_byte_value 0
+    mov     rdi, [rel imm_u32_value]
+    call    append_text_byte
+%endm
+
+%macro er_emit_zero_u32 0
+    xor     edi, edi
+    call    append_text_u32
+%endm
+
+%macro er_emit_zero_byte 0
+    xor     edi, edi
+    call    append_text_byte
+%endm
+
+%macro er_ret_true 0
+    mov     eax, 1
+    ret
+%endm
+
+%macro er_ret_false 0
+    xor     eax, eax
+    ret
+%endm
+
+%macro er_match_source_token 2
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel %1]
+    mov     ecx, %2
+    call    token_eq
+%endm
+
+%macro er_expect_token_operand 2
+    lea     rdi, [rel %1]
+    mov     esi, %2
+    call    expect_operand
 %endm
 
 _start:

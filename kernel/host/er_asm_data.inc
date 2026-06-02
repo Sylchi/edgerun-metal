@@ -2,6 +2,7 @@ SECTION .data
 arg_parse_only: db "--parse-only", 0
 arg_o: db "-o", 0
 arg_f: db "-f", 0
+arg_format_flat: db "flat", 0
 arg_i: db "-I", 0
 msg_usage: db "usage: er_asm --parse-only <source.asm> | -f <fmt> [-I path] [-d name] [-D name] -o <out> <source.asm>", 10, 0
 msg_fail: db "er_asm: assembly failed", 10, 0

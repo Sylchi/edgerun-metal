@@ -63,11 +63,9 @@ er_fn token_eq
     inc     r8
     jmp     .loop
 .yes:
-    mov     eax, 1
-    ret
+    er_ret_true
 .no:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn print_report
     lea     rdi, [rel key_magic]
@@ -167,11 +165,9 @@ er_fn streq
     inc     rcx
     jmp     .loop
 .yes:
-    mov     eax, 1
-    ret
+    er_ret_true
 .no:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn write_stderr
     mov     esi, STDERR_FD

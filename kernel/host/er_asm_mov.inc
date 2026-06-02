@@ -1,9 +1,5 @@
 er_fn match_common_mov
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_mov]
-    mov     ecx, tok_mov_len
-    call    token_eq
+    er_match_source_token tok_mov, tok_mov_len
     test    eax, eax
     jz      .bad
     lea     rdi, [rel tok_rdx]
@@ -16,9 +12,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    call    expect_operand
+    er_expect_token_operand tok_rax, tok_rax_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -38,9 +32,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    call    expect_operand
+    er_expect_token_operand tok_rax, tok_rax_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -61,9 +53,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .r8_not_rsi
     pop     r11
@@ -75,9 +65,7 @@ er_fn match_common_mov
 .r8_not_rsi:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     test    eax, eax
     jz      .r8_not_rdx
     pop     r11
@@ -89,9 +77,7 @@ er_fn match_common_mov
 .r8_not_rdx:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .r8_not_rdi
     pop     r11
@@ -109,8 +95,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x49, 0xb8
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u64
+    er_emit_imm_u64_value
     jmp     .yes
 .not_r8_imm64:
     pop     r14
@@ -125,9 +110,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rcx]
-    mov     esi, tok_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx, tok_rcx_len
     test    eax, eax
     jz      .r9_not_rcx_src
     pop     r11
@@ -138,9 +121,7 @@ er_fn match_common_mov
     jmp     .yes
 .r9_not_rcx_src:
     pop     r14
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -184,9 +165,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -214,9 +193,7 @@ er_fn match_common_mov
     jmp     .early_ecx_value_ok
 .early_ecx_try_madt_entries:
     pop     r14
-    lea     rdi, [rel tok_madt_entries]
-    mov     esi, tok_madt_entries_len
-    call    expect_operand
+    er_expect_token_operand tok_madt_entries, tok_madt_entries_len
     test    eax, eax
     jz      .bad
     mov     qword [rel imm_u32_value], 44
@@ -225,8 +202,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xb9
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .not_early_ecx_imm:
     pop     r14
@@ -241,9 +217,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     test    eax, eax
     jz      .rcx_not_rdx
     pop     r11
@@ -261,8 +235,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xb9
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u64
+    er_emit_imm_u64_value
     jmp     .yes
 .not_rcx_rdx:
     pop     r14
@@ -276,9 +249,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -299,9 +270,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_ecx]
-    mov     esi, tok_ecx_len
-    call    expect_operand
+    er_expect_token_operand tok_ecx, tok_ecx_len
     test    eax, eax
     jz      .edx_not_ecx
     pop     r11
@@ -312,9 +281,7 @@ er_fn match_common_mov
     jmp     .yes
 .edx_not_ecx:
     pop     r14
-    lea     rdi, [rel tok_eax]
-    mov     esi, tok_eax_len
-    call    expect_operand
+    er_expect_token_operand tok_eax, tok_eax_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -334,9 +301,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_esi]
-    mov     esi, tok_esi_len
-    call    expect_operand
+    er_expect_token_operand tok_esi, tok_esi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -346,9 +311,7 @@ er_fn match_common_mov
     jmp     .yes
 .eax_not_esi:
     pop     r14
-    lea     rdi, [rel tok_r9d]
-    mov     esi, tok_r9d_len
-    call    expect_operand
+    er_expect_token_operand tok_r9d, tok_r9d_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -376,9 +339,7 @@ er_fn match_common_mov
     jmp     .ecx_value_ok
 .ecx_try_madt_entries:
     pop     r14
-    lea     rdi, [rel tok_madt_entries]
-    mov     esi, tok_madt_entries_len
-    call    expect_operand
+    er_expect_token_operand tok_madt_entries, tok_madt_entries_len
     test    eax, eax
     jz      .bad
     mov     qword [rel imm_u32_value], 44
@@ -387,8 +348,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xb9
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .not_ecx_imm:
     pop     r14
@@ -403,9 +363,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_eax]
-    mov     esi, tok_eax_len
-    call    expect_operand
+    er_expect_token_operand tok_eax, tok_eax_len
     test    eax, eax
     jz      .mem_r8_not_eax
     pop     r11
@@ -416,9 +374,7 @@ er_fn match_common_mov
     jmp     .yes
 .mem_r8_not_eax:
     pop     r14
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    call    expect_operand
+    er_expect_token_operand tok_rax, tok_rax_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -439,9 +395,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_edx]
-    mov     esi, tok_edx_len
-    call    expect_operand
+    er_expect_token_operand tok_edx, tok_edx_len
     test    eax, eax
     jz      .mem_r9_not_edx
     pop     r11
@@ -452,9 +406,7 @@ er_fn match_common_mov
     jmp     .yes
 .mem_r9_not_edx:
     pop     r14
-    lea     rdi, [rel tok_rdx]
-    mov     esi, tok_rdx_len
-    call    expect_operand
+    er_expect_token_operand tok_rdx, tok_rdx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -474,9 +426,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -511,9 +461,7 @@ er_fn match_common_mov
 .dx_not_r8w:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_di]
-    mov     esi, tok_di_len
-    call    expect_operand
+    er_expect_token_operand tok_di, tok_di_len
     test    eax, eax
     jz      .dx_not_di
     pop     r11
@@ -524,9 +472,7 @@ er_fn match_common_mov
     jmp     .yes
 .dx_not_di:
     pop     r14
-    lea     rdi, [rel tok_bx]
-    mov     esi, tok_bx_len
-    call    expect_operand
+    er_expect_token_operand tok_bx, tok_bx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -544,9 +490,7 @@ er_fn match_common_mov
     jz      .not_initial_byte_store
     pop     r11
     push    r14
-    lea     rdi, [rel tok_mem_rdi]
-    mov     esi, tok_mem_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi, tok_mem_rdi_len
     test    eax, eax
     jz      .initial_byte_mem_rsi
     pop     r11
@@ -554,9 +498,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_cl]
-    mov     esi, tok_cl_len
-    call    expect_operand
+    er_expect_token_operand tok_cl, tok_cl_len
     test    eax, eax
     jz      .initial_byte_mem_rdi_imm
     pop     r11
@@ -574,24 +516,19 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xc6, 0x07
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_byte
+    er_emit_imm_byte_value
     jmp     .yes
 .initial_byte_mem_rsi:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_r8]
-    mov     esi, tok_mem_r8_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r8, tok_mem_r8_len
     test    eax, eax
     jz      .initial_byte_mem_rsi_real
     pop     r11
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_dl]
-    mov     esi, tok_dl_len
-    call    expect_operand
+    er_expect_token_operand tok_dl, tok_dl_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -602,9 +539,7 @@ er_fn match_common_mov
 .initial_byte_mem_rsi_real:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .byte_rdx_r8x2_al_common
     pop     r11
@@ -612,9 +547,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .initial_byte_store_dil
     pop     r11
@@ -625,9 +558,7 @@ er_fn match_common_mov
     jmp     .yes
 .initial_byte_store_dil:
     pop     r14
-    lea     rdi, [rel tok_dil]
-    mov     esi, tok_dil_len
-    call    expect_operand
+    er_expect_token_operand tok_dil, tok_dil_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -644,9 +575,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .not_initial_qword_mem_rsi_store
     pop     r11
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .bad
     call    expect_comma
@@ -659,8 +588,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0x06
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .not_initial_qword_mem_rsi_store:
     pop     r14
@@ -674,9 +602,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r9]
-    mov     esi, tok_r9_len
-    call    expect_operand
+    er_expect_token_operand tok_r9, tok_r9_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -697,9 +623,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rcx]
-    mov     esi, tok_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx, tok_rcx_len
     test    eax, eax
     jz      .initial_mem_rsi_r8_store
     pop     r11
@@ -710,9 +634,7 @@ er_fn match_common_mov
     jmp     .yes
 .initial_mem_rsi_r8_store:
     pop     r14
-    lea     rdi, [rel tok_r8]
-    mov     esi, tok_r8_len
-    call    expect_operand
+    er_expect_token_operand tok_r8, tok_r8_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -733,9 +655,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .initial_rcx_r9
     pop     r11
@@ -747,9 +667,7 @@ er_fn match_common_mov
 .initial_rcx_r9:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_r9]
-    mov     esi, tok_r9_len
-    call    expect_operand
+    er_expect_token_operand tok_r9, tok_r9_len
     test    eax, eax
     jz      .initial_rcx_r8
     pop     r11
@@ -761,9 +679,7 @@ er_fn match_common_mov
 .initial_rcx_r8:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_r8]
-    mov     esi, tok_r8_len
-    call    expect_operand
+    er_expect_token_operand tok_r8, tok_r8_len
     test    eax, eax
     jz      .initial_rcx_minus_one
     pop     r11
@@ -781,8 +697,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0xc1
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .not_initial_rcx_imm:
     pop     r14
@@ -795,9 +710,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .r8_rcx_common
     pop     r11
@@ -824,14 +737,10 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_mem_r9]
-    mov     esi, tok_mem_r9_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r9, tok_mem_r9_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -852,9 +761,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .r8_rcx_common
     pop     r11
@@ -876,9 +783,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .r8_rcx_common
     pop     r11
@@ -890,9 +795,7 @@ er_fn match_common_mov
 .r8_rcx_common:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_rcx]
-    mov     esi, tok_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_rcx, tok_rcx_len
     test    eax, eax
     jz      .r8_mem_rdi_common
     pop     r11
@@ -903,9 +806,7 @@ er_fn match_common_mov
     jmp     .yes
 .r8_mem_rdi_common:
     pop     r14
-    lea     rdi, [rel tok_mem_rdi]
-    mov     esi, tok_mem_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi, tok_mem_rdi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -925,9 +826,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -948,9 +847,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .rsi_r12_source
     pop     r11
@@ -962,9 +859,7 @@ er_fn match_common_mov
 .rsi_r12_source:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_r12]
-    mov     esi, tok_r12_len
-    call    expect_operand
+    er_expect_token_operand tok_r12, tok_r12_len
     test    eax, eax
     jz      .rsi_imm
     pop     r11
@@ -982,8 +877,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0xc6
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .rax_rdi:
     pop     r14
@@ -998,9 +892,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .rax_imm
     pop     r11
@@ -1012,9 +904,7 @@ er_fn match_common_mov
 .rax_imm:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_r9]
-    mov     esi, tok_r9_len
-    call    expect_operand
+    er_expect_token_operand tok_r9, tok_r9_len
     test    eax, eax
     jz      .rax_rcx_common
     pop     r11
@@ -1097,8 +987,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0xc0
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .rdx_rsi:
     pop     r14
@@ -1113,9 +1002,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rsi]
-    mov     esi, tok_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_rsi, tok_rsi_len
     test    eax, eax
     jz      .rdx_imm
     pop     r11
@@ -1133,8 +1020,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0xc2
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .rdi_rsp:
     pop     r14
@@ -1149,9 +1035,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    call    expect_operand
+    er_expect_token_operand tok_rax, tok_rax_len
     test    eax, eax
     jz      .rdi_rsp_source
     pop     r11
@@ -1163,9 +1047,7 @@ er_fn match_common_mov
 .rdi_rsp_source:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_rdi]
-    mov     esi, tok_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_rdi, tok_rdi_len
     test    eax, eax
     jz      .rdi_rsp_source_real
     pop     r11
@@ -1177,9 +1059,7 @@ er_fn match_common_mov
 .rdi_rsp_source_real:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_rsp]
-    mov     esi, tok_rsp_len
-    call    expect_operand
+    er_expect_token_operand tok_rsp, tok_rsp_len
     test    eax, eax
     jz      .rdi_imm
     pop     r11
@@ -1215,8 +1095,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x48, 0xc7, 0xc7
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .r12d_edi:
     pop     r14
@@ -1231,9 +1110,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_edi]
-    mov     esi, tok_edi_len
-    call    expect_operand
+    er_expect_token_operand tok_edi, tok_edi_len
     test    eax, eax
     jz      .eax_esi_common
     pop     r11
@@ -1255,9 +1132,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_r8d]
-    mov     esi, tok_r8d_len
-    call    expect_operand
+    er_expect_token_operand tok_r8d, tok_r8d_len
     test    eax, eax
     jz      .ebx_edx_common
     pop     r11
@@ -1268,9 +1143,7 @@ er_fn match_common_mov
     jmp     .yes
 .ebx_edx_common:
     pop     r14
-    lea     rdi, [rel tok_edx]
-    mov     esi, tok_edx_len
-    call    expect_operand
+    er_expect_token_operand tok_edx, tok_edx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -1291,9 +1164,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_esi]
-    mov     esi, tok_esi_len
-    call    expect_operand
+    er_expect_token_operand tok_esi, tok_esi_len
     test    eax, eax
     jz      .r8d_imm_common
     pop     r11
@@ -1311,8 +1182,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x41, 0xb8
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .eax_edi_common:
     pop     r14
@@ -1327,9 +1197,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_edi]
-    mov     esi, tok_edi_len
-    call    expect_operand
+    er_expect_token_operand tok_edi, tok_edi_len
     test    eax, eax
     jz      .eax_esi_common
     pop     r11
@@ -1340,9 +1208,7 @@ er_fn match_common_mov
     jmp     .yes
 .eax_esi_common:
     pop     r14
-    lea     rdi, [rel tok_esi]
-    mov     esi, tok_esi_len
-    call    expect_operand
+    er_expect_token_operand tok_esi, tok_esi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -1364,9 +1230,7 @@ er_fn match_common_mov
     jz      .bad
     push    r14
     push    r14
-    lea     rdi, [rel tok_ecx]
-    mov     esi, tok_ecx_len
-    call    expect_operand
+    er_expect_token_operand tok_ecx, tok_ecx_len
     test    eax, eax
     jz      .sub_eax_imm_math
     pop     r11
@@ -1385,8 +1249,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xb0
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_byte
+    er_emit_imm_byte_value
     jmp     .yes
 .al_cl:
     pop     r14
@@ -1443,9 +1306,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .cl_byte_mem_rsi_common
     pop     r11
@@ -1456,15 +1317,11 @@ er_fn match_common_mov
     jmp     .yes
 .cl_byte_mem_rsi_common:
     pop     r14
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .cl_byte_mem_rdi_common
     pop     r11
@@ -1476,9 +1333,7 @@ er_fn match_common_mov
 .cl_byte_mem_rdi_common:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_rdi]
-    mov     esi, tok_mem_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi, tok_mem_rdi_len
     test    eax, eax
     jz      .cl_byte_rsi_r8_common
     pop     r11
@@ -1507,9 +1362,7 @@ er_fn match_common_mov
     jz      .al_mem_rdi_rcx_minus_one
     pop     r11
     push    r14
-    lea     rdi, [rel tok_mem_rdi]
-    mov     esi, tok_mem_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi, tok_mem_rdi_len
     test    eax, eax
     jz      .al_mem_rsi_after_byte
     pop     r11
@@ -1521,9 +1374,7 @@ er_fn match_common_mov
 .al_mem_rsi_after_byte:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .al_mem_r9_after_byte
     pop     r11
@@ -1537,9 +1388,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .byte_mem_rsi_store_dil_after_byte
     pop     r11
@@ -1550,9 +1399,7 @@ er_fn match_common_mov
     jmp     .yes
 .byte_mem_rsi_store_dil_after_byte:
     pop     r14
-    lea     rdi, [rel tok_dil]
-    mov     esi, tok_dil_len
-    call    expect_operand
+    er_expect_token_operand tok_dil, tok_dil_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -1563,9 +1410,7 @@ er_fn match_common_mov
 .al_mem_r9_after_byte:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_r9]
-    mov     esi, tok_mem_r9_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r9, tok_mem_r9_len
     test    eax, eax
     jz      .al_mem_rsi_r9_after_byte
     pop     r11
@@ -1622,9 +1467,7 @@ er_fn match_common_mov
     jmp     .yes
 .al_mem_rdi_rcx_minus_one:
     pop     r14
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
     call    expect_rdi_plus_rcx_minus_one
@@ -1648,9 +1491,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_di]
-    mov     esi, tok_di_len
-    call    expect_operand
+    er_expect_token_operand tok_di, tok_di_len
     test    eax, eax
     jz      .dx_imm
     pop     r11
@@ -1694,8 +1535,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xba
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .r13d_imm:
     pop     r14
@@ -1716,8 +1556,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x41, 0xbd
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .edi_imm:
     pop     r14
@@ -1732,9 +1571,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_eax]
-    mov     esi, tok_eax_len
-    call    expect_operand
+    er_expect_token_operand tok_eax, tok_eax_len
     test    eax, eax
     jz      .edi_value
     pop     r11
@@ -1752,8 +1589,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xbf
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .eax_imm_common:
     pop     r14
@@ -1768,16 +1604,13 @@ er_fn match_common_mov
     jne     .eax_generic
     cmp     qword [rel exit_instr_step], 0
     jne     .eax_generic
-    xor     eax, eax
-    ret
+    er_ret_false
 .eax_generic:
     call    expect_comma
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_edi]
-    mov     esi, tok_edi_len
-    call    expect_operand
+    er_expect_token_operand tok_edi, tok_edi_len
     test    eax, eax
     jz      .eax_value_common
     pop     r11
@@ -1798,8 +1631,7 @@ er_fn match_common_mov
     cmp     [rel imm_u32_value], rax
     ja      .bad
     er_emit_text_bytes 0xb8
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .r10b_imm_common:
     pop     r14
@@ -1822,14 +1654,11 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x41, 0xb2
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_byte
+    er_emit_imm_byte_value
     jmp     .yes
 .r10b_byte_load_common:
     pop     r14
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
     call    expect_rsi_plus_rcx_minus_one
@@ -1862,13 +1691,11 @@ er_fn match_common_mov
     cmp     [rel imm_u32_value], rax
     ja      .rbx_imm64_common
     er_emit_text_bytes 0x48, 0xc7, 0xc3
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .rbx_imm64_common:
     er_emit_text_bytes 0x48, 0xbb
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u64
+    er_emit_imm_u64_value
     jmp     .yes
 .r9_rax_common:
     pop     r14
@@ -1883,9 +1710,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    call    expect_operand
+    er_expect_token_operand tok_rax, tok_rax_len
     test    eax, eax
     jz      .r9_rsi_common
     pop     r11
@@ -1954,8 +1779,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x49, 0xb9
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u64
+    er_emit_imm_u64_value
     jmp     .yes
 .byte_mem_rsi_al_common:
     pop     r14
@@ -1976,8 +1800,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x49, 0xbb
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u64
+    er_emit_imm_u64_value
     jmp     .yes
 .byte_mem_rsi_al_common_after_r11:
     pop     r14
@@ -1991,17 +1814,14 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r12]
-    mov     esi, tok_r12_len
-    call    expect_operand
+    er_expect_token_operand tok_r12, tok_r12_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x4d, 0x89, 0x65
-    xor     edi, edi
-    call    append_text_byte
+    er_emit_zero_byte
     jmp     .yes
 .byte_mem_rsi_al_common_after_mem_r13:
     pop     r14
@@ -2016,9 +1836,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_eax]
-    mov     esi, tok_eax_len
-    call    expect_operand
+    er_expect_token_operand tok_eax, tok_eax_len
     test    eax, eax
     jz      .ecx_imm_common
     pop     r11
@@ -2036,8 +1854,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0xb9
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .byte_mem_rsi_al_common_after_ecx:
     pop     r14
@@ -2058,20 +1875,15 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x41, 0xb8
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_u32
+    er_emit_imm_u32_value
     jmp     .yes
 .byte_mem_rsi_al_common_after_r8d:
     pop     r14
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .byte_rdx_r8x2_al_common
     pop     r11
@@ -2079,9 +1891,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .byte_mem_rsi_dil_common
     pop     r11
@@ -2092,9 +1902,7 @@ er_fn match_common_mov
     jmp     .yes
 .byte_mem_rsi_dil_common:
     pop     r14
-    lea     rdi, [rel tok_dil]
-    mov     esi, tok_dil_len
-    call    expect_operand
+    er_expect_token_operand tok_dil, tok_dil_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2112,9 +1920,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2132,9 +1938,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2152,9 +1956,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2172,9 +1974,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2192,9 +1992,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_r10b]
-    mov     esi, tok_r10b_len
-    call    expect_operand
+    er_expect_token_operand tok_r10b, tok_r10b_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2212,9 +2010,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2232,9 +2028,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2252,9 +2046,7 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_cl]
-    mov     esi, tok_cl_len
-    call    expect_operand
+    er_expect_token_operand tok_cl, tok_cl_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2271,9 +2063,7 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .byte_rdi_r9_imm_common
     pop     r11
@@ -2291,22 +2081,15 @@ er_fn match_common_mov
     test    eax, eax
     jz      .bad
     er_emit_text_bytes 0x42, 0xc6, 0x04, 0x0f
-    mov     rdi, [rel imm_u32_value]
-    call    append_text_byte
+    er_emit_imm_byte_value
     jmp     .yes
 .yes:
-    mov     eax, 1
-    ret
+    er_ret_true
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 
 er_fn match_more_runtime_ops
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_movzx]
-    mov     ecx, tok_movzx_len
-    call    token_eq
+    er_match_source_token tok_movzx, tok_movzx_len
     test    eax, eax
     jz      .cld
     lea     rdi, [rel tok_eax]
@@ -2320,9 +2103,7 @@ er_fn match_more_runtime_ops
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_sil]
-    mov     esi, tok_sil_len
-    call    expect_operand
+    er_expect_token_operand tok_sil, tok_sil_len
     test    eax, eax
     jz      .movzx_eax_mem_rdi
     pop     r11
@@ -2341,9 +2122,7 @@ er_fn match_more_runtime_ops
     jz      .movzx_eax_al_direct
     pop     r11
     push    r14
-    lea     rdi, [rel tok_mem_rdi]
-    mov     esi, tok_mem_rdi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rdi, tok_mem_rdi_len
     test    eax, eax
     jz      .movzx_eax_mem_rdi_r8
     pop     r11
@@ -2379,9 +2158,7 @@ er_fn match_more_runtime_ops
 .movzx_eax_mem_r12:
     pop     r14
     push    r14
-    lea     rdi, [rel tok_mem_r12]
-    mov     esi, tok_mem_r12_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_r12, tok_mem_r12_len
     test    eax, eax
     jz      .movzx_eax_mem_r12_plus_one
     pop     r11
@@ -2402,9 +2179,7 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .movzx_eax_al_direct:
     pop     r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2425,9 +2200,7 @@ er_fn match_more_runtime_ops
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .cl_byte_load
     pop     r11
@@ -2448,9 +2221,7 @@ er_fn match_more_runtime_ops
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
     push    r14
@@ -2465,9 +2236,7 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .movzx_edx_mem_rcx:
     pop     r14
-    lea     rdi, [rel tok_mem_rcx]
-    mov     esi, tok_mem_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rcx, tok_mem_rcx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2484,9 +2253,7 @@ er_fn match_more_runtime_ops
     test    eax, eax
     jz      .movzx_ecx_cl_direct
     pop     r11
-    lea     rdi, [rel tok_mem_rsi]
-    mov     esi, tok_mem_rsi_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rsi, tok_mem_rsi_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2510,9 +2277,7 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .movzx_ecx_al_direct:
     pop     r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2532,9 +2297,7 @@ er_fn match_more_runtime_ops
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_dl]
-    mov     esi, tok_dl_len
-    call    expect_operand
+    er_expect_token_operand tok_dl, tok_dl_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2555,9 +2318,7 @@ er_fn match_more_runtime_ops
     test    eax, eax
     jz      .bad
     push    r14
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .cl_byte_operand
     pop     r11
@@ -2568,14 +2329,10 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .cl_byte_operand:
     pop     r14
-    lea     rdi, [rel tok_byte]
-    mov     esi, tok_byte_len
-    call    expect_operand
+    er_expect_token_operand tok_byte, tok_byte_len
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_mem_rcx]
-    mov     esi, tok_mem_rcx_len
-    call    expect_operand
+    er_expect_token_operand tok_mem_rcx, tok_mem_rcx_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2595,9 +2352,7 @@ er_fn match_more_runtime_ops
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    expect_operand
+    er_expect_token_operand tok_al, tok_al_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2607,17 +2362,13 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .movzx_ecx_cl:
     pop     r14
-    lea     rdi, [rel tok_ecx]
-    mov     esi, tok_ecx_len
-    call    expect_operand
+    er_expect_token_operand tok_ecx, tok_ecx_len
     test    eax, eax
     jz      .bad
     call    expect_comma
     test    eax, eax
     jz      .bad
-    lea     rdi, [rel tok_cl]
-    mov     esi, tok_cl_len
-    call    expect_operand
+    er_expect_token_operand tok_cl, tok_cl_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2626,11 +2377,7 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0x0f, 0xb6, 0xc9
     jmp     .yes
 .cld:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_cld]
-    mov     ecx, tok_cld_len
-    call    token_eq
+    er_match_source_token tok_cld, tok_cld_len
     test    eax, eax
     jz      .std
     call    expect_line_end
@@ -2639,11 +2386,7 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0xfc
     jmp     .yes
 .std:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_std]
-    mov     ecx, tok_std_len
-    call    token_eq
+    er_match_source_token tok_std, tok_std_len
     test    eax, eax
     jz      .clc
     call    expect_line_end
@@ -2652,11 +2395,7 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0xfd
     jmp     .yes
 .clc:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_clc]
-    mov     ecx, tok_clc_len
-    call    token_eq
+    er_match_source_token tok_clc, tok_clc_len
     test    eax, eax
     jz      .stc
     call    expect_line_end
@@ -2665,11 +2404,7 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0xf8
     jmp     .yes
 .stc:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_stc]
-    mov     ecx, tok_stc_len
-    call    token_eq
+    er_match_source_token tok_stc, tok_stc_len
     test    eax, eax
     jz      .repne
     call    expect_line_end
@@ -2678,16 +2413,10 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0xf9
     jmp     .yes
 .repne:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_repne]
-    mov     ecx, tok_repne_len
-    call    token_eq
+    er_match_source_token tok_repne, tok_repne_len
     test    eax, eax
     jz      .rep
-    lea     rdi, [rel tok_scasb]
-    mov     esi, tok_scasb_len
-    call    expect_operand
+    er_expect_token_operand tok_scasb, tok_scasb_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2696,11 +2425,7 @@ er_fn match_more_runtime_ops
     er_emit_text_bytes 0xf2, 0xae
     jmp     .yes
 .rep:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_rep]
-    mov     ecx, tok_rep_len
-    call    token_eq
+    er_match_source_token tok_rep, tok_rep_len
     test    eax, eax
     jz      .test
     lea     rdi, [rel tok_stosq]
@@ -2759,9 +2484,7 @@ er_fn match_more_runtime_ops
     jmp     .yes
 .stosd:
     pop     r14
-    lea     rdi, [rel tok_stosd]
-    mov     esi, tok_stosd_len
-    call    expect_operand
+    er_expect_token_operand tok_stosd, tok_stosd_len
     test    eax, eax
     jz      .bad
     call    expect_line_end
@@ -2779,11 +2502,8 @@ er_fn match_more_runtime_ops
     call    match_more_and
     test    eax, eax
     jnz     .yes
-    xor     eax, eax
-    ret
+    er_ret_false
 .bad:
-    xor     eax, eax
-    ret
+    er_ret_false
 .yes:
-    mov     eax, 1
-    ret
+    er_ret_true
