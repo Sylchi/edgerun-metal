@@ -106,34 +106,14 @@ er_fn emit_out_dx_al
 er_fn append_text_u32
     er_push rbx
     mov     rbx, rdi
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
+    er_emit_shifted_text_bytes 4
     er_pop  rbx
     ret
 
 er_fn append_text_u64
     er_push rbx
     mov     rbx, rdi
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
-    shr     rbx, 8
-    er_emit_text_bytes ebx
+    er_emit_shifted_text_bytes 8
     er_pop  rbx
     ret
 
@@ -216,14 +196,11 @@ er_fn emit_short_branch_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
-    er_match_source_token tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
-    test    eax, eax
+    er_match_source_token_result tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
     jnz     .inline_in_al_dx
-    er_match_source_token tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
-    test    eax, eax
+    er_match_source_token_result tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
     jnz     .inline_out_dx_al
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     cmp     ebx, 0xeb
     jne     .near_cond
@@ -265,15 +242,13 @@ er_fn emit_short_branch_operand
     mov     eax, 1
     jmp     .done
 .inline_in_al_dx:
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0xec
     mov     eax, 1
     jmp     .done
 .inline_out_dx_al:
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0xee
     mov     eax, 1
@@ -295,14 +270,11 @@ er_fn emit_call_label_operand
     sub     r13, r12
     test    r13, r13
     jz      .bad
-    er_match_source_token tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
-    test    eax, eax
+    er_match_source_token_result tok_er_in_al_dx_sym, tok_er_in_al_dx_sym_len
     jnz     .inline_in_al_dx
-    er_match_source_token tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
-    test    eax, eax
+    er_match_source_token_result tok_er_out_dx_al_sym, tok_er_out_dx_al_sym_len
     jnz     .inline_out_dx_al
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0xe8
     mov     rax, [rel text_len]
@@ -331,15 +303,13 @@ er_fn emit_call_label_operand
     mov     eax, 1
     jmp     .done
 .inline_in_al_dx:
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0xec
     mov     eax, 1
     jmp     .done
 .inline_out_dx_al:
-    call    expect_line_end
-    test    eax, eax
+    er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0xee
     mov     eax, 1

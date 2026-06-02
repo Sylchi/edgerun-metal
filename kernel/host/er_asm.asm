@@ -116,12 +116,17 @@ pending_rel_count: resq 1
 macro_name_ptr: resq ER_ASM_MACRO_CAP
 macro_name_len: resq ER_ASM_MACRO_CAP
 macro_arg_count: resq ER_ASM_MACRO_CAP
+macro_min_arg_count: resq ER_ASM_MACRO_CAP
+macro_variadic: resq ER_ASM_MACRO_CAP
 macro_body_ptr: resq ER_ASM_MACRO_CAP
 macro_body_len: resq ER_ASM_MACRO_CAP
 macro_count: resq 1
 macro_arg_ptr: resq ER_ASM_MACRO_ARG_CAP
 macro_arg_len: resq ER_ASM_MACRO_ARG_CAP
 macro_arg_active_count: resq 1
+macro_arg_expected_count: resq 1
+macro_arg_min_active_count: resq 1
+macro_arg_variadic_active: resq 1
 macro_expand_depth: resq 1
 macro_expand_base_ptr: resq 1
 macro_expand_limit_ptr: resq 1
@@ -140,6 +145,17 @@ global _start
         mov     edi, %1
         call    append_text_byte
         %rotate 1
+    %endrep
+%endm
+
+%macro er_emit_shifted_text_bytes 1
+    %assign %%remaining %1
+    %rep %%remaining
+        er_emit_text_bytes ebx
+        %assign %%remaining %%remaining - 1
+        %if %%remaining > 0
+            shr     rbx, 8
+        %endif
     %endrep
 %endm
 
@@ -186,10 +202,88 @@ global _start
     call    token_eq
 %endm
 
+%macro er_match_source_token_result 2
+    er_match_source_token %1, %2
+    test    eax, eax
+%endm
+
+%macro er_token_eq_result 0
+    call    token_eq
+    test    eax, eax
+%endm
+
 %macro er_expect_token_operand 2
     lea     rdi, [rel %1]
     mov     esi, %2
     call    expect_operand
+%endm
+
+%macro er_expect_token_operand_result 2
+    er_expect_token_operand %1, %2
+    test    eax, eax
+%endm
+
+%macro er_push_expect_token_operand_result 2
+    push    r14
+    er_expect_token_operand_result %1, %2
+%endm
+
+%macro er_pop_expect_token_operand_result 2
+    pop     r14
+    er_expect_token_operand_result %1, %2
+%endm
+
+%macro er_expect_token_operand_push_result 2
+    lea     rdi, [rel %1]
+    mov     esi, %2
+    push    r14
+    call    expect_operand
+    test    eax, eax
+%endm
+
+%macro er_pop_expect_token_operand_push_result 2
+    pop     r14
+    er_expect_token_operand_push_result %1, %2
+%endm
+
+%macro er_expect_comma_result 0
+    call    expect_comma
+    test    eax, eax
+%endm
+
+%macro er_expect_line_end_result 0
+    call    expect_line_end
+    test    eax, eax
+%endm
+
+%macro er_expect_u32_result 0
+    call    expect_u32_operand
+    test    eax, eax
+%endm
+
+%macro er_expect_u64_result 0
+    call    expect_u64_operand
+    test    eax, eax
+%endm
+
+%macro er_expect_imm8_result 0
+    call    expect_imm8_operand
+    test    eax, eax
+%endm
+
+%macro er_expect_value_result 0
+    call    expect_value_operand
+    test    eax, eax
+%endm
+
+%macro er_emit_short_branch_result 0
+    call    emit_short_branch_operand
+    test    eax, eax
+%endm
+
+%macro er_emit_rax_u32 0
+    mov     rdi, rax
+    call    append_text_u32
 %endm
 
 _start:

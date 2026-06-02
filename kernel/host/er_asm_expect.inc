@@ -15,11 +15,9 @@ er_fn expect_operand
     ret
 
 er_fn expect_mem_rdi_plus_rcx
-    er_expect_token_operand tok_mem_rdi_rcx, tok_mem_rdi_rcx_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_rcx, tok_mem_rdi_rcx_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_rcx_close, tok_rcx_close_len
     ret
@@ -27,11 +25,9 @@ er_fn expect_mem_rdi_plus_rcx
     er_ret_false
 
 er_fn expect_rsi_plus_rdx
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_rdx_close, tok_rdx_close_len
     ret
@@ -45,8 +41,7 @@ er_fn expect_minus_one_operand
     cmp     byte [r14], '-'
     jne     .bad
     inc     r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .bad
     cmp     qword [rel imm_u32_value], 1
     jne     .bad
@@ -65,14 +60,11 @@ er_fn expect_rsi_plus_rdx_minus_one
     er_ret_false
 
 er_fn expect_rdi_plus_rdx_minus_one
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
-    er_expect_token_operand tok_rdx, tok_rdx_len
-    test    eax, eax
+    er_expect_token_operand_result tok_rdx, tok_rdx_len
     jz      .bad
     call    expect_minus_one_close
     ret
@@ -80,14 +72,11 @@ er_fn expect_rdi_plus_rdx_minus_one
     er_ret_false
 
 er_fn expect_rdi_plus_rcx_minus_one
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
-    er_expect_token_operand tok_rcx, tok_rcx_len
-    test    eax, eax
+    er_expect_token_operand_result tok_rcx, tok_rcx_len
     jz      .bad
     call    expect_minus_one_close
     ret
@@ -95,14 +84,11 @@ er_fn expect_rdi_plus_rcx_minus_one
     er_ret_false
 
 er_fn expect_rsi_plus_rcx_minus_one
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
-    er_expect_token_operand tok_rcx, tok_rcx_len
-    test    eax, eax
+    er_expect_token_operand_result tok_rcx, tok_rcx_len
     jz      .bad
     call    expect_minus_one_close
     ret
@@ -110,8 +96,7 @@ er_fn expect_rsi_plus_rcx_minus_one
     er_ret_false
 
 er_fn expect_rdi_minus_one
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
     call    expect_minus_one_close
     ret
@@ -119,8 +104,7 @@ er_fn expect_rdi_minus_one
     er_ret_false
 
 er_fn expect_rsi_minus_one
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
     call    expect_minus_one_close
     ret
@@ -128,11 +112,9 @@ er_fn expect_rsi_minus_one
     er_ret_false
 
 er_fn expect_rdi_plus_one
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -140,11 +122,9 @@ er_fn expect_rdi_plus_one
     er_ret_false
 
 er_fn expect_r12_plus_one
-    er_expect_token_operand tok_mem_r12_open, tok_mem_r12_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_r12_open, tok_mem_r12_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -152,11 +132,9 @@ er_fn expect_r12_plus_one
     er_ret_false
 
 er_fn expect_rsi_plus_one
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -164,11 +142,9 @@ er_fn expect_rsi_plus_one
     er_ret_false
 
 er_fn expect_rsi_plus_two
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_two_close, tok_two_close_len
     ret
@@ -176,11 +152,9 @@ er_fn expect_rsi_plus_two
     er_ret_false
 
 er_fn expect_rsi_plus_three
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_three_close, tok_three_close_len
     ret
@@ -192,11 +166,9 @@ er_fn expect_r8_plain_mem
     ret
 
 er_fn expect_rdi_plus_r8
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r8_close, tok_r8_close_len
     ret
@@ -204,17 +176,13 @@ er_fn expect_rdi_plus_r8
     er_ret_false
 
 er_fn expect_rdi_plus_r8_plus_one
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
-    er_expect_token_operand tok_r8, tok_r8_len
-    test    eax, eax
+    er_expect_token_operand_result tok_r8, tok_r8_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -222,11 +190,9 @@ er_fn expect_rdi_plus_r8_plus_one
     er_ret_false
 
 er_fn expect_rsi_plus_r8
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r8_close, tok_r8_close_len
     ret
@@ -234,11 +200,9 @@ er_fn expect_rsi_plus_r8
     er_ret_false
 
 er_fn expect_rsi_plus_r9
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
@@ -246,11 +210,9 @@ er_fn expect_rsi_plus_r9
     er_ret_false
 
 er_fn expect_rsi_plus_r10
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r10_close, tok_r10_close_len
     ret
@@ -258,11 +220,9 @@ er_fn expect_rsi_plus_r10
     er_ret_false
 
 er_fn expect_rdi_plus_r9
-    er_expect_token_operand tok_mem_rdi_open, tok_mem_rdi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdi_open, tok_mem_rdi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
@@ -270,11 +230,9 @@ er_fn expect_rdi_plus_r9
     er_ret_false
 
 er_fn expect_rdx_plus_r8_times_2
-    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdx_open, tok_mem_rdx_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r8_times_2_close, tok_r8_times_2_close_len
     ret
@@ -282,17 +240,13 @@ er_fn expect_rdx_plus_r8_times_2
     er_ret_false
 
 er_fn expect_rdx_plus_r8_times_2_plus_one
-    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdx_open, tok_mem_rdx_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
-    er_expect_token_operand tok_r8_times_2, tok_r8_times_2_len
-    test    eax, eax
+    er_expect_token_operand_result tok_r8_times_2, tok_r8_times_2_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -300,11 +254,9 @@ er_fn expect_rdx_plus_r8_times_2_plus_one
     er_ret_false
 
 er_fn expect_rdx_plus_r9
-    er_expect_token_operand tok_mem_rdx_open, tok_mem_rdx_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rdx_open, tok_mem_rdx_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_r9_close, tok_r9_close_len
     ret
@@ -312,11 +264,9 @@ er_fn expect_rdx_plus_r9
     er_ret_false
 
 er_fn expect_rsi_plus_rdx_prefix
-    er_expect_token_operand tok_mem_rsi_open, tok_mem_rsi_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_mem_rsi_open, tok_mem_rsi_open_len
     jz      .bad
-    er_expect_token_operand tok_plus, tok_plus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_plus, tok_plus_len
     jz      .bad
     er_expect_token_operand tok_rdx, tok_rdx_len
     ret
@@ -324,8 +274,7 @@ er_fn expect_rsi_plus_rdx_prefix
     er_ret_false
 
 er_fn expect_minus_one_close
-    er_expect_token_operand tok_minus, tok_minus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_minus, tok_minus_len
     jz      .bad
     er_expect_token_operand tok_one_close, tok_one_close_len
     ret
@@ -407,8 +356,7 @@ er_fn expect_u32_operand
     jmp     .done
 .negative:
     inc     r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .done
     mov     rbx, [rel imm_u32_value]
     neg     ebx
@@ -417,8 +365,7 @@ er_fn expect_u32_operand
     jmp     .done
 
 er_fn expect_imm8_operand
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .done
     cmp     qword [rel imm_u32_value], 255
     ja      .bad
@@ -436,11 +383,9 @@ er_fn expect_imm8_expr_operand
     jz      .plain
     mov     rdx, [rel imm_u32_value]
     push    rdx
-    er_expect_token_operand tok_minus, tok_minus_len
-    test    eax, eax
+    er_expect_token_operand_result tok_minus, tok_minus_len
     jz      .bad_pop
-    call    expect_imm8_operand
-    test    eax, eax
+    er_expect_imm8_result
     jz      .bad_pop
     pop     rdx
     sub     rdx, [rel imm_u32_value]
@@ -518,8 +463,7 @@ er_fn expect_value_operand
     cmp     byte [r14], '-'
     jne     .positive
     inc     r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .bad
     mov     rax, [rel imm_u32_value]
     neg     rax
@@ -528,8 +472,7 @@ er_fn expect_value_operand
     jmp     .done
 .positive:
     push    r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .symbol
     pop     r11
     jmp     .maybe_plus
@@ -547,8 +490,7 @@ er_fn expect_value_operand
     jne     .yes
     inc     r14
     push    r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .plus_symbol
     pop     r11
     jmp     .plus_ok
@@ -583,8 +525,7 @@ er_fn expect_symbol_value_operand
     mov     rsi, r11
     lea     rdx, [rel tok_error_no_data]
     mov     ecx, tok_error_no_data_len
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jz      .error_timeout
     mov     qword [rel imm_u32_value], 23
     mov     eax, 1
@@ -594,8 +535,7 @@ er_fn expect_symbol_value_operand
     mov     rsi, r11
     lea     rdx, [rel tok_error_timeout]
     mov     ecx, tok_error_timeout_len
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jz      .error_not_present
     mov     qword [rel imm_u32_value], 20
     mov     eax, 1
@@ -605,8 +545,7 @@ er_fn expect_symbol_value_operand
     mov     rsi, r11
     lea     rdx, [rel tok_error_not_present]
     mov     ecx, tok_error_not_present_len
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jz      .error_bad_argument
     mov     qword [rel imm_u32_value], 22
     mov     eax, 1
@@ -616,8 +555,7 @@ er_fn expect_symbol_value_operand
     mov     rsi, r11
     lea     rdx, [rel tok_error_bad_argument]
     mov     ecx, tok_error_bad_argument_len
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jz      .error_ok
     mov     qword [rel imm_u32_value], 29
     mov     eax, 1
@@ -693,8 +631,7 @@ er_fn expect_symbol_value_operand
 er_fn match_builtin_error_value
     mov     rdi, r10
     mov     rsi, r11
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jz      .no
     mov     [rel imm_u32_value], r8
     er_ret_true
@@ -704,8 +641,7 @@ er_fn match_builtin_error_value
 er_fn expect_rel_label_value
     er_push r10, r11
     call    skip_space_inline
-    er_expect_token_operand tok_rel_open, tok_rel_open_len
-    test    eax, eax
+    er_expect_token_operand_result tok_rel_open, tok_rel_open_len
     jz      .bad
     call    skip_space_inline
     mov     r10, r14
@@ -786,8 +722,7 @@ er_fn expect_equ_operand
     mov     rsi, r12
     mov     rdx, [rel equ_name_ptr + r13 * 8]
     mov     rcx, [rel equ_name_len + r13 * 8]
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jnz     .found
     inc     r13
     jmp     .loop
@@ -814,8 +749,7 @@ er_fn expect_equ_mul_operand
     cmp     byte [r14], '*'
     jne     .bad
     inc     r14
-    call    expect_u32_operand
-    test    eax, eax
+    er_expect_u32_result
     jz      .bad
     imul    rbx, [rel imm_u32_value]
     mov     [rel imm_u32_value], rbx

@@ -7,8 +7,7 @@ er_fn is_directive
     mov     rsi, r12
     lea     rdx, [rel %1]
     mov     ecx, %2
-    call    token_eq
-    test    eax, eax
+    er_token_eq_result
     jnz     .yes
 %endmacro
     CHECK_DIR tok_section, tok_section_len
