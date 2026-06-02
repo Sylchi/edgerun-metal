@@ -286,6 +286,48 @@ global _start
     call    append_text_u32
 %endm
 
+%macro er_match_same_token_operands 4-5
+    er_push_expect_token_operand_result %1, %2
+    jz      %%not_match
+    pop     r11
+    er_expect_comma_result
+    jz      %%bad
+    er_expect_token_operand_result %1, %2
+    jz      %%bad
+    er_expect_line_end_result
+    jz      %%bad
+    %if %0 = 4
+        er_emit_text_bytes %3, %4
+    %else
+        er_emit_text_bytes %3, %4, %5
+    %endif
+    er_ret_true
+%%bad:
+    mov     qword [rel exit_subset_bad], 1
+    er_ret_true
+%%not_match:
+    pop     r14
+%endm
+
+%macro er_match_line_token_operand 4-5
+    er_push_expect_token_operand_result %1, %2
+    jz      %%not_match
+    pop     r11
+    er_expect_line_end_result
+    jz      %%bad
+    %if %0 = 4
+        er_emit_text_bytes %3, %4
+    %else
+        er_emit_text_bytes %3, %4, %5
+    %endif
+    er_ret_true
+%%bad:
+    mov     qword [rel exit_subset_bad], 1
+    er_ret_true
+%%not_match:
+    pop     r14
+%endm
+
 _start:
     mov     r12, [rsp]
     lea     r13, [rsp + 8]

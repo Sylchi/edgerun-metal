@@ -12,6 +12,7 @@
 ;   er_build x86-objects
 ;   er_build validate-object OBJECT
 ;   er_build body-to-file OBJECT OUTPUT
+;   er_build file-to-object INPUT OUTPUT.erobj
 ;
 ; The runner reads build graph data from EdgeRun EROBJ001 bytes objects instead
 ; of shell-owned text. It is intentionally small and fail-closed.
@@ -20,6 +21,7 @@ SYS_read       equ 0
 SYS_write      equ 1
 SYS_open       equ 2
 SYS_close      equ 3
+SYS_dup2       equ 33
 SYS_mkdir      equ 83
 SYS_fork       equ 57
 SYS_execve     equ 59
@@ -29,6 +31,7 @@ SYS_exit_group equ 231
 STDOUT_FD equ 1
 STDERR_FD equ 2
 O_RDONLY  equ 0
+O_WRONLY  equ 1
 O_WRONLY_CREAT_TRUNC equ 577
 DIR_MODE_0755 equ 0755o
 FILE_MODE_0644 equ 0644o
@@ -52,6 +55,8 @@ source_logical_buf: resb 512
 object_stem_buf: resb 128
 object_path_buf: resb 512
 binary_path_buf: resb 512
+suppress_host_tools_output: resq 1
+process_quiet: resq 1
 stack_bottom: resb 65536
 stack_top:
 
@@ -63,6 +68,8 @@ _start:
     lea     r13, [rsp + 8]
     mov     rsp, stack_top
 
+    cmp     r12, 5
+    je      .argc5
     cmp     r12, 4
     je      .argc4
     cmp     r12, 3
@@ -79,6 +86,11 @@ _start:
     call    streq
     test    eax, eax
     jnz     .test_registry
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_test_status]
+    call    streq
+    test    eax, eax
+    jnz     .test_status_all
     mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_help]
     call    streq
@@ -110,6 +122,11 @@ _start:
     test    eax, eax
     jnz     .host_tools
     mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_er_asm]
+    call    streq
+    test    eax, eax
+    jnz     .er_asm
+    mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_x86_objects]
     call    streq
     test    eax, eax
@@ -118,13 +135,36 @@ _start:
 
 .argc4:
     mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_test_status]
+    call    streq
+    test    eax, eax
+    jnz     .test_status_2
+    mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_body_to_file]
     call    streq
     test    eax, eax
     jnz     .body_to_file
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_file_to_object]
+    call    streq
+    test    eax, eax
+    jnz     .file_to_object
+    jmp     .usage
+
+.argc5:
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_test_status]
+    call    streq
+    test    eax, eax
+    jnz     .test_status_3
     jmp     .usage
 
 .argc3:
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_test_status]
+    call    streq
+    test    eax, eax
+    jnz     .test_status_1
     mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_validate_object]
     call    streq
@@ -139,6 +179,34 @@ _start:
 
 .test_registry:
     call    cmd_test_registry
+    xor     edi, edi
+    jmp     exit_now
+
+.test_status_all:
+    xor     edi, edi
+    xor     esi, esi
+    call    cmd_test_status
+    xor     edi, edi
+    jmp     exit_now
+
+.test_status_1:
+    lea     rdi, [r13 + 16]
+    mov     esi, 1
+    call    cmd_test_status
+    xor     edi, edi
+    jmp     exit_now
+
+.test_status_2:
+    lea     rdi, [r13 + 16]
+    mov     esi, 2
+    call    cmd_test_status
+    xor     edi, edi
+    jmp     exit_now
+
+.test_status_3:
+    lea     rdi, [r13 + 16]
+    mov     esi, 3
+    call    cmd_test_status
     xor     edi, edi
     jmp     exit_now
 
@@ -176,6 +244,11 @@ _start:
     xor     edi, edi
     jmp     exit_now
 
+.er_asm:
+    call    cmd_host_tools
+    xor     edi, edi
+    jmp     exit_now
+
 .x86_objects:
     call    cmd_x86_objects
     xor     edi, edi
@@ -185,6 +258,13 @@ _start:
     mov     rdi, [r13 + 16]
     mov     rsi, [r13 + 24]
     call    write_object_body_file
+    xor     edi, edi
+    jmp     exit_now
+
+.file_to_object:
+    mov     rdi, [r13 + 16]
+    mov     rsi, [r13 + 24]
+    call    write_file_object
     xor     edi, edi
     jmp     exit_now
 
@@ -280,8 +360,11 @@ cmd_host_tools:
     jnz     build_fail
     jmp     .tool_loop
 .tools_done:
+    cmp     qword [rel suppress_host_tools_output], 0
+    jne     .quiet_done
     lea     rdi, [rel msg_host_tools_ok]
     call    print_cstr_stdout
+.quiet_done:
     ret
 
 cmd_x86_objects:
@@ -625,6 +708,12 @@ ensure_parent_dir:
     ret
 
 ; run_process(path, argv) -> eax=0 on clean exit, 1 otherwise
+run_process_quiet:
+    mov     qword [rel process_quiet], 1
+    call    run_process
+    mov     qword [rel process_quiet], 0
+    ret
+
 run_process:
     push    rbx
     push    r12
@@ -653,6 +742,22 @@ run_process:
     pop     rbx
     ret
 .child:
+    cmp     qword [rel process_quiet], 0
+    je      .exec
+    lea     rdi, [rel dev_null_path]
+    mov     esi, O_WRONLY
+    xor     edx, edx
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      .exec
+    mov     rdi, rax
+    mov     esi, STDOUT_FD
+    mov     eax, SYS_dup2
+    syscall
+    mov     eax, SYS_close
+    syscall
+.exec:
     mov     rdi, r12
     mov     rsi, r13
     lea     rdx, [rel null_env]
@@ -689,6 +794,114 @@ cmd_test_registry:
     call    cmd_write_body
     lea     rdi, [rel test_object_asm_registry_line]
     call    print_cstr_stdout
+    ret
+
+; cmd_test_status(argv_targets, count). count=0 runs the deterministic build subset.
+cmd_test_status:
+    push    rbx
+    push    r12
+    push    r13
+    mov     r12, rdi
+    mov     r13, rsi
+    lea     rdi, [rel test_status_header]
+    call    print_cstr_stdout
+    test    r13, r13
+    jnz     .requested
+    lea     rdi, [rel arg_test_registry]
+    call    run_test_status_target
+    lea     rdi, [rel arg_test_er_asm_parse]
+    call    run_test_status_target
+    lea     rdi, [rel arg_test_er_asm_cli]
+    call    run_test_status_target
+    jmp     .done
+.requested:
+    xor     ebx, ebx
+.loop:
+    cmp     rbx, r13
+    jae     .done
+    mov     rdi, [r12 + rbx * 8]
+    call    run_test_status_target
+    inc     rbx
+    jmp     .loop
+.done:
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+run_test_status_target:
+    push    r12
+    push    r13
+    mov     r12, rdi
+    lea     rsi, [rel arg_test_registry]
+    call    streq
+    test    eax, eax
+    jnz     .registry
+    mov     rdi, r12
+    lea     rsi, [rel arg_test_er_asm_parse]
+    call    streq
+    test    eax, eax
+    jnz     .er_asm_parse
+    mov     rdi, r12
+    lea     rsi, [rel arg_test_er_asm_cli]
+    call    streq
+    test    eax, eax
+    jnz     .er_asm_cli
+    mov     rdi, r12
+    call    print_cstr_stdout
+    lea     rdi, [rel test_status_unknown_tail]
+    call    print_cstr_stdout
+    jmp     .done
+.registry:
+    lea     rdi, [rel registry_path]
+    call    read_object
+    test    rax, rax
+    js      .registry_fail
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      .registry_fail
+    lea     rdi, [rel test_status_registry_pass]
+    call    print_cstr_stdout
+    jmp     .done
+.registry_fail:
+    lea     rdi, [rel test_status_registry_fail]
+    call    print_cstr_stdout
+    jmp     .done
+.er_asm_parse:
+    mov     qword [rel suppress_host_tools_output], 1
+    call    cmd_host_tools
+    mov     qword [rel suppress_host_tools_output], 0
+    lea     rdi, [rel er_asm_path]
+    lea     rsi, [rel argv_er_asm_parse_test]
+    call    run_process_quiet
+    test    eax, eax
+    jnz     .parse_fail
+    lea     rdi, [rel test_status_er_asm_parse_pass]
+    call    print_cstr_stdout
+    jmp     .done
+.parse_fail:
+    lea     rdi, [rel test_status_er_asm_parse_fail]
+    call    print_cstr_stdout
+    jmp     .done
+.er_asm_cli:
+    mov     qword [rel suppress_host_tools_output], 1
+    call    cmd_host_tools
+    mov     qword [rel suppress_host_tools_output], 0
+    lea     rdi, [rel er_asm_path]
+    lea     rsi, [rel argv_er_asm_cli_test]
+    call    run_process_quiet
+    test    eax, eax
+    jnz     .cli_fail
+    lea     rdi, [rel test_status_er_asm_cli_pass]
+    call    print_cstr_stdout
+    jmp     .done
+.cli_fail:
+    lea     rdi, [rel test_status_er_asm_cli_fail]
+    call    print_cstr_stdout
+.done:
+    pop     r13
+    pop     r12
     ret
 
 cmd_validate_object_path:
@@ -785,6 +998,85 @@ write_object_body_file:
     js      build_fail
     pop     r13
     pop     r12
+    ret
+
+; write_file_object(input_path, output_path)
+write_file_object:
+    push    r12
+    push    r13
+    push    r14
+    mov     r12, rsi
+
+    mov     rsi, O_RDONLY
+    xor     edx, edx
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r14, rax
+
+    mov     rdi, r14
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     edx, OBJECT_BUF_SIZE - OBJECT_HEADER_SIZE
+    mov     eax, SYS_read
+    syscall
+    test    rax, rax
+    js      build_fail
+    cmp     rax, OBJECT_BUF_SIZE - OBJECT_HEADER_SIZE
+    jae     build_fail
+    mov     r13, rax
+
+    mov     rdi, r14
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+
+    call    init_object_header
+
+    mov     rdi, r12
+    call    ensure_parent_dir
+    mov     rdi, r12
+    mov     esi, O_WRONLY_CREAT_TRUNC
+    mov     edx, FILE_MODE_0644
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r14, rax
+
+    mov     rdi, r14
+    lea     rsi, [rel object_buf]
+    lea     rdx, [r13 + OBJECT_HEADER_SIZE]
+    mov     eax, SYS_write
+    syscall
+    lea     rdx, [r13 + OBJECT_HEADER_SIZE]
+    cmp     rax, rdx
+    jne     build_fail
+
+    mov     rdi, r14
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+init_object_header:
+    lea     rdi, [rel object_buf]
+    mov     ecx, OBJECT_HEADER_SIZE
+.zero:
+    mov     byte [rdi], 0
+    inc     rdi
+    loop    .zero
+    mov     rax, 0x3130304a424f5245
+    mov     [rel object_buf], rax
+    mov     word [rel object_buf + 8], OBJECT_VERSION
+    mov     word [rel object_buf + 10], OBJECT_KIND_BYTES
+    mov     qword [rel object_buf + 16], r13
+    mov     qword [rel object_buf + 32], r13
     ret
 
 write_registry_test_list:
@@ -970,15 +1262,20 @@ exit_now:
 section .rodata
 arg_test_list: db "test-list", 0
 arg_test_registry: db "test-registry", 0
+arg_test_status: db "test-status", 0
+arg_test_er_asm_parse: db "test-er-asm-parse", 0
+arg_test_er_asm_cli: db "test-er-asm-cli", 0
 arg_help: db "help", 0
 arg_x86_sources: db "x86-sources", 0
 arg_pi_sources: db "pi-sources", 0
 arg_app_test_roots: db "app-test-roots", 0
 arg_app_build_steps: db "app-build-steps", 0
 arg_host_tools: db "host-tools", 0
+arg_er_asm: db "er-asm", 0
 arg_x86_objects: db "x86-objects", 0
 arg_validate_object: db "validate-object", 0
 arg_body_to_file: db "body-to-file", 0
+arg_file_to_object: db "file-to-object", 0
 registry_path: db "kernel/test/registry.erobj", 0
 x86_sources_path: db "kernel/x86_64/kernel_sources.erobj", 0
 pi_sources_path: db "kernel/arm/pi/kernel_sources.erobj", 0
@@ -994,11 +1291,19 @@ test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|test-registry|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects|validate-object OBJECT|body-to-file OBJECT OUTPUT", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
-msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next", 10, 0
+msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm", 10, 0
 msg_x86_objects_ok: db "x86-objects: .build/kernel/kernel_*.o", 10, 0
+test_status_header: db "target", 9, "category", 9, "subsystem", 9, "status", 9, "log", 10, 0
+test_status_registry_pass: db "test-registry", 9, "unit", 9, "build", 9, "pass", 9, "registry object validated", 10, 0
+test_status_registry_fail: db "test-registry", 9, "unit", 9, "build", 9, "fail", 9, "registry object invalid", 10, 0
+test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm parsed kernel/x86_64/macros.inc", 10, 0
+test_status_er_asm_parse_fail: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "fail", 9, "er_asm parse probe failed", 10, 0
+test_status_er_asm_cli_pass: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "pass", 9, "er_asm accepted flat CLI shape", 10, 0
+test_status_er_asm_cli_fail: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "fail", 9, "er_asm CLI probe failed", 10, 0
+test_status_unknown_tail: db 9, "unknown", 9, "unknown", 9, "fail", 9, "unsupported test-status target", 10, 0
 build_dir: db ".build", 0
 host_build_dir: db ".build/host", 0
 kernel_build_dir: db ".build/kernel", 0
@@ -1011,6 +1316,8 @@ arg_elf64: db "elf64", 0
 arg_include: db "-I", 0
 arg_kernel: db "kernel", 0
 arg_o: db "-o", 0
+arg_flat: db "flat", 0
+arg_parse_only: db "--parse-only", 0
 arg_elf32: db "elf32", 0
 arg_nostdlib: db "-nostdlib", 0
 arg_static: db "-static", 0
@@ -1022,7 +1329,14 @@ host_source_materialized_prefix: db ".build/host/", 0
 x86_object_prefix: db ".build/kernel/kernel_", 0
 object_suffix: db ".o", 0
 kernel_source_build_dir: db ".build/kernel/source", 0
+er_asm_path: db ".build/host/er_asm", 0
+macros_inc_path: db "kernel/x86_64/macros.inc", 0
+er_asm_cli_source_path: db "kernel/test/test_flat_runtime.asm", 0
+er_asm_cli_probe_path: db ".build/host/er_asm_cli_probe.bin", 0
+dev_null_path: db "/dev/null", 0
 null_env: dq 0
 argv_yasm_host_tool: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
 argv_ld_host_tool: dq arg_ld, arg_nostdlib, arg_static, arg_o, binary_path_buf, object_path_buf, 0
 argv_yasm_x86_object: dq arg_yasm, arg_f, arg_elf32, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
+argv_er_asm_parse_test: dq er_asm_path, arg_parse_only, macros_inc_path, 0
+argv_er_asm_cli_test: dq er_asm_path, arg_f, arg_flat, arg_include, arg_kernel, arg_o, er_asm_cli_probe_path, er_asm_cli_source_path, 0

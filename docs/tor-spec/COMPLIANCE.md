@@ -1,6 +1,6 @@
 # Tor Spec Compliance
 
-Source specs are copied from `~/tor-spec` into this directory. The implementation must be audited against these files, not against memory or comments.
+Source specs live in this directory. The implementation must be audited against these files, not against memory or comments.
 
 ## Current implementation state
 

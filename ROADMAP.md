@@ -7,7 +7,7 @@ capability OS where every process, device, and user has a fixed identity and the
 kernel routes cells by identity — not by IP address.
 
 The full mapping from Tor semantics to OS primitives is specified in
-`~/tor-spec/00-os-mapping.md`.
+`docs/tor-spec/00-os-mapping.md`.
 
 ---
 
@@ -44,10 +44,10 @@ Curve25519 arithmetic and Ed25519 signing are implemented and covered.
 
 | Primitive | File | Current | Coverage |
 |-----------|------|---------|----------|
-| `_fe_invert` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-fe-mul`, `./build.sh test-x25519` |
-| `_curve25519_ladder_step` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
-| `er_tor_curve25519_scalar_mult` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
-| `er_ed25519_sign` / `er_ed25519_blind_sign` | `kernel/x86_64/crypto/ed25519.asm` | Implemented | `./build.sh test-ed25519`, `./build.sh test-tor-hs` |
+| `_fe_invert` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | owned registry targets `test-fe-mul`, `test-x25519` |
+| `_curve25519_ladder_step` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | owned registry target `test-x25519` |
+| `er_tor_curve25519_scalar_mult` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | owned registry target `test-x25519` |
+| `er_ed25519_sign` / `er_ed25519_blind_sign` | `kernel/x86_64/crypto/ed25519.asm` | Implemented | owned registry targets `test-ed25519`, `test-tor-hs` |
 
 These form the basis of ntor handshake support for both legacy and native paths.
 
@@ -64,7 +64,7 @@ These form the basis of ntor handshake support for both legacy and native paths.
 
 ## Phase 1: Kernel Identity Routing Primitives
 
-The in-kernel local transport exists and is covered by `./build.sh test-local-route`.
+The in-kernel local transport exists and is covered by owned registry target `test-local-route`.
 The remaining work is syscall/exec integration and full production policy wiring.
 
 ### P1a — `register_handler` syscall
@@ -275,7 +275,7 @@ state just by mutating its heap.
 - **File:** `kernel/driver/nvme.asm`
 - **Current:** `er_nvme_read_blocks` and `er_nvme_write_blocks` build IO queue
   1 read/write SQEs, ring the SQ1 tail doorbell at BAR0 + 0x1008, poll
-  `NVME_IO_CQ`, and are covered by `./build.sh test-nvme`.
+  `NVME_IO_CQ`, and are covered by owned registry target `test-nvme`.
 - **Work:** Validate the IO path against real hardware and connect it to the
   store flush path with explicit error propagation for controller status codes.
 - **Dependencies:** P6b hardware validation

@@ -1,103 +1,15 @@
 er_fn match_more_test
     er_match_source_token_result tok_test, tok_test_len
     jz      .no
-    er_expect_token_operand_push_result tok_rdi, tok_rdi_len
-    jz      .rax
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_rdi, tok_rdi_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x85, 0xff
-    jmp     .yes
-.rax:
-    er_pop_expect_token_operand_push_result tok_rax, tok_rax_len
-    jz      .r11
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_rax, tok_rax_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x85, 0xc0
-    jmp     .yes
-.r11:
-    er_pop_expect_token_operand_push_result tok_r11, tok_r11_len
-    jz      .r10
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r11, tok_r11_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4d, 0x85, 0xdb
-    jmp     .yes
-.r10:
-    er_pop_expect_token_operand_push_result tok_r10, tok_r10_len
-    jz      .r13
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r10, tok_r10_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4d, 0x85, 0xd2
-    jmp     .yes
-.r13:
-    er_pop_expect_token_operand_push_result tok_r13, tok_r13_len
-    jz      .al
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r13, tok_r13_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4d, 0x85, 0xed
-    jmp     .yes
-.al:
-    er_pop_expect_token_operand_push_result tok_al, tok_al_len
-    jz      .cl
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_al, tok_al_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x84, 0xc0
-    jmp     .yes
-.cl:
-    er_pop_expect_token_operand_push_result tok_cl, tok_cl_len
-    jz      .dl
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_cl, tok_cl_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x84, 0xc9
-    jmp     .yes
-.dl:
-    er_pop_expect_token_operand_push_result tok_dl, tok_dl_len
-    jz      .sil_imm
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_dl, tok_dl_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x84, 0xd2
-    jmp     .yes
-.sil_imm:
-    er_pop_expect_token_operand_result tok_sil, tok_sil_len
+    er_match_same_token_operands tok_rdi, tok_rdi_len, 0x48, 0x85, 0xff
+    er_match_same_token_operands tok_rax, tok_rax_len, 0x48, 0x85, 0xc0
+    er_match_same_token_operands tok_r11, tok_r11_len, 0x4d, 0x85, 0xdb
+    er_match_same_token_operands tok_r10, tok_r10_len, 0x4d, 0x85, 0xd2
+    er_match_same_token_operands tok_r13, tok_r13_len, 0x4d, 0x85, 0xed
+    er_match_same_token_operands tok_al, tok_al_len, 0x84, 0xc0
+    er_match_same_token_operands tok_cl, tok_cl_len, 0x84, 0xc9
+    er_match_same_token_operands tok_dl, tok_dl_len, 0x84, 0xd2
+    er_expect_token_operand_result tok_sil, tok_sil_len
     jz      .no
     er_expect_comma_result
     jz      .bad
@@ -107,7 +19,6 @@ er_fn match_more_test
     jz      .bad
     er_emit_text_bytes 0x40, 0xf6, 0xc6
     er_emit_imm_byte_value
-.yes:
     er_ret_true
 .bad:
     mov     qword [rel exit_subset_bad], 1
@@ -118,79 +29,13 @@ er_fn match_more_test
 er_fn match_more_xor
     er_match_source_token_result tok_xor, tok_xor_len
     jz      .no
-    er_expect_token_operand_push_result tok_ecx, tok_ecx_len
-    jz      .rcx
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_ecx, tok_ecx_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x31, 0xc9
-    jmp     .yes
-.rcx:
-    er_pop_expect_token_operand_push_result tok_rcx, tok_rcx_len
-    jz      .edx
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_rcx, tok_rcx_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x31, 0xc9
-    jmp     .yes
-.edx:
-    er_pop_expect_token_operand_push_result tok_edx, tok_edx_len
-    jz      .r8d
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_edx, tok_edx_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x31, 0xd2
-    jmp     .yes
-.r8d:
-    er_pop_expect_token_operand_push_result tok_r8d, tok_r8d_len
-    jz      .r9d
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r8d, tok_r8d_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x45, 0x31, 0xc0
-    jmp     .yes
-.r9d:
-    er_pop_expect_token_operand_push_result tok_r9d, tok_r9d_len
-    jz      .r10d
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r9d, tok_r9d_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x45, 0x31, 0xc9
-    jmp     .yes
-.r10d:
-    er_pop_expect_token_operand_push_result tok_r10d, tok_r10d_len
-    jz      .r11d
-    pop     r11
-    er_expect_comma_result
-    jz      .bad
-    er_expect_token_operand_result tok_r10d, tok_r10d_len
-    jz      .bad
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x45, 0x31, 0xd2
-    jmp     .yes
-.r11d:
-    er_pop_expect_token_operand_result tok_r11d, tok_r11d_len
+    er_match_same_token_operands tok_ecx, tok_ecx_len, 0x31, 0xc9
+    er_match_same_token_operands tok_rcx, tok_rcx_len, 0x48, 0x31, 0xc9
+    er_match_same_token_operands tok_edx, tok_edx_len, 0x31, 0xd2
+    er_match_same_token_operands tok_r8d, tok_r8d_len, 0x45, 0x31, 0xc0
+    er_match_same_token_operands tok_r9d, tok_r9d_len, 0x45, 0x31, 0xc9
+    er_match_same_token_operands tok_r10d, tok_r10d_len, 0x45, 0x31, 0xd2
+    er_expect_token_operand_result tok_r11d, tok_r11d_len
     jz      .no
     er_expect_comma_result
     jz      .bad
@@ -199,7 +44,6 @@ er_fn match_more_xor
     er_expect_line_end_result
     jz      .bad
     er_emit_text_bytes 0x45, 0x31, 0xdb
-.yes:
     er_ret_true
 .bad:
     mov     qword [rel exit_subset_bad], 1
@@ -485,47 +329,11 @@ er_fn match_more_and
     pop     r11
     er_expect_comma_result
     jz      .bad
-    er_push_expect_token_operand_result tok_r9, tok_r9_len
-    jz      .rcx_eax
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4c, 0x89, 0xc9
-    jmp     .yes
-.rcx_eax:
-    er_pop_expect_token_operand_push_result tok_eax, tok_eax_len
-    jz      .rcx_rdx
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x89, 0xc1
-    jmp     .yes
-.rcx_rdx:
-    er_pop_expect_token_operand_push_result tok_rdx, tok_rdx_len
-    jz      .rcx_r8
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x89, 0xd1
-    jmp     .yes
-.rcx_r8:
-    er_pop_expect_token_operand_push_result tok_r8, tok_r8_len
-    jz      .rcx_rsi
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4c, 0x89, 0xc1
-    jmp     .yes
-.rcx_rsi:
-    er_pop_expect_token_operand_push_result tok_rsi, tok_rsi_len
-    jz      .rcx_minus_one
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x89, 0xf1
-    jmp     .yes
-.rcx_minus_one:
-    pop     r14
+    er_match_line_token_operand tok_r9, tok_r9_len, 0x4c, 0x89, 0xc9
+    er_match_line_token_operand tok_eax, tok_eax_len, 0x89, 0xc1
+    er_match_line_token_operand tok_rdx, tok_rdx_len, 0x48, 0x89, 0xd1
+    er_match_line_token_operand tok_r8, tok_r8_len, 0x4c, 0x89, 0xc1
+    er_match_line_token_operand tok_rsi, tok_rsi_len, 0x48, 0x89, 0xf1
     call    expect_minus_one_operand
     test    eax, eax
     jz      .bad
@@ -541,51 +349,12 @@ er_fn match_more_and
     pop     r11
     er_expect_comma_result
     jz      .bad
-    er_push_expect_token_operand_result tok_r8, tok_r8_len
-    jz      .rax_r9_more
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4c, 0x89, 0xc0
-    jmp     .yes
-.rax_r9_more:
-    pop     r14
-    er_push_expect_token_operand_result tok_r9, tok_r9_len
-    jz      .rax_rsi_more
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x4c, 0x89, 0xc8
-    jmp     .yes
-.rax_rsi_more:
-    pop     r14
-    er_push_expect_token_operand_result tok_rsi, tok_rsi_len
-    jz      .rax_rcx_more
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x89, 0xf0
-    jmp     .yes
-.rax_rcx_more:
-    pop     r14
-    er_push_expect_token_operand_result tok_rcx, tok_rcx_len
-    jz      .rax_rdx_more
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x89, 0xc8
-    jmp     .yes
-.rax_rdx_more:
-    pop     r14
-    er_push_expect_token_operand_result tok_rdx, tok_rdx_len
-    jz      .rax_mem_rdi
-    pop     r11
-    er_expect_line_end_result
-    jz      .bad
-    er_emit_text_bytes 0x48, 0x89, 0xd0
-    jmp     .yes
-.rax_mem_rdi:
-    er_pop_expect_token_operand_push_result tok_mem_rdi, tok_mem_rdi_len
+    er_match_line_token_operand tok_r8, tok_r8_len, 0x4c, 0x89, 0xc0
+    er_match_line_token_operand tok_r9, tok_r9_len, 0x4c, 0x89, 0xc8
+    er_match_line_token_operand tok_rsi, tok_rsi_len, 0x48, 0x89, 0xf0
+    er_match_line_token_operand tok_rcx, tok_rcx_len, 0x48, 0x89, 0xc8
+    er_match_line_token_operand tok_rdx, tok_rdx_len, 0x48, 0x89, 0xd0
+    er_push_expect_token_operand_result tok_mem_rdi, tok_mem_rdi_len
     jz      .rax_imm64_more
     pop     r11
     er_expect_line_end_result

@@ -1,16 +1,17 @@
 # Performance & Consolidation Analysis
 
-Updated: 2026-06-01
+Updated: 2026-06-02
 
 Verified current baseline:
 
-- `./build.sh test` passes.
-- `./build.sh kernel` builds `.build/kernel/kernel.elf` and `.build/kernel/kernel.bin`.
+- `.build/host/er_build test-list` and `test-registry` emit the owned test registry.
+- `.build/host/er_build x86-objects` builds the registry-owned x86 object set.
 - Older notes about `test-wasm-compiler` hanging or TPM hash failures are historical,
   not current blockers.
 
-This file tracks consolidation targets. Treat line counts as directional because
-multiple agents are actively changing the tree.
+This file tracks consolidation targets. Implementation and owned registry objects
+are authoritative; estimates are intentionally omitted when they would invite
+stale accounting.
 
 ## Performance Optimizations
 
@@ -52,30 +53,20 @@ compute-heavy workloads.
 | Object authority | Reconcile Zig object/grant concepts with ASM object serialization and route enforcement | Kernel checks the same requirements app code declares |
 | Hardware bring-up | Keep one explicit path per device class | Probe-only placeholders are either completed or removed |
 
-### Kernel-Side (~500 lines)
+### Kernel-Side
 
-| Area | Est. Savings | Description |
-|------|:---:|-------------|
-| WASM memory load/store handlers | ~150 | 19 handlers share identical skeleton; macro-ize |
-| LEB128-read preamble | ~105 | 15 sites copy 9-line identical preamble |
-| Wait-loop consolidation | ~110 | 7 poll-with-timeout functions across 3 drivers |
-| Integer div/rem handlers | ~60 | 8 handlers share preamble pattern |
-| Unused/underused DSL macros | ~70 | 14 macros in macros.inc are never used |
-| I2C HID prologues | ~15 | 3 identical function prologues |
-| **Total** | **~510** | |
+- Consolidate repeated WASM memory load/store handlers.
+- Consolidate repeated LEB128-read preambles.
+- Consolidate poll-with-timeout loops across drivers.
+- Remove unused DSL macros only after verifying no registry-owned source uses them.
 
-### App-Side (~2,400 lines)
+### App-Side
 
-| Area | Est. Savings | Description |
-|------|:---:|-------------|
-| App entry surfaces | TBD | Re-audit `app/src/app_*.zig`, previews, and host entry points; no `app/src/route/` tree exists in this checkout |
-| Component serialization boilerplate | ~550-825 | 55+ components share identical toObject/writeRecord/fromView |
-| `encodedId` wrappers | ~50 | 7 near-identical wrappers |
-| `Point` struct | ~30 | 4 identical definitions |
-| Render backend duplicated helpers | ~30 | makeRgbaTexture duplicated |
-| **Total** | **~2,400** | |
+- Port app entry surfaces and previews out of Zig instead of adding more wrappers.
+- Consolidate component serialization around one canonical object writer.
+- Remove duplicate geometry and encoded-id helpers as their owned equivalents land.
 
 ### SVG Assets
 
-5,093 SVG files in `app/src/assets/` (~100K+ lines of markup).
-Consolidate to binary sprite atlas or Zig data arrays.
+SVG assets in `app/src/assets/` should move toward owned binary sprite/icon
+objects. Do not add new Zig data generators.

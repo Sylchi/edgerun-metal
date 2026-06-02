@@ -68,6 +68,14 @@ tok_percent_macro: db "%macro"
 tok_percent_macro_len equ $ - tok_percent_macro
 tok_percent_endmacro: db "%endmacro"
 tok_percent_endmacro_len equ $ - tok_percent_endmacro
+tok_percent_endm: db "%endm"
+tok_percent_endm_len equ $ - tok_percent_endm
+tok_percent_rep: db "%rep"
+tok_percent_rep_len equ $ - tok_percent_rep
+tok_percent_rotate: db "%rotate"
+tok_percent_rotate_len equ $ - tok_percent_rotate
+tok_percent_endrep: db "%endrep"
+tok_percent_endrep_len equ $ - tok_percent_endrep
 tok_percent_ifdef: db "%ifdef"
 tok_percent_ifdef_len equ $ - tok_percent_ifdef
 tok_percent_ifndef: db "%ifndef"

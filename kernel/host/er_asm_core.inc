@@ -448,8 +448,13 @@ er_fn record_er_fn_directive
 er_fn handle_directive_emit
     er_push r12, r13
     er_match_source_token_result tok_global, tok_global_len
-    jz      .incbin
+    jz      .bits
     call    record_global_operands
+    jmp     .done
+.bits:
+    er_match_source_token_result tok_bits, tok_bits_len
+    jz      .incbin
+    call    emit_bits_directive
     jmp     .done
 .incbin:
     er_match_source_token_result tok_incbin, tok_incbin_len
@@ -503,6 +508,24 @@ er_fn handle_directive_emit
     call    emit_res_directive
 .done:
     er_pop  r12, r13
+    ret
+
+er_fn emit_bits_directive
+    er_expect_u32_result
+    jz      .bad
+    cmp     qword [rel imm_u32_value], 64
+    jne     .bad
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], ']'
+    jne     .bad
+    inc     r14
+    er_expect_line_end_result
+    jz      .bad
+    ret
+.bad:
+    mov     qword [rel exit_subset_bad], 1
     ret
 
 er_fn emit_res_directive
@@ -1023,6 +1046,16 @@ er_fn record_macro_definition
     er_token_eq_result
     jnz     .found
     mov     r14, r13
+    call    skip_space_inline
+    mov     rdi, r14
+    call    skip_token
+    mov     rsi, r14
+    sub     rsi, rdi
+    lea     rdx, [rel tok_percent_endm]
+    mov     ecx, tok_percent_endm_len
+    er_token_eq_result
+    jnz     .found
+    mov     r14, r13
 .next_line:
     cmp     r14, r15
     jae     .bad
@@ -1195,6 +1228,11 @@ er_fn build_macro_expansion
     movzx   eax, byte [r12 + rbx]
     cmp     al, '%'
     jne     .copy_byte
+    call    append_macro_rep_if_current
+    cmp     eax, 1
+    je      .rep_done
+    cmp     eax, -1
+    je      .bad
     mov     r10, rbx
     inc     r10
     cmp     r10, r13
@@ -1284,6 +1322,9 @@ er_fn build_macro_expansion
     inc     r14
     inc     rbx
     jmp     .copy
+.rep_done:
+    mov     rbx, rdx
+    jmp     .copy
 .finish:
     mov     rax, [rel macro_expand_base_ptr]
     mov     rdx, r14
@@ -1298,6 +1339,477 @@ er_fn build_macro_expansion
     xor     eax, eax
 .done:
     er_pop  rbx, r10, r11, r12, r13, r14, r15
+    ret
+
+; append_macro_rep_if_current(body=r12, body_len=r13, index=rbx)
+; returns eax=1 handled with rdx=new index, eax=0 not %rep, eax=-1 bad.
+er_fn append_macro_rep_if_current
+    er_push r8, r9, r10, r11, r15
+    lea     rdi, [r12 + rbx]
+    mov     rsi, tok_percent_rep_len
+    lea     rdx, [rel tok_percent_rep]
+    mov     ecx, tok_percent_rep_len
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    mov     r15, rbx
+    add     r15, tok_percent_rep_len
+    call    parse_macro_rep_count
+    test    eax, eax
+    jz      .bad
+    mov     r9, rdx                 ; repeat count
+    call    macro_index_after_line
+    test    eax, eax
+    jz      .bad
+    mov     r10, rdx                ; body start index
+    mov     r15, r10
+    call    find_macro_endrep
+    test    eax, eax
+    jz      .bad
+    mov     r11, rdx                ; body end index
+    mov     r8, rax                 ; index after %endrep line
+.repeat:
+    test    r9, r9
+    jz      .handled
+    lea     rdi, [r12 + r10]
+    lea     rsi, [r12 + r11]
+    push    r8
+    push    r9
+    call    append_macro_range_no_rep
+    pop     r9
+    pop     r8
+    test    eax, eax
+    jz      .bad
+    dec     r9
+    jmp     .repeat
+.handled:
+    mov     rdx, r8
+    mov     eax, 1
+    jmp     .done
+.no:
+    xor     eax, eax
+    jmp     .done
+.bad:
+    mov     eax, -1
+.done:
+    er_pop  r8, r9, r10, r11, r15
+    ret
+
+; parse_macro_rep_count(r12=body, r13=len, r15=index after %rep) -> eax=1, rdx=count.
+er_fn parse_macro_rep_count
+    xor     edx, edx
+.space:
+    cmp     r15, r13
+    jae     .bad
+    movzx   eax, byte [r12 + r15]
+    cmp     al, ' '
+    je      .space_next
+    cmp     al, 9
+    jne     .value
+.space_next:
+    inc     r15
+    jmp     .space
+.value:
+    cmp     al, '%'
+    jne     .decimal
+    inc     r15
+    cmp     r15, r13
+    jae     .bad
+    cmp     byte [r12 + r15], '0'
+    jne     .bad
+    inc     r15
+    mov     rdx, [rel macro_arg_active_count]
+    jmp     .line_end
+.decimal:
+    cmp     al, '0'
+    jb      .bad
+    cmp     al, '9'
+    ja      .bad
+.digit:
+    cmp     r15, r13
+    jae     .line_end
+    movzx   eax, byte [r12 + r15]
+    cmp     al, '0'
+    jb      .line_end
+    cmp     al, '9'
+    ja      .line_end
+    imul    rdx, rdx, 10
+    sub     al, '0'
+    movzx   eax, al
+    add     rdx, rax
+    inc     r15
+    jmp     .digit
+.line_end:
+    cmp     r15, r13
+    jae     .yes
+    movzx   eax, byte [r12 + r15]
+    cmp     al, ' '
+    je      .line_next
+    cmp     al, 9
+    je      .line_next
+    cmp     al, 10
+    je      .yes
+    cmp     al, ';'
+    je      .yes
+    jmp     .bad
+.line_next:
+    inc     r15
+    jmp     .line_end
+.yes:
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+; macro_index_after_line(r12=body, r13=len, r15=index on current line) -> eax=1, rdx=next line index.
+er_fn macro_index_after_line
+.scan:
+    cmp     r15, r13
+    jae     .bad
+    movzx   eax, byte [r12 + r15]
+    inc     r15
+    cmp     al, 10
+    jne     .scan
+    mov     rdx, r15
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+; find_macro_endrep(r12=body, r13=len, r15=start index) -> eax=after line index, rdx=body end index.
+er_fn find_macro_endrep
+    er_push r8, r9, r10, r11
+    xor     r9d, r9d
+.line:
+    cmp     r15, r13
+    jae     .bad
+    mov     r10, r15                ; line start
+    mov     r11, r15
+.skip_space:
+    cmp     r11, r13
+    jae     .bad
+    movzx   eax, byte [r12 + r11]
+    cmp     al, ' '
+    je      .space_next
+    cmp     al, 9
+    jne     .check
+.space_next:
+    inc     r11
+    jmp     .skip_space
+.check:
+    lea     rdi, [r12 + r11]
+    mov     rsi, tok_percent_rep_len
+    lea     rdx, [rel tok_percent_rep]
+    mov     ecx, tok_percent_rep_len
+    push    r9
+    call    token_eq
+    pop     r9
+    test    eax, eax
+    jnz     .nested_rep
+    lea     rdi, [r12 + r11]
+    mov     rsi, tok_percent_endrep_len
+    lea     rdx, [rel tok_percent_endrep]
+    mov     ecx, tok_percent_endrep_len
+    push    r9
+    call    token_eq
+    pop     r9
+    test    eax, eax
+    jnz     .maybe_done
+.next_line:
+    cmp     r15, r13
+    jae     .bad
+    movzx   eax, byte [r12 + r15]
+    inc     r15
+    cmp     al, 10
+    jne     .next_line
+    jmp     .line
+.nested_rep:
+    inc     r9
+    jmp     .next_line
+.maybe_done:
+    test    r9, r9
+    jz      .found
+    dec     r9
+    jmp     .next_line
+.found:
+    mov     r8, r15
+.end_line:
+    cmp     r15, r13
+    jae     .bad
+    movzx   eax, byte [r12 + r15]
+    inc     r15
+    cmp     al, 10
+    jne     .end_line
+    mov     rax, r15
+    mov     rdx, r10
+    jmp     .done
+.bad:
+    xor     eax, eax
+    xor     edx, edx
+.done:
+    er_pop  r8, r9, r10, r11
+    ret
+
+; append_macro_range_no_rep(rdi=start, rsi=end) -> eax=1/0. Handles args, %%locals, and %rotate.
+er_fn append_macro_range_no_rep
+    er_push rbx, r10, r11, r12, r13, r15
+    mov     rbx, rdi
+    mov     r13, rsi
+.copy:
+    cmp     rbx, r13
+    jae     .yes
+    movzx   eax, byte [rbx]
+    cmp     al, '%'
+    jne     .copy_byte
+    mov     rdi, rbx
+    mov     rsi, tok_percent_rotate_len
+    lea     rdx, [rel tok_percent_rotate]
+    mov     ecx, tok_percent_rotate_len
+    call    token_eq
+    test    eax, eax
+    jnz     .rotate
+    lea     r10, [rbx + 1]
+    cmp     r10, r13
+    jae     .copy_byte
+    movzx   eax, byte [r10]
+    cmp     al, '%'
+    je      .copy_local
+    cmp     al, '0'
+    je      .copy_arg_count
+    cmp     al, '1'
+    jb      .copy_percent
+    cmp     al, '8'
+    ja      .copy_percent
+    sub     al, '1'
+    movzx   r11d, al
+    cmp     r11, [rel macro_arg_active_count]
+    jae     .bad
+    mov     r15, [rel macro_arg_len + r11 * 8]
+    mov     r10, [rel macro_arg_ptr + r11 * 8]
+.copy_arg:
+    test    r15, r15
+    jz      .arg_done
+    movzx   eax, byte [r10]
+    push    rax
+    call    macro_expand_room
+    test    eax, eax
+    jz      .bad_pop
+    pop     rax
+    mov     [r14], al
+    inc     r14
+    inc     r10
+    dec     r15
+    jmp     .copy_arg
+.arg_done:
+    add     rbx, 2
+    jmp     .copy
+.copy_arg_count:
+    mov     rdi, [rel macro_arg_active_count]
+    call    append_macro_u64_value
+    test    eax, eax
+    jz      .bad
+    add     rbx, 2
+    jmp     .copy
+.copy_local:
+    lea     r10, [rbx + 2]
+    mov     r11, r10
+.local_scan:
+    cmp     r11, r13
+    jae     .local_done
+    movzx   eax, byte [r11]
+    cmp     al, '_'
+    je      .local_next
+    cmp     al, '0'
+    jb      .local_done
+    cmp     al, '9'
+    jbe     .local_next
+    cmp     al, 'A'
+    jb      .local_done
+    cmp     al, 'Z'
+    jbe     .local_next
+    cmp     al, 'a'
+    jb      .local_done
+    cmp     al, 'z'
+    ja      .local_done
+.local_next:
+    inc     r11
+    jmp     .local_scan
+.local_done:
+    sub     r11, r10
+    test    r11, r11
+    jz      .bad
+    call    append_macro_local_label
+    test    eax, eax
+    jz      .bad
+    add     rbx, 2
+    add     rbx, r11
+    jmp     .copy
+.rotate:
+    add     rbx, tok_percent_rotate_len
+    call    parse_macro_rotate_count_from_ptr
+    test    eax, eax
+    jz      .bad
+    mov     rdi, rdx
+    call    macro_rotate_args
+    test    eax, eax
+    jz      .bad
+.rotate_skip:
+    cmp     rbx, r13
+    jae     .yes
+    movzx   eax, byte [rbx]
+    inc     rbx
+    cmp     al, 10
+    jne     .rotate_skip
+    jmp     .copy
+.copy_percent:
+    mov     eax, '%'
+.copy_byte:
+    push    rax
+    call    macro_expand_room
+    test    eax, eax
+    jz      .bad_pop
+    pop     rax
+    mov     [r14], al
+    inc     r14
+    inc     rbx
+    jmp     .copy
+.yes:
+    mov     eax, 1
+    jmp     .done
+.bad_pop:
+    pop     rax
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx, r10, r11, r12, r13, r15
+    ret
+
+; parse_macro_rotate_count_from_ptr(rbx points after %rotate, r13=end) -> eax=1, rdx=signed count.
+er_fn parse_macro_rotate_count_from_ptr
+    xor     edx, edx
+    xor     r12d, r12d
+.space:
+    cmp     rbx, r13
+    jae     .bad
+    movzx   eax, byte [rbx]
+    cmp     al, ' '
+    je      .space_next
+    cmp     al, 9
+    jne     .sign
+.space_next:
+    inc     rbx
+    jmp     .space
+.sign:
+    cmp     al, '-'
+    jne     .digit_start
+    mov     r12d, 1
+    inc     rbx
+.digit_start:
+    cmp     rbx, r13
+    jae     .bad
+    movzx   eax, byte [rbx]
+    cmp     al, '0'
+    jb      .bad
+    cmp     al, '9'
+    ja      .bad
+.digit:
+    cmp     rbx, r13
+    jae     .finish
+    movzx   eax, byte [rbx]
+    cmp     al, '0'
+    jb      .finish
+    cmp     al, '9'
+    ja      .finish
+    imul    rdx, rdx, 10
+    sub     al, '0'
+    movzx   eax, al
+    add     rdx, rax
+    inc     rbx
+    jmp     .digit
+.finish:
+    test    r12d, r12d
+    jz      .yes
+    neg     rdx
+.yes:
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+; macro_rotate_args(rdi=signed count) -> eax=1/0.
+er_fn macro_rotate_args
+    test    rdi, rdi
+    jz      .yes
+    cmp     qword [rel macro_arg_active_count], 0
+    je      .yes
+    cmp     rdi, 0
+    jl      .right_loop
+.left_loop:
+    test    rdi, rdi
+    jz      .yes
+    call    macro_rotate_left_once
+    dec     rdi
+    jmp     .left_loop
+.right_loop:
+    test    rdi, rdi
+    jz      .yes
+    call    macro_rotate_right_once
+    inc     rdi
+    jmp     .right_loop
+.yes:
+    mov     eax, 1
+    ret
+
+er_fn macro_rotate_left_once
+    er_push rbx, r10, r11
+    mov     rbx, [rel macro_arg_active_count]
+    cmp     rbx, 1
+    jbe     .done
+    mov     r10, [rel macro_arg_ptr]
+    mov     r11, [rel macro_arg_len]
+    xor     eax, eax
+.shift:
+    inc     rax
+    cmp     rax, rbx
+    jae     .store_last
+    mov     rdx, [rel macro_arg_ptr + rax * 8]
+    mov     [rel macro_arg_ptr + rax * 8 - 8], rdx
+    mov     rdx, [rel macro_arg_len + rax * 8]
+    mov     [rel macro_arg_len + rax * 8 - 8], rdx
+    jmp     .shift
+.store_last:
+    dec     rbx
+    mov     [rel macro_arg_ptr + rbx * 8], r10
+    mov     [rel macro_arg_len + rbx * 8], r11
+.done:
+    er_pop  rbx, r10, r11
+    ret
+
+er_fn macro_rotate_right_once
+    er_push rbx, r10, r11
+    mov     rbx, [rel macro_arg_active_count]
+    cmp     rbx, 1
+    jbe     .done
+    dec     rbx
+    mov     r10, [rel macro_arg_ptr + rbx * 8]
+    mov     r11, [rel macro_arg_len + rbx * 8]
+.shift:
+    test    rbx, rbx
+    jz      .store_first
+    mov     rdx, [rel macro_arg_ptr + rbx * 8 - 8]
+    mov     [rel macro_arg_ptr + rbx * 8], rdx
+    mov     rdx, [rel macro_arg_len + rbx * 8 - 8]
+    mov     [rel macro_arg_len + rbx * 8], rdx
+    dec     rbx
+    jmp     .shift
+.store_first:
+    mov     [rel macro_arg_ptr], r10
+    mov     [rel macro_arg_len], r11
+.done:
+    er_pop  rbx, r10, r11
     ret
 
 er_fn macro_expand_room

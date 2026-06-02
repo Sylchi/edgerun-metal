@@ -63,10 +63,10 @@ The repository has two code worlds separated by a hard boundary:
   - `object/` — object.asm, object_constants.inc
 - `kernel/test/` — self-hosted ASM test runners and minimal platform stubs.
 - `kernel/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
-- `kernel/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
+- `kernel/host/` — Linux userspace ASM host tools, including `er_build.asm`,
+  `er_asm`, `er_obj_body`, `er_obj_wrap`, Pi USB boot, and ESP32 serial boot.
 - `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
 - `app/` — transitional app-side Zig frontend and browser-facing app runtime. Treat existing Zig as porting input, not a place for new implementation. App code compiles to WASM and runs on the canonical host-side WASM interpreter/import contract. Do not add an app-side WASM interpreter.
-- `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)
 
@@ -82,29 +82,59 @@ The repository has two code worlds separated by a hard boundary:
 
 ## Required Commands
 
-All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
+Do not add or expand shell build orchestration. Bootstrap the owned ASM runner
+directly at the start of a tooling/build session, then use its registry/object
+commands.
 
-- Full repository check:
-  - `./build.sh test` (all ASM tests)
-- Machine-readable registry/status checks:
-  - `./build.sh test-list`
-  - `./build.sh test-status [TARGET...]`
-- Focused tests are canonical in `./build.sh test-list` and `./build.sh help`.
-  Use `./build.sh test-status TARGET...` for touched behavior.
-- ASM kernel build:
-  - `./build.sh kernel`
-  - `./build.sh kernel-hello` (build + QEMU launch)
-- Clean:
-  - `./build.sh clean`
-- View targets:
-  - `./build.sh help`
+```sh
+mkdir -p .build/host
+yasm -f elf64 -I kernel -o .build/host/er_build.o kernel/host/er_build.asm
+ld -nostdlib -static -o .build/host/er_build .build/host/er_build.o
+./.build/host/er_build host-tools
+```
+
+Expected host-tools output:
+
+```text
+host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm
+```
+
+Owned runner checks:
+
+```sh
+./.build/host/er_build help
+./.build/host/er_build test-list
+./.build/host/er_build test-registry
+./.build/host/er_build test-status
+./.build/host/er_build x86-sources
+./.build/host/er_build x86-objects
+./.build/host/er_build validate-object kernel/test/registry.erobj
+```
+
+Source-object editing workflow:
+
+```sh
+./.build/host/er_build body-to-file SOURCE.erobj .build/host/source-view.asm
+./.build/host/er_build file-to-object .build/host/source-view.asm .build/host/source-edited.asm.erobj
+./.build/host/er_build validate-object .build/host/source-edited.asm.erobj
+```
+
+Workflow rules:
+
+- `.erobj` files are authoritative build data and source objects.
+- Files materialized under `.build/` are temporary views.
+- After changing host tooling registry/source objects, rerun `er_build host-tools`.
+- If `host-tools` fails after editing `er_build.asm` or `er_asm.asm`, bootstrap `er_build`, regenerate the matching `.asm.erobj` with `er_build file-to-object`, then rerun `er_build host-tools`.
+- If a workflow is missing, add an owned `er_build` command or registry object; do not add shell wrappers.
 
 ## Host-Side ASM Rules
 
 - All new production code must be written in the project's ASM DSL (`macros.inc`).
 - Do not add C test harnesses or C startup bridges.
-- Build and link ASM tests directly through `build.sh` and `ld`.
-- Keep behavior and tests coherent across `build.sh` and module-local tests.
+- Build and link ASM tests directly through owned host tooling and `ld` until
+  the repo-owned linker replaces `ld`.
+- Keep behavior and tests coherent across `er_build.asm`, registry objects, and
+  module-local tests.
 - Do not reintroduce C compatibility wrappers or shims at the ASM boundary.
 - The WASM interpreter in `kernel/x86_64/wasm/wasm_run.asm` is the canonical implementation.
 

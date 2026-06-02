@@ -400,11 +400,7 @@ er_fn track_real_instruction
     er_ret_true
 .test_same:
     push    r14
-    call    match_direct_test_same
-    test    eax, eax
-    jz      .direct_add_dx
-    pop     r11
-    er_ret_true
+    jmp     .direct_add_dx
 .direct_add_dx:
     pop     r14
     push    r14
@@ -414,13 +410,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .direct_add_eax:
-    pop     r14
-    push    r14
-    call    match_direct_add_eax_imm8
-    test    eax, eax
-    jz      .direct_add_r11d
-    pop     r11
-    er_ret_true
+    jmp     .direct_add_r11d
 .direct_add_r11d:
     pop     r14
     push    r14
@@ -438,29 +428,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .direct_add_rsp:
-    pop     r14
-    push    r14
-    call    match_direct_add_rsp_imm8
-    test    eax, eax
-    jz      .direct_sub_rsp
-    pop     r11
-    er_ret_true
-.direct_sub_rsp:
-    pop     r14
-    push    r14
-    call    match_direct_sub_rsp_imm8
-    test    eax, eax
-    jz      .direct_xor_al
-    pop     r11
-    er_ret_true
-.direct_xor_al:
-    pop     r14
-    push    r14
-    call    match_direct_xor_al_al
-    test    eax, eax
-    jz      .direct_test_al
-    pop     r11
-    er_ret_true
+    jmp     .direct_test_al
 .direct_test_al:
     pop     r14
     push    r14
@@ -478,29 +446,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .direct_test_r9d:
-    pop     r14
-    push    r14
-    call    match_direct_test_r9d_r9d
-    test    eax, eax
-    jz      .direct_cmp_ecx
-    pop     r11
-    er_ret_true
-.direct_cmp_ecx:
-    pop     r14
-    push    r14
-    call    match_direct_cmp_ecx_imm8
-    test    eax, eax
-    jz      .direct_shl_r9d
-    pop     r11
-    er_ret_true
-.direct_shl_r9d:
-    pop     r14
-    push    r14
-    call    match_direct_shl_r9d_imm8
-    test    eax, eax
-    jz      .direct_shl_r9
-    pop     r11
-    er_ret_true
+    jmp     .direct_shl_r9
 .direct_shl_r9:
     pop     r14
     push    r14
@@ -510,29 +456,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .direct_shr_rax:
-    pop     r14
-    push    r14
-    call    match_direct_shr_rax_imm8
-    test    eax, eax
-    jz      .direct_dec_ecx
-    pop     r11
-    er_ret_true
-.direct_dec_ecx:
-    pop     r14
-    push    r14
-    call    match_direct_dec_ecx
-    test    eax, eax
-    jz      .direct_div_ebx
-    pop     r11
-    er_ret_true
-.direct_div_ebx:
-    pop     r14
-    push    r14
-    call    match_direct_div_ebx
-    test    eax, eax
-    jz      .direct_lodsb
-    pop     r11
-    er_ret_true
+    jmp     .direct_lodsb
 .direct_lodsb:
     pop     r14
     push    r14
@@ -552,13 +476,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .early_common_mov_after_dx_imm:
-    pop     r14
-    push    r14
-    call    match_direct_mov_edx_imm32
-    test    eax, eax
-    jz      .early_common_mov_after_edx_imm
-    pop     r11
-    er_ret_true
+    jmp     .early_common_mov_after_edx_imm
 .early_common_mov_after_edx_imm:
     pop     r14
     push    r14
@@ -584,69 +502,7 @@ er_fn track_real_instruction
     pop     r11
     er_ret_true
 .early_common_mov_after_rsp10:
-    pop     r14
-    push    r14
-    call    match_direct_mov_rax_r9
-    test    eax, eax
-    jz      .early_common_mov_after_rax_r9
-    pop     r11
-    er_ret_true
-.early_common_mov_after_rax_r9:
-    pop     r14
-    push    r14
-    call    match_direct_mov_eax_r9d
-    test    eax, eax
-    jz      .early_common_mov_after_eax_r9d
-    pop     r11
-    er_ret_true
-.early_common_mov_after_eax_r9d:
-    pop     r14
-    push    r14
-    call    match_direct_mov_sil_imm8
-    test    eax, eax
-    jz      .early_common_mov_after_sil_imm
-    pop     r11
-    er_ret_true
-.early_common_mov_after_sil_imm:
-    pop     r14
-    push    r14
-    call    match_direct_mov_al_imm8
-    test    eax, eax
-    jz      .early_common_mov_after_al_imm
-    pop     r11
-    er_ret_true
-.early_common_mov_after_al_imm:
-    pop     r14
-    push    r14
-    call    match_direct_mov_al_cl
-    test    eax, eax
-    jz      .early_common_mov_after_al_cl
-    pop     r11
-    er_ret_true
-.early_common_mov_after_al_cl:
-    pop     r14
-    push    r14
-    call    match_direct_mov_al_al
-    test    eax, eax
-    jz      .early_common_mov_after_al_al
-    pop     r11
-    er_ret_true
-.early_common_mov_after_al_al:
-    pop     r14
-    push    r14
-    call    match_direct_mov_ebx_eax
-    test    eax, eax
-    jz      .early_common_mov_after_ebx_eax
-    pop     r11
-    er_ret_true
-.early_common_mov_after_ebx_eax:
-    pop     r14
-    push    r14
-    call    match_direct_mov_ecx_imm
-    test    eax, eax
-    jz      .early_common_mov_after_ecx_imm
-    pop     r11
-    er_ret_true
+    jmp     .early_common_mov_after_ecx_imm
 .early_common_mov_after_ecx_imm:
     pop     r14
     push    r14
@@ -1160,215 +1016,6 @@ er_fn expect_rdi_mcfg_field
     pop     rdi
     ret
 
-er_fn match_direct_mov_ecx_imm
-    er_expect_token_operand_push_result tok_ecx, tok_ecx_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    push    r14
-    er_expect_u32_result
-    jz      .try_madt_entries
-    pop     r11
-    jmp     .value_ok
-.try_madt_entries:
-    er_pop_expect_token_operand_result tok_madt_entries, tok_madt_entries_len
-    jz      .no_pop
-    mov     qword [rel imm_u32_value], 44
-.value_ok:
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0xb9
-    er_emit_imm_u32_value
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_al_imm8
-    er_expect_token_operand_push_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    push    r14
-    call    expect_rsi_minus_one
-    test    eax, eax
-    jz      .not_rsi_minus_one
-    pop     r11
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x8a, 0x46, 0xff
-    er_ret_true
-.not_rsi_minus_one:
-    pop     r14
-    er_push_expect_token_operand_result tok_sil, tok_sil_len
-    jz      .not_sil
-    pop     r11
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x40, 0x88, 0xf0
-    er_ret_true
-.not_sil:
-    pop     r14
-    er_push_expect_token_operand_result tok_ah, tok_ah_len
-    jz      .not_ah
-    pop     r11
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x88, 0xe0
-    er_ret_true
-.not_ah:
-    pop     r14
-    push    r14
-    er_expect_imm8_result
-    jz      .symbol
-    pop     r11
-    jmp     .emit
-.symbol:
-    pop     r14
-    lea     rdi, [rel tok_lcr_dlab]
-    mov     esi, tok_lcr_dlab_len
-    mov     r10d, 0x80
-    call    match_direct_symbol_imm8
-    test    eax, eax
-    jnz     .symbol_ok
-    lea     rdi, [rel tok_lcr_8n1]
-    mov     esi, tok_lcr_8n1_len
-    mov     r10d, 0x03
-    call    match_direct_symbol_imm8
-    test    eax, eax
-    jz      .no_pop
-.symbol_ok:
-    mov     qword [rel imm_u32_value], r10
-.emit:
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0xb0
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_al_cl
-    er_expect_token_operand_push_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_cl, tok_cl_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x88, 0xc8
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_al_al
-    er_expect_token_operand_push_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_ebx_eax
-    er_expect_token_operand_push_result tok_ebx, tok_ebx_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_eax, tok_eax_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x89, 0xc3
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_sil_imm8
-    er_expect_token_operand_push_result tok_sil, tok_sil_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_push_expect_token_operand_result tok_al, tok_al_len
-    jz      .not_al
-    pop     r11
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x40, 0x88, 0xc6
-    er_ret_true
-.not_al:
-    pop     r14
-    push    r14
-    er_expect_imm8_result
-    jz      .char
-    pop     r11
-    jmp     .emit
-.char:
-    pop     r14
-    call    expect_char_operand
-    test    eax, eax
-    jz      .no_pop
-.emit:
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x40, 0xb6
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_eax_r9d
-    er_expect_token_operand_push_result tok_eax, tok_eax_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_r9d, tok_r9d_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x44, 0x89, 0xc8
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_rax_r9
-    er_expect_token_operand_push_result tok_rax, tok_rax_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_r9, tok_r9_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x4c, 0x89, 0xc8
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
 er_fn match_direct_mov_byte_rsp10_imm8
     er_expect_token_operand_push_result tok_byte, tok_byte_len
     jz      .no_pop
@@ -1427,31 +1074,6 @@ er_fn match_direct_mov_sil_rsp_rcx
     jz      .no_pop
     pop     r14
     er_emit_text_bytes 0x40, 0x8a, 0x34, 0x0c
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_mov_edx_imm32
-    er_expect_token_operand_push_result tok_edx, tok_edx_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    push    r14
-    er_expect_u32_result
-    jz      .symbol
-    pop     r11
-    jmp     .emit
-.symbol:
-    er_pop_expect_token_operand_result tok_error_no_data, tok_error_no_data_len
-    jz      .no_pop
-    mov     qword [rel imm_u32_value], 23
-.emit:
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0xba
-    er_emit_imm_u32_value
     er_ret_true
 .no_pop:
     pop     r14
@@ -1557,78 +1179,6 @@ er_fn match_direct_add_dx_imm8
     jz      .no_pop
     pop     r14
     er_emit_text_bytes 0x66, 0x83, 0xc2
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_add_eax_imm8
-    er_match_source_token_result tok_add, tok_add_len
-    jz      .no
-    er_expect_token_operand_push_result tok_eax, tok_eax_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    push    r14
-    call    match_serial_add_eax_expr
-    test    eax, eax
-    jz      .not_serial_expr
-    pop     r11
-    jmp     .emit
-.not_serial_expr:
-    pop     r14
-    push    r14
-    er_expect_imm8_result
-    jz      .char_or_expr
-    pop     r11
-    jmp     .emit
-.char_or_expr:
-    pop     r14
-    push    r14
-    call    expect_char_operand
-    test    eax, eax
-    jz      .serial_expr
-    er_expect_line_end_result
-    jz      .serial_expr
-    pop     r11
-    jmp     .emit_no_line
-.serial_expr:
-    pop     r14
-    call    expect_char_operand
-    test    eax, eax
-    jz      .no_pop
-    cmp     qword [rel imm_u32_value], 'a'
-    jne     .no_pop
-    call    skip_space_inline
-    cmp     r14, r15
-    jae     .no_pop
-    cmp     byte [r14], '-'
-    jne     .no_pop
-    inc     r14
-    er_expect_imm8_result
-    jz      .no_pop
-    cmp     qword [rel imm_u32_value], 10
-    jne     .no_pop
-    call    skip_space_inline
-    cmp     r14, r15
-    jae     .no_pop
-    cmp     byte [r14], '-'
-    jne     .no_pop
-    inc     r14
-    call    expect_char_operand
-    test    eax, eax
-    jz      .no_pop
-    cmp     qword [rel imm_u32_value], '0'
-    jne     .no_pop
-    mov     qword [rel imm_u32_value], 39
-.emit:
-    er_expect_line_end_result
-    jz      .no_pop
-.emit_no_line:
-    pop     r14
-    er_emit_text_bytes 0x83, 0xc0
     er_emit_imm_byte_value
     er_ret_true
 .no_pop:
@@ -1811,101 +1361,6 @@ er_fn match_emit_two_reg32_operands
     pop     r10
     er_ret_false
 
-er_fn match_direct_sub_rsp_imm8
-    er_match_source_token_result tok_sub, tok_sub_len
-    jz      .no
-    er_expect_token_operand_push_result tok_rsp, tok_rsp_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_imm8_result
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x48, 0x83, 0xec
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_add_rsp_imm8
-    er_match_source_token_result tok_add, tok_add_len
-    jz      .no
-    er_expect_token_operand_push_result tok_rsp, tok_rsp_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_imm8_result
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x48, 0x83, 0xc4
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_serial_add_eax_expr
-    push    r14
-    call    skip_space_inline
-    cmp     r14, r15
-    jae     .bad
-    cmp     byte [r14], ASCII_SQUOTE
-    jne     .bad
-    inc     r14
-    cmp     r14, r15
-    jae     .bad
-    cmp     byte [r14], 'a'
-    jne     .bad
-    inc     r14
-    cmp     r14, r15
-    jae     .bad
-    cmp     byte [r14], ASCII_SQUOTE
-    jne     .bad
-    inc     r14
-.scan:
-    cmp     r14, r15
-    jae     .ok
-    movzx   eax, byte [r14]
-    cmp     al, 10
-    je      .ok
-    cmp     al, ';'
-    je      .ok
-    inc     r14
-    jmp     .scan
-.ok:
-    pop     r11
-    mov     qword [rel imm_u32_value], 39
-    er_ret_true
-.bad:
-    pop     r14
-    er_ret_false
-
-er_fn match_direct_xor_al_al
-    er_match_source_token_result tok_xor, tok_xor_len
-    jz      .no
-    er_expect_token_operand_push_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x30, 0xc0
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
 er_fn match_direct_test_al_imm8
     er_match_source_token_result tok_test, tok_test_len
     jz      .no
@@ -1946,45 +1401,6 @@ er_fn match_direct_test_al_imm8
 .no:
     er_ret_false
 
-er_fn match_direct_test_r9d_r9d
-    er_match_source_token_result tok_test, tok_test_len
-    jz      .no
-    er_expect_token_operand_push_result tok_r9d, tok_r9d_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_r9d, tok_r9d_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x45, 0x85, 0xc9
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_cmp_ecx_imm8
-    er_match_source_token_result tok_cmp, tok_cmp_len
-    jz      .no
-    er_expect_token_operand_push_result tok_ecx, tok_ecx_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_imm8_result
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x83, 0xf9
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
 er_fn match_direct_lodsb
     er_match_source_token_result tok_lodsb, tok_lodsb_len
     jz      .no
@@ -1992,26 +1408,6 @@ er_fn match_direct_lodsb
     jz      .no
     er_emit_text_bytes 0xac
     er_ret_true
-.no:
-    er_ret_false
-
-er_fn match_direct_shl_r9d_imm8
-    er_match_source_token_result tok_shl, tok_shl_len
-    jz      .no
-    er_expect_token_operand_push_result tok_r9d, tok_r9d_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_imm8_result
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x41, 0xc1, 0xe1
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
 .no:
     er_ret_false
 
@@ -2029,56 +1425,6 @@ er_fn match_direct_shl_r9_imm8
     pop     r14
     er_emit_text_bytes 0x49, 0xc1, 0xe1
     er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_shr_rax_imm8
-    er_match_source_token_result tok_shr, tok_shr_len
-    jz      .no
-    er_expect_token_operand_push_result tok_rax, tok_rax_len
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_imm8_result
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0x48, 0xc1, 0xe8
-    er_emit_imm_byte_value
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_dec_ecx
-    er_match_source_token_result tok_dec, tok_dec_len
-    jz      .no
-    er_expect_token_operand_push_result tok_ecx, tok_ecx_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0xff, 0xc9
-    er_ret_true
-.no_pop:
-    pop     r14
-.no:
-    er_ret_false
-
-er_fn match_direct_div_ebx
-    er_match_source_token_result tok_div, tok_div_len
-    jz      .no
-    er_expect_token_operand_push_result tok_ebx, tok_ebx_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     r14
-    er_emit_text_bytes 0xf7, 0xf3
     er_ret_true
 .no_pop:
     pop     r14
@@ -3459,6 +2805,8 @@ er_fn match_generic_common_instruction
     jnz     .not
     er_match_source_token_result tok_mul, tok_mul_len
     jnz     .mul
+    er_match_source_token_result tok_div, tok_div_len
+    jnz     .div
     er_match_source_token_result tok_lea, tok_lea_len
     jnz     .lea
     er_match_source_token_result tok_setz, tok_setz_len
@@ -3543,6 +2891,9 @@ er_fn match_generic_common_instruction
     jmp     .group3
 .mul:
     mov     r10d, 4
+    jmp     .group3
+.div:
+    mov     r10d, 6
 .group3:
     mov     [rel generic_opcode_ext], r10
     call    parse_generic_one_reg_operand
@@ -5180,6 +4531,7 @@ er_fn emit_generic_test
     er_ret_false
 
 er_fn emit_generic_group1
+    mov     r10, [rel generic_opcode_ext]
     cmp     qword [rel generic_op1_kind], 1
     jne     .bad
     cmp     qword [rel generic_op2_kind], 1
@@ -5674,119 +5026,6 @@ er_fn emit_generic_setcc
     or      edi, 0xc0
     call    append_text_byte
     er_ret_true
-
-er_fn match_direct_test_same
-    er_match_source_token_result tok_test, tok_test_len
-    jz      .no
-    lea     rdi, [rel tok_esi]
-    mov     esi, tok_esi_len
-    mov     r10d, 0xf6
-    xor     r11d, r11d
-    call    match_emit_test_same_operand
-    test    eax, eax
-    jnz     .yes
-    lea     rdi, [rel tok_eax]
-    mov     esi, tok_eax_len
-    mov     r10d, 0xc0
-    xor     r11d, r11d
-    call    match_emit_test_same_operand
-    test    eax, eax
-    jnz     .yes
-    lea     rdi, [rel tok_rax]
-    mov     esi, tok_rax_len
-    mov     r10d, 0xc0
-    mov     r11d, 1
-    call    match_emit_test_same_operand
-    test    eax, eax
-    jnz     .yes
-    lea     rdi, [rel tok_al]
-    mov     esi, tok_al_len
-    call    match_emit_test_al_al
-    test    eax, eax
-    jnz     .yes
-    lea     rdi, [rel tok_sil]
-    mov     esi, tok_sil_len
-    call    match_emit_test_sil_sil
-    test    eax, eax
-    jnz     .yes
-    er_ret_false
-.yes:
-    er_ret_true
-.no:
-    er_ret_false
-
-er_fn match_emit_test_same_operand
-    push    r10
-    push    r11
-    push    rdi
-    push    rsi
-    push    r14
-    call    expect_operand
-    test    eax, eax
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    mov     rdi, [rsp + 16]
-    mov     rsi, [rsp + 8]
-    call    expect_operand
-    test    eax, eax
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     rax
-    pop     rsi
-    pop     rdi
-    pop     r11
-    pop     r10
-    test    r11d, r11d
-    jz      .opcode
-    er_emit_text_bytes 0x48
-.opcode:
-    er_emit_text_bytes 0x85, r10d
-    er_ret_true
-.no_pop:
-    pop     r14
-    pop     rsi
-    pop     rdi
-    pop     r11
-    pop     r10
-    er_ret_false
-
-er_fn match_emit_test_al_al
-    push    r14
-    call    expect_operand
-    test    eax, eax
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_al, tok_al_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     rax
-    er_emit_text_bytes 0x84, 0xc0
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
-
-er_fn match_emit_test_sil_sil
-    push    r14
-    call    expect_operand
-    test    eax, eax
-    jz      .no_pop
-    er_expect_comma_result
-    jz      .no_pop
-    er_expect_token_operand_result tok_sil, tok_sil_len
-    jz      .no_pop
-    er_expect_line_end_result
-    jz      .no_pop
-    pop     rax
-    er_emit_text_bytes 0x40, 0x84, 0xf6
-    er_ret_true
-.no_pop:
-    pop     r14
-    er_ret_false
 
 er_fn match_cmos_time_ops
     er_match_source_token_result tok_mov, tok_mov_len
