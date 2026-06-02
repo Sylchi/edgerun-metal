@@ -184,6 +184,7 @@ er_fn er_local_open_circuit
 
     ; Store destination slot and state
     mov     [rax + CIRCUIT_DEST_SLOT], ebx
+    mov     [rax + CIRCUIT_OWN_SLOT], r13d
     mov     dword [rax + CIRCUIT_STATE], CIRCUIT_STATE_OPEN
     mov     dword [local_circuit_own_slot], r13d
 
@@ -251,8 +252,8 @@ er_fn er_local_recv_cell
     call    _local_circuit_open_entry
     er_check_nonzero edx, .bad
 
-    ; Read from own slot's ring buffer
-    mov     edi, [local_circuit_own_slot]
+    ; Read from this circuit owner's ring buffer.
+    mov     edi, [rax + CIRCUIT_OWN_SLOT]
     test    edi, edi
     js      .bad            ; own_slot not set
 

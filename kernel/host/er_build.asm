@@ -2,6 +2,7 @@
 ;
 ; Current milestone:
 ;   er_build test-list
+;   er_build test-registry
 ;   er_build help
 ;   er_build x86-sources
 ;   er_build pi-sources
@@ -68,6 +69,11 @@ _start:
     test    eax, eax
     jnz     .test_list
     mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_test_registry]
+    call    streq
+    test    eax, eax
+    jnz     .test_registry
+    mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_help]
     call    streq
     test    eax, eax
@@ -106,6 +112,11 @@ _start:
 
 .test_list:
     call    cmd_test_list
+    xor     edi, edi
+    jmp     exit_now
+
+.test_registry:
+    call    cmd_test_registry
     xor     edi, edi
     jmp     exit_now
 
@@ -634,6 +645,15 @@ cmd_test_list:
     lea     rdi, [rel test_list_header]
     call    print_cstr_stdout
     call    write_registry_test_list
+    lea     rdi, [rel test_object_asm_list_line]
+    call    print_cstr_stdout
+    ret
+
+cmd_test_registry:
+    lea     rdi, [rel registry_path]
+    call    cmd_write_body
+    lea     rdi, [rel test_object_asm_registry_line]
+    call    print_cstr_stdout
     ret
 
 cmd_help:
@@ -654,6 +674,8 @@ cmd_test_help:
     test    eax, eax
     jz      bad_object
     call    write_registry_help
+    lea     rdi, [rel test_object_asm_help_line]
+    call    print_cstr_stdout
     ret
 
 cmd_write_body:
@@ -902,6 +924,7 @@ exit_now:
 
 section .rodata
 arg_test_list: db "test-list", 0
+arg_test_registry: db "test-registry", 0
 arg_help: db "help", 0
 arg_x86_sources: db "x86-sources", 0
 arg_pi_sources: db "pi-sources", 0
@@ -918,10 +941,13 @@ help_top_path: db "docs/build-help-top.erobj", 0
 help_bottom_path: db "docs/build-help-bottom.erobj", 0
 host_tools_path: db "kernel/host/host_tools.erobj", 0
 test_list_header: db "target", 9, "category", 9, "subsystem", 9, "default", 9, "description", 10, 0
+test_object_asm_registry_line: db "test-object-asm|unit|object|yes|cmd_test_object_asm|Run object serialization ASM test", 10, 0
+test_object_asm_list_line: db "test-object-asm", 9, "unit", 9, "object", 9, "yes", 9, "Run object serialization ASM test", 10, 0
+test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object serialization ASM test", 10, 0
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
 msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next", 10, 0

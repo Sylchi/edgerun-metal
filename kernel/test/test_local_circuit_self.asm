@@ -23,14 +23,19 @@ own_hash:
 dest_hash:
     db "local-circuit-dest-identity"
     times 32 - ($ - dest_hash) db 0
+alt_own_hash:
+    db "local-circuit-alt-identity"
+    times 32 - ($ - alt_own_hash) db 0
 missing_hash:
     db "local-circuit-missing-identity"
     times 32 - ($ - missing_hash) db 0
 
 TEST_BSS_PASSED_FAILED
 own_slot:       resd 1
+alt_own_slot:   resd 1
 dest_slot:      resd 1
 circuit_fd:     resd 1
+alt_fd:         resd 1
 test_cell:      resb LOCAL_CELL_SIZE
 out_cell:       resb LOCAL_CELL_SIZE
 
@@ -63,6 +68,11 @@ _start:
     call    er_local_route_register
     ASSERT_RDX 0
     mov     [rel own_slot], eax
+
+    lea     rdi, [rel alt_own_hash]
+    call    er_local_route_register
+    ASSERT_RDX 0
+    mov     [rel alt_own_slot], eax
 
     lea     rdi, [rel dest_hash]
     call    er_local_route_register
@@ -107,6 +117,43 @@ _start:
     ASSERT_RDX 0
     ASSERT_EQ byte [rel out_cell + LOCAL_CELL_CMD], 0xa5
 
+    lea     rdi, [rel dest_hash]
+    mov     esi, [rel alt_own_slot]
+    call    er_local_open_circuit
+    ASSERT_RDX 0
+    ASSERT_RAX 2
+    mov     [rel alt_fd], eax
+    mov     eax, [rel alt_own_slot]
+    ASSERT_EQ dword [rel local_circuit_own_slot], eax
+
+    mov     byte [rel test_cell + LOCAL_CELL_CMD], 0xb1
+    mov     edi, [rel own_slot]
+    lea     rsi, [rel test_cell]
+    call    er_local_cell_send_to_slot
+    ASSERT_RDX 0
+
+    mov     byte [rel test_cell + LOCAL_CELL_CMD], 0xb2
+    mov     edi, [rel alt_own_slot]
+    lea     rsi, [rel test_cell]
+    call    er_local_cell_send_to_slot
+    ASSERT_RDX 0
+
+    mov     edi, [rel circuit_fd]
+    lea     rsi, [rel out_cell]
+    call    er_local_recv_cell
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel out_cell + LOCAL_CELL_CMD], 0xb1
+
+    mov     edi, [rel alt_fd]
+    lea     rsi, [rel out_cell]
+    call    er_local_recv_cell
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel out_cell + LOCAL_CELL_CMD], 0xb2
+
+    mov     edi, [rel alt_fd]
+    call    er_local_close_circuit
+    ASSERT_RDX 0
+
     mov     edi, [rel circuit_fd]
     call    er_local_close_circuit
     ASSERT_RDX 0
@@ -131,14 +178,14 @@ _start:
     mov     esi, LOCAL_MAX_IDENTITIES
     call    er_local_open_circuit
     ASSERT_RDX ERROR_INVALID_PARAM
-    mov     eax, [rel own_slot]
+    mov     eax, [rel alt_own_slot]
     ASSERT_EQ dword [rel local_circuit_own_slot], eax
 
     lea     rdi, [rel missing_hash]
     mov     esi, [rel own_slot]
     call    er_local_open_circuit
     ASSERT_RDX ERROR_LOCAL_NOT_FOUND
-    mov     eax, [rel own_slot]
+    mov     eax, [rel alt_own_slot]
     ASSERT_EQ dword [rel local_circuit_own_slot], eax
 
     TEST_EXIT_FAILED

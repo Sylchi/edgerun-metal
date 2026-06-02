@@ -1673,8 +1673,7 @@ er_fn emit_db_directive
     je      .string_done
     cmp     al, 10
     je      .bad
-    mov     edi, eax
-    call    append_text_byte
+    er_emit_text_bytes eax
     inc     r14
     jmp     .string_loop
 .string_done:

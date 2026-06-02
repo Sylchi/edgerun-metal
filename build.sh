@@ -178,14 +178,8 @@ KERNEL_ASM_SRCS="$(object_body "${KERNEL_X86_SOURCES}")"
 
 # ---- assemble_kernel ----
 assemble_kernel() {
-	for src in ${KERNEL_ASM_SRCS}; do
-		local base="$(source_entry_stem "$src")"
-		local name="${base##*/}"
-		local src_path="${ASM_DIR}/$(source_entry_path "$src")"
-		local dst="${ASM_BUILD}/kernel_${name}.o"
-		elf32 "$src_path" "$dst"
-		echo "  AS  ${dst}"
-	done
+	cmd_er_build >/dev/null
+	"${HOST_BUILD}/er_build" x86-objects
 	# kernel_main — source name != target
 	local km_src="${ASM_DIR}/kernel_main.asm"
 	local km_dst="${ASM_BUILD}/kernel_main_elf32.o"
@@ -457,8 +451,8 @@ build_test_stubbed() {
 }
 
 test_registry() {
- object_body "${TEST_REGISTRY}"
- printf '%s\n' 'test-object-asm|unit|object|yes|cmd_test_object_asm|Run object serialization ASM test'
+ cmd_er_build >/dev/null
+ "${HOST_BUILD}/er_build" test-registry
 }
 
 cmd_test_registry() {
@@ -539,6 +533,10 @@ cmd_check_x86_asm_boundary() {
   exit 1
  fi
  echo "PASS x86-asm-boundary"
+}
+
+cmd_test_x86_asm_boundary() {
+ cmd_check_x86_asm_boundary
 }
 
 cmd_test_x86_asm_selector() {
@@ -756,14 +754,23 @@ EOF
  echo "PASS x86-asm-warning-fatal"
 }
 
-cmd_er_asm() {
+build_static_host_tool() {
+ local name="$1"
+ local src="$2"
  mkdir -p "${HOST_BUILD}"
- local src="kernel/host/er_asm.asm"
- local obj="${HOST_BUILD}/er_asm.o"
- local bin="${HOST_BUILD}/er_asm"
+ local obj="${HOST_BUILD}/${name}.o"
+ local bin="${HOST_BUILD}/${name}"
  asm_x86_obj elf64 "$obj" "$src"
  ld -nostdlib -static -o "$bin" "$obj"
  echo "  LD  ${bin}"
+}
+
+cmd_er_asm() {
+ build_static_host_tool er_asm kernel/host/er_asm.asm
+}
+
+cmd_er_build() {
+ build_static_host_tool er_build kernel/host/er_build.asm
 }
 
 cmd_er_asm_obj() {
@@ -874,16 +881,18 @@ cmd_test_er_asm_cli() {
  local src_shr_acc="${ASM_BUILD}/er_asm_shr_acc_probe.asm"
  local src_data_dirs="${ASM_BUILD}/er_asm_data_dirs_probe.asm"
  local src_status_macros="${ASM_BUILD}/er_asm_status_macros_probe.asm"
- local src_rel_mem="${ASM_BUILD}/er_asm_rel_mem_probe.asm"
- local src_reg_moves="${ASM_BUILD}/er_asm_reg_moves_probe.asm"
- local src_sized_mem="${ASM_BUILD}/er_asm_sized_mem_probe.asm"
+	local src_rel_mem="${ASM_BUILD}/er_asm_rel_mem_probe.asm"
+	local src_reg_moves="${ASM_BUILD}/er_asm_reg_moves_probe.asm"
+	local src_index_mem="${ASM_BUILD}/er_asm_index_mem_probe.asm"
+	local src_sized_mem="${ASM_BUILD}/er_asm_sized_mem_probe.asm"
  local src_test_call="${ASM_BUILD}/er_asm_test_call_probe.asm"
  local src_check_zero="${ASM_BUILD}/er_asm_check_zero_probe.asm"
  local src_cmp_below="${ASM_BUILD}/er_asm_cmp_below_probe.asm"
  local src_test_exit_total="${ASM_BUILD}/er_asm_test_exit_total_probe.asm"
  local src_cmos_macros="${ASM_BUILD}/er_asm_cmos_macros_probe.asm"
  local src_cmos_time="${ASM_BUILD}/er_asm_cmos_time_probe.asm"
- local src_define_product="${ASM_BUILD}/er_asm_define_product_probe.asm"
+	local src_define_product="${ASM_BUILD}/er_asm_define_product_probe.asm"
+	local src_many_defines="${ASM_BUILD}/er_asm_many_defines_probe.asm"
  local local_inc_file="${ASM_BUILD}/local_exit_defs.inc"
  local inc_dir_a="${ASM_BUILD}/er_asm_inc_a"
  local inc_file_a="${inc_dir_a}/exit_more_defs.inc"
@@ -896,7 +905,7 @@ cmd_test_er_asm_cli() {
  local bad_define_tail_src="${ASM_BUILD}/er_asm_bad_define_tail_probe.asm"
  local out="${ASM_BUILD}/er_asm_exit_probe.bin"
  local log="${ASM_BUILD}/er_asm_unsupported.log"
- local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_sized_mem" "$src_test_call" "$src_check_zero" "$src_cmp_below" "$src_test_exit_total" "$src_cmos_macros" "$src_cmos_time" "$src_define_product" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
+	local cleanup_files=("$src" "$src_status" "$src_include" "$src_local_include" "$src_char" "$src_64reg" "$src_named" "$src_long_named" "$src_return_fn" "$src_zero_fn" "$src_identity_fn" "$src_local_call" "$src_negative" "$src_and_eax" "$src_and_edx" "$src_shr_acc" "$src_data_dirs" "$src_status_macros" "$src_rel_mem" "$src_reg_moves" "$src_index_mem" "$src_sized_mem" "$src_test_call" "$src_check_zero" "$src_cmp_below" "$src_test_exit_total" "$src_cmos_macros" "$src_cmos_time" "$src_define_product" "$src_many_defines" "$local_inc_file" "$bad_src" "$bad_u32_src" "$bad_hex_src" "$bad_dup_equ_src" "$bad_define_tail_src" "$out" "$log")
  cleanup_er_asm_cli() {
   rm -rf "$inc_dir_a"
   rm -rf "$inc_dir"
@@ -1143,13 +1152,21 @@ _start:
     mov     eax, esi
     ret
 EOF
- cat > "$src_sized_mem" <<'EOF'
+	cat > "$src_sized_mem" <<'EOF'
 [BITS 64]
 section .text
 global _start
 _start:
     mov     dword [rdx], 0x01020304
     mov     dword [rcx], 0
+EOF
+	cat > "$src_index_mem" <<'EOF'
+[BITS 64]
+section .text
+global _start
+_start:
+    mov     [rdi + rsi], edx
+    ret
 EOF
  cat > "$src_test_call" <<'EOF'
 [BITS 64]
@@ -1225,7 +1242,7 @@ _start:
     pop     r8
     ret
 EOF
- cat > "$src_define_product" <<'EOF'
+	cat > "$src_define_product" <<'EOF'
 [BITS 64]
 %define MAX_DECODED_OPS 512 * 1024
 section .text
@@ -1234,6 +1251,15 @@ _start:
     mov     eax, MAX_DECODED_OPS
     ret
 EOF
+	{
+		printf '[BITS 64]\n'
+		local n=0
+		while [ "$n" -le 256 ]; do
+			printf 'DEF_%03d equ %d\n' "$n" "$n"
+			n=$((n + 1))
+		done
+		printf 'section .text\nglobal _start\n_start:\n    mov     eax, DEF_256\n    ret\n'
+	} > "$src_many_defines"
  cat > "$bad_src" <<'EOF'
 [BITS 64]
 section .text
@@ -1301,11 +1327,13 @@ EOF
  expect_er_asm_bytes "$src_shr_acc" "c1e80848c1e820c3" "shr accumulator immediate"
  expect_er_asm_bytes "$src_data_dirs" "34120500efcdab8900000000000000000000000000000000" "data directives"
  expect_er_asm_bytes "$src_status_macros" "31d2ba0c000000c3" "status macros"
- expect_er_asm_bytes "$src_rel_mem" "00000000893df6ffffffff05f0ffffff" "rel memory ops"
- expect_er_asm_bytes "$src_reg_moves" "4889d689ca4889d189f0c3" "register moves"
- expect_er_asm_bytes "$src_sized_mem" "c70204030201c70100000000" "sized memory immediates"
- expect_er_asm_bytes "$src_cmos_time" "41504151415240b7044188c04188c14188c2410fb6f8410fb6f9410fb6fa410fb6c0410fb6c1410fb6c26641890424664189450066418906415a41594158c3" "cmos time byte and stack ops"
- expect_er_asm_bytes "$src_define_product" "b800000800c3" "define product expression"
+	expect_er_asm_bytes "$src_rel_mem" "00000000893df6ffffffff05f0ffffff" "rel memory ops"
+	expect_er_asm_bytes "$src_reg_moves" "4889d689ca4889d189f0c3" "register moves"
+	expect_er_asm_bytes "$src_index_mem" "891437c3" "base plus index memory"
+	expect_er_asm_bytes "$src_sized_mem" "c70204030201c70100000000" "sized memory immediates"
+	expect_er_asm_bytes "$src_cmos_time" "41504151415240b7044188c04188c14188c2410fb6f8410fb6f9410fb6fa410fb6c0410fb6c1410fb6c26641890424664189450066418906415a41594158c3" "cmos time byte and stack ops"
+	expect_er_asm_bytes "$src_define_product" "b800000800c3" "define product expression"
+	expect_er_asm_bytes "$src_many_defines" "b800010000c3" "expanded define table"
  expect_er_asm_builds "$src_test_call" "test call macro"
  expect_er_asm_builds "$src_check_zero" "check zero macro"
  expect_er_asm_builds "$src_cmp_below" "cmp below macro"
@@ -1394,18 +1422,13 @@ cmd_test_er_efiboot() {
 }
 
 cmd_test_list() {
- printf 'target\tcategory\tsubsystem\tdefault\tdescription\n'
- while IFS='|' read -r target category subsystem default runner description; do
-  [ -n "$target" ] || continue
-  printf '%s\t%s\t%s\t%s\t%s\n' "$target" "$category" "$subsystem" "$default" "$description"
- done < <(test_registry)
+ cmd_er_build >/dev/null
+ "${HOST_BUILD}/er_build" test-list
 }
 
 cmd_test_help() {
- while IFS='|' read -r target category subsystem default runner description; do
-  [ -n "$target" ] || continue
-  printf '  %-22s [%s/%s] %s\n' "$target" "$category" "$subsystem" "$description"
- done < <(test_registry)
+ cmd_er_build >/dev/null
+ "${HOST_BUILD}/er_build" help
 }
 
 cmd_test_registered() {
@@ -1562,6 +1585,7 @@ cmd_test_core() {
 }
 
 cmd_test_app() {
+ cmd_er_build >/dev/null
  local root
  while IFS= read -r root; do
   [ -n "$root" ] || continue
@@ -1569,7 +1593,7 @@ cmd_test_app() {
    src/crypto.zig|src/identity.zig|src/seal.zig|src/kernel_authority_test.zig) continue ;;
   esac
   (cd app && zig test -ODebug --dep er_std -Mroot="$root" -Mer_std=src/std.zig)
- done < <(object_body "${APP_TEST_ROOTS}")
+ done < <("${HOST_BUILD}/er_build" app-test-roots)
 }
 
 cmd_app_ui_wasm() {
@@ -1743,6 +1767,7 @@ cmd_real_tpm() {
 }
 
 cmd_app() {
+ cmd_er_build >/dev/null
  local kind arg1 arg2
  while IFS='|' read -r kind arg1 arg2; do
   [ -n "$kind" ] || continue
@@ -1758,7 +1783,7 @@ cmd_app() {
     exit 1
     ;;
   esac
- done < <(object_body "${APP_BUILD_STEPS}")
+ done < <("${HOST_BUILD}/er_build" app-build-steps)
 }
 
 cmd_test() {
@@ -2221,6 +2246,7 @@ arm_obj() {
 }
 
 cmd_pi_kernel() {
+ cmd_er_build >/dev/null
 	mkdir -p "${PI_BUILD}"
 	local objs=""
 	local src base obj
@@ -2230,7 +2256,7 @@ cmd_pi_kernel() {
 		obj="${PI_BUILD}/${base##*/}.o"
 		arm_obj "${ASM_ARM_DIR}/${src}" "$obj"
 		objs="${objs} ${obj}"
-	done < <(object_body "${PI_KERNEL_SOURCES}")
+	done < <("${HOST_BUILD}/er_build" pi-sources)
 	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "${PI_KERNEL_ELF}" ${objs}
 	${ARM_OBJCOPY} -O binary "${PI_KERNEL_ELF}" "${PI_KERNEL_IMG}"
 	local esize=$(stat -c '%s' "${PI_KERNEL_ELF}" 2>/dev/null || echo 0)
@@ -2378,9 +2404,8 @@ cmd_deps_audit() {
 }
 
 cmd_help() {
-	object_body "${BUILD_HELP_TOP}"
-	cmd_test_help
-	object_body "${BUILD_HELP_BOTTOM}"
+ cmd_er_build >/dev/null
+ "${HOST_BUILD}/er_build" help
 }
 
 # ---- dispatch ----
@@ -2433,6 +2458,7 @@ case "${1:-help}" in
 	bench-tor-hs)   cmd_bench_tor_hs ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	er-asm)          cmd_er_asm ;;
+	er-build)        cmd_er_build ;;
 	er-asm-obj)      shift; cmd_er_asm_obj "$@" ;;
 	er-asm-all)      cmd_er_asm_all ;;
 	tor-hs-host)     cmd_tor_hs_host ;;

@@ -40,19 +40,23 @@ network path instead of a tested side path.
 ## Phase 0: Critical Crypto Gaps
 
 These are the cryptographic primitives that gate full native encrypted circuits.
-Curve25519 arithmetic is implemented and covered; Ed25519 remains open.
+Curve25519 arithmetic and Ed25519 signing are implemented and covered.
 
 | Primitive | File | Current | Coverage |
 |-----------|------|---------|----------|
 | `_fe_invert` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-fe-mul`, `./build.sh test-x25519` |
 | `_curve25519_ladder_step` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
 | `er_tor_curve25519_scalar_mult` | `kernel/x86_64/crypto/curve25519.asm` | Implemented | `./build.sh test-x25519` |
+| `er_ed25519_sign` / `er_ed25519_blind_sign` | `kernel/x86_64/crypto/ed25519.asm` | Implemented | `./build.sh test-ed25519`, `./build.sh test-tor-hs` |
 
 These form the basis of ntor handshake support for both legacy and native paths.
 
 ### P0d — Ed25519 signing/verification
-- **File:** Does not exist yet (constants in `identity.asm`)
-- **Work:** Implement Ed25519 for device identity attestation
+- **File:** `kernel/x86_64/crypto/ed25519.asm`
+- **Current:** Signing and blinded signing are implemented and used by
+  `kernel/x86_64/crypto/tor.asm`.
+- **Remaining work:** Add verification if a production path needs to validate
+  peer Ed25519 signatures locally instead of only producing attestations.
 - **Needed for:** TPM-backed device identity, beacon signatures
 - **Optional for:** legacy Tor CERTS cell (exit bridge path)
 
@@ -91,7 +95,8 @@ The remaining work is syscall/exec integration and full production policy wiring
 ### P1d — Per-process circuit table
 - Fixed-size table (preallocated at process exec)
 - Entry: `[destination_id, path[5], keys[5], window_state, stream_table]`
-- Local fixed-size circuit table exists; process exec ownership is not complete
+- Local fixed-size circuit table stores the caller mailbox slot per circuit;
+  process exec ownership is not complete
 - **Reuses:** Circuit table layout from `tor_constants.inc`
 - **Current file:** `kernel/x86_64/crypto/local_circuit.asm`
 

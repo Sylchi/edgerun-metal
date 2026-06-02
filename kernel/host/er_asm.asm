@@ -18,7 +18,7 @@ FILE_MODE_0644  equ 420
 ER_ASM_BUF_SIZE equ 1048576
 ER_ASM_TEXT_CAP equ 65536
 ER_ASM_SYM_NAME_CAP equ 30
-ER_ASM_EQU_CAP equ 256
+ER_ASM_EQU_CAP equ 512
 ER_ASM_INCLUDE_CAP equ 4
 ER_ASM_GLOBAL_CAP equ 256
 ER_ASM_LABEL_CAP equ 256
@@ -66,6 +66,7 @@ imm_u32_value:  resq 1
 generic_op1_kind: resq 1
 generic_op1_width: resq 1
 generic_op1_reg: resq 1
+generic_op1_index: resq 1
 generic_op1_imm: resq 1
 generic_op1_sym_ptr: resq 1
 generic_op1_sym_len: resq 1
@@ -78,6 +79,7 @@ generic_op2_sym_ptr: resq 1
 generic_op2_sym_len: resq 1
 generic_mem_sym_ptr: resq 1
 generic_mem_sym_len: resq 1
+generic_mem_index: resq 1
 generic_opcode_ext: resq 1
 branch1_patch_off: resq 1
 branch2_patch_off: resq 1
@@ -131,6 +133,14 @@ num_buf:        resb 32
 
 SECTION .text
 global _start
+
+%macro er_emit_text_bytes 1-*
+    %rep %0
+        mov     edi, %1
+        call    append_text_byte
+        %rotate 1
+    %endrep
+%endm
 
 _start:
     mov     r12, [rsp]

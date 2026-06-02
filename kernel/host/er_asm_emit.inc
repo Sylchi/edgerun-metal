@@ -11,108 +11,78 @@ er_fn append_text_byte
     ret
 
 er_fn emit_mov_eax_imm32
-    mov     edi, 0xb8
-    call    append_text_byte
+    er_emit_text_bytes 0xb8
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_u32
 
 er_fn emit_mov_rax_imm32
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xc7, 0xc0
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_u32
 
 er_fn emit_xor_edi_edi
-    mov     edi, 0x31
-    call    append_text_byte
+    er_emit_text_bytes 0x31
     mov     edi, 0xff
     jmp     append_text_byte
 
 er_fn emit_xor_eax_eax
-    mov     edi, 0x31
-    call    append_text_byte
+    er_emit_text_bytes 0x31
     mov     edi, 0xc0
     jmp     append_text_byte
 
 er_fn emit_mov_eax_edi
-    mov     edi, 0x89
-    call    append_text_byte
+    er_emit_text_bytes 0x89
     mov     edi, 0xf8
     jmp     append_text_byte
 
 er_fn emit_add_eax_imm8
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x83, 0xc0
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_byte
 
 er_fn emit_sub_eax_imm8
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xe8
-    call    append_text_byte
+    er_emit_text_bytes 0x83, 0xe8
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_byte
 
 er_fn emit_cmp_dil_imm8
-    mov     edi, 0x40
-    call    append_text_byte
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x40, 0x80, 0xff
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_byte
 
 er_fn emit_jb_placeholder
-    mov     edi, 0x72
-    call    append_text_byte
+    er_emit_text_bytes 0x72
     mov     rax, [rel text_len]
     mov     [rel branch1_patch_off], rax
     xor     edi, edi
     jmp     append_text_byte
 
 er_fn emit_jnz_placeholder
-    mov     edi, 0x75
-    call    append_text_byte
+    er_emit_text_bytes 0x75
     mov     rax, [rel text_len]
     mov     [rel branch1_patch_off], rax
     xor     edi, edi
     jmp     append_text_byte
 
 er_fn emit_ja_placeholder
-    mov     edi, 0x77
-    call    append_text_byte
+    er_emit_text_bytes 0x77
     mov     rax, [rel text_len]
     mov     [rel branch2_patch_off], rax
     xor     edi, edi
     jmp     append_text_byte
 
 er_fn emit_mov_edi_imm32
-    mov     edi, 0xbf
-    call    append_text_byte
+    er_emit_text_bytes 0xbf
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_u32
 
 er_fn emit_mov_rdi_imm32
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xc7, 0xc7
     mov     rdi, [rel imm_u32_value]
     jmp     append_text_u32
 
 er_fn emit_syscall
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x0f
     mov     edi, 0x05
     jmp     append_text_byte
 
@@ -121,8 +91,7 @@ er_fn emit_ret
     jmp     append_text_byte
 
 er_fn emit_test_edi_edi
-    mov     edi, 0x85
-    call    append_text_byte
+    er_emit_text_bytes 0x85
     mov     edi, 0xff
     jmp     append_text_byte
 
@@ -137,46 +106,34 @@ er_fn emit_out_dx_al
 er_fn append_text_u32
     er_push rbx
     mov     rbx, rdi
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     er_pop  rbx
     ret
 
 er_fn append_text_u64
     er_push rbx
     mov     rbx, rdi
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     shr     rbx, 8
-    mov     edi, ebx
-    call    append_text_byte
+    er_emit_text_bytes ebx
     er_pop  rbx
     ret
 
@@ -278,12 +235,10 @@ er_fn emit_short_branch_operand
     jz      .bad
     cmp     ebx, 0xeb
     jne     .near_cond
-    mov     edi, 0xe9
-    call    append_text_byte
+    er_emit_text_bytes 0xe9
     jmp     .near_offset
 .near_cond:
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x0f
     lea     edi, [ebx + 0x10]
     call    append_text_byte
 .near_offset:
@@ -322,16 +277,14 @@ er_fn emit_short_branch_operand
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xec
-    call    append_text_byte
+    er_emit_text_bytes 0xec
     mov     eax, 1
     jmp     .done
 .inline_out_dx_al:
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xee
-    call    append_text_byte
+    er_emit_text_bytes 0xee
     mov     eax, 1
     jmp     .done
 .bad:
@@ -368,8 +321,7 @@ er_fn emit_call_label_operand
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xe8
-    call    append_text_byte
+    er_emit_text_bytes 0xe8
     mov     rax, [rel text_len]
     mov     rbx, rax
     xor     edi, edi
@@ -400,16 +352,14 @@ er_fn emit_call_label_operand
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xec
-    call    append_text_byte
+    er_emit_text_bytes 0xec
     mov     eax, 1
     jmp     .done
 .inline_out_dx_al:
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xee
-    call    append_text_byte
+    er_emit_text_bytes 0xee
     mov     eax, 1
     jmp     .done
 .bad:

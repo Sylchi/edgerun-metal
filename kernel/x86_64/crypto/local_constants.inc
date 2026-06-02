@@ -54,7 +54,8 @@ LOCAL_ROUTE_KIND_RELAY  equ 2   ; raw Tor fixed-cell forwarding
 CIRCUIT_DEST_HASH       equ 0   ; 32 bytes — destination identity
 CIRCUIT_DEST_SLOT       equ 32  ; 4 bytes — cached destination slot_id
 CIRCUIT_STATE           equ 36  ; 4 bytes — 0=FREE, 1=OPEN
-CIRCUIT_SLOT_SIZE       equ 40
+CIRCUIT_OWN_SLOT        equ 40  ; 4 bytes — caller mailbox slot_id
+CIRCUIT_SLOT_SIZE       equ 44
 
 MAX_CIRCUITS            equ 16
 CIRCUIT_TABLE_SIZE      equ MAX_CIRCUITS * CIRCUIT_SLOT_SIZE

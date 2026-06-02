@@ -24,12 +24,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x85
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x85, 0xff
     jmp     .yes
 .rax:
     pop     r14
@@ -51,12 +46,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x85
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x85, 0xc0
     jmp     .yes
 .r11:
     pop     r14
@@ -78,12 +68,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4d
-    call    append_text_byte
-    mov     edi, 0x85
-    call    append_text_byte
-    mov     edi, 0xdb
-    call    append_text_byte
+    er_emit_text_bytes 0x4d, 0x85, 0xdb
     jmp     .yes
 .r10:
     pop     r14
@@ -105,12 +90,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4d
-    call    append_text_byte
-    mov     edi, 0x85
-    call    append_text_byte
-    mov     edi, 0xd2
-    call    append_text_byte
+    er_emit_text_bytes 0x4d, 0x85, 0xd2
     jmp     .yes
 .r13:
     pop     r14
@@ -132,12 +112,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4d
-    call    append_text_byte
-    mov     edi, 0x85
-    call    append_text_byte
-    mov     edi, 0xed
-    call    append_text_byte
+    er_emit_text_bytes 0x4d, 0x85, 0xed
     jmp     .yes
 .al:
     pop     r14
@@ -159,10 +134,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x84
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x84, 0xc0
     jmp     .yes
 .cl:
     pop     r14
@@ -184,10 +156,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x84
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x84, 0xc9
     jmp     .yes
 .dl:
     pop     r14
@@ -209,10 +178,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x84
-    call    append_text_byte
-    mov     edi, 0xd2
-    call    append_text_byte
+    er_emit_text_bytes 0x84, 0xd2
     jmp     .yes
 .sil_imm:
     pop     r14
@@ -230,12 +196,7 @@ er_fn match_more_test
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x40
-    call    append_text_byte
-    mov     edi, 0xf6
-    call    append_text_byte
-    mov     edi, 0xc6
-    call    append_text_byte
+    er_emit_text_bytes 0x40, 0xf6, 0xc6
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
 .yes:
@@ -275,10 +236,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x31, 0xc9
     jmp     .yes
 .rcx:
     pop     r14
@@ -300,12 +258,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x31, 0xc9
     jmp     .yes
 .edx:
     pop     r14
@@ -327,10 +280,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xd2
-    call    append_text_byte
+    er_emit_text_bytes 0x31, 0xd2
     jmp     .yes
 .r8d:
     pop     r14
@@ -352,12 +302,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x45
-    call    append_text_byte
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x45, 0x31, 0xc0
     jmp     .yes
 .r9d:
     pop     r14
@@ -379,12 +324,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x45
-    call    append_text_byte
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x45, 0x31, 0xc9
     jmp     .yes
 .r10d:
     pop     r14
@@ -406,12 +346,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x45
-    call    append_text_byte
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xd2
-    call    append_text_byte
+    er_emit_text_bytes 0x45, 0x31, 0xd2
     jmp     .yes
 .r11d:
     pop     r14
@@ -431,12 +366,7 @@ er_fn match_more_xor
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x45
-    call    append_text_byte
-    mov     edi, 0x31
-    call    append_text_byte
-    mov     edi, 0xdb
-    call    append_text_byte
+    er_emit_text_bytes 0x45, 0x31, 0xdb
 .yes:
     mov     eax, 1
     ret
@@ -476,10 +406,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x29
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x29, 0xc8
     jmp     .yes
 .sub_eax_imm:
     pop     r14
@@ -489,12 +416,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xe1
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x83, 0xe1
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -520,10 +442,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x29
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x29, 0xc8
     jmp     .yes
 .sub_eax_imm_math:
     pop     r14
@@ -533,12 +452,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xe0
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x83, 0xe0
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -560,8 +474,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x25
-    call    append_text_byte
+    er_emit_text_bytes 0x25
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
@@ -583,8 +496,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x24
-    call    append_text_byte
+    er_emit_text_bytes 0x24
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -606,12 +518,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xe1
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x83, 0xe1
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -635,18 +542,12 @@ er_fn match_more_and
     jz      .bad
     cmp     qword [rel imm_u32_value], 255
     ja      .and_edx_u32
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xe2
-    call    append_text_byte
+    er_emit_text_bytes 0x83, 0xe2
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
 .and_edx_u32:
-    mov     edi, 0x81
-    call    append_text_byte
-    mov     edi, 0xe2
-    call    append_text_byte
+    er_emit_text_bytes 0x81, 0xe2
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
@@ -666,10 +567,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0xe1
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0xe1
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -695,10 +593,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xc0
-    call    append_text_byte
-    mov     edi, 0xe0
-    call    append_text_byte
+    er_emit_text_bytes 0xc0, 0xe0
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -726,10 +621,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xc0
-    call    append_text_byte
-    mov     edi, 0xe8
-    call    append_text_byte
+    er_emit_text_bytes 0xc0, 0xe8
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -751,10 +643,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xc1
-    call    append_text_byte
-    mov     edi, 0xe8
-    call    append_text_byte
+    er_emit_text_bytes 0xc1, 0xe8
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -774,12 +663,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
-    mov     edi, 0xe9
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xc1, 0xe9
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -811,12 +695,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x89, 0xc9
     jmp     .yes
 .r9_minus_one:
     pop     r14
@@ -828,12 +707,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xc7, 0xc1
     mov     edi, 0xffffffff
     call    append_text_u32
     jmp     .yes
@@ -847,10 +721,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xb9
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xb9
     mov     rdi, [rel imm_u32_value]
     call    append_text_u64
     jmp     .yes
@@ -866,12 +737,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x89, 0xc1
     jmp     .yes
 .r9_rsi_more:
     pop     r14
@@ -885,12 +751,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf1
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x89, 0xf1
     jmp     .yes
 .r11_imm_more:
     pop     r14
@@ -910,12 +771,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc3
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xc7, 0xc3
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
@@ -929,12 +785,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x8b
-    call    append_text_byte
-    mov     edi, 0x0e
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x8b, 0x0e
     jmp     .yes
 .r11_imm_first:
     pop     r14
@@ -954,12 +805,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc3
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xc7, 0xc3
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
@@ -983,10 +829,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x89, 0xc1
     jmp     .yes
 .rcx_r9_real:
     pop     r14
@@ -1010,12 +853,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc9
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0xc9
     jmp     .yes
 .rcx_eax:
     pop     r14
@@ -1029,10 +867,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x89, 0xc1
     jmp     .yes
 .rcx_rdx:
     pop     r14
@@ -1046,12 +881,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xd1
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xd1
     jmp     .yes
 .rcx_r8:
     pop     r14
@@ -1065,12 +895,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0xc1
     jmp     .yes
 .rcx_rsi:
     pop     r14
@@ -1084,12 +909,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf1
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xf1
     jmp     .yes
 .rcx_minus_one:
     pop     r14
@@ -1099,12 +919,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xc7, 0xc1
     mov     edi, 0xffffffff
     call    append_text_u32
     jmp     .yes
@@ -1130,12 +945,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc0
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0xc0
     jmp     .yes
 .rax_r9_more:
     pop     r14
@@ -1149,12 +959,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0xc8
     jmp     .yes
 .rax_rsi_more:
     pop     r14
@@ -1168,12 +973,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf0
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xf0
     jmp     .yes
 .rax_rcx_more:
     pop     r14
@@ -1187,12 +987,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xc8
     jmp     .yes
 .rax_rdx_more:
     pop     r14
@@ -1206,12 +1001,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xd0
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xd0
     jmp     .yes
 .rax_mem_rdi:
     pop     r14
@@ -1225,12 +1015,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x8b
-    call    append_text_byte
-    mov     edi, 0x07
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x8b, 0x07
     jmp     .yes
 .rax_imm64_more:
     pop     r14
@@ -1243,10 +1028,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xb8
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xb8
     mov     rdi, [rel imm_u32_value]
     call    append_text_u64
     jmp     .yes
@@ -1272,10 +1054,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf0
-    call    append_text_byte
+    er_emit_text_bytes 0x89, 0xf0
     jmp     .yes
 .eax_edi_more:
     pop     r14
@@ -1287,10 +1066,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf8
-    call    append_text_byte
+    er_emit_text_bytes 0x89, 0xf8
     jmp     .yes
 .r8_rcx:
     pop     r14
@@ -1314,12 +1090,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x89, 0xc8
     jmp     .yes
 .r8_rsi_more:
     pop     r14
@@ -1333,12 +1104,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf0
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x89, 0xf0
     jmp     .yes
 .r8_mem_rdi_more:
     pop     r14
@@ -1352,12 +1118,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x8b
-    call    append_text_byte
-    mov     edi, 0x07
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x8b, 0x07
     jmp     .yes
 .r8_imm64_more:
     pop     r14
@@ -1367,10 +1128,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xb8
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xb8
     mov     rdi, [rel imm_u32_value]
     call    append_text_u64
     jmp     .yes
@@ -1396,12 +1154,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xc7
     jmp     .yes
 .rdi_rel_more:
     pop     r14
@@ -1413,12 +1166,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x8b
-    call    append_text_byte
-    mov     edi, 0x3d
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x8b, 0x3d
     mov     rax, [rel imm_u32_value]
     mov     rdx, [rel text_len]
     add     rdx, 4
@@ -1436,12 +1184,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xff
     jmp     .yes
 .rbx_imm_more:
     pop     r14
@@ -1464,20 +1207,12 @@ er_fn match_more_and
     mov     rax, 0xffffffff
     cmp     [rel imm_u32_value], rax
     ja      .rbx_imm64_more
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xc7
-    call    append_text_byte
-    mov     edi, 0xc3
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xc7, 0xc3
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
 .rbx_imm64_more:
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xbb
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xbb
     mov     rdi, [rel imm_u32_value]
     call    append_text_u64
     jmp     .yes
@@ -1501,12 +1236,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0xf6
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0xf6
     jmp     .yes
 .dl_mem_r9:
     pop     r14
@@ -1533,12 +1263,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x41
-    call    append_text_byte
-    mov     edi, 0x8a
-    call    append_text_byte
-    mov     edi, 0x11
-    call    append_text_byte
+    er_emit_text_bytes 0x41, 0x8a, 0x11
     jmp     .yes
 .mem_r8_dl:
     pop     r14
@@ -1567,10 +1292,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x8a
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x8a, 0x0f
     jmp     .yes
 .cl_mem_rsi:
     pop     r14
@@ -1584,10 +1306,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x8a
-    call    append_text_byte
-    mov     edi, 0x0e
-    call    append_text_byte
+    er_emit_text_bytes 0x8a, 0x0e
     jmp     .yes
 .cl_mem_rsi_r8:
     pop     r14
@@ -1597,14 +1316,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x8a
-    call    append_text_byte
-    mov     edi, 0x0c
-    call    append_text_byte
-    mov     edi, 0x06
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x8a, 0x0c, 0x06
     jmp     .yes
 .mem_r8_dl_real:
     pop     r14
@@ -1626,10 +1338,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x41
-    call    append_text_byte
-    mov     edi, 0xb2
-    call    append_text_byte
+    er_emit_text_bytes 0x41, 0xb2
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -1646,16 +1355,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x44
-    call    append_text_byte
-    mov     edi, 0x8a
-    call    append_text_byte
-    mov     edi, 0x54
-    call    append_text_byte
-    mov     edi, 0x0e
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x44, 0x8a, 0x54, 0x0e, 0xff
     jmp     .yes
 .mem_r8_dl_byte_store:
     pop     r14
@@ -1686,10 +1386,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x88, 0x0f
     jmp     .yes
 .mem_rsi_al_store:
     pop     r14
@@ -1711,10 +1408,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x06
-    call    append_text_byte
+    er_emit_text_bytes 0x88, 0x06
     jmp     .yes
 .mem_rdi_imm_byte_store:
     pop     r14
@@ -1724,10 +1418,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0xc6
-    call    append_text_byte
-    mov     edi, 0x07
-    call    append_text_byte
+    er_emit_text_bytes 0xc6, 0x07
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -1751,14 +1442,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x04
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x88, 0x04, 0x0f
     jmp     .yes
 .mem_rdi_r9_imm_store:
     pop     r14
@@ -1768,14 +1452,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0xc6
-    call    append_text_byte
-    mov     edi, 0x04
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0xc6, 0x04, 0x0f
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -1799,12 +1476,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x41
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x10
-    call    append_text_byte
+    er_emit_text_bytes 0x41, 0x88, 0x10
     jmp     .yes
 .mem_rsi_rcx_al:
     pop     r14
@@ -1824,14 +1496,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x44
-    call    append_text_byte
-    mov     edi, 0x0e
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x88, 0x44, 0x0e, 0xff
     jmp     .yes
 .mem_rdx_r8x2_al:
     pop     r14
@@ -1851,14 +1516,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x04
-    call    append_text_byte
-    mov     edi, 0x42
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x88, 0x04, 0x42
     jmp     .yes
 .mem_rdx_r8x2_plus_one_al:
     pop     r14
@@ -1878,16 +1536,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x44
-    call    append_text_byte
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x01
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x88, 0x44, 0x42, 0x01
     jmp     .yes
 .mem_rdx_r9_cl:
     pop     r14
@@ -1907,14 +1556,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x0c
-    call    append_text_byte
-    mov     edi, 0x0a
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x88, 0x0c, 0x0a
     jmp     .yes
 .mem_rdi_rcx_r10b:
     pop     r14
@@ -1932,16 +1574,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x44
-    call    append_text_byte
-    mov     edi, 0x88
-    call    append_text_byte
-    mov     edi, 0x54
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x44, 0x88, 0x54, 0x0f, 0xff
     jmp     .yes
 .mem_rdi_r9_qword:
     pop     r14
@@ -1965,12 +1598,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0x0f
     jmp     .yes
 .mem_rdi_rax_qword:
     pop     r14
@@ -1982,12 +1610,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0x07
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0x07
     jmp     .yes
 .mem_rsi_r8_qword:
     pop     r14
@@ -2009,12 +1632,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4c
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0x06
-    call    append_text_byte
+    er_emit_text_bytes 0x4c, 0x89, 0x06
     jmp     .yes
 .rel_store_rdi:
     pop     r14
@@ -2034,12 +1652,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0x3d
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x89, 0x3d
     mov     rax, [rel imm_u32_value]
     mov     rdx, [rel text_len]
     add     rdx, 4
@@ -2065,12 +1678,7 @@ er_fn match_more_and
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x4d
-    call    append_text_byte
-    mov     edi, 0x89
-    call    append_text_byte
-    mov     edi, 0x65
-    call    append_text_byte
+    er_emit_text_bytes 0x4d, 0x89, 0x65
     xor     edi, edi
     call    append_text_byte
     jmp     .yes
@@ -2109,8 +1717,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x04
-    call    append_text_byte
+    er_emit_text_bytes 0x04
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2130,10 +1737,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0xc1
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2163,8 +1767,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x3c
-    call    append_text_byte
+    er_emit_text_bytes 0x3c
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2188,12 +1791,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0x39
-    call    append_text_byte
-    mov     edi, 0xd8
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0x39, 0xd8
     jmp     .yes
 .cmp_al_cl:
     pop     r14
@@ -2207,10 +1805,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x38
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x38, 0xc8
     jmp     .yes
 .cmp_al_dl:
     pop     r14
@@ -2224,10 +1819,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x38
-    call    append_text_byte
-    mov     edi, 0xd0
-    call    append_text_byte
+    er_emit_text_bytes 0x38, 0xd0
     jmp     .yes
 .cmp_al_mem_r8:
     pop     r14
@@ -2244,10 +1836,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x41
-    call    append_text_byte
-    mov     edi, 0x3a
-    call    append_text_byte
+    er_emit_text_bytes 0x41, 0x3a
     xor     edi, edi
     call    append_text_byte
     jmp     .yes
@@ -2273,12 +1862,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x39
-    call    append_text_byte
-    mov     edi, 0xf0
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x39, 0xf0
     jmp     .yes
 .cmp_r8_rdx:
     pop     r14
@@ -2318,12 +1902,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0x39
-    call    append_text_byte
-    mov     edi, r10d
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0x39, r10d
     jmp     .yes
 .cmp_cl:
     pop     r14
@@ -2343,10 +1922,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0xf9
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0xf9
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2368,10 +1944,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x81
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x81, 0xff
     mov     rdi, [rel imm_u32_value]
     call    append_text_u32
     jmp     .yes
@@ -2422,10 +1995,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x38
-    call    append_text_byte
-    mov     edi, 0x07
-    call    append_text_byte
+    er_emit_text_bytes 0x38, 0x07
     jmp     .yes
 .cmp_byte_rdi_imm:
     pop     r14
@@ -2435,10 +2005,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0x3f
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0x3f
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2460,10 +2027,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0x3e
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0x3e
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2487,12 +2051,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x38
-    call    append_text_byte
-    mov     edi, 0x04
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x38, 0x04, 0x0f
     jmp     .yes
 .cmp_byte_rdi_rcx_imm:
     pop     r14
@@ -2502,12 +2061,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0x3c
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x80, 0x3c, 0x0f
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2525,14 +2079,7 @@ er_fn match_more_byte_arith
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x42
-    call    append_text_byte
-    mov     edi, 0x80
-    call    append_text_byte
-    mov     edi, 0x3c
-    call    append_text_byte
-    mov     edi, 0x0f
-    call    append_text_byte
+    er_emit_text_bytes 0x42, 0x80, 0x3c, 0x0f
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2563,12 +2110,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x48
-    call    append_text_byte
-    mov     edi, 0xf7
-    call    append_text_byte
-    mov     edi, 0xd1
-    call    append_text_byte
+    er_emit_text_bytes 0x48, 0xf7, 0xd1
     jmp     .yes
 .or:
     mov     rdi, r12
@@ -2596,10 +2138,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
+    er_emit_text_bytes 0x83, 0xc8
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2611,12 +2150,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x83
-    call    append_text_byte
-    mov     edi, 0xc8
-    call    append_text_byte
-    mov     edi, 0xff
-    call    append_text_byte
+    er_emit_text_bytes 0x83, 0xc8, 0xff
     jmp     .yes
 .or_cl_al:
     pop     r14
@@ -2636,8 +2170,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x0c
-    call    append_text_byte
+    er_emit_text_bytes 0x0c
     mov     rdi, [rel imm_u32_value]
     call    append_text_byte
     jmp     .yes
@@ -2659,10 +2192,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x08
-    call    append_text_byte
-    mov     edi, 0xc1
-    call    append_text_byte
+    er_emit_text_bytes 0x08, 0xc1
     jmp     .yes
 .neg:
     mov     rdi, r12
@@ -2680,12 +2210,7 @@ er_fn match_more_unary
     call    expect_line_end
     test    eax, eax
     jz      .bad
-    mov     edi, 0x49
-    call    append_text_byte
-    mov     edi, 0xf7
-    call    append_text_byte
-    mov     edi, 0xd9
-    call    append_text_byte
+    er_emit_text_bytes 0x49, 0xf7, 0xd9
     jmp     .yes
 .yes:
     mov     eax, 1
