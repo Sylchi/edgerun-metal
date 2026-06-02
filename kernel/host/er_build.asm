@@ -1482,7 +1482,7 @@ msg_x86_objects_ok: db "x86-objects: .build/kernel/kernel_*.o", 10, 0
 test_status_header: db "target", 9, "category", 9, "subsystem", 9, "status", 9, "log", 10, 0
 test_status_registry_pass: db "test-registry", 9, "unit", 9, "build", 9, "pass", 9, "registry object validated", 10, 0
 test_status_registry_fail: db "test-registry", 9, "unit", 9, "build", 9, "fail", 9, "registry object invalid", 10, 0
-test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm parsed committed source object", 10, 0
+test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm interpreted committed source object", 10, 0
 test_status_er_asm_parse_fail: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "fail", 9, "er_asm parse probe failed", 10, 0
 test_status_er_asm_cli_pass: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "pass", 9, "er_asm assembled committed source object", 10, 0
 test_status_er_asm_cli_fail: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "fail", 9, "er_asm CLI probe failed", 10, 0
@@ -1501,6 +1501,7 @@ arg_kernel: db "kernel", 0
 arg_o: db "-o", 0
 arg_flat: db "flat", 0
 arg_parse_only: db "--parse-only", 0
+arg_interpret: db "--interpret", 0
 arg_elf32: db "elf32", 0
 arg_nostdlib: db "-nostdlib", 0
 arg_static: db "-static", 0
@@ -1521,5 +1522,5 @@ null_env: dq 0
 argv_yasm_host_tool: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
 argv_ld_host_tool: dq arg_ld, arg_nostdlib, arg_static, arg_o, binary_path_buf, object_path_buf, 0
 argv_yasm_x86_object: dq arg_yasm, arg_f, arg_elf32, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
-argv_er_asm_parse_test: dq er_asm_path, arg_parse_only, er_asm_source_object_path, 0
+argv_er_asm_parse_test: dq er_asm_path, arg_interpret, er_asm_source_object_path, 0
 argv_er_asm_cli_test: dq er_asm_path, arg_f, arg_flat, arg_include, arg_kernel, arg_o, er_asm_cli_probe_path, er_asm_cli_source_path, 0

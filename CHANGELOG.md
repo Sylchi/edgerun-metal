@@ -19,6 +19,7 @@
 - Added `kernel/host/er_asm.asm.erobj` and changed `kernel/host/host_tools.erobj` so the assembler is built from an owned source object.
 - Added `kernel/host/er_build.asm.erobj` and changed `kernel/host/host_tools.erobj` so the next build runner is built from an owned source object.
 - `er_asm` now accepts EROBJ001 `.asm.erobj` source input directly for parsing and supported flat-binary assembly.
+- Added explicit `er_asm --interpret` mode for committed source objects so assembler work follows the object-interpreter direction instead of ELF/toolchain compatibility.
 - `app/src/content/kernel_authority.zig` and its Zig test shim were removed; `kernel/x86_64/content/kernel_authority.asm` and `kernel/test/test_kernel_authority_self.asm` are the source of truth.
 
 ## Current Verification

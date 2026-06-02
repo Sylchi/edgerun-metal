@@ -71,15 +71,15 @@ Development rules:
 
 Current gaps:
 
-- `er_build x86-objects` builds the registry-owned object set, but full kernel/test linking is still being moved into owned commands.
-- `er_asm` is the owned assembler path under active development; `yasm` remains a temporary fresh-checkout bootstrap tool only.
+- `er_build x86-objects` builds the registry-owned object set; executable program work is moving toward interpreted object graphs and receipts.
+- `er_asm` is being reduced to an owned source-object interpreter/canonicalizer; `yasm` remains a temporary fresh-checkout bootstrap tool only.
 
 ## Current Facts
 
 - The x86 source registry is an owned object consumed by `er_build`.
 - `er_build x86-objects` builds the registry-owned x86 object set.
 - `er_build host-tools` remains a one-time bootstrap escape hatch for `.build/host/` tools, not a normal workflow step.
-- `er_asm` accepts plain `.asm` and EROBJ001 `.asm.erobj` source input directly. ELF object emission is still pending, so host-tools still uses the bootstrap assembler for ELF64 outputs.
+- `er_asm --interpret` consumes committed EROBJ001 `.asm.erobj` source objects directly. Flat byte output remains a smoke/debug path, not the system target.
 - `er_build view`, `replace-range`, `file-to-object`, and `body-to-file` provide the current source-object editing bridge.
 - Local identity routing, object serialization, crypto slices, media parsers, UI/render IR, and WASM paths have self-hosted ASM test coverage in the owned registry.
 - App-side Zig remains a temporary bootstrap surface being ported out.

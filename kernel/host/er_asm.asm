@@ -340,7 +340,13 @@ _start:
     lea     rsi, [rel arg_parse_only]
     call    streq
     test    eax, eax
+    jnz     .parse_mode
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_interpret]
+    call    streq
+    test    eax, eax
     jz      .assembler_args
+.parse_mode:
     mov     rdi, [r13 + 16]
     call    parse_file
     test    eax, eax

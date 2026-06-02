@@ -1,10 +1,11 @@
 SECTION .data
 arg_parse_only: db "--parse-only", 0
+arg_interpret: db "--interpret", 0
 arg_o: db "-o", 0
 arg_f: db "-f", 0
 arg_format_flat: db "flat", 0
 arg_i: db "-I", 0
-msg_usage: db "usage: er_asm --parse-only <source.asm> | -f <fmt> [-I path] [-d name] [-D name] -o <out> <source.asm>", 10, 0
+msg_usage: db "usage: er_asm --interpret <source.asm.erobj> | --parse-only <source.asm> | -f flat [-I path] -o <out> <source.asm.erobj>", 10, 0
 msg_fail: db "er_asm: assembly failed", 10, 0
 msg_unsupported: db "er_asm: unsupported source shape", 10, 0
 key_magic: db "er_asm_parse", 9, "1", 10, 0
