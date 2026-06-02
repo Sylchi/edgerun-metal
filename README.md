@@ -21,22 +21,15 @@ EdgeRun is a self-owned app and OS stack. The goal is a deterministic source-obj
 
 ## Developer Workflow
 
-Start every session by bootstrapping the owned runner and host tools directly:
+Start from the already-built owned tools in `.build/host/`. If `.build/host/er_build` is missing on a fresh checkout, bootstrap only the runner directly:
 
 ```sh
 mkdir -p .build/host
 yasm -f elf64 -I kernel -o .build/host/er_build.o kernel/host/er_build.asm
 ld -nostdlib -static -o .build/host/er_build .build/host/er_build.o
-./.build/host/er_build host-tools
 ```
 
-Expected `host-tools` output:
-
-```text
-host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm
-```
-
-Use the runner and generated owned object tools from `.build/host/`:
+Use the runner and owned object tools from `.build/host/`:
 
 ```sh
 ./.build/host/er_build help
@@ -46,12 +39,20 @@ Use the runner and generated owned object tools from `.build/host/`:
 ./.build/host/er_build x86-sources
 ./.build/host/er_build x86-objects
 ./.build/host/er_build validate-object kernel/test/registry.erobj
+./.build/host/er_build view kernel/host/er_build.asm.erobj
 ./.build/host/er_build file-to-object kernel/host/er_build.asm .build/host/er_build.asm.erobj
 ./.build/host/er_obj_body kernel/host/host_tools.erobj
-./.build/host/er_obj_wrap kernel/host/er_build.asm .build/host/er_build.asm.erobj
 ```
 
-For source-object work, use this round trip:
+For direct source-object edits, write replacement bytes to a small file and patch the object body without materializing the full source:
+
+```sh
+printf 'replacement text' > .build/host/replacement.txt
+./.build/host/er_build replace-range SOURCE.erobj OFFSET DELETE_LEN .build/host/replacement.txt .build/host/source-edited.erobj
+./.build/host/er_build validate-object .build/host/source-edited.erobj
+```
+
+For inspection or larger manual edits, use a temporary view and wrap it back into an object:
 
 ```sh
 ./.build/host/er_build body-to-file kernel/host/er_build.asm.erobj .build/host/er_build.asm
@@ -62,23 +63,24 @@ For source-object work, use this round trip:
 Development rules:
 
 - Treat `.erobj` files as authoritative build data and source objects.
-- Treat materialized files under `.build/` as temporary views.
-- Re-run `er_build host-tools` after changing `kernel/host/host_tools.erobj`, `kernel/host/er_build.asm`, `kernel/host/er_asm.asm`, or their source objects.
-- If `host-tools` fails after editing `er_build.asm` or `er_asm.asm`, bootstrap `er_build`, regenerate the matching `.asm.erobj` with `er_build file-to-object`, then rerun `er_build host-tools`.
+- Use `view` and `replace-range` for object-first edits. Treat materialized files under `.build/` as inspection/debug views.
+- Do not make `host-tools` rebuilds part of routine work. The goal is to get off host build tools, not preserve a rebuild loop around them.
+- After editing `er_build.asm` or `er_asm.asm`, update the matching `.asm.erobj` with `er_build file-to-object` and verify the existing owned tool path directly.
 - Do not add shell build orchestration. Add owned `er_build` commands or object registry records instead.
 - If a command fails, fix the owned registry/object/tool path. Do not add fallback commands.
 
 Current gaps:
 
 - `er_build x86-objects` builds the registry-owned object set, but full kernel/test linking is still being moved into owned commands.
-- `er_asm` is the owned assembler path under active development; `yasm` remains the temporary bootstrap assembler.
+- `er_asm` is the owned assembler path under active development; `yasm` remains a temporary fresh-checkout bootstrap tool only.
 
 ## Current Facts
 
 - The x86 source registry is an owned object consumed by `er_build`.
 - `er_build x86-objects` builds the registry-owned x86 object set.
-- `er_build host-tools` builds object body/wrap tools, object-backed `er_asm`, and object-backed `er_build.next` from `kernel/host/host_tools.erobj`.
-- `er_build file-to-object` and `body-to-file` are the primary source-object editing bridge.
+- `er_build host-tools` remains a one-time bootstrap escape hatch for `.build/host/` tools, not a normal workflow step.
+- `er_asm` accepts plain `.asm` and EROBJ001 `.asm.erobj` source input directly. ELF object emission is still pending, so host-tools still uses the bootstrap assembler for ELF64 outputs.
+- `er_build view`, `replace-range`, `file-to-object`, and `body-to-file` provide the current source-object editing bridge.
 - Local identity routing, object serialization, crypto slices, media parsers, UI/render IR, and WASM paths have self-hosted ASM test coverage in the owned registry.
 - App-side Zig remains a temporary bootstrap surface being ported out.
 

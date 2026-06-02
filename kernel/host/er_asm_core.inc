@@ -240,12 +240,86 @@ er_fn read_file_to_buffer
     js      .bad
     cmp     r13, ER_ASM_BUF_SIZE
     jae     .bad
-    mov     rax, r13
+    mov     rdi, r12
+    mov     rsi, r13
+    call    normalize_erobj_source
+    test    rax, rax
+    js      .bad
     jmp     .done
 .bad:
     mov     rax, -1
 .done:
     er_pop  rbx, r12, r13
+    ret
+
+; normalize_erobj_source(buf, len) -> source len or -1.
+; Plain source is returned unchanged. EROBJ001 bytes objects are validated and
+; their body is copied down to the start of the same buffer.
+er_fn normalize_erobj_source
+    er_push rbx, r12, r13, r14, r15
+    mov     r12, rdi
+    mov     r13, rsi
+    cmp     r13, 8
+    jb      .plain
+    mov     rax, [r12]
+    mov     rcx, 0x3130304a424f5245
+    cmp     rax, rcx
+    jne     .plain
+    cmp     r13, EROBJ_HEADER_SIZE
+    jb      .bad
+    cmp     word [r12 + 8], EROBJ_VERSION
+    jne     .bad
+    cmp     word [r12 + 10], EROBJ_KIND_BYTES
+    jne     .bad
+    cmp     dword [r12 + 12], 0
+    jne     .bad
+    cmp     word [r12 + 24], 0
+    jne     .bad
+    cmp     word [r12 + 26], 0
+    jne     .bad
+    cmp     dword [r12 + 28], 0
+    jne     .bad
+    mov     r14, [r12 + 32]
+    cmp     [r12 + 16], r14
+    jne     .bad
+    mov     rax, r13
+    sub     rax, EROBJ_HEADER_SIZE
+    cmp     rax, r14
+    jne     .bad
+    lea     rbx, [r12 + 132]
+    mov     ecx, 16
+.reserved_loop:
+    cmp     byte [rbx], 0
+    jne     .bad
+    inc     rbx
+    loop    .reserved_loop
+    mov     rdi, r12
+    lea     rsi, [r12 + EROBJ_HEADER_SIZE]
+    mov     rdx, r14
+    call    erobj_copy_down
+    mov     rax, r14
+    jmp     .done
+.plain:
+    mov     rax, r13
+    jmp     .done
+.bad:
+    mov     rax, -1
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    ret
+
+; erobj_copy_down(dst, src, len) handles overlapping downward copies.
+er_fn erobj_copy_down
+    test    rdx, rdx
+    jz      .done
+.loop:
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rdi
+    inc     rsi
+    dec     rdx
+    jnz     .loop
+.done:
     ret
 
 ; scan_source(r14=cursor, r15=end)

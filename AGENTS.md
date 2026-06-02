@@ -82,21 +82,15 @@ The repository has two code worlds separated by a hard boundary:
 
 ## Required Commands
 
-Do not add or expand shell build orchestration. Bootstrap the owned ASM runner
-directly at the start of a tooling/build session, then use its registry/object
+Do not add or expand shell build orchestration. Use the already-built owned
+tools in `.build/host/`. If `.build/host/er_build` is missing on a fresh
+checkout, bootstrap only the runner directly, then use its registry/object
 commands.
 
 ```sh
 mkdir -p .build/host
 yasm -f elf64 -I kernel -o .build/host/er_build.o kernel/host/er_build.asm
 ld -nostdlib -static -o .build/host/er_build .build/host/er_build.o
-./.build/host/er_build host-tools
-```
-
-Expected host-tools output:
-
-```text
-host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm
 ```
 
 Owned runner checks:
@@ -114,6 +108,15 @@ Owned runner checks:
 Source-object editing workflow:
 
 ```sh
+printf 'replacement text' > .build/host/replacement.txt
+./.build/host/er_build replace-range SOURCE.erobj OFFSET DELETE_LEN .build/host/replacement.txt .build/host/source-edited.asm.erobj
+./.build/host/er_build validate-object .build/host/source-edited.asm.erobj
+```
+
+Source-object inspection workflow:
+
+```sh
+./.build/host/er_build view SOURCE.erobj
 ./.build/host/er_build body-to-file SOURCE.erobj .build/host/source-view.asm
 ./.build/host/er_build file-to-object .build/host/source-view.asm .build/host/source-edited.asm.erobj
 ./.build/host/er_build validate-object .build/host/source-edited.asm.erobj
@@ -122,9 +125,9 @@ Source-object editing workflow:
 Workflow rules:
 
 - `.erobj` files are authoritative build data and source objects.
-- Files materialized under `.build/` are temporary views.
-- After changing host tooling registry/source objects, rerun `er_build host-tools`.
-- If `host-tools` fails after editing `er_build.asm` or `er_asm.asm`, bootstrap `er_build`, regenerate the matching `.asm.erobj` with `er_build file-to-object`, then rerun `er_build host-tools`.
+- Use `view` and `replace-range` for object-first edits. Files materialized under `.build/` are temporary inspection/debug views.
+- Do not make `host-tools` rebuilds part of routine work. The goal is to get off host build tools, not preserve a rebuild loop around them.
+- After editing `er_build.asm` or `er_asm.asm`, regenerate the matching `.asm.erobj` with `er_build file-to-object` and verify the existing owned tool path directly.
 - If a workflow is missing, add an owned `er_build` command or registry object; do not add shell wrappers.
 
 ## Host-Side ASM Rules

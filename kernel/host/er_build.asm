@@ -11,8 +11,10 @@
 ;   er_build host-tools
 ;   er_build x86-objects
 ;   er_build validate-object OBJECT
+;   er_build view OBJECT
 ;   er_build body-to-file OBJECT OUTPUT
 ;   er_build file-to-object INPUT OUTPUT.erobj
+;   er_build replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj
 ;
 ; The runner reads build graph data from EdgeRun EROBJ001 bytes objects instead
 ; of shell-owned text. It is intentionally small and fail-closed.
@@ -45,6 +47,7 @@ EROBJ_SUFFIX_LEN   equ 6
 section .bss
 object_buf: resb OBJECT_BUF_SIZE
 source_list_buf: resb OBJECT_BUF_SIZE
+edit_buf: resb OBJECT_BUF_SIZE
 byte_buf: resb 1
 wait_status: resd 1
 source_path_buf: resb 512
@@ -68,6 +71,8 @@ _start:
     lea     r13, [rsp + 8]
     mov     rsp, stack_top
 
+    cmp     r12, 7
+    je      .argc7
     cmp     r12, 5
     je      .argc5
     cmp     r12, 4
@@ -133,6 +138,14 @@ _start:
     jnz     .x86_objects
     jmp     .usage
 
+.argc7:
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_replace_range]
+    call    streq
+    test    eax, eax
+    jnz     .replace_range
+    jmp     .usage
+
 .argc4:
     mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_test_status]
@@ -166,11 +179,22 @@ _start:
     test    eax, eax
     jnz     .test_status_1
     mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_view]
+    call    streq
+    test    eax, eax
+    jnz     .view
+    mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_validate_object]
     call    streq
     test    eax, eax
     jnz     .validate_object
     jmp     .usage
+
+.view:
+    mov     rdi, [r13 + 16]
+    call    cmd_write_body
+    xor     edi, edi
+    jmp     exit_now
 
 .test_list:
     call    cmd_test_list
@@ -265,6 +289,16 @@ _start:
     mov     rdi, [r13 + 16]
     mov     rsi, [r13 + 24]
     call    write_file_object
+    xor     edi, edi
+    jmp     exit_now
+
+.replace_range:
+    mov     rdi, [r13 + 16]
+    mov     rsi, [r13 + 24]
+    mov     rdx, [r13 + 32]
+    mov     rcx, [r13 + 40]
+    mov     r8,  [r13 + 48]
+    call    cmd_replace_range
     xor     edi, edi
     jmp     exit_now
 
@@ -869,9 +903,6 @@ run_test_status_target:
     call    print_cstr_stdout
     jmp     .done
 .er_asm_parse:
-    mov     qword [rel suppress_host_tools_output], 1
-    call    cmd_host_tools
-    mov     qword [rel suppress_host_tools_output], 0
     lea     rdi, [rel er_asm_path]
     lea     rsi, [rel argv_er_asm_parse_test]
     call    run_process_quiet
@@ -885,9 +916,6 @@ run_test_status_target:
     call    print_cstr_stdout
     jmp     .done
 .er_asm_cli:
-    mov     qword [rel suppress_host_tools_output], 1
-    call    cmd_host_tools
-    mov     qword [rel suppress_host_tools_output], 0
     lea     rdi, [rel er_asm_path]
     lea     rsi, [rel argv_er_asm_cli_test]
     call    run_process_quiet
@@ -1062,6 +1090,159 @@ write_file_object:
     pop     r14
     pop     r13
     pop     r12
+    ret
+
+; cmd_replace_range(object, offset_text, delete_len_text, insert_file, output_object)
+cmd_replace_range:
+    push    rbx
+    push    rbp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r12, rdi            ; object path
+    mov     rbx, r8             ; output path
+    mov     rbp, rcx            ; insert file path
+    mov     rdi, rsi
+    call    parse_u64_or_fail
+    mov     r14, rax            ; offset
+    mov     rdi, rdx
+    call    parse_u64_or_fail
+    mov     r15, rax            ; delete length
+
+    mov     rdi, r12
+    call    read_object
+    test    rax, rax
+    js      bad_object
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      bad_object
+    mov     r12, [rel object_buf + 32] ; original body length
+    cmp     r14, r12
+    ja      build_fail
+    mov     rax, r12
+    sub     rax, r14
+    cmp     r15, rax
+    ja      build_fail
+
+    mov     rdi, rbp
+    call    read_insert_file
+    mov     rbp, rax            ; insert length
+
+    mov     r13, r12
+    sub     r13, r15
+    add     r13, rbp            ; new body length
+    jc      build_fail
+    cmp     r13, OBJECT_BUF_SIZE - OBJECT_HEADER_SIZE
+    jae     build_fail
+
+    lea     rdi, [rel source_list_buf]
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rdx, r14
+    call    copy_bytes
+    mov     rdi, rax
+    lea     rsi, [rel edit_buf]
+    mov     rdx, rbp
+    call    copy_bytes
+    mov     rdi, rax
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    add     rsi, r14
+    add     rsi, r15
+    mov     rdx, r12
+    sub     rdx, r14
+    sub     rdx, r15
+    call    copy_bytes
+
+    call    init_object_header
+    lea     rdi, [rel object_buf + OBJECT_HEADER_SIZE]
+    lea     rsi, [rel source_list_buf]
+    mov     rdx, r13
+    call    copy_bytes
+    mov     rdi, rbx
+    call    write_current_object_file
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    ret
+
+read_insert_file:
+    push    r12
+    push    r13
+    mov     rsi, O_RDONLY
+    xor     edx, edx
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r12, rax
+    mov     rdi, r12
+    lea     rsi, [rel edit_buf]
+    mov     edx, OBJECT_BUF_SIZE - OBJECT_HEADER_SIZE
+    mov     eax, SYS_read
+    syscall
+    test    rax, rax
+    js      build_fail
+    cmp     rax, OBJECT_BUF_SIZE - OBJECT_HEADER_SIZE
+    jae     build_fail
+    mov     r13, rax
+    mov     rdi, r12
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     rax, r13
+    pop     r13
+    pop     r12
+    ret
+
+write_current_object_file:
+    push    r12
+    mov     r12, rdi
+    call    ensure_parent_dir
+    mov     rdi, r12
+    mov     esi, O_WRONLY_CREAT_TRUNC
+    mov     edx, FILE_MODE_0644
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r12, rax
+    mov     rdi, r12
+    lea     rsi, [rel object_buf]
+    lea     rdx, [r13 + OBJECT_HEADER_SIZE]
+    mov     eax, SYS_write
+    syscall
+    lea     rdx, [r13 + OBJECT_HEADER_SIZE]
+    cmp     rax, rdx
+    jne     build_fail
+    mov     rdi, r12
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+    pop     r12
+    ret
+
+parse_u64_or_fail:
+    xor     eax, eax
+.loop:
+    movzx   ecx, byte [rdi]
+    test    ecx, ecx
+    jz      .done
+    cmp     ecx, '0'
+    jb      build_fail
+    cmp     ecx, '9'
+    ja      build_fail
+    imul    rax, rax, 10
+    sub     ecx, '0'
+    add     rax, rcx
+    inc     rdi
+    jmp     .loop
+.done:
     ret
 
 init_object_header:
@@ -1274,8 +1455,10 @@ arg_host_tools: db "host-tools", 0
 arg_er_asm: db "er-asm", 0
 arg_x86_objects: db "x86-objects", 0
 arg_validate_object: db "validate-object", 0
+arg_view: db "view", 0
 arg_body_to_file: db "body-to-file", 0
 arg_file_to_object: db "file-to-object", 0
+arg_replace_range: db "replace-range", 0
 registry_path: db "kernel/test/registry.erobj", 0
 x86_sources_path: db "kernel/x86_64/kernel_sources.erobj", 0
 pi_sources_path: db "kernel/arm/pi/kernel_sources.erobj", 0
@@ -1291,7 +1474,7 @@ test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|view OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj|replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
 msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm", 10, 0
