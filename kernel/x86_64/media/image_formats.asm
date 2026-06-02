@@ -27,6 +27,24 @@ deflate_distance_extra:
     db 11, 11, 12, 12, 13, 13
 deflate_cl_order:
     db 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
+jpeg_zigzag:
+    db 0, 1, 8, 16, 9, 2, 3, 10
+    db 17, 24, 32, 25, 18, 11, 4, 5
+    db 12, 19, 26, 33, 40, 48, 41, 34
+    db 27, 20, 13, 6, 7, 14, 21, 28
+    db 35, 42, 49, 56, 57, 50, 43, 36
+    db 29, 22, 15, 23, 30, 37, 44, 51
+    db 58, 59, 52, 45, 38, 31, 39, 46
+    db 53, 60, 61, 54, 47, 55, 62, 63
+jpeg_idct_basis:
+    dw 2896, 2896, 2896, 2896, 2896, 2896, 2896, 2896
+    dw 4017, 3406, 2276, 799, -799, -2276, -3406, -4017
+    dw 3784, 1567, -1567, -3784, -3784, -1567, 1567, 3784
+    dw 3406, -799, -4017, -2276, 2276, 4017, 799, -3406
+    dw 2896, -2896, -2896, 2896, 2896, -2896, -2896, 2896
+    dw 2276, -4017, 799, 3406, -3406, -799, 4017, -2276
+    dw 1567, -3784, 3784, -1567, -1567, 3784, -3784, 1567
+    dw 799, -2276, 3406, -4017, 4017, -3406, 2276, -799
 
 SECTION .bss
 dyn_cl_len:      resb DEFLATE_CL_COUNT
@@ -74,6 +92,10 @@ er_fn er_image_is_png
     mov     eax, 1
     er_ok
     er_ret
+.no:
+    xor     eax, eax
+    er_ok
+    er_ret
 
 ; er_jpeg_bit_reader_init(state, bytes, len) -> eax=1, rdx=error
 er_fn er_jpeg_bit_reader_init
@@ -111,7 +133,7 @@ er_fn er_jpeg_next_entropy_byte
     mov     [rdi + JPEG_BIT_READER_CURSOR_OFF], eax
     test    ecx, ecx
     jz      .stuffed
-    cmp     ecx, JPEG_MARKER_SOI ; EOI/RST are corrupt during entropy bit reads; other markers unsupported.
+    cmp     ecx, JPEG_MARKER_EOI ; EOI/RST are corrupt during entropy bit reads; other markers unsupported.
     je      .corrupt
     cmp     ecx, JPEG_MARKER_RST0
     jb      .unsupported
@@ -165,13 +187,13 @@ er_fn er_jpeg_read_bit
 
 ; er_jpeg_read_bits(state, count) -> eax=value, rdx=error
 er_fn er_jpeg_read_bits
-    er_push rbx, r12
+    er_push rbx, r12, r13
     er_check_zero rdi, .invalid_param
     cmp     esi, JPEG_MAX_CODE_LEN
     ja      .corrupt
     mov     r12, rdi
     mov     ebx, esi
-    xor     ecx, ecx
+    xor     r13d, r13d
 .loop:
     test    ebx, ebx
     jz      .ok
@@ -179,12 +201,256 @@ er_fn er_jpeg_read_bits
     call    er_jpeg_read_bit
     test    edx, edx
     jnz     .done
-    shl     ecx, 1
-    or      ecx, eax
+    shl     r13d, 1
+    or      r13d, eax
     dec     ebx
     jmp     .loop
 .ok:
+    mov     eax, r13d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_jpeg_consume_marker(state) -> eax=marker, rdx=error
+er_fn er_jpeg_consume_marker
+    er_check_zero rdi, .invalid_param
+    mov     byte [rdi + JPEG_BIT_READER_BITS_LEFT_OFF], 0
+    mov     r8, [rdi + JPEG_BIT_READER_BYTES_OFF]
+    mov     eax, [rdi + JPEG_BIT_READER_CURSOR_OFF]
+    cmp     eax, [rdi + JPEG_BIT_READER_LEN_OFF]
+    jae     .corrupt
+    cmp     byte [r8 + rax], JPEG_MARKER_PREFIX
+    jne     .corrupt
+.skip_prefix:
+    cmp     eax, [rdi + JPEG_BIT_READER_LEN_OFF]
+    jae     .corrupt
+    cmp     byte [r8 + rax], JPEG_MARKER_PREFIX
+    jne     .read_marker
+    inc     eax
+    jmp     .skip_prefix
+.read_marker:
+    cmp     eax, [rdi + JPEG_BIT_READER_LEN_OFF]
+    jae     .corrupt
+    movzx   ecx, byte [r8 + rax]
+    inc     eax
+    mov     [rdi + JPEG_BIT_READER_CURSOR_OFF], eax
+    test    ecx, ecx
+    jz      .corrupt
     mov     eax, ecx
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
+; er_jpeg_consume_restart(state, expected_marker) -> eax=1, rdx=error
+er_fn er_jpeg_consume_restart
+    er_push rbx
+    mov     ebx, esi
+    call    er_jpeg_consume_marker
+    test    edx, edx
+    jnz     .done
+    cmp     eax, ebx
+    jne     .corrupt
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx
+    er_ret
+
+; er_jpeg_consume_eoi(state) -> eax=1, rdx=error
+er_fn er_jpeg_consume_eoi
+    er_push rbx
+    mov     rbx, rdi
+    call    er_jpeg_consume_marker
+    test    edx, edx
+    jnz     .done
+    cmp     eax, JPEG_MARKER_EOI
+    jne     .corrupt
+    mov     eax, [rbx + JPEG_BIT_READER_CURSOR_OFF]
+    cmp     eax, [rbx + JPEG_BIT_READER_LEN_OFF]
+    jne     .corrupt
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx
+    er_ret
+
+; er_jpeg_build_huffman_table(counts16, values, value_len, table) -> eax=1, rdx=error
+er_fn er_jpeg_build_huffman_table
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    mov     r15, rcx
+    test    edx, edx
+    jz      .corrupt
+    cmp     edx, JPEG_MAX_HUFFMAN_SYMBOLS
+    ja      .corrupt
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     dword [r15 + JPEG_HUFF_TABLE_LEN_OFF], 0
+    mov     dword [r15 + JPEG_HUFF_TABLE_READY_OFF], 0
+    mov     ebx, 1
+    xor     r8d, r8d
+    xor     r9d, r9d
+    mov     r10d, 1
+.len_loop:
+    cmp     r10d, JPEG_MAX_CODE_LEN
+    ja      .finish
+    movzx   r11d, byte [r12 + r10 - 1]
+    lea     ebx, [rbx + rbx]
+    sub     ebx, r11d
+    js      .corrupt
+    xor     ecx, ecx
+.symbol_loop:
+    cmp     ecx, r11d
+    jae     .next_len
+    cmp     r9d, r14d
+    jae     .corrupt
+    mov     eax, [r15 + JPEG_HUFF_TABLE_LEN_OFF]
+    cmp     eax, JPEG_MAX_HUFFMAN_SYMBOLS
+    jae     .corrupt
+    lea     rdx, [r15 + JPEG_HUFF_TABLE_SYMBOLS_OFF + rax * JPEG_HUFF_SYMBOL_SIZE]
+    mov     [rdx + JPEG_HUFF_CODE_OFF], r8w
+    mov     [rdx + JPEG_HUFF_LEN_OFF], r10b
+    movzx   eax, byte [r13 + r9]
+    mov     [rdx + JPEG_HUFF_VALUE_OFF], al
+    inc     dword [r15 + JPEG_HUFF_TABLE_LEN_OFF]
+    inc     r9d
+    inc     r8d
+    inc     ecx
+    jmp     .symbol_loop
+.next_len:
+    shl     r8d, 1
+    inc     r10d
+    jmp     .len_loop
+.finish:
+    cmp     r9d, r14d
+    jne     .corrupt
+    mov     dword [r15 + JPEG_HUFF_TABLE_READY_OFF], 1
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    mov     dword [r15 + JPEG_HUFF_TABLE_LEN_OFF], 0
+    mov     dword [r15 + JPEG_HUFF_TABLE_READY_OFF], 0
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_huffman_decode(table, reader) -> eax=symbol, rdx=error
+er_fn er_jpeg_huffman_decode
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    cmp     dword [rdi + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .corrupt
+    mov     r12, rdi
+    mov     r13, rsi
+    xor     r14d, r14d
+    mov     r15d, 1
+.len_loop:
+    cmp     r15d, JPEG_MAX_CODE_LEN
+    ja      .corrupt
+    mov     rdi, r13
+    call    er_jpeg_read_bit
+    test    edx, edx
+    jnz     .done
+    shl     r14d, 1
+    or      r14d, eax
+    xor     ebx, ebx
+.symbol_loop:
+    cmp     ebx, [r12 + JPEG_HUFF_TABLE_LEN_OFF]
+    jae     .next_len
+    lea     rcx, [r12 + JPEG_HUFF_TABLE_SYMBOLS_OFF + rbx * JPEG_HUFF_SYMBOL_SIZE]
+    cmp     byte [rcx + JPEG_HUFF_LEN_OFF], r15b
+    jne     .advance_symbol
+    cmp     word [rcx + JPEG_HUFF_CODE_OFF], r14w
+    jne     .advance_symbol
+    movzx   eax, byte [rcx + JPEG_HUFF_VALUE_OFF]
+    er_ok
+    jmp     .done
+.advance_symbol:
+    inc     ebx
+    jmp     .symbol_loop
+.next_len:
+    inc     r15d
+    jmp     .len_loop
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_receive_extend(reader, len) -> eax=signed value, rdx=error
+er_fn er_jpeg_receive_extend
+    er_push rbx, r12
+    er_check_zero rdi, .invalid_param
+    test    esi, esi
+    jz      .zero
+    cmp     esi, JPEG_MAX_CODE_LEN
+    ja      .corrupt
+    mov     ebx, esi
+    call    er_jpeg_read_bits
+    test    edx, edx
+    jnz     .done
+    mov     r12d, eax
+    mov     ecx, ebx
+    dec     ecx
+    mov     eax, 1
+    shl     eax, cl
+    cmp     r12d, eax
+    jae     .positive
+    mov     ecx, ebx
+    mov     eax, 1
+    shl     eax, cl
+    mov     ecx, r12d
+    inc     ecx
+    sub     ecx, eax
+    mov     eax, ecx
+    er_ok
+    jmp     .done
+.positive:
+    mov     eax, r12d
+    er_ok
+    jmp     .done
+.zero:
+    xor     eax, eax
     er_ok
     jmp     .done
 .invalid_param:
@@ -197,9 +463,1161 @@ er_fn er_jpeg_read_bits
 .done:
     er_pop  rbx, r12
     er_ret
-.no:
+
+; er_jpeg_decode_block(dc_table, ac_table, quant64, prev_dc, reader, block64) -> eax=1, rdx=error
+er_fn er_jpeg_decode_block
+    er_push rbx, rbp, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r8, .invalid_param
+    er_check_zero r9, .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     rbp, r8
+    mov     rbx, r9
+    xor     eax, eax
+.clear_loop:
+    cmp     eax, JPEG_BLOCK_LEN
+    jae     .decode_dc
+    mov     word [rbx + rax * 2], 0
+    inc     eax
+    jmp     .clear_loop
+.decode_dc:
+    mov     r15, rcx
+    mov     rdi, r12
+    mov     rsi, rbp
+    call    er_jpeg_huffman_decode
+    test    edx, edx
+    jnz     .done
+    cmp     eax, 11
+    ja      .corrupt
+    mov     rdi, rbp
+    mov     esi, eax
+    call    er_jpeg_receive_extend
+    test    edx, edx
+    jnz     .done
+    movsx   ecx, word [r15]
+    add     ecx, eax
+    mov     [r15], cx
+    movzx   edx, word [r14]
+    imul    ecx, edx
+    mov     [rbx], cx
+    mov     r15d, 1
+.ac_loop:
+    cmp     r15d, JPEG_BLOCK_LEN
+    jae     .ok
+    mov     rdi, r13
+    mov     rsi, rbp
+    call    er_jpeg_huffman_decode
+    test    edx, edx
+    jnz     .done
+    test    eax, eax
+    jz      .ok
+    cmp     eax, 0xf0
+    jne     .ac_symbol
+    add     r15d, 16
+    jmp     .ac_loop
+.ac_symbol:
+    mov     r10d, eax
+    mov     esi, eax
+    and     esi, 0x0f
+    jz      .corrupt
+    cmp     esi, 10
+    ja      .corrupt
+    shr     r10d, 4
+    add     r15d, r10d
+    cmp     r15d, JPEG_BLOCK_LEN
+    jae     .corrupt
+    mov     rdi, rbp
+    call    er_jpeg_receive_extend
+    test    edx, edx
+    jnz     .done
+    movzx   edx, word [r14 + r15 * 2]
+    imul    eax, edx
+    movzx   ecx, byte [rel jpeg_zigzag + r15]
+    mov     [rbx + rcx * 2], ax
+    inc     r15d
+    jmp     .ac_loop
+.ok:
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_clamp_u8(value) -> eax=0..255
+er_fn er_jpeg_clamp_u8
+    test    edi, edi
+    jle     .zero
+    cmp     edi, 255
+    jge     .full
+    mov     eax, edi
+    er_ok
+    er_ret
+.zero:
     xor     eax, eax
     er_ok
+    er_ret
+.full:
+    mov     eax, 255
+    er_ok
+    er_ret
+
+; er_jpeg_gray_color(value) -> eax=packed RGBA
+er_fn er_jpeg_gray_color
+    call    er_jpeg_clamp_u8
+    mov     ecx, eax
+    shl     eax, 16
+    mov     edx, ecx
+    shl     edx, 8
+    or      eax, edx
+    or      eax, ecx
+    or      eax, JPEG_ALPHA_OPAQUE
+    er_ok
+    er_ret
+
+; er_jpeg_ycbcr_color(y, cb, cr) -> eax=packed RGBA
+er_fn er_jpeg_ycbcr_color
+    er_push rbx, r12, r13
+    mov     r12d, edi
+    mov     ebx, esi
+    sub     ebx, 128
+    mov     r13d, edx
+    sub     r13d, 128
+    mov     eax, r13d
+    imul    eax, JPEG_YCBCR_R_CR_COEFF
+    add     eax, JPEG_COLOR_ROUND
+    sar     eax, JPEG_COLOR_SCALE_BITS
+    add     eax, r12d
+    mov     edi, eax
+    call    er_jpeg_clamp_u8
+    mov     r8d, eax
+    mov     eax, ebx
+    imul    eax, JPEG_YCBCR_G_CB_COEFF
+    mov     ecx, r13d
+    imul    ecx, JPEG_YCBCR_G_CR_COEFF
+    add     eax, ecx
+    add     eax, JPEG_COLOR_ROUND
+    sar     eax, JPEG_COLOR_SCALE_BITS
+    mov     edi, r12d
+    sub     edi, eax
+    call    er_jpeg_clamp_u8
+    mov     r9d, eax
+    mov     eax, ebx
+    imul    eax, JPEG_YCBCR_B_CB_COEFF
+    add     eax, JPEG_COLOR_ROUND
+    sar     eax, JPEG_COLOR_SCALE_BITS
+    add     eax, r12d
+    mov     edi, eax
+    call    er_jpeg_clamp_u8
+    shl     eax, 16
+    shl     r9d, 8
+    or      eax, r9d
+    or      eax, r8d
+    or      eax, JPEG_ALPHA_OPAQUE
+    er_ok
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_jpeg_idct_sample(block64, x, y) -> eax=sample, rdx=error
+er_fn er_jpeg_idct_sample
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 16
+    er_check_zero rdi, .invalid_param
+    cmp     esi, 8
+    jae     .invalid_param
+    cmp     edx, 8
+    jae     .invalid_param
+    mov     r13, rdi
+    mov     r14d, esi
+    mov     r15d, edx
+    xor     r12, r12
+    mov     dword [rsp], 0
+.v_loop:
+    cmp     dword [rsp], 8
+    jae     .finish
+    mov     dword [rsp + 4], 0
+.u_loop:
+    cmp     dword [rsp + 4], 8
+    jae     .next_v
+    mov     eax, [rsp]
+    shl     eax, 3
+    add     eax, [rsp + 4]
+    movsx   rax, word [r13 + rax * 2]
+    test    rax, rax
+    jz      .next_u
+    mov     ebx, [rsp + 4]
+    shl     ebx, 3
+    add     ebx, r14d
+    movsx   rbx, word [rel jpeg_idct_basis + rbx * 2]
+    imul    rax, rbx
+    mov     ebx, [rsp]
+    shl     ebx, 3
+    add     ebx, r15d
+    movsx   rbx, word [rel jpeg_idct_basis + rbx * 2]
+    imul    rax, rbx
+    add     r12, rax
+.next_u:
+    inc     dword [rsp + 4]
+    jmp     .u_loop
+.next_v:
+    inc     dword [rsp]
+    jmp     .v_loop
+.finish:
+    mov     rax, r12
+    test    rax, rax
+    js      .round_negative
+    add     rax, JPEG_IDCT_FINAL_ROUND
+    sar     rax, JPEG_IDCT_FINAL_SHIFT
+    jmp     .bias
+.round_negative:
+    neg     rax
+    add     rax, JPEG_IDCT_FINAL_ROUND
+    shr     rax, JPEG_IDCT_FINAL_SHIFT
+    neg     rax
+.bias:
+    add     eax, 128
+    cmp     eax, JPEG_I16_MIN
+    jl      .clip_low
+    cmp     eax, JPEG_I16_MAX
+    jg      .clip_high
+    er_ok
+    jmp     .done
+.clip_low:
+    mov     eax, JPEG_I16_MIN
+    er_ok
+    jmp     .done
+.clip_high:
+    mov     eax, JPEG_I16_MAX
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    add     rsp, 16
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_sample_component(blocks, sampling, max_h, max_v, mcu_x, mcu_y) -> eax=sample, rdx=error
+er_fn er_jpeg_sample_component
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 16
+    er_check_zero rdi, .invalid_param
+    test    edx, edx
+    jz      .invalid_param
+    test    ecx, ecx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     r15d, ecx
+    mov     ebx, esi
+    shr     ebx, 4
+    and     r13d, 0x0f
+    test    ebx, ebx
+    jz      .invalid_param
+    test    r13d, r13d
+    jz      .invalid_param
+    cmp     ebx, JPEG_MAX_SAMPLING_FACTOR
+    ja      .invalid_param
+    cmp     r13d, JPEG_MAX_SAMPLING_FACTOR
+    ja      .invalid_param
+    mov     eax, r8d
+    imul    eax, ebx
+    xor     edx, edx
+    div     r14d
+    mov     [rsp], eax
+    mov     eax, r9d
+    imul    eax, r13d
+    xor     edx, edx
+    div     r15d
+    mov     [rsp + 4], eax
+    mov     eax, [rsp]
+    shr     eax, 3
+    mov     ecx, [rsp + 4]
+    shr     ecx, 3
+    imul    ecx, ebx
+    add     ecx, eax
+    cmp     ecx, JPEG_MAX_COMPONENT_BLOCKS
+    jae     .invalid_param
+    mov     eax, ecx
+    shl     eax, 7
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp]
+    and     esi, 7
+    mov     edx, [rsp + 4]
+    and     edx, 7
+    call    er_jpeg_idct_sample
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    add     rsp, 16
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_decode_component_block(state, component_index, reader, block64) -> eax=1, rdx=error
+er_fn er_jpeg_decode_component_block
+    er_push rbx, rbp, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    cmp     esi, [rdi + JPEG_STATE_COMPONENT_COUNT_OFF]
+    jae     .corrupt
+    mov     r12, rdi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     ebx, esi
+    imul    ebx, JPEG_COMPONENT_SIZE
+    lea     r15, [r12 + JPEG_STATE_COMPONENTS_OFF + rbx]
+    movzx   eax, byte [r15 + JPEG_COMPONENT_QUANT_ID_OFF]
+    cmp     byte [r12 + JPEG_STATE_QUANT_READY_OFF + rax], 1
+    jne     .corrupt
+    shl     eax, 7
+    lea     rbp, [r12 + JPEG_STATE_QUANT_OFF + rax]
+    movzx   eax, byte [r15 + JPEG_COMPONENT_DC_TABLE_OFF]
+    imul    eax, JPEG_HUFF_TABLE_SIZE
+    lea     rdi, [r12 + JPEG_STATE_DC_TABLES_OFF + rax]
+    cmp     dword [rdi + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .corrupt
+    movzx   eax, byte [r15 + JPEG_COMPONENT_AC_TABLE_OFF]
+    imul    eax, JPEG_HUFF_TABLE_SIZE
+    lea     rsi, [r12 + JPEG_STATE_AC_TABLES_OFF + rax]
+    cmp     dword [rsi + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .corrupt
+    mov     rdx, rbp
+    lea     rcx, [r15 + JPEG_COMPONENT_PREV_DC_OFF]
+    mov     r8, r13
+    mov     r9, r14
+    call    er_jpeg_decode_block
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_reset_dc(state) -> eax=1, rdx=error
+er_fn er_jpeg_reset_dc
+    er_check_zero rdi, .invalid_param
+    xor     eax, eax
+.loop:
+    cmp     eax, [rdi + JPEG_STATE_COMPONENT_COUNT_OFF]
+    jae     .ok
+    mov     ecx, eax
+    imul    ecx, JPEG_COMPONENT_SIZE
+    mov     word [rdi + JPEG_STATE_COMPONENTS_OFF + rcx + JPEG_COMPONENT_PREV_DC_OFF], 0
+    inc     eax
+    jmp     .loop
+.ok:
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_jpeg_state_init(state) -> eax=1, rdx=error
+er_fn er_jpeg_state_init
+    er_check_zero rdi, .invalid_param
+    xor     eax, eax
+.zero_loop:
+    cmp     eax, JPEG_STATE_SIZE
+    jae     .defaults
+    mov     byte [rdi + rax], 0
+    inc     eax
+    jmp     .zero_loop
+.defaults:
+    mov     dword [rdi + JPEG_STATE_MAX_H_OFF], 1
+    mov     dword [rdi + JPEG_STATE_MAX_V_OFF], 1
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_jpeg_parse_dqt(payload, len, state) -> eax=1, rdx=error
+er_fn er_jpeg_parse_dqt
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    xor     ebx, ebx
+.table_loop:
+    cmp     ebx, r13d
+    jae     .ok
+    movzx   eax, byte [r12 + rbx]
+    inc     ebx
+    mov     ecx, eax
+    shr     ecx, 4
+    test    ecx, ecx
+    jnz     .unsupported
+    and     eax, 0x0f
+    cmp     eax, JPEG_TABLE_COUNT
+    jae     .unsupported
+    mov     ecx, r13d
+    sub     ecx, ebx
+    cmp     ecx, JPEG_BLOCK_LEN
+    jb      .corrupt
+    mov     r15d, eax
+    shl     r15d, 7
+    lea     r15, [r14 + JPEG_STATE_QUANT_OFF + r15]
+    xor     ecx, ecx
+.copy_loop:
+    cmp     ecx, JPEG_BLOCK_LEN
+    jae     .ready
+    mov     edx, ebx
+    add     edx, ecx
+    movzx   eax, byte [r12 + rdx]
+    mov     [r15 + rcx * 2], ax
+    inc     ecx
+    jmp     .copy_loop
+.ready:
+    movzx   eax, byte [r12 + rbx - 1]
+    and     eax, 0x0f
+    mov     byte [r14 + JPEG_STATE_QUANT_READY_OFF + rax], 1
+    add     ebx, JPEG_BLOCK_LEN
+    jmp     .table_loop
+.ok:
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_parse_sof0(payload, len, state) -> eax=1, rdx=error
+er_fn er_jpeg_parse_sof0
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    cmp     dword [rdx + JPEG_STATE_HAVE_FRAME_OFF], 0
+    jne     .corrupt
+    cmp     esi, 6
+    jb      .corrupt
+    cmp     byte [rdi], JPEG_PRECISION_8
+    jne     .unsupported
+    movzx   eax, word [rdi + 1]
+    rol     ax, 8
+    test    eax, eax
+    jz      .corrupt
+    mov     r12d, eax
+    movzx   eax, word [rdi + 3]
+    rol     ax, 8
+    test    eax, eax
+    jz      .corrupt
+    mov     r13d, eax
+    movzx   r14d, byte [rdi + 5]
+    test    r14d, r14d
+    jz      .corrupt
+    cmp     r14d, JPEG_MAX_COMPONENTS
+    ja      .unsupported
+    mov     eax, r14d
+    imul    eax, 3
+    add     eax, 6
+    cmp     eax, esi
+    jne     .corrupt
+    mov     r15, rdx
+    xor     ebx, ebx
+.component_loop:
+    cmp     ebx, r14d
+    jae     .validate_sampling
+    mov     eax, ebx
+    imul    eax, 3
+    lea     r8, [rdi + rax + 6]
+    movzx   eax, byte [r8]
+    xor     ecx, ecx
+.dup_loop:
+    cmp     ecx, ebx
+    jae     .component_unique
+    mov     edx, ecx
+    imul    edx, JPEG_COMPONENT_SIZE
+    cmp     byte [r15 + JPEG_STATE_COMPONENTS_OFF + rdx + JPEG_COMPONENT_ID_OFF], al
+    je      .corrupt
+    inc     ecx
+    jmp     .dup_loop
+.component_unique:
+    movzx   ecx, byte [r8 + 1]
+    mov     edx, ecx
+    shr     edx, 4
+    mov     r9d, ecx
+    and     r9d, 0x0f
+    test    edx, edx
+    jz      .unsupported
+    test    r9d, r9d
+    jz      .unsupported
+    cmp     edx, JPEG_MAX_SAMPLING_FACTOR
+    ja      .unsupported
+    cmp     r9d, JPEG_MAX_SAMPLING_FACTOR
+    ja      .unsupported
+    cmp     edx, [r15 + JPEG_STATE_MAX_H_OFF]
+    jbe     .max_v
+    mov     [r15 + JPEG_STATE_MAX_H_OFF], edx
+.max_v:
+    cmp     r9d, [r15 + JPEG_STATE_MAX_V_OFF]
+    jbe     .quant_id
+    mov     [r15 + JPEG_STATE_MAX_V_OFF], r9d
+.quant_id:
+    movzx   edx, byte [r8 + 2]
+    cmp     edx, JPEG_TABLE_COUNT
+    jae     .corrupt
+    mov     ecx, ebx
+    imul    ecx, JPEG_COMPONENT_SIZE
+    mov     byte [r15 + JPEG_STATE_COMPONENTS_OFF + rcx + JPEG_COMPONENT_ID_OFF], al
+    movzx   eax, byte [r8 + 1]
+    mov     byte [r15 + JPEG_STATE_COMPONENTS_OFF + rcx + JPEG_COMPONENT_SAMPLING_OFF], al
+    mov     byte [r15 + JPEG_STATE_COMPONENTS_OFF + rcx + JPEG_COMPONENT_QUANT_ID_OFF], dl
+    inc     ebx
+    jmp     .component_loop
+.validate_sampling:
+    cmp     r14d, 1
+    jne     .validate_color
+    cmp     byte [r15 + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SAMPLING_OFF], 0x11
+    jne     .unsupported
+    jmp     .store_frame
+.validate_color:
+    cmp     r14d, 3
+    jne     .unsupported
+.store_frame:
+    mov     [r15 + JPEG_STATE_HEIGHT_OFF], r12d
+    mov     [r15 + JPEG_STATE_WIDTH_OFF], r13d
+    mov     [r15 + JPEG_STATE_COMPONENT_COUNT_OFF], r14d
+    mov     dword [r15 + JPEG_STATE_HAVE_FRAME_OFF], 1
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_parse_dht(payload, len, state) -> eax=1, rdx=error
+er_fn er_jpeg_parse_dht
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 16
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    xor     ebx, ebx
+.table_loop:
+    cmp     ebx, r13d
+    jae     .ok
+    movzx   eax, byte [r12 + rbx]
+    inc     ebx
+    mov     ecx, eax
+    shr     ecx, 4
+    cmp     ecx, JPEG_AC_CLASS
+    ja      .unsupported
+    mov     [rsp], ecx
+    and     eax, 0x0f
+    cmp     eax, JPEG_TABLE_COUNT
+    jae     .unsupported
+    mov     [rsp + 4], eax
+    mov     ecx, r13d
+    sub     ecx, ebx
+    cmp     ecx, JPEG_MAX_CODE_LEN
+    jb      .corrupt
+    xor     r15d, r15d
+    xor     ecx, ecx
+.count_loop:
+    cmp     ecx, JPEG_MAX_CODE_LEN
+    jae     .counts_done
+    mov     edx, ebx
+    add     edx, ecx
+    movzx   eax, byte [r12 + rdx]
+    add     r15d, eax
+    cmp     r15d, JPEG_MAX_HUFFMAN_SYMBOLS
+    ja      .corrupt
+    inc     ecx
+    jmp     .count_loop
+.counts_done:
+    test    r15d, r15d
+    jz      .corrupt
+    mov     ecx, r13d
+    sub     ecx, ebx
+    sub     ecx, JPEG_MAX_CODE_LEN
+    cmp     ecx, r15d
+    jb      .corrupt
+    mov     eax, [rsp + 4]
+    imul    eax, JPEG_HUFF_TABLE_SIZE
+    cmp     dword [rsp], JPEG_DC_CLASS
+    jne     .ac_table
+    lea     rbp, [r14 + JPEG_STATE_DC_TABLES_OFF + rax]
+    jmp     .build
+.ac_table:
+    lea     rbp, [r14 + JPEG_STATE_AC_TABLES_OFF + rax]
+.build:
+    lea     rdi, [r12 + rbx]
+    lea     rsi, [r12 + rbx + JPEG_MAX_CODE_LEN]
+    mov     edx, r15d
+    mov     rcx, rbp
+    call    er_jpeg_build_huffman_table
+    test    edx, edx
+    jnz     .done
+    add     ebx, JPEG_MAX_CODE_LEN
+    add     ebx, r15d
+    jmp     .table_loop
+.ok:
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    add     rsp, 16
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_parse_sos(payload, len, state) -> eax=1, rdx=error
+er_fn er_jpeg_parse_sos
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    cmp     dword [rdx + JPEG_STATE_HAVE_FRAME_OFF], 1
+    jne     .corrupt
+    cmp     esi, 4
+    jb      .corrupt
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    movzx   r15d, byte [rdi]
+    cmp     r15d, [rdx + JPEG_STATE_COMPONENT_COUNT_OFF]
+    jne     .corrupt
+    mov     eax, r15d
+    imul    eax, 2
+    add     eax, 4
+    cmp     eax, esi
+    jne     .corrupt
+    cmp     byte [r12 + r13 - 3], 0
+    jne     .unsupported
+    cmp     byte [r12 + r13 - 2], 63
+    jne     .unsupported
+    cmp     byte [r12 + r13 - 1], 0
+    jne     .unsupported
+    xor     ebx, ebx
+    xor     r11d, r11d
+.component_loop:
+    cmp     ebx, r15d
+    jae     .ok
+    mov     eax, ebx
+    shl     eax, 1
+    movzx   r8d, byte [r12 + rax + 1]
+    movzx   r9d, byte [r12 + rax + 2]
+    xor     ecx, ecx
+.find_loop:
+    cmp     ecx, [r14 + JPEG_STATE_COMPONENT_COUNT_OFF]
+    jae     .corrupt
+    mov     edx, ecx
+    imul    edx, JPEG_COMPONENT_SIZE
+    cmp     byte [r14 + JPEG_STATE_COMPONENTS_OFF + rdx + JPEG_COMPONENT_ID_OFF], r8b
+    je      .found
+    inc     ecx
+    jmp     .find_loop
+.found:
+    mov     eax, 1
+    shl     eax, cl
+    test    r11d, eax
+    jnz     .corrupt
+    or      r11d, eax
+    mov     eax, r9d
+    shr     eax, 4
+    cmp     eax, JPEG_TABLE_COUNT
+    jae     .corrupt
+    mov     r10d, r9d
+    and     r10d, 0x0f
+    cmp     r10d, JPEG_TABLE_COUNT
+    jae     .corrupt
+    mov     edx, ecx
+    imul    edx, JPEG_COMPONENT_SIZE
+    mov     byte [r14 + JPEG_STATE_COMPONENTS_OFF + rdx + JPEG_COMPONENT_DC_TABLE_OFF], al
+    mov     byte [r14 + JPEG_STATE_COMPONENTS_OFF + rdx + JPEG_COMPONENT_AC_TABLE_OFF], r10b
+    inc     ebx
+    jmp     .component_loop
+.ok:
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_parse_dri(payload, len, state) -> eax=1, rdx=error
+er_fn er_jpeg_parse_dri
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    cmp     esi, 2
+    jne     .corrupt
+    movzx   eax, word [rdi]
+    rol     ax, 8
+    mov     [rdx + JPEG_STATE_RESTART_INTERVAL_OFF], eax
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
+; er_jpeg_parse(bytes, len, state, need_scan, out_scan_offset) -> eax=1, rdx=error
+er_fn er_jpeg_parse
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 16
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
+    cmp     esi, 2
+    jb      .unsupported
+    cmp     byte [rdi], JPEG_MARKER_PREFIX
+    jne     .unsupported
+    cmp     byte [rdi + 1], JPEG_MARKER_SOI
+    jne     .unsupported
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     [rsp], ecx
+    mov     [rsp + 8], r8
+    mov     ebx, 2
+    mov     qword [r8], 0
+.marker_loop:
+    cmp     ebx, r13d
+    jae     .corrupt
+.seek_prefix:
+    cmp     ebx, r13d
+    jae     .corrupt
+    cmp     byte [r12 + rbx], JPEG_MARKER_PREFIX
+    je      .skip_prefix
+    inc     ebx
+    jmp     .seek_prefix
+.skip_prefix:
+    cmp     ebx, r13d
+    jae     .corrupt
+    cmp     byte [r12 + rbx], JPEG_MARKER_PREFIX
+    jne     .read_marker
+    inc     ebx
+    jmp     .skip_prefix
+.read_marker:
+    cmp     ebx, r13d
+    jae     .corrupt
+    movzx   eax, byte [r12 + rbx]
+    inc     ebx
+    test    eax, eax
+    jz      .corrupt
+    cmp     eax, JPEG_MARKER_EOI
+    je      .eoi
+    cmp     eax, JPEG_MARKER_SOI
+    je      .corrupt
+    cmp     eax, JPEG_MARKER_RST0
+    jb      .dispatch
+    cmp     eax, JPEG_MARKER_RST7
+    jbe     .corrupt
+.dispatch:
+    cmp     eax, JPEG_MARKER_SOF2
+    je      .unsupported
+    cmp     eax, 0xc1
+    je      .unsupported
+    cmp     eax, 0xc3
+    je      .unsupported
+    cmp     eax, 0xc5
+    jb      .segment_dispatch
+    cmp     eax, 0xcb
+    jbe     .unsupported
+    cmp     eax, 0xcd
+    jb      .segment_dispatch
+    cmp     eax, 0xcf
+    jbe     .unsupported
+.segment_dispatch:
+    mov     ebp, eax
+    mov     eax, r13d
+    sub     eax, ebx
+    cmp     eax, 2
+    jb      .corrupt
+    movzx   r15d, word [r12 + rbx]
+    rol     r15w, 8
+    cmp     r15d, 2
+    jb      .corrupt
+    mov     eax, r13d
+    sub     eax, ebx
+    cmp     r15d, eax
+    ja      .corrupt
+    lea     rdi, [r12 + rbx + 2]
+    mov     esi, r15d
+    sub     esi, 2
+    mov     rdx, r14
+    cmp     ebp, JPEG_MARKER_DQT
+    je      .call_dqt
+    cmp     ebp, JPEG_MARKER_DHT
+    je      .call_dht
+    cmp     ebp, JPEG_MARKER_DRI
+    je      .call_dri
+    cmp     ebp, JPEG_MARKER_SOF0
+    je      .call_sof0
+    cmp     ebp, JPEG_MARKER_SOS
+    je      .call_sos
+    jmp     .skip_segment
+.call_dqt:
+    call    er_jpeg_parse_dqt
+    jmp     .after_segment_call
+.call_dht:
+    call    er_jpeg_parse_dht
+    jmp     .after_segment_call
+.call_dri:
+    call    er_jpeg_parse_dri
+    jmp     .after_segment_call
+.call_sof0:
+    call    er_jpeg_parse_sof0
+    test    edx, edx
+    jnz     .done
+    cmp     dword [rsp], 0
+    jne     .skip_segment
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.call_sos:
+    call    er_jpeg_parse_sos
+    test    edx, edx
+    jnz     .done
+    add     ebx, r15d
+    mov     r8, [rsp + 8]
+    mov     [r8], ebx
+    cmp     dword [r14 + JPEG_STATE_HAVE_FRAME_OFF], 1
+    jne     .corrupt
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.after_segment_call:
+    test    edx, edx
+    jnz     .done
+.skip_segment:
+    add     ebx, r15d
+    jmp     .marker_loop
+.eoi:
+    cmp     dword [rsp], 0
+    jne     .corrupt
+    mov     eax, 1
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    add     rsp, 16
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_jpeg_decode_scan_gray(state, scan, scan_len, out_pixels, out_count, scratch, scratch_cap)
+; -> eax=pixel_count, rdx=error
+er_fn er_jpeg_decode_scan_gray
+    mov     r10, [rsp + 8]
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 80
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r9, .invalid_param
+    cmp     r10d, JPEG_SCAN_SCRATCH_SIZE
+    jb      .no_space
+    cmp     dword [rdi + JPEG_STATE_HAVE_FRAME_OFF], 1
+    jne     .corrupt
+    cmp     dword [rdi + JPEG_STATE_COMPONENT_COUNT_OFF], 1
+    jne     .unsupported
+    cmp     byte [rdi + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SAMPLING_OFF], 0x11
+    jne     .unsupported
+    mov     eax, [rdi + JPEG_STATE_WIDTH_OFF]
+    imul    eax, [rdi + JPEG_STATE_HEIGHT_OFF]
+    jo      .memory
+    cmp     r8d, eax
+    jb      .no_space
+    mov     [rsp], rdi          ; state
+    mov     [rsp + 8], rcx      ; out
+    mov     [rsp + 16], r9      ; scratch
+    mov     [rsp + 24], eax     ; pixel count
+    mov     [rsp + 48], rsi      ; scan
+    mov     [rsp + 56], edx      ; scan len
+    mov     rdi, [rsp + 16]
+    mov     rsi, [rsp + 48]
+    mov     edx, [rsp + 56]
+    call    er_jpeg_bit_reader_init
+    test    edx, edx
+    jnz     .done
+    mov     rdi, [rsp]
+    mov     eax, [rdi + JPEG_STATE_WIDTH_OFF]
+    add     eax, 7
+    shr     eax, 3
+    mov     [rsp + 28], eax     ; block columns
+    mov     eax, [rdi + JPEG_STATE_HEIGHT_OFF]
+    add     eax, 7
+    shr     eax, 3
+    mov     [rsp + 32], eax     ; block rows
+    mov     ecx, [rsp + 28]
+    imul    ecx, eax
+    mov     [rsp + 68], ecx     ; total blocks
+    mov     dword [rsp + 72], 0 ; processed blocks
+    mov     dword [rsp + 76], 0 ; restart count
+    mov     dword [rsp + 44], JPEG_MARKER_RST0
+    xor     ebp, ebp            ; block y
+.block_y_loop:
+    cmp     ebp, [rsp + 32]
+    jae     .finish
+    xor     ebx, ebx            ; block x
+.block_x_loop:
+    cmp     ebx, [rsp + 28]
+    jae     .next_block_y
+    mov     rdi, [rsp]
+    xor     esi, esi
+    mov     rdx, [rsp + 16]
+    lea     rcx, [rdx + JPEG_SCAN_SCRATCH_BLOCK_OFF]
+    call    er_jpeg_decode_component_block
+    test    edx, edx
+    jnz     .done
+    mov     dword [rsp + 60], 0 ; local y
+.pixel_y_loop:
+    cmp     dword [rsp + 60], JPEG_BLOCK_SIDE
+    jae     .next_block_x
+    mov     eax, ebp
+    shl     eax, 3
+    add     eax, [rsp + 60]
+    mov     rdi, [rsp]
+    cmp     eax, [rdi + JPEG_STATE_HEIGHT_OFF]
+    jae     .next_block_x
+    mov     [rsp + 36], eax     ; global y
+    mov     dword [rsp + 64], 0 ; local x
+.pixel_x_loop:
+    cmp     dword [rsp + 64], JPEG_BLOCK_SIDE
+    jae     .next_pixel_y
+    mov     eax, ebx
+    shl     eax, 3
+    add     eax, [rsp + 64]
+    mov     rdi, [rsp]
+    cmp     eax, [rdi + JPEG_STATE_WIDTH_OFF]
+    jae     .next_pixel_y
+    mov     [rsp + 40], eax     ; global x
+    mov     rdi, [rsp + 16]
+    lea     rdi, [rdi + JPEG_SCAN_SCRATCH_BLOCK_OFF]
+    mov     esi, [rsp + 64]
+    mov     edx, [rsp + 60]
+    call    er_jpeg_idct_sample
+    test    edx, edx
+    jnz     .done
+    mov     edi, eax
+    call    er_jpeg_gray_color
+    mov     rdi, [rsp]
+    mov     ecx, [rsp + 36]
+    imul    ecx, [rdi + JPEG_STATE_WIDTH_OFF]
+    add     ecx, [rsp + 40]
+    mov     rdi, [rsp + 8]
+    mov     [rdi + rcx * 4], eax
+    inc     dword [rsp + 64]
+    jmp     .pixel_x_loop
+.next_pixel_y:
+    inc     dword [rsp + 60]
+    jmp     .pixel_y_loop
+.next_block_x:
+    inc     dword [rsp + 72]
+    mov     rdi, [rsp]
+    cmp     dword [rdi + JPEG_STATE_RESTART_INTERVAL_OFF], 0
+    je      .advance_block_x
+    inc     dword [rsp + 76]
+    mov     eax, [rdi + JPEG_STATE_RESTART_INTERVAL_OFF]
+    cmp     [rsp + 76], eax
+    jne     .advance_block_x
+    mov     eax, [rsp + 72]
+    cmp     eax, [rsp + 68]
+    jae     .advance_block_x
+    mov     rdi, [rsp + 16]
+    mov     esi, [rsp + 44]
+    call    er_jpeg_consume_restart
+    test    edx, edx
+    jnz     .done
+    mov     rdi, [rsp]
+    call    er_jpeg_reset_dc
+    test    edx, edx
+    jnz     .done
+    mov     dword [rsp + 76], 0
+    cmp     dword [rsp + 44], JPEG_MARKER_RST7
+    jne     .restart_inc
+    mov     dword [rsp + 44], JPEG_MARKER_RST0
+    jmp     .advance_block_x
+.restart_inc:
+    inc     dword [rsp + 44]
+.advance_block_x:
+    inc     ebx
+    jmp     .block_x_loop
+.next_block_y:
+    inc     ebp
+    jmp     .block_y_loop
+.finish:
+    mov     rdi, [rsp + 16]
+    call    er_jpeg_consume_eoi
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + 24]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+    jmp     .done
+.memory:
+    xor     eax, eax
+    er_err  ERROR_NO_MEMORY
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    add     rsp, 80
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_image_decode_jpeg(bytes, len, out_pixels, out_count, scratch, scratch_cap, out_header)
+; -> eax=pixel_count, rdx=error
+er_fn er_image_decode_jpeg
+    mov     r10, [rsp + 8]
+    er_push rbx, rbp, r12, r13, r14, r15
+    sub     rsp, 64
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero r8, .invalid_param
+    er_check_zero r10, .invalid_param
+    cmp     r9d, JPEG_DECODE_SCRATCH_SIZE
+    jb      .no_space
+    mov     [rsp], rdi       ; bytes
+    mov     [rsp + 8], esi   ; len
+    mov     [rsp + 16], rdx  ; out pixels
+    mov     [rsp + 24], ecx  ; out count
+    mov     [rsp + 32], r8   ; scratch
+    mov     [rsp + 40], r10  ; out header
+    lea     r12, [r8 + JPEG_DECODE_SCRATCH_STATE_OFF]
+    lea     r13, [r8 + JPEG_DECODE_SCRATCH_SCAN_OFF]
+    mov     rdi, r12
+    call    er_jpeg_state_init
+    test    edx, edx
+    jnz     .done
+    mov     rdi, [rsp]
+    mov     esi, [rsp + 8]
+    mov     rdx, r12
+    mov     ecx, 1
+    lea     r8, [rsp + 48]
+    call    er_jpeg_parse
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + 8]
+    sub     eax, [rsp + 48]
+    mov     rdi, r12
+    mov     rsi, [rsp]
+    add     rsi, [rsp + 48]
+    mov     edx, eax
+    mov     rcx, [rsp + 16]
+    mov     r8d, [rsp + 24]
+    mov     r9, r13
+    push    JPEG_SCAN_SCRATCH_SIZE
+    call    er_jpeg_decode_scan_gray
+    add     rsp, 8
+    test    edx, edx
+    jnz     .done
+    mov     r10, [rsp + 40]
+    mov     ecx, [r12 + JPEG_STATE_WIDTH_OFF]
+    mov     [r10 + IMAGE_HEADER_WIDTH], ecx
+    mov     ecx, [r12 + JPEG_STATE_HEIGHT_OFF]
+    mov     [r10 + IMAGE_HEADER_HEIGHT], ecx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+.done:
+    add     rsp, 64
+    er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
 ; er_image_jxl_kind(buf, len) -> eax=kind, rdx=error
@@ -2196,6 +3614,131 @@ er_fn er_png_write_pixels
     er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
+; er_png_parse_ihdr(payload, out_info) -> eax=1, rdx=error
+; out_info: width u32, height u32, channels u32
+er_fn er_png_parse_ihdr
+    er_check_zero rdi, .invalid_param
+    er_check_zero rsi, .invalid_param
+    mov     eax, [rdi]
+    bswap   eax
+    test    eax, eax
+    jz      .corrupt
+    mov     [rsi + PNG_INFO_WIDTH_OFF], eax
+    mov     eax, [rdi + 4]
+    bswap   eax
+    test    eax, eax
+    jz      .corrupt
+    mov     [rsi + PNG_INFO_HEIGHT_OFF], eax
+    cmp     byte [rdi + 8], PNG_BIT_DEPTH_U8
+    jne     .unsupported
+    movzx   eax, byte [rdi + 9]
+    cmp     eax, PNG_COLOR_GRAYSCALE
+    je      .channels_1
+    cmp     eax, PNG_COLOR_RGB
+    je      .channels_3
+    cmp     eax, PNG_COLOR_GRAYSCALE_ALPHA
+    je      .channels_2
+    cmp     eax, PNG_COLOR_RGBA
+    jne     .unsupported
+    mov     dword [rsi + PNG_INFO_CHANNELS_OFF], 4
+    jmp     .methods
+.channels_1:
+    mov     dword [rsi + PNG_INFO_CHANNELS_OFF], 1
+    jmp     .methods
+.channels_2:
+    mov     dword [rsi + PNG_INFO_CHANNELS_OFF], 2
+    jmp     .methods
+.channels_3:
+    mov     dword [rsi + PNG_INFO_CHANNELS_OFF], 3
+.methods:
+    cmp     byte [rdi + 10], PNG_METHOD_DEFLATE
+    jne     .unsupported
+    cmp     byte [rdi + 11], PNG_FILTER_STANDARD
+    jne     .unsupported
+    cmp     byte [rdi + 12], PNG_INTERLACE_NONE
+    jne     .unsupported
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
+; er_png_read_chunk(bytes, len, cursor, out_chunk_info) -> eax=type, rdx=error
+er_fn er_png_read_chunk
+    er_push rbx, r12, r13, r14, r15
+    er_check_zero rdi, .invalid_param
+    er_check_zero rcx, .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14d, edx
+    mov     r15, rcx
+    mov     eax, r13d
+    sub     eax, r14d
+    cmp     eax, PNG_CHUNK_OVERHEAD
+    jb      .corrupt
+    mov     eax, [r12 + r14]
+    bswap   eax
+    mov     [r15 + PNG_CHUNK_INFO_LEN_OFF], eax
+    lea     rdi, [r12 + r14 + PNG_LENGTH_SIZE]
+    call    er_png_validate_chunk_type
+    test    edx, edx
+    jnz     .done
+    mov     eax, r13d
+    sub     eax, r14d
+    sub     eax, PNG_CHUNK_OVERHEAD
+    cmp     [r15 + PNG_CHUNK_INFO_LEN_OFF], eax
+    ja      .corrupt
+    lea     rdi, [r12 + r14 + PNG_LENGTH_SIZE]
+    mov     eax, [rdi]
+    mov     [r15 + PNG_CHUNK_INFO_TYPE_OFF], eax
+    mov     ebx, r14d
+    add     ebx, PNG_CHUNK_HEADER_SIZE
+    mov     [r15 + PNG_CHUNK_INFO_DATA_OFF], ebx
+    lea     rsi, [r12 + rbx]
+    mov     edx, [r15 + PNG_CHUNK_INFO_LEN_OFF]
+    call    er_png_crc32
+    test    edx, edx
+    jnz     .done
+    mov     ecx, [r15 + PNG_CHUNK_INFO_LEN_OFF]
+    lea     r11, [r12 + r14]
+    mov     edx, [r11 + rcx + PNG_CHUNK_HEADER_SIZE]
+    bswap   edx
+    cmp     eax, edx
+    jne     .corrupt
+    mov     eax, [r15 + PNG_CHUNK_INFO_LEN_OFF]
+    add     eax, PNG_CHUNK_OVERHEAD
+    jc      .memory
+    add     eax, r14d
+    jc      .memory
+    mov     [r15 + PNG_CHUNK_INFO_NEXT_OFF], eax
+    mov     eax, [r15 + PNG_CHUNK_INFO_TYPE_OFF]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.memory:
+    xor     eax, eax
+    er_err  ERROR_NO_MEMORY
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
 ; er_image_decode_png_stored(bytes, len, out_pixels, out_count, scratch, scratch_cap, out_header)
 ; -> eax=pixel_count, rdx=error. PNG decode for zlib stored-block IDAT streams.
 er_fn er_image_decode_png_stored
@@ -2228,35 +3771,13 @@ er_fn er_image_decode_png_stored
     mov     ebx, PNG_SIGNATURE_SIZE
     xor     r15d, r15d
 .chunk_loop:
-    mov     eax, r13d
-    sub     eax, ebx
-    cmp     eax, PNG_CHUNK_OVERHEAD
-    jb      .corrupt
-    mov     eax, [r12 + rbx]
-    bswap   eax
-    mov     [rsp + 76], eax
-    lea     rdi, [r12 + rbx + PNG_LENGTH_SIZE]
-    call    er_png_validate_chunk_type
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     edx, ebx
+    lea     rcx, [rsp + 76]
+    call    er_png_read_chunk
     test    edx, edx
     jnz     .done
-    mov     eax, r13d
-    sub     eax, ebx
-    sub     eax, PNG_CHUNK_OVERHEAD
-    cmp     [rsp + 76], eax
-    ja      .corrupt
-    lea     rdi, [r12 + rbx + PNG_LENGTH_SIZE]
-    lea     rsi, [r12 + rbx + PNG_CHUNK_HEADER_SIZE]
-    mov     edx, [rsp + 76]
-    call    er_png_crc32
-    test    edx, edx
-    jnz     .done
-    mov     ecx, [rsp + 76]
-    lea     r11, [r12 + rbx]
-    mov     edx, [r11 + rcx + PNG_CHUNK_HEADER_SIZE]
-    bswap   edx
-    cmp     eax, edx
-    jne     .corrupt
-    mov     eax, [r12 + rbx + PNG_LENGTH_SIZE]
     cmp     eax, PNG_CHUNK_IHDR
     je      .ihdr
     cmp     eax, PNG_CHUNK_IDAT
@@ -2278,45 +3799,12 @@ er_fn er_image_decode_png_stored
     jne     .corrupt
     cmp     dword [rsp + 76], PNG_IHDR_SIZE
     jne     .corrupt
-    lea     rdi, [r12 + rbx + PNG_CHUNK_HEADER_SIZE]
-    mov     eax, [rdi]
-    bswap   eax
-    test    eax, eax
-    jz      .corrupt
-    mov     [rsp + 64], eax
-    mov     eax, [rdi + 4]
-    bswap   eax
-    test    eax, eax
-    jz      .corrupt
-    mov     [rsp + 68], eax
-    cmp     byte [rdi + 8], PNG_BIT_DEPTH_U8
-    jne     .unsupported
-    movzx   eax, byte [rdi + 9]
-    cmp     eax, PNG_COLOR_GRAYSCALE
-    je      .channels_1
-    cmp     eax, PNG_COLOR_RGB
-    je      .channels_3
-    cmp     eax, PNG_COLOR_GRAYSCALE_ALPHA
-    je      .channels_2
-    cmp     eax, PNG_COLOR_RGBA
-    jne     .unsupported
-    mov     dword [rsp + 72], 4
-    jmp     .ihdr_methods
-.channels_1:
-    mov     dword [rsp + 72], 1
-    jmp     .ihdr_methods
-.channels_2:
-    mov     dword [rsp + 72], 2
-    jmp     .ihdr_methods
-.channels_3:
-    mov     dword [rsp + 72], 3
-.ihdr_methods:
-    cmp     byte [rdi + 10], PNG_METHOD_DEFLATE
-    jne     .unsupported
-    cmp     byte [rdi + 11], PNG_FILTER_STANDARD
-    jne     .unsupported
-    cmp     byte [rdi + 12], PNG_INTERLACE_NONE
-    jne     .unsupported
+    mov     edi, [rsp + 76 + PNG_CHUNK_INFO_DATA_OFF]
+    add     rdi, r12
+    lea     rsi, [rsp + 64]
+    call    er_png_parse_ihdr
+    test    edx, edx
+    jnz     .done
     or      r15d, 1
     jmp     .advance
 .idat:
@@ -2333,7 +3821,8 @@ er_fn er_image_decode_png_stored
     ja      .no_space
     mov     rdi, [rsp + 32]
     add     rdi, [rsp + 56]
-    lea     rsi, [r12 + rbx + PNG_CHUNK_HEADER_SIZE]
+    mov     esi, [rsp + 76 + PNG_CHUNK_INFO_DATA_OFF]
+    add     rsi, r12
     xor     edx, edx
 .copy_idat:
     cmp     edx, [rsp + 76]
@@ -2356,14 +3845,12 @@ er_fn er_image_decode_png_stored
     je      .corrupt
     cmp     dword [rsp + 76], 0
     jne     .corrupt
-    add     ebx, PNG_CHUNK_OVERHEAD
+    mov     ebx, [rsp + 76 + PNG_CHUNK_INFO_NEXT_OFF]
     cmp     ebx, r13d
     jne     .corrupt
     jmp     .inflate
 .advance:
-    add     ebx, PNG_CHUNK_OVERHEAD
-    add     ebx, [rsp + 76]
-    jc      .memory
+    mov     ebx, [rsp + 76 + PNG_CHUNK_INFO_NEXT_OFF]
     jmp     .chunk_loop
 .inflate:
     mov     eax, [rsp + 64]
@@ -2444,7 +3931,7 @@ er_fn er_image_decode_png_stored
 ; er_image_decode_png_header(buf, len, out_header) -> eax=IMAGE_HEADER_SIZE, rdx=error
 er_fn er_image_decode_png_header
     er_push rbx, r12, r13, r14, r15
-    er_stack_alloc 32
+    er_stack_alloc 48
     er_check_zero rdi, .invalid_param
     er_check_zero rdx, .invalid_param
     cmp     esi, PNG_SIGNATURE_SIZE + PNG_CHUNK_OVERHEAD + PNG_IHDR_SIZE + PNG_CHUNK_OVERHEAD + 1 + PNG_CHUNK_OVERHEAD
@@ -2460,35 +3947,13 @@ er_fn er_image_decode_png_header
     xor     r15d, r15d           ; flags: bit0 header, bit1 saw IDAT, bit2 closed IDAT
     mov     qword [rsp + 0], 0   ; idat_total
 .chunk_loop:
-    mov     eax, r13d
-    sub     eax, ebx
-    cmp     eax, PNG_CHUNK_OVERHEAD
-    jb      .corrupt
-    mov     eax, [r12 + rbx]
-    bswap   eax
-    mov     [rsp + 8], eax       ; length
-    lea     rdi, [r12 + rbx + PNG_LENGTH_SIZE]
-    call    er_png_validate_chunk_type
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     edx, ebx
+    lea     rcx, [rsp + 8]
+    call    er_png_read_chunk
     test    edx, edx
     jnz     .done
-    mov     eax, r13d
-    sub     eax, ebx
-    sub     eax, PNG_CHUNK_OVERHEAD
-    cmp     [rsp + 8], eax
-    ja      .corrupt
-    lea     rdi, [r12 + rbx + PNG_LENGTH_SIZE]
-    lea     rsi, [r12 + rbx + PNG_CHUNK_HEADER_SIZE]
-    mov     edx, [rsp + 8]
-    call    er_png_crc32
-    test    edx, edx
-    jnz     .done
-    mov     ecx, [rsp + 8]
-    lea     r10, [r12 + rbx]
-    mov     edx, [r10 + rcx + PNG_CHUNK_HEADER_SIZE]
-    bswap   edx
-    cmp     eax, edx
-    jne     .corrupt
-    mov     eax, [r12 + rbx + PNG_LENGTH_SIZE]
     cmp     eax, PNG_CHUNK_IHDR
     je      .ihdr
     cmp     eax, PNG_CHUNK_IDAT
@@ -2508,37 +3973,18 @@ er_fn er_image_decode_png_header
     jnz     .corrupt
     cmp     ebx, PNG_SIGNATURE_SIZE
     jne     .corrupt
-    cmp     dword [rsp + 8], PNG_IHDR_SIZE
+    cmp     dword [rsp + 8 + PNG_CHUNK_INFO_LEN_OFF], PNG_IHDR_SIZE
     jne     .corrupt
-    lea     rdi, [r12 + rbx + PNG_CHUNK_HEADER_SIZE]
-    mov     eax, [rdi + 0]
-    bswap   eax
-    test    eax, eax
-    jz      .corrupt
+    mov     edi, [rsp + 8 + PNG_CHUNK_INFO_DATA_OFF]
+    add     rdi, r12
+    lea     rsi, [rsp + 24]
+    call    er_png_parse_ihdr
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + 24 + PNG_INFO_WIDTH_OFF]
     mov     [r14 + IMAGE_HEADER_WIDTH], eax
-    mov     eax, [rdi + 4]
-    bswap   eax
-    test    eax, eax
-    jz      .corrupt
+    mov     eax, [rsp + 24 + PNG_INFO_HEIGHT_OFF]
     mov     [r14 + IMAGE_HEADER_HEIGHT], eax
-    cmp     byte [rdi + 8], PNG_BIT_DEPTH_U8
-    jne     .unsupported
-    movzx   eax, byte [rdi + 9]
-    cmp     eax, PNG_COLOR_GRAYSCALE
-    je      .ihdr_color_ok
-    cmp     eax, PNG_COLOR_RGB
-    je      .ihdr_color_ok
-    cmp     eax, PNG_COLOR_GRAYSCALE_ALPHA
-    je      .ihdr_color_ok
-    cmp     eax, PNG_COLOR_RGBA
-    jne     .unsupported
-.ihdr_color_ok:
-    cmp     byte [rdi + 10], PNG_METHOD_DEFLATE
-    jne     .unsupported
-    cmp     byte [rdi + 11], PNG_FILTER_STANDARD
-    jne     .unsupported
-    cmp     byte [rdi + 12], PNG_INTERLACE_NONE
-    jne     .unsupported
     or      r15d, 1
     jmp     .advance
 .idat:
@@ -2547,7 +3993,7 @@ er_fn er_image_decode_png_header
     test    r15d, 4
     jnz     .corrupt
     or      r15d, 2
-    mov     eax, [rsp + 8]
+    mov     eax, [rsp + 8 + PNG_CHUNK_INFO_LEN_OFF]
     add     [rsp + 0], rax
     jc      .memory
     jmp     .advance
@@ -2558,18 +4004,16 @@ er_fn er_image_decode_png_header
     jz      .corrupt
     cmp     qword [rsp + 0], 0
     je      .corrupt
-    cmp     dword [rsp + 8], 0
+    cmp     dword [rsp + 8 + PNG_CHUNK_INFO_LEN_OFF], 0
     jne     .corrupt
-    add     ebx, PNG_CHUNK_OVERHEAD
+    mov     ebx, [rsp + 8 + PNG_CHUNK_INFO_NEXT_OFF]
     cmp     ebx, r13d
     jne     .corrupt
     mov     eax, IMAGE_HEADER_SIZE
     er_ok
     jmp     .done
 .advance:
-    add     ebx, PNG_CHUNK_OVERHEAD
-    add     ebx, [rsp + 8]
-    jc      .memory
+    mov     ebx, [rsp + 8 + PNG_CHUNK_INFO_NEXT_OFF]
     jmp     .chunk_loop
 .invalid_param:
     xor     eax, eax
@@ -2587,103 +4031,37 @@ er_fn er_image_decode_png_header
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
-    er_stack_free 32
+    er_stack_free 48
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_image_decode_jpeg_header(buf, len, out_header) -> eax=IMAGE_HEADER_SIZE, rdx=error
 er_fn er_image_decode_jpeg_header
     er_push rbx, r12, r13
+    sub     rsp, JPEG_STATE_SIZE + 16
     er_check_zero rdi, .invalid_param
     er_check_zero rdx, .invalid_param
-    cmp     esi, 4
-    jb      .corrupt
-    cmp     byte [rdi], JPEG_MARKER_PREFIX
-    jne     .unsupported
-    cmp     byte [rdi + 1], JPEG_MARKER_SOI
-    jne     .unsupported
-    mov     r12, rdi
+    mov     rbx, rdi
+    mov     r12d, esi
     mov     r13, rdx
-    mov     ebx, 2
-.marker_loop:
-    cmp     ebx, esi
-    jae     .corrupt
-.scan_prefix:
-    cmp     ebx, esi
-    jae     .corrupt
-    cmp     byte [r12 + rbx], JPEG_MARKER_PREFIX
-    je      .skip_prefix
-    inc     ebx
-    jmp     .scan_prefix
-.skip_prefix:
-    cmp     ebx, esi
-    jae     .corrupt
-    cmp     byte [r12 + rbx], JPEG_MARKER_PREFIX
-    jne     .have_marker
-    inc     ebx
-    jmp     .skip_prefix
-.have_marker:
-    cmp     ebx, esi
-    jae     .corrupt
-    movzx   eax, byte [r12 + rbx]
-    inc     ebx
-    test    eax, eax
-    jz      .corrupt
-    cmp     eax, JPEG_MARKER_SOF0
-    je      .sof0
-    cmp     eax, JPEG_MARKER_SOF2
-    je      .unsupported
-    cmp     eax, JPEG_MARKER_SOS
-    je      .corrupt
-    cmp     eax, JPEG_MARKER_RST0
-    jb      .skip_segment
-    cmp     eax, JPEG_MARKER_RST7
-    jbe     .corrupt
-.skip_segment:
-    mov     edx, esi
-    sub     edx, ebx
-    cmp     edx, 2
-    jb      .corrupt
-    movzx   edx, word [r12 + rbx]
-    xchg    dl, dh
-    cmp     edx, 2
-    jb      .corrupt
-    mov     ecx, esi
-    sub     ecx, ebx
-    cmp     edx, ecx
-    ja      .corrupt
-    add     ebx, edx
-    jmp     .marker_loop
-.sof0:
-    mov     edx, esi
-    sub     edx, ebx
-    cmp     edx, 8
-    jb      .corrupt
-    movzx   edx, word [r12 + rbx]
-    xchg    dl, dh
-    cmp     edx, 8
-    jb      .corrupt
-    mov     ecx, esi
-    sub     ecx, ebx
-    cmp     edx, ecx
-    ja      .corrupt
-    cmp     byte [r12 + rbx + 2], JPEG_PRECISION_8
-    jne     .unsupported
-    movzx   ecx, word [r12 + rbx + 3]
-    xchg    cl, ch
-    test    ecx, ecx
-    jz      .corrupt
-    movzx   eax, word [r12 + rbx + 5]
-    xchg    al, ah
-    test    eax, eax
-    jz      .corrupt
-    movzx   edx, byte [r12 + rbx + 7]
+    mov     rdi, rsp
+    call    er_jpeg_state_init
     test    edx, edx
-    jz      .corrupt
-    cmp     edx, JPEG_MAX_COMPONENTS
-    ja      .unsupported
+    jnz     .done
+    mov     rdi, rbx
+    mov     esi, r12d
+    mov     rdx, rsp
+    xor     ecx, ecx
+    lea     r8, [rsp + JPEG_STATE_SIZE]
+    call    er_jpeg_parse
+    test    edx, edx
+    jnz     .done
+    cmp     dword [rsp + JPEG_STATE_HAVE_FRAME_OFF], 1
+    jne     .corrupt
+    mov     eax, [rsp + JPEG_STATE_WIDTH_OFF]
     mov     [r13 + IMAGE_HEADER_WIDTH], eax
-    mov     [r13 + IMAGE_HEADER_HEIGHT], ecx
+    mov     eax, [rsp + JPEG_STATE_HEIGHT_OFF]
+    mov     [r13 + IMAGE_HEADER_HEIGHT], eax
     mov     eax, IMAGE_HEADER_SIZE
     er_ok
     jmp     .done
@@ -2699,6 +4077,7 @@ er_fn er_image_decode_jpeg_header
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
+    add     rsp, JPEG_STATE_SIZE + 16
     er_pop  rbx, r12, r13
     er_ret
 

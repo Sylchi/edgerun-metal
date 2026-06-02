@@ -16,6 +16,7 @@
 SYS_read       equ 0
 SYS_write      equ 1
 SYS_open       equ 2
+SYS_close      equ 3
 SYS_mkdir      equ 83
 SYS_fork       equ 57
 SYS_execve     equ 59
@@ -25,19 +26,25 @@ SYS_exit_group equ 231
 STDOUT_FD equ 1
 STDERR_FD equ 2
 O_RDONLY  equ 0
+O_WRONLY_CREAT_TRUNC equ 577
 DIR_MODE_0755 equ 0755o
+FILE_MODE_0644 equ 0644o
 
 OBJECT_HEADER_SIZE equ 148
 OBJECT_BUF_SIZE    equ 1048576
 OBJECT_KIND_BYTES  equ 1
 OBJECT_VERSION     equ 1
+ASM_EROBJ_SUFFIX_LEN equ 10
 
 section .bss
 object_buf: resb OBJECT_BUF_SIZE
+source_list_buf: resb OBJECT_BUF_SIZE
 byte_buf: resb 1
 wait_status: resd 1
 source_path_buf: resb 512
+source_object_path_buf: resb 512
 object_path_buf: resb 512
+binary_path_buf: resb 512
 stack_bottom: resb 65536
 stack_top:
 
@@ -165,26 +172,70 @@ cmd_host_tools:
     mov     eax, SYS_mkdir
     syscall
 
+    lea     rdi, [rel host_tools_path]
+    call    read_object
+    test    rax, rax
+    js      bad_object
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      bad_object
+    mov     eax, [rel object_buf + 32]
+    mov     edx, [rel object_buf + 36]
+    test    edx, edx
+    jnz     bad_object
+    lea     rdi, [rel source_list_buf]
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rdx, rax
+    call    copy_bytes
+    mov     eax, [rel object_buf + 32]
+    lea     r12, [rel source_list_buf]
+    lea     r13, [r12 + rax]
+.tool_loop:
+    cmp     r12, r13
+    jae     .tools_done
+    lea     rdi, [rel source_object_path_buf]
+    mov     rsi, r12
+    mov     rdx, r13
+    call    copy_field
+    mov     r12, rax
+    lea     rdi, [rel object_path_buf]
+    mov     rsi, r12
+    mov     rdx, r13
+    call    copy_field
+    mov     r12, rax
+    lea     rdi, [rel binary_path_buf]
+    mov     rsi, r12
+    mov     rdx, r13
+    call    copy_field
+    mov     r12, rax
+
+    call    build_host_source_path
+    lea     rdi, [rel source_object_path_buf]
+    call    cstr_len
+    mov     rsi, rax
+    lea     rdi, [rel source_object_path_buf]
+    lea     rdx, [rel asm_erobj_suffix]
+    mov     ecx, ASM_EROBJ_SUFFIX_LEN
+    call    has_suffix
+    test    eax, eax
+    jz      .tool_assemble
+    lea     rdi, [rel source_object_path_buf]
+    lea     rsi, [rel source_path_buf]
+    call    write_object_body_file
+.tool_assemble:
     lea     rdi, [rel yasm_path]
-    lea     rsi, [rel argv_yasm_obj_body]
+    lea     rsi, [rel argv_yasm_host_tool]
     call    run_process
     test    eax, eax
     jnz     build_fail
     lea     rdi, [rel ld_path]
-    lea     rsi, [rel argv_ld_obj_body]
+    lea     rsi, [rel argv_ld_host_tool]
     call    run_process
     test    eax, eax
     jnz     build_fail
-    lea     rdi, [rel yasm_path]
-    lea     rsi, [rel argv_yasm_build]
-    call    run_process
-    test    eax, eax
-    jnz     build_fail
-    lea     rdi, [rel ld_path]
-    lea     rsi, [rel argv_ld_build]
-    call    run_process
-    test    eax, eax
-    jnz     build_fail
+    jmp     .tool_loop
+.tools_done:
     lea     rdi, [rel msg_host_tools_ok]
     call    print_cstr_stdout
     ret
@@ -195,6 +246,10 @@ cmd_x86_objects:
     mov     eax, SYS_mkdir
     syscall
     lea     rdi, [rel kernel_build_dir]
+    mov     esi, DIR_MODE_0755
+    mov     eax, SYS_mkdir
+    syscall
+    lea     rdi, [rel kernel_source_build_dir]
     mov     esi, DIR_MODE_0755
     mov     eax, SYS_mkdir
     syscall
@@ -212,7 +267,12 @@ cmd_x86_objects:
     mov     edx, [rel object_buf + 36]
     test    edx, edx
     jnz     bad_object
-    lea     r12, [rel object_buf + OBJECT_HEADER_SIZE]
+    lea     rdi, [rel source_list_buf]
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rdx, rax
+    call    copy_bytes
+    mov     eax, [rel object_buf + 32]
+    lea     r12, [rel source_list_buf]
     lea     r13, [r12 + rax]
 .line_loop:
     cmp     r12, r13
@@ -233,6 +293,14 @@ cmd_x86_objects:
     mov     rdi, r14
     mov     rsi, r15
     call    build_x86_paths
+    test    eax, eax
+    jz      .assemble
+    lea     rdi, [rel source_path_buf]
+    call    ensure_parent_dir
+    lea     rdi, [rel source_object_path_buf]
+    lea     rsi, [rel source_path_buf]
+    call    write_object_body_file
+.assemble:
     lea     rdi, [rel yasm_path]
     lea     rsi, [rel argv_yasm_x86_object]
     call    run_process
@@ -248,7 +316,58 @@ cmd_x86_objects:
     call    print_cstr_stdout
     ret
 
-; build_x86_paths(line_ptr, line_len)
+; build_host_source_path()
+build_host_source_path:
+    push    r12
+    push    r14
+    push    r15
+    lea     rdi, [rel source_object_path_buf]
+    call    cstr_len
+    mov     rsi, rax
+    lea     rdi, [rel source_object_path_buf]
+    lea     rdx, [rel asm_erobj_suffix]
+    mov     ecx, ASM_EROBJ_SUFFIX_LEN
+    call    has_suffix
+    test    eax, eax
+    jnz     .object_source
+    lea     rdi, [rel source_path_buf]
+    lea     rsi, [rel source_object_path_buf]
+    call    copy_cstr
+    jmp     .done
+.object_source:
+    lea     r12, [rel source_object_path_buf]
+    mov     r14, r12
+.base_scan:
+    mov     al, [r12]
+    test    al, al
+    jz      .base_found
+    cmp     al, '/'
+    jne     .base_next
+    lea     r14, [r12 + 1]
+.base_next:
+    inc     r12
+    jmp     .base_scan
+.base_found:
+    mov     r15, r12
+    sub     r15, r14
+    cmp     r15, ASM_EROBJ_SUFFIX_LEN
+    jbe     build_fail
+    sub     r15, 6
+    lea     rdi, [rel source_path_buf]
+    lea     rsi, [rel host_source_materialized_prefix]
+    call    copy_cstr
+    mov     rdi, rax
+    mov     rsi, r14
+    mov     rdx, r15
+    call    copy_bytes
+    mov     byte [rax], 0
+.done:
+    pop     r15
+    pop     r14
+    pop     r12
+    ret
+
+; build_x86_paths(line_ptr, line_len) -> eax=1 when source object was materialized
 build_x86_paths:
     push    rbx
     push    r12
@@ -257,12 +376,22 @@ build_x86_paths:
     push    r15
     mov     r12, rdi
     mov     r13, rsi
+    mov     r10, r12
+
+    lea     rdi, [rel source_object_path_buf]
+    lea     rsi, [rel x86_source_prefix]
+    call    copy_cstr
+    mov     rdi, rax
+    mov     rsi, r10
+    mov     rdx, r13
+    call    copy_bytes
+    mov     byte [rax], 0
 
     lea     rdi, [rel source_path_buf]
     lea     rsi, [rel x86_source_prefix]
     call    copy_cstr
     mov     rdi, rax
-    mov     rsi, r12
+    mov     rsi, r10
     mov     rdx, r13
     call    copy_bytes
     mov     byte [rax], 0
@@ -282,10 +411,32 @@ build_x86_paths:
 .base_found:
     mov     r15, rbx
     sub     r15, r14
+    xor     r11d, r11d
+    mov     rdi, r10
+    mov     rsi, r13
+    lea     rdx, [rel asm_erobj_suffix]
+    mov     ecx, ASM_EROBJ_SUFFIX_LEN
+    call    has_suffix
+    test    eax, eax
+    jz      .plain_source
+    sub     r15, 10
+    mov     r11d, 1
+    lea     rdi, [rel source_path_buf]
+    lea     rsi, [rel x86_source_materialized_prefix]
+    call    copy_cstr
+    mov     rdi, rax
+    mov     rsi, r10
+    mov     rdx, r13
+    sub     rdx, 6
+    call    copy_bytes
+    mov     byte [rax], 0
+    jmp     .object_path
+.plain_source:
     cmp     r15, 4
     jb      build_fail
     sub     r15, 4
 
+.object_path:
     lea     rdi, [rel object_path_buf]
     lea     rsi, [rel x86_object_prefix]
     call    copy_cstr
@@ -297,6 +448,7 @@ build_x86_paths:
     lea     rsi, [rel object_suffix]
     call    copy_cstr
 
+    mov     eax, r11d
     pop     r15
     pop     r14
     pop     r13
@@ -331,6 +483,84 @@ copy_bytes:
     jnz     .loop
 .done:
     mov     rax, rdi
+    ret
+
+; copy_field(dst, ptr, end) -> rax=next ptr after '|' or newline
+copy_field:
+    push    r12
+    mov     r12, rdx
+.loop:
+    cmp     rsi, r12
+    jae     .finish
+    mov     al, [rsi]
+    inc     rsi
+    cmp     al, '|'
+    je      .finish
+    cmp     al, 10
+    je      .finish
+    mov     [rdi], al
+    inc     rdi
+    jmp     .loop
+.finish:
+    mov     byte [rdi], 0
+    mov     rax, rsi
+    pop     r12
+    ret
+
+; has_suffix(buf, len, suffix, suffix_len) -> eax=1 when matched
+has_suffix:
+    cmp     rsi, rcx
+    jb      .no
+    add     rdi, rsi
+    sub     rdi, rcx
+.loop:
+    test    rcx, rcx
+    jz      .yes
+    mov     al, [rdi]
+    cmp     al, [rdx]
+    jne     .no
+    inc     rdi
+    inc     rdx
+    dec     rcx
+    jmp     .loop
+.yes:
+    mov     eax, 1
+    ret
+.no:
+    xor     eax, eax
+    ret
+
+; ensure_parent_dir(path)
+ensure_parent_dir:
+    push    r12
+    push    r13
+    push    r14
+    mov     r14, rdi
+    mov     r12, rdi
+    xor     r13d, r13d
+.scan:
+    mov     al, [r12]
+    test    al, al
+    jz      .ready
+    cmp     al, '/'
+    jne     .next
+    mov     r13, r12
+.next:
+    inc     r12
+    jmp     .scan
+.ready:
+    test    r13, r13
+    jz      .done
+    mov     byte [r13], 0
+    mov     rdi, r14
+    mov     esi, DIR_MODE_0755
+    mov     eax, SYS_mkdir
+    syscall
+    mov     byte [r13], '/'
+.done:
+    pop     r14
+    pop     r13
+    pop     r12
     ret
 
 ; run_process(path, argv) -> eax=0 on clean exit, 1 otherwise
@@ -432,6 +662,47 @@ write_object_body:
     mov     edi, STDOUT_FD
     mov     eax, SYS_write
     syscall
+    ret
+
+; write_object_body_file(object_path, output_path)
+write_object_body_file:
+    push    r12
+    push    r13
+    mov     r13, rsi
+    call    read_object
+    test    rax, rax
+    js      bad_object
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      bad_object
+    mov     eax, [rel object_buf + 32]
+    mov     edx, [rel object_buf + 36]
+    test    edx, edx
+    jnz     bad_object
+    mov     r12, rax
+    mov     rdi, r13
+    mov     esi, O_WRONLY_CREAT_TRUNC
+    mov     edx, FILE_MODE_0644
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r13, rax
+    mov     rdi, r13
+    lea     rsi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rdx, r12
+    mov     eax, SYS_write
+    syscall
+    cmp     rax, r12
+    jne     build_fail
+    mov     rdi, r13
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+    pop     r13
+    pop     r12
     ret
 
 write_registry_test_list:
@@ -630,6 +901,7 @@ app_test_roots_path: db "app/test_roots.erobj", 0
 app_build_steps_path: db "app/build_steps.erobj", 0
 help_top_path: db "docs/build-help-top.erobj", 0
 help_bottom_path: db "docs/build-help-bottom.erobj", 0
+host_tools_path: db "kernel/host/host_tools.erobj", 0
 test_list_header: db "target", 9, "category", 9, "subsystem", 9, "default", 9, "description", 10, 0
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
@@ -637,7 +909,7 @@ help_meta_close: db "] ", 0
 msg_usage: db "usage: er_build help|test-list|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|x86-objects", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
-msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_build.next", 10, 0
+msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next", 10, 0
 msg_x86_objects_ok: db "x86-objects: .build/kernel/kernel_*.o", 10, 0
 build_dir: db ".build", 0
 host_build_dir: db ".build/host", 0
@@ -654,18 +926,14 @@ arg_o: db "-o", 0
 arg_elf32: db "elf32", 0
 arg_nostdlib: db "-nostdlib", 0
 arg_static: db "-static", 0
-obj_body_src: db "kernel/host/er_obj_body.asm", 0
-obj_body_o: db ".build/host/er_obj_body.o", 0
-obj_body_bin: db ".build/host/er_obj_body", 0
-er_build_src: db "kernel/host/er_build.asm", 0
-er_build_o: db ".build/host/er_build.next.o", 0
-er_build_bin: db ".build/host/er_build.next", 0
+asm_erobj_suffix: db ".asm.erobj"
 x86_source_prefix: db "kernel/x86_64/", 0
+x86_source_materialized_prefix: db ".build/kernel/source/", 0
+host_source_materialized_prefix: db ".build/host/", 0
 x86_object_prefix: db ".build/kernel/kernel_", 0
 object_suffix: db ".o", 0
+kernel_source_build_dir: db ".build/kernel/source", 0
 null_env: dq 0
-argv_yasm_obj_body: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, obj_body_o, obj_body_src, 0
-argv_ld_obj_body: dq arg_ld, arg_nostdlib, arg_static, arg_o, obj_body_bin, obj_body_o, 0
-argv_yasm_build: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, er_build_o, er_build_src, 0
-argv_ld_build: dq arg_ld, arg_nostdlib, arg_static, arg_o, er_build_bin, er_build_o, 0
+argv_yasm_host_tool: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
+argv_ld_host_tool: dq arg_ld, arg_nostdlib, arg_static, arg_o, binary_path_buf, object_path_buf, 0
 argv_yasm_x86_object: dq arg_yasm, arg_f, arg_elf32, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0

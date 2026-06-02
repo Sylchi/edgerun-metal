@@ -279,6 +279,8 @@ tok_rbx: db "rbx"
 tok_rbx_len equ $ - tok_rbx
 tok_rbp: db "rbp"
 tok_rbp_len equ $ - tok_rbp
+tok_ebp: db "ebp"
+tok_ebp_len equ $ - tok_ebp
 tok_rsp: db "rsp"
 tok_rsp_len equ $ - tok_rsp
 tok_r8: db "r8"
@@ -301,6 +303,16 @@ tok_r10d: db "r10d"
 tok_r10d_len equ $ - tok_r10d
 tok_r10b: db "r10b"
 tok_r10b_len equ $ - tok_r10b
+tok_r11b: db "r11b"
+tok_r11b_len equ $ - tok_r11b
+tok_r12b: db "r12b"
+tok_r12b_len equ $ - tok_r12b
+tok_r13b: db "r13b"
+tok_r13b_len equ $ - tok_r13b
+tok_r14b: db "r14b"
+tok_r14b_len equ $ - tok_r14b
+tok_r15b: db "r15b"
+tok_r15b_len equ $ - tok_r15b
 tok_r11: db "r11"
 tok_r11_len equ $ - tok_r11
 tok_r11d: db "r11d"
@@ -317,6 +329,8 @@ tok_r14: db "r14"
 tok_r14_len equ $ - tok_r14
 tok_r14d: db "r14d"
 tok_r14d_len equ $ - tok_r14d
+tok_r15d: db "r15d"
+tok_r15d_len equ $ - tok_r15d
 tok_r15: db "r15"
 tok_r15_len equ $ - tok_r15
 tok_ax: db "ax"
@@ -373,6 +387,8 @@ tok_mem_r15: db "[r15]"
 tok_mem_r15_len equ $ - tok_mem_r15
 tok_mem_rbx: db "[rbx]"
 tok_mem_rbx_len equ $ - tok_mem_rbx
+tok_mem_rsp: db "[rsp]"
+tok_mem_rsp_len equ $ - tok_mem_rsp
 tok_mem_ebda_seg_ptr: db "[EBDA_SEG_PTR]"
 tok_mem_ebda_seg_ptr_len equ $ - tok_mem_ebda_seg_ptr
 tok_mem_r12_open: db "[r12"
@@ -393,6 +409,8 @@ tok_minus: db "-"
 tok_minus_len equ $ - tok_minus
 tok_rcx_close: db "rcx]"
 tok_rcx_close_len equ $ - tok_rcx_close
+tok_rbx_close: db "rbx]"
+tok_rbx_close_len equ $ - tok_rbx_close
 tok_rdx_close: db "rdx]"
 tok_rdx_close_len equ $ - tok_rdx_close
 tok_r8_close: db "r8]"
@@ -449,6 +467,8 @@ tok_error_no_data: db "ERROR_NO_DATA"
 tok_error_no_data_len equ $ - tok_error_no_data
 tok_error_timeout: db "ERROR_TIMEOUT"
 tok_error_timeout_len equ $ - tok_error_timeout
+tok_error_not_present: db "ERROR_NOT_PRESENT"
+tok_error_not_present_len equ $ - tok_error_not_present
 tok_er_in_al_dx_sym: db "er_in_al_dx"
 tok_er_in_al_dx_sym_len equ $ - tok_er_in_al_dx_sym
 tok_er_out_dx_al_sym: db "er_out_dx_al"

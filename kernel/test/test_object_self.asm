@@ -17,10 +17,16 @@ extern er_object_envelope_encode
 extern er_object_envelope_decode
 extern er_object_envelope_validate
 extern er_object_view_decode
+extern er_object_write_bytes_node
+extern er_object_write_bytes_node_owned
+extern er_object_write_tree_node
+extern er_object_write_tree_node_owned
 
 OBJECT_VIEW_SIZE equ 148
 CANONICAL_BYTES_LEN equ OBJECT_HEADER_SIZE + 5
 CANONICAL_OWNED_LEN equ OBJECT_HEADER_SIZE + OBJECT_OWNER_SIZE + OBJECT_ENVELOPE_SIZE + 7
+CANONICAL_TREE_LEN equ OBJECT_HEADER_SIZE + OBJECT_CHILD_SIZE
+CANONICAL_OWNED_TREE_LEN equ OBJECT_HEADER_SIZE + OBJECT_OWNER_SIZE + OBJECT_ENVELOPE_SIZE + OBJECT_CHILD_SIZE
 
 SECTION .bss
 TEST_BSS_PASSED_FAILED
@@ -42,6 +48,8 @@ envelope_decoded: resb ENVELOPE_STRUCT_SIZE
 view: resb OBJECT_VIEW_SIZE
 canonical_bytes: resb CANONICAL_BYTES_LEN
 canonical_owned: resb CANONICAL_OWNED_LEN
+canonical_tree: resb CANONICAL_TREE_LEN
+canonical_owned_tree: resb CANONICAL_OWNED_TREE_LEN
 
 SECTION .data
 keeper_stamp:
@@ -171,6 +179,16 @@ _start:
     call    er_object_envelope_validate
     ASSERT_RAX 1
     ASSERT_RDX 0
+
+    mov     word [rel envelope_struct + ENVELOPE_STRUCT_ALGORITHM], OBJECT_ALGORITHM_XCHACHA20_POLY1305
+    lea     rdi, [rel envelope_raw]
+    lea     rsi, [rel envelope_struct]
+    lea     rdx, [rel owner_struct]
+    call    er_object_envelope_encode
+    ASSERT_RAX 1
+    ASSERT_RDX 0
+    mov     word [rel envelope_struct + ENVELOPE_STRUCT_ALGORITHM], OBJECT_ALGORITHM_AES_GCM_256
+
     mov     dword [rel owner_struct + OWNER_STRUCT_KIND], OBJECT_OWNER_KIND_USER
     lea     rdi, [rel envelope_raw]
     lea     rsi, [rel envelope_struct]
@@ -182,10 +200,14 @@ _start:
 
     call    fill_header_bytes
     lea     rdi, [rel canonical_bytes]
-    lea     rsi, [rel header_struct]
-    call    er_object_header_encode
-    ASSERT_RAX 1
-    call    copy_hello_body
+    mov     esi, CANONICAL_BYTES_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel body_hello]
+    mov     r9d, 5
+    call    er_object_write_bytes_node
+    ASSERT_RAX CANONICAL_BYTES_LEN
+    ASSERT_RDX 0
     lea     rdi, [rel canonical_bytes]
     mov     esi, CANONICAL_BYTES_LEN
     lea     rdx, [rel view]
@@ -194,22 +216,36 @@ _start:
     ASSERT_RDX 0
     ASSERT_QWORD [rel view + 8], 5
 
+    lea     rdi, [rel canonical_bytes]
+    mov     esi, CANONICAL_BYTES_LEN - 1
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel body_hello]
+    mov     r9d, 5
+    call    er_object_write_bytes_node
+    ASSERT_RAX 0
+    ASSERT_RDX OBJECT_ERR_NO_SPACE
+
     call    fill_header_owned
-    lea     rdi, [rel canonical_owned]
-    lea     rsi, [rel header_struct]
-    call    er_object_header_encode
-    ASSERT_RAX 1
-    lea     rdi, [rel canonical_owned + OBJECT_HEADER_SIZE]
-    lea     rsi, [rel owner_struct]
-    call    er_object_owner_encode
-    ASSERT_RAX 1
     call    fill_envelope
-    lea     rdi, [rel canonical_owned + OBJECT_HEADER_SIZE + OBJECT_OWNER_SIZE]
-    lea     rsi, [rel envelope_struct]
-    lea     rdx, [rel owner_struct]
-    call    er_object_envelope_encode
-    ASSERT_RAX 1
-    call    copy_payload_body
+    lea     rax, [rel envelope_struct]
+    mov     ecx, 1
+    push    rcx
+    push    rax
+    mov     eax, 7
+    push    rax
+    lea     rax, [rel body_payload]
+    push    rax
+    lea     rdi, [rel canonical_owned]
+    mov     esi, CANONICAL_OWNED_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel owner_struct]
+    mov     r9d, 1
+    call    er_object_write_bytes_node_owned
+    add     rsp, 32
+    ASSERT_RAX CANONICAL_OWNED_LEN
+    ASSERT_RDX 0
     lea     rdi, [rel canonical_owned]
     mov     esi, CANONICAL_OWNED_LEN
     lea     rdx, [rel view]
@@ -217,6 +253,111 @@ _start:
     ASSERT_RAX 1
     ASSERT_RDX 0
     ASSERT_QWORD [rel view + 8], 7
+
+    call    fill_envelope
+    mov     dword [rel envelope_struct + ENVELOPE_STRUCT_KIND], OBJECT_ENVELOPE_KIND_USER
+    mov     dword [rel owner_struct + OWNER_STRUCT_KIND], OBJECT_OWNER_KIND_APP
+    ASSERT_DWORD [rel envelope_struct + ENVELOPE_STRUCT_KIND], OBJECT_ENVELOPE_KIND_USER
+    ASSERT_DWORD [rel owner_struct + OWNER_STRUCT_KIND], OBJECT_OWNER_KIND_APP
+    lea     rdi, [rel envelope_raw]
+    lea     rsi, [rel envelope_struct]
+    lea     rdx, [rel owner_struct]
+    call    er_object_envelope_encode
+    ASSERT_RAX 0
+    ASSERT_RDX OBJECT_ERR_BAD_ARGUMENT
+    lea     rax, [rel envelope_struct]
+    mov     ecx, 1
+    push    rcx
+    push    rax
+    mov     eax, 7
+    push    rax
+    lea     rax, [rel body_payload]
+    push    rax
+    lea     rdi, [rel canonical_owned]
+    mov     esi, CANONICAL_OWNED_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel owner_struct]
+    mov     r9d, 1
+    call    er_object_write_bytes_node_owned
+    add     rsp, 32
+    ASSERT_RAX 0
+    ASSERT_RDX OBJECT_ERR_BAD_ARGUMENT
+
+    call    fill_child
+    lea     rdi, [rel canonical_tree]
+    mov     esi, CANONICAL_TREE_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel child_struct]
+    mov     r9d, 1
+    call    er_object_write_tree_node
+    ASSERT_RAX CANONICAL_TREE_LEN
+    ASSERT_RDX 0
+    lea     rdi, [rel canonical_tree]
+    lea     rsi, [rel header_decoded]
+    call    er_object_header_decode
+    ASSERT_RAX 1
+    ASSERT_RDX 0
+    ASSERT_WORD [rel header_decoded + HEADER_STRUCT_KIND], OBJECT_KIND_TREE
+    ASSERT_QWORD [rel header_decoded + HEADER_STRUCT_LOGICAL_LEN], 10
+    ASSERT_DWORD [rel header_decoded + HEADER_STRUCT_CHILD_COUNT], 1
+    lea     rdi, [rel canonical_tree + OBJECT_HEADER_SIZE]
+    xor     esi, esi
+    lea     rdx, [rel child_decoded]
+    call    er_object_child_decode
+    ASSERT_RAX 1
+    ASSERT_RDX 0
+    ASSERT_QWORD [rel child_decoded + CHILD_STRUCT_LOGICAL_LEN], 10
+    lea     rdi, [rel canonical_tree]
+    mov     esi, CANONICAL_TREE_LEN
+    lea     rdx, [rel view]
+    call    er_object_view_decode
+    ASSERT_RAX 1
+    ASSERT_RDX 0
+    ASSERT_WORD [rel view + 16 + HEADER_STRUCT_KIND], OBJECT_KIND_TREE
+    ASSERT_QWORD [rel view + 16 + HEADER_STRUCT_LOGICAL_LEN], 10
+    ASSERT_QWORD [rel view + 8], 0
+
+    mov     qword [rel child_struct + CHILD_STRUCT_LOGICAL_OFFSET], 1
+    lea     rdi, [rel canonical_tree]
+    mov     esi, CANONICAL_TREE_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel child_struct]
+    mov     r9d, 1
+    call    er_object_write_tree_node
+    ASSERT_RAX 0
+    ASSERT_RDX OBJECT_ERR_BAD_ARGUMENT
+    mov     qword [rel child_struct + CHILD_STRUCT_LOGICAL_OFFSET], 0
+
+    call    fill_envelope
+    lea     rax, [rel envelope_struct]
+    mov     ecx, 1
+    push    rcx
+    push    rax
+    mov     eax, 1
+    push    rax
+    lea     rax, [rel child_struct]
+    push    rax
+    lea     rdi, [rel canonical_owned_tree]
+    mov     esi, CANONICAL_OWNED_TREE_LEN
+    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
+    lea     rcx, [rel keeper_stamp]
+    lea     r8, [rel owner_struct]
+    mov     r9d, 1
+    call    er_object_write_tree_node_owned
+    add     rsp, 32
+    ASSERT_RAX CANONICAL_OWNED_TREE_LEN
+    ASSERT_RDX 0
+    lea     rdi, [rel canonical_owned_tree]
+    mov     esi, CANONICAL_OWNED_TREE_LEN
+    lea     rdx, [rel view]
+    call    er_object_view_decode
+    ASSERT_RAX 1
+    ASSERT_RDX 0
+    ASSERT_WORD [rel view + 16 + HEADER_STRUCT_KIND], OBJECT_KIND_TREE
+    ASSERT_QWORD [rel view + 16 + HEADER_STRUCT_LOGICAL_LEN], 10
 
     TEST_EXIT_FAILED
 

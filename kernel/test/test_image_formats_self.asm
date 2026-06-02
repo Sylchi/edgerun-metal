@@ -16,6 +16,31 @@ extern er_image_decode_png_header
 extern er_image_decode_tga_header
 extern er_image_decode_tga
 extern er_image_encode_tga_rgba
+extern er_jpeg_bit_reader_init
+extern er_jpeg_read_bit
+extern er_jpeg_read_bits
+extern er_jpeg_consume_marker
+extern er_jpeg_consume_restart
+extern er_jpeg_consume_eoi
+extern er_jpeg_build_huffman_table
+extern er_jpeg_huffman_decode
+extern er_jpeg_receive_extend
+extern er_jpeg_decode_block
+extern er_jpeg_clamp_u8
+extern er_jpeg_gray_color
+extern er_jpeg_ycbcr_color
+extern er_jpeg_idct_sample
+extern er_jpeg_sample_component
+extern er_jpeg_state_init
+extern er_jpeg_parse_dqt
+extern er_jpeg_parse_sof0
+extern er_jpeg_parse_dht
+extern er_jpeg_parse_sos
+extern er_jpeg_parse_dri
+extern er_jpeg_parse
+extern er_jpeg_decode_scan_gray
+extern er_image_decode_jpeg
+extern er_jpeg_reset_dc
 extern er_image_runtime_payload_len
 extern er_image_runtime_canonical_len
 extern er_image_runtime_encode_rgba
@@ -36,6 +61,20 @@ decoded_erimg: resd 6
 png_pixels: resd 4
 inflate_out: resb 128
 png_scratch: resb 64
+jpeg_reader: resb JPEG_BIT_READER_SIZE
+jpeg_huff: resb JPEG_HUFF_TABLE_SIZE
+jpeg_huff_ac: resb JPEG_HUFF_TABLE_SIZE
+jpeg_quant: resw JPEG_BLOCK_LEN
+jpeg_block: resw JPEG_BLOCK_LEN
+jpeg_component_blocks: resw JPEG_MAX_COMPONENT_BLOCKS * JPEG_BLOCK_LEN
+jpeg_prev_dc: resw 1
+jpeg_state: resb JPEG_STATE_SIZE
+jpeg_scan_offset: resq 1
+jpeg_scan_scratch: resb JPEG_SCAN_SCRATCH_SIZE
+jpeg_scan_pixels: resd 1
+jpeg_decode_scratch: resb JPEG_DECODE_SCRATCH_SIZE
+jpeg_decode_pixels: resd 1
+jpeg_restart_pixels: resd 9
 
 SECTION .data
 jpeg_minimal:
@@ -224,6 +263,207 @@ bad_bytes:
     db 'n', 'o', 't', '-', 'i', 'm', 'a', 'g', 'e'
 bad_bytes_len equ $ - bad_bytes
 
+jpeg_entropy_stuffed:
+    db 0xa5, 0xff, 0x00
+jpeg_entropy_stuffed_len equ $ - jpeg_entropy_stuffed
+
+jpeg_entropy_marker:
+    db 0xff, JPEG_MARKER_EOI
+jpeg_entropy_marker_len equ $ - jpeg_entropy_marker
+
+jpeg_restart_marker:
+    db 0xff, 0xff, JPEG_MARKER_RST3
+jpeg_restart_marker_len equ $ - jpeg_restart_marker
+
+jpeg_eoi_marker:
+    db 0xff, JPEG_MARKER_EOI
+jpeg_eoi_marker_len equ $ - jpeg_eoi_marker
+
+jpeg_huff_counts:
+    db 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+jpeg_huff_values:
+    db 0x11, 0x22, 0x33
+jpeg_huff_values_len equ $ - jpeg_huff_values
+jpeg_huff_bits:
+    db 0x18
+jpeg_huff_bits_len equ $ - jpeg_huff_bits
+
+jpeg_receive_negative_bits:
+    db 0x20
+jpeg_receive_negative_bits_len equ $ - jpeg_receive_negative_bits
+
+jpeg_dc_counts:
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+jpeg_dc_values:
+    db 2
+jpeg_dc_values_len equ $ - jpeg_dc_values
+jpeg_ac_counts:
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+jpeg_ac_values:
+    db 0
+jpeg_ac_values_len equ $ - jpeg_ac_values
+jpeg_block_bits:
+    db 0x60
+jpeg_block_bits_len equ $ - jpeg_block_bits
+
+jpeg_dqt_payload:
+    db 0x02
+    db 5, 6, 7, 8, 9, 10, 11, 12
+    db 13, 14, 15, 16, 17, 18, 19, 20
+    db 21, 22, 23, 24, 25, 26, 27, 28
+    db 29, 30, 31, 32, 33, 34, 35, 36
+    db 37, 38, 39, 40, 41, 42, 43, 44
+    db 45, 46, 47, 48, 49, 50, 51, 52
+    db 53, 54, 55, 56, 57, 58, 59, 60
+    db 61, 62, 63, 64, 65, 66, 67, 68
+jpeg_dqt_payload_len equ $ - jpeg_dqt_payload
+
+jpeg_sof0_payload:
+    db JPEG_PRECISION_8
+    db 0x00, 0x03
+    db 0x00, 0x02
+    db 0x03
+    db 0x01, 0x21, 0x00
+    db 0x02, 0x11, 0x01
+    db 0x03, 0x11, 0x02
+jpeg_sof0_payload_len equ $ - jpeg_sof0_payload
+
+jpeg_dht_payload:
+    db 0x01
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x02
+    db 0x12
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+jpeg_dht_payload_len equ $ - jpeg_dht_payload
+
+jpeg_sos_payload:
+    db 0x03
+    db 0x01, 0x12
+    db 0x02, 0x12
+    db 0x03, 0x12
+    db 0x00, 0x3f, 0x00
+jpeg_sos_payload_len equ $ - jpeg_sos_payload
+
+jpeg_dri_payload:
+    db 0x00, 0x04
+jpeg_dri_payload_len equ $ - jpeg_dri_payload
+
+jpeg_parse_fixture:
+    db 0xff, JPEG_MARKER_SOI
+    db 0xff, 0xdb
+    db 0x00, 0x43
+    db 0x02
+    db 5, 6, 7, 8, 9, 10, 11, 12
+    db 13, 14, 15, 16, 17, 18, 19, 20
+    db 21, 22, 23, 24, 25, 26, 27, 28
+    db 29, 30, 31, 32, 33, 34, 35, 36
+    db 37, 38, 39, 40, 41, 42, 43, 44
+    db 45, 46, 47, 48, 49, 50, 51, 52
+    db 53, 54, 55, 56, 57, 58, 59, 60
+    db 61, 62, 63, 64, 65, 66, 67, 68
+    db 0xff, 0xc4
+    db 0x00, 0x26
+    db 0x01
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x02
+    db 0x12
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+    db 0xff, JPEG_MARKER_SOF0
+    db 0x00, 0x11
+    db JPEG_PRECISION_8
+    db 0x00, 0x03
+    db 0x00, 0x02
+    db 0x03
+    db 0x01, 0x21, 0x00
+    db 0x02, 0x11, 0x01
+    db 0x03, 0x11, 0x02
+    db 0xff, JPEG_MARKER_SOS
+    db 0x00, 0x0c
+    db 0x03
+    db 0x01, 0x12
+    db 0x02, 0x12
+    db 0x03, 0x12
+    db 0x00, 0x3f, 0x00
+    db 0xff, JPEG_MARKER_EOI
+jpeg_parse_fixture_len equ $ - jpeg_parse_fixture
+jpeg_parse_fixture_scan_offset equ jpeg_parse_fixture_len - 2
+
+jpeg_gray_dqt_payload:
+    db 0x00
+    times 64 db 1
+jpeg_gray_dqt_payload_len equ $ - jpeg_gray_dqt_payload
+
+jpeg_gray_dht_payload:
+    db 0x00
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x07
+    db 0x10
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+jpeg_gray_dht_payload_len equ $ - jpeg_gray_dht_payload
+
+jpeg_gray_sof0_payload:
+    db JPEG_PRECISION_8
+    db 0x00, 0x01
+    db 0x00, 0x01
+    db 0x01
+    db 0x01, 0x11, 0x00
+jpeg_gray_sof0_payload_len equ $ - jpeg_gray_sof0_payload
+
+jpeg_gray_sof0_w9_payload:
+    db JPEG_PRECISION_8
+    db 0x00, 0x01
+    db 0x00, 0x09
+    db 0x01
+    db 0x01, 0x11, 0x00
+jpeg_gray_sof0_w9_payload_len equ $ - jpeg_gray_sof0_w9_payload
+
+jpeg_gray_sos_payload:
+    db 0x01
+    db 0x01, 0x00
+    db 0x00, 0x3f, 0x00
+jpeg_gray_sos_payload_len equ $ - jpeg_gray_sos_payload
+
+jpeg_gray_scan:
+    db 0x50, 0x00, 0xff, JPEG_MARKER_EOI
+jpeg_gray_scan_len equ $ - jpeg_gray_scan
+
+jpeg_gray_restart_scan:
+    db 0x50, 0x00, 0xff, JPEG_MARKER_RST0
+    db 0x50, 0x00, 0xff, JPEG_MARKER_EOI
+jpeg_gray_restart_scan_len equ $ - jpeg_gray_restart_scan
+
+jpeg_gray_full:
+    db 0xff, JPEG_MARKER_SOI
+    db 0xff, 0xdb
+    db 0x00, 0x43
+    db 0x00
+    times 64 db 1
+    db 0xff, 0xc4
+    db 0x00, 0x26
+    db 0x00
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x07
+    db 0x10
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+    db 0xff, JPEG_MARKER_SOF0
+    db 0x00, 0x0b
+    db JPEG_PRECISION_8
+    db 0x00, 0x01
+    db 0x00, 0x01
+    db 0x01
+    db 0x01, 0x11, 0x00
+    db 0xff, JPEG_MARKER_SOS
+    db 0x00, 0x08
+    db 0x01
+    db 0x01, 0x00
+    db 0x00, 0x3f, 0x00
+    db 0x50, 0x00, 0xff, JPEG_MARKER_EOI
+jpeg_gray_full_len equ $ - jpeg_gray_full
+
 SECTION .text
 global _start
 _start:
@@ -235,8 +475,531 @@ _start:
     test    edx, edx
     jnz     .fail_jpeg_is
     inc     qword [rel passed]
-    jmp     .png_is
+    jmp     .jpeg_bit_reader
 .fail_jpeg_is:
+    inc     qword [rel failed]
+
+.jpeg_bit_reader:
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_entropy_stuffed
+    mov     edx, jpeg_entropy_stuffed_len
+    call    er_jpeg_bit_reader_init
+    cmp     eax, 1
+    jne     .fail_jpeg_bit_reader
+    test    edx, edx
+    jnz     .fail_jpeg_bit_reader
+    mov     rdi, jpeg_reader
+    mov     esi, 8
+    call    er_jpeg_read_bits
+    cmp     eax, 0xa5
+    jne     .fail_jpeg_bit_reader
+    test    edx, edx
+    jnz     .fail_jpeg_bit_reader
+    mov     rdi, jpeg_reader
+    mov     esi, 8
+    call    er_jpeg_read_bits
+    cmp     eax, JPEG_MARKER_PREFIX
+    jne     .fail_jpeg_bit_reader
+    test    edx, edx
+    jnz     .fail_jpeg_bit_reader
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_entropy_marker
+    mov     edx, jpeg_entropy_marker_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_reader
+    call    er_jpeg_read_bit
+    test    eax, eax
+    jnz     .fail_jpeg_bit_reader
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_jpeg_bit_reader
+    inc     qword [rel passed]
+    jmp     .jpeg_marker_consumers
+.fail_jpeg_bit_reader:
+    inc     qword [rel failed]
+
+.jpeg_marker_consumers:
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_restart_marker
+    mov     edx, jpeg_restart_marker_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_reader
+    mov     esi, JPEG_MARKER_RST3
+    call    er_jpeg_consume_restart
+    cmp     eax, 1
+    jne     .fail_jpeg_marker_consumers
+    test    edx, edx
+    jnz     .fail_jpeg_marker_consumers
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_eoi_marker
+    mov     edx, jpeg_eoi_marker_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_reader
+    call    er_jpeg_consume_eoi
+    cmp     eax, 1
+    jne     .fail_jpeg_marker_consumers
+    test    edx, edx
+    jnz     .fail_jpeg_marker_consumers
+    inc     qword [rel passed]
+    jmp     .jpeg_huffman
+.fail_jpeg_marker_consumers:
+    inc     qword [rel failed]
+
+.jpeg_huffman:
+    mov     rdi, jpeg_huff_counts
+    mov     rsi, jpeg_huff_values
+    mov     edx, jpeg_huff_values_len
+    mov     rcx, jpeg_huff
+    call    er_jpeg_build_huffman_table
+    cmp     eax, 1
+    jne     .fail_jpeg_huffman
+    test    edx, edx
+    jnz     .fail_jpeg_huffman
+    cmp     dword [rel jpeg_huff + JPEG_HUFF_TABLE_LEN_OFF], 3
+    jne     .fail_jpeg_huffman
+    cmp     dword [rel jpeg_huff + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .fail_jpeg_huffman
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_huff_bits
+    mov     edx, jpeg_huff_bits_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_huff
+    mov     rsi, jpeg_reader
+    call    er_jpeg_huffman_decode
+    cmp     eax, 0x11
+    jne     .fail_jpeg_huffman
+    test    edx, edx
+    jnz     .fail_jpeg_huffman
+    mov     rdi, jpeg_huff
+    mov     rsi, jpeg_reader
+    call    er_jpeg_huffman_decode
+    cmp     eax, 0x22
+    jne     .fail_jpeg_huffman
+    test    edx, edx
+    jnz     .fail_jpeg_huffman
+    mov     rdi, jpeg_huff
+    mov     rsi, jpeg_reader
+    call    er_jpeg_huffman_decode
+    cmp     eax, 0x33
+    jne     .fail_jpeg_huffman
+    test    edx, edx
+    jnz     .fail_jpeg_huffman
+    inc     qword [rel passed]
+    jmp     .jpeg_receive_extend
+.fail_jpeg_huffman:
+    inc     qword [rel failed]
+
+.jpeg_receive_extend:
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_receive_negative_bits
+    mov     edx, jpeg_receive_negative_bits_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_reader
+    mov     esi, 3
+    call    er_jpeg_receive_extend
+    cmp     eax, -6
+    jne     .fail_jpeg_receive_extend
+    test    edx, edx
+    jnz     .fail_jpeg_receive_extend
+    inc     qword [rel passed]
+    jmp     .jpeg_decode_block
+.fail_jpeg_receive_extend:
+    inc     qword [rel failed]
+
+.jpeg_decode_block:
+    mov     word [rel jpeg_quant], 2
+    mov     eax, 1
+.jpeg_quant_loop:
+    cmp     eax, JPEG_BLOCK_LEN
+    jae     .jpeg_tables
+    mov     word [rel jpeg_quant + rax * 2], 1
+    inc     eax
+    jmp     .jpeg_quant_loop
+.jpeg_tables:
+    mov     word [rel jpeg_prev_dc], 4
+    mov     rdi, jpeg_dc_counts
+    mov     rsi, jpeg_dc_values
+    mov     edx, jpeg_dc_values_len
+    mov     rcx, jpeg_huff
+    call    er_jpeg_build_huffman_table
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_block
+    test    edx, edx
+    jnz     .fail_jpeg_decode_block
+    mov     rdi, jpeg_ac_counts
+    mov     rsi, jpeg_ac_values
+    mov     edx, jpeg_ac_values_len
+    mov     rcx, jpeg_huff_ac
+    call    er_jpeg_build_huffman_table
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_block
+    test    edx, edx
+    jnz     .fail_jpeg_decode_block
+    mov     rdi, jpeg_reader
+    mov     rsi, jpeg_block_bits
+    mov     edx, jpeg_block_bits_len
+    call    er_jpeg_bit_reader_init
+    mov     rdi, jpeg_huff
+    mov     rsi, jpeg_huff_ac
+    mov     rdx, jpeg_quant
+    mov     rcx, jpeg_prev_dc
+    mov     r8, jpeg_reader
+    mov     r9, jpeg_block
+    call    er_jpeg_decode_block
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_block
+    test    edx, edx
+    jnz     .fail_jpeg_decode_block
+    cmp     word [rel jpeg_prev_dc], 7
+    jne     .fail_jpeg_decode_block
+    cmp     word [rel jpeg_block], 14
+    jne     .fail_jpeg_decode_block
+    cmp     word [rel jpeg_block + 2], 0
+    jne     .fail_jpeg_decode_block
+    inc     qword [rel passed]
+    jmp     .jpeg_color_helpers
+.fail_jpeg_decode_block:
+    inc     qword [rel failed]
+
+.jpeg_color_helpers:
+    mov     edi, -3
+    call    er_jpeg_clamp_u8
+    test    eax, eax
+    jnz     .fail_jpeg_color_helpers
+    test    edx, edx
+    jnz     .fail_jpeg_color_helpers
+    mov     edi, 300
+    call    er_jpeg_clamp_u8
+    cmp     eax, 255
+    jne     .fail_jpeg_color_helpers
+    test    edx, edx
+    jnz     .fail_jpeg_color_helpers
+    mov     edi, 32
+    call    er_jpeg_gray_color
+    cmp     eax, 0xff202020
+    jne     .fail_jpeg_color_helpers
+    test    edx, edx
+    jnz     .fail_jpeg_color_helpers
+    mov     edi, 128
+    mov     esi, 128
+    mov     edx, 128
+    call    er_jpeg_ycbcr_color
+    cmp     eax, 0xff808080
+    jne     .fail_jpeg_color_helpers
+    test    edx, edx
+    jnz     .fail_jpeg_color_helpers
+    mov     edi, 255
+    mov     esi, 128
+    mov     edx, 128
+    call    er_jpeg_ycbcr_color
+    cmp     eax, 0xffffffff
+    jne     .fail_jpeg_color_helpers
+    test    edx, edx
+    jnz     .fail_jpeg_color_helpers
+    inc     qword [rel passed]
+    jmp     .jpeg_idct_sample
+.fail_jpeg_color_helpers:
+    inc     qword [rel failed]
+
+.jpeg_idct_sample:
+    xor     eax, eax
+.jpeg_idct_clear_loop:
+    cmp     eax, JPEG_BLOCK_LEN
+    jae     .jpeg_idct_run
+    mov     word [rel jpeg_block + rax * 2], 0
+    inc     eax
+    jmp     .jpeg_idct_clear_loop
+.jpeg_idct_run:
+    mov     word [rel jpeg_block], 80
+    mov     rdi, jpeg_block
+    xor     esi, esi
+    xor     edx, edx
+    call    er_jpeg_idct_sample
+    cmp     eax, 138
+    jne     .fail_jpeg_idct_sample
+    test    edx, edx
+    jnz     .fail_jpeg_idct_sample
+    mov     rdi, jpeg_block
+    mov     esi, 7
+    mov     edx, 7
+    call    er_jpeg_idct_sample
+    cmp     eax, 138
+    jne     .fail_jpeg_idct_sample
+    test    edx, edx
+    jnz     .fail_jpeg_idct_sample
+    inc     qword [rel passed]
+    jmp     .jpeg_sample_component
+.fail_jpeg_idct_sample:
+    inc     qword [rel failed]
+
+.jpeg_sample_component:
+    xor     eax, eax
+.jpeg_component_clear_loop:
+    cmp     eax, JPEG_MAX_COMPONENT_BLOCKS * JPEG_BLOCK_LEN
+    jae     .jpeg_component_run
+    mov     word [rel jpeg_component_blocks + rax * 2], 0
+    inc     eax
+    jmp     .jpeg_component_clear_loop
+.jpeg_component_run:
+    mov     word [rel jpeg_component_blocks], 80
+    mov     word [rel jpeg_component_blocks + JPEG_BLOCK_LEN * 2], 160
+    mov     rdi, jpeg_component_blocks
+    mov     esi, 0x11
+    mov     edx, 1
+    mov     ecx, 1
+    xor     r8d, r8d
+    xor     r9d, r9d
+    call    er_jpeg_sample_component
+    cmp     eax, 138
+    jne     .fail_jpeg_sample_component
+    test    edx, edx
+    jnz     .fail_jpeg_sample_component
+    mov     rdi, jpeg_component_blocks
+    mov     esi, 0x21
+    mov     edx, 2
+    mov     ecx, 1
+    mov     r8d, 8
+    xor     r9d, r9d
+    call    er_jpeg_sample_component
+    cmp     eax, 148
+    jne     .fail_jpeg_sample_component
+    test    edx, edx
+    jnz     .fail_jpeg_sample_component
+    inc     qword [rel passed]
+    jmp     .jpeg_state_parsers
+.fail_jpeg_sample_component:
+    inc     qword [rel failed]
+
+.jpeg_state_parsers:
+    mov     rdi, jpeg_state
+    call    er_jpeg_state_init
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_MAX_H_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_MAX_V_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    mov     rdi, jpeg_dqt_payload
+    mov     esi, jpeg_dqt_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dqt
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_QUANT_READY_OFF + 2], 1
+    jne     .fail_jpeg_state_parsers
+    cmp     word [rel jpeg_state + JPEG_STATE_QUANT_OFF + 2 * JPEG_BLOCK_LEN * 2], 5
+    jne     .fail_jpeg_state_parsers
+    cmp     word [rel jpeg_state + JPEG_STATE_QUANT_OFF + 2 * JPEG_BLOCK_LEN * 2 + 63 * 2], 68
+    jne     .fail_jpeg_state_parsers
+    mov     rdi, jpeg_sof0_payload
+    mov     esi, jpeg_sof0_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sof0
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_WIDTH_OFF], 2
+    jne     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_HEIGHT_OFF], 3
+    jne     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_COMPONENT_COUNT_OFF], 3
+    jne     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_MAX_H_OFF], 2
+    jne     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SAMPLING_OFF], 0x21
+    jne     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SIZE + JPEG_COMPONENT_QUANT_ID_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    mov     rdi, jpeg_dht_payload
+    mov     esi, jpeg_dht_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dht
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_DC_TABLES_OFF + JPEG_HUFF_TABLE_SIZE + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_DC_TABLES_OFF + JPEG_HUFF_TABLE_SIZE + JPEG_HUFF_TABLE_SYMBOLS_OFF + JPEG_HUFF_VALUE_OFF], 0x02
+    jne     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_AC_TABLES_OFF + 2 * JPEG_HUFF_TABLE_SIZE + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_AC_TABLES_OFF + 2 * JPEG_HUFF_TABLE_SIZE + JPEG_HUFF_TABLE_SYMBOLS_OFF + JPEG_HUFF_VALUE_OFF], 0x00
+    jne     .fail_jpeg_state_parsers
+    mov     rdi, jpeg_sos_payload
+    mov     esi, jpeg_sos_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sos
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_DC_TABLE_OFF], 1
+    jne     .fail_jpeg_state_parsers
+    cmp     byte [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_AC_TABLE_OFF], 2
+    jne     .fail_jpeg_state_parsers
+    mov     rdi, jpeg_dri_payload
+    mov     esi, jpeg_dri_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dri
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     dword [rel jpeg_state + JPEG_STATE_RESTART_INTERVAL_OFF], 4
+    jne     .fail_jpeg_state_parsers
+    mov     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_PREV_DC_OFF], 11
+    mov     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SIZE + JPEG_COMPONENT_PREV_DC_OFF], 22
+    mov     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + 2 * JPEG_COMPONENT_SIZE + JPEG_COMPONENT_PREV_DC_OFF], 33
+    mov     rdi, jpeg_state
+    call    er_jpeg_reset_dc
+    cmp     eax, 1
+    jne     .fail_jpeg_state_parsers
+    test    edx, edx
+    jnz     .fail_jpeg_state_parsers
+    cmp     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_PREV_DC_OFF], 0
+    jne     .fail_jpeg_state_parsers
+    cmp     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SIZE + JPEG_COMPONENT_PREV_DC_OFF], 0
+    jne     .fail_jpeg_state_parsers
+    cmp     word [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + 2 * JPEG_COMPONENT_SIZE + JPEG_COMPONENT_PREV_DC_OFF], 0
+    jne     .fail_jpeg_state_parsers
+    inc     qword [rel passed]
+    jmp     .jpeg_parse_fixture
+.fail_jpeg_state_parsers:
+    inc     qword [rel failed]
+
+.jpeg_parse_fixture:
+    mov     rdi, jpeg_state
+    call    er_jpeg_state_init
+    mov     rdi, jpeg_parse_fixture
+    mov     esi, jpeg_parse_fixture_len
+    mov     rdx, jpeg_state
+    mov     ecx, 1
+    mov     r8, jpeg_scan_offset
+    call    er_jpeg_parse
+    cmp     eax, 1
+    jne     .fail_jpeg_parse_fixture
+    test    edx, edx
+    jnz     .fail_jpeg_parse_fixture
+    cmp     qword [rel jpeg_scan_offset], jpeg_parse_fixture_scan_offset
+    jne     .fail_jpeg_parse_fixture
+    cmp     dword [rel jpeg_state + JPEG_STATE_WIDTH_OFF], 2
+    jne     .fail_jpeg_parse_fixture
+    cmp     byte [rel jpeg_state + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_AC_TABLE_OFF], 2
+    jne     .fail_jpeg_parse_fixture
+    cmp     dword [rel jpeg_state + JPEG_STATE_DC_TABLES_OFF + JPEG_HUFF_TABLE_SIZE + JPEG_HUFF_TABLE_READY_OFF], 1
+    jne     .fail_jpeg_parse_fixture
+    inc     qword [rel passed]
+    jmp     .jpeg_decode_scan_gray
+.fail_jpeg_parse_fixture:
+    inc     qword [rel failed]
+
+.jpeg_decode_scan_gray:
+    mov     rdi, jpeg_state
+    call    er_jpeg_state_init
+    mov     rdi, jpeg_gray_dqt_payload
+    mov     esi, jpeg_gray_dqt_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dqt
+    mov     rdi, jpeg_gray_dht_payload
+    mov     esi, jpeg_gray_dht_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dht
+    mov     rdi, jpeg_gray_sof0_payload
+    mov     esi, jpeg_gray_sof0_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sof0
+    mov     rdi, jpeg_gray_sos_payload
+    mov     esi, jpeg_gray_sos_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sos
+    mov     rdi, jpeg_state
+    mov     rsi, jpeg_gray_scan
+    mov     edx, jpeg_gray_scan_len
+    mov     rcx, jpeg_scan_pixels
+    mov     r8d, 1
+    mov     r9, jpeg_scan_scratch
+    push    JPEG_SCAN_SCRATCH_SIZE
+    call    er_jpeg_decode_scan_gray
+    add     rsp, 8
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_scan_gray
+    test    edx, edx
+    jnz     .fail_jpeg_decode_scan_gray
+    cmp     dword [rel jpeg_scan_pixels], 0xff8a8a8a
+    jne     .fail_jpeg_decode_scan_gray
+    mov     rdi, jpeg_state
+    call    er_jpeg_state_init
+    mov     rdi, jpeg_gray_dqt_payload
+    mov     esi, jpeg_gray_dqt_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dqt
+    mov     rdi, jpeg_gray_dht_payload
+    mov     esi, jpeg_gray_dht_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dht
+    mov     rdi, jpeg_gray_sof0_w9_payload
+    mov     esi, jpeg_gray_sof0_w9_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sof0
+    mov     rdi, jpeg_gray_sos_payload
+    mov     esi, jpeg_gray_sos_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_sos
+    mov     rdi, jpeg_dri_payload
+    mov     esi, jpeg_dri_payload_len
+    mov     rdx, jpeg_state
+    call    er_jpeg_parse_dri
+    mov     dword [rel jpeg_state + JPEG_STATE_RESTART_INTERVAL_OFF], 1
+    mov     rdi, jpeg_state
+    mov     rsi, jpeg_gray_restart_scan
+    mov     edx, jpeg_gray_restart_scan_len
+    mov     rcx, jpeg_restart_pixels
+    mov     r8d, 9
+    mov     r9, jpeg_scan_scratch
+    push    JPEG_SCAN_SCRATCH_SIZE
+    call    er_jpeg_decode_scan_gray
+    add     rsp, 8
+    cmp     eax, 9
+    jne     .fail_jpeg_decode_scan_gray
+    test    edx, edx
+    jnz     .fail_jpeg_decode_scan_gray
+    cmp     dword [rel jpeg_restart_pixels], 0xff8a8a8a
+    jne     .fail_jpeg_decode_scan_gray
+    cmp     dword [rel jpeg_restart_pixels + 8 * 4], 0xff8a8a8a
+    jne     .fail_jpeg_decode_scan_gray
+    inc     qword [rel passed]
+    jmp     .jpeg_decode_full_gray
+.fail_jpeg_decode_scan_gray:
+    inc     qword [rel failed]
+
+.jpeg_decode_full_gray:
+    mov     rdi, jpeg_gray_full
+    mov     esi, jpeg_gray_full_len
+    mov     rdx, jpeg_decode_pixels
+    mov     ecx, 1
+    mov     r8, jpeg_decode_scratch
+    mov     r9d, JPEG_DECODE_SCRATCH_SIZE
+    push    hdr
+    call    er_image_decode_jpeg
+    add     rsp, 8
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_full_gray
+    test    edx, edx
+    jnz     .fail_jpeg_decode_full_gray
+    cmp     dword [rel hdr + IMAGE_HEADER_WIDTH], 1
+    jne     .fail_jpeg_decode_full_gray
+    cmp     dword [rel hdr + IMAGE_HEADER_HEIGHT], 1
+    jne     .fail_jpeg_decode_full_gray
+    cmp     dword [rel jpeg_decode_pixels], 0xff8a8a8a
+    jne     .fail_jpeg_decode_full_gray
+    inc     qword [rel passed]
+    jmp     .png_is
+.fail_jpeg_decode_full_gray:
     inc     qword [rel failed]
 
 .png_is:

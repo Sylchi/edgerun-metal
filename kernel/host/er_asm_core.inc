@@ -1100,20 +1100,38 @@ er_fn expand_macro_invocation
     inc     rbx
     jmp     .find
 .found:
+    mov     rax, [rel macro_expand_depth]
+    cmp     rax, ER_ASM_MACRO_DEPTH_CAP
+    jae     .bad
+    mov     r11, ER_ASM_MACRO_EXPAND_CAP
+    mul     r11
+    lea     r11, [rel macro_expand_buf]
+    add     r11, rax
+    mov     [rel macro_expand_base_ptr], r11
+    lea     rax, [r11 + ER_ASM_MACRO_EXPAND_CAP]
+    mov     [rel macro_expand_limit_ptr], rax
+    inc     qword [rel macro_expand_depth]
+    inc     qword [rel macro_invocation_seq]
+    mov     rax, [rel macro_invocation_seq]
+    mov     [rel macro_invocation_id], rax
     mov     r10, [rel macro_arg_count + rbx * 8]
+    mov     [rel macro_arg_active_count], r10
     call    parse_macro_args
     test    eax, eax
-    jz      .bad
+    jz      .bad_depth
     mov     r12, [rel macro_body_ptr + rbx * 8]
     mov     r13, [rel macro_body_len + rbx * 8]
     call    build_macro_expansion
     test    eax, eax
-    jz      .bad
-    lea     r14, [rel macro_expand_buf]
-    lea     r15, [rel macro_expand_buf + rax]
+    jz      .bad_depth
+    mov     r14, [rel macro_expand_base_ptr]
+    lea     r15, [r14 + rax]
     call    scan_source
+    dec     qword [rel macro_expand_depth]
     mov     eax, 1
     jmp     .done
+.bad_depth:
+    dec     qword [rel macro_expand_depth]
 .bad:
     mov     qword [rel generic_instr_bad], 1
     mov     eax, 1
@@ -1189,7 +1207,7 @@ er_fn parse_macro_args
 ; build_macro_expansion(r12=body ptr, r13=body len) -> eax=len or 0 on failure.
 er_fn build_macro_expansion
     er_push rbx, r10, r11, r12, r13, r14, r15
-    lea     r14, [rel macro_expand_buf]
+    mov     r14, [rel macro_expand_base_ptr]
     xor     ebx, ebx
 .copy:
     cmp     rbx, r13
@@ -1202,6 +1220,10 @@ er_fn build_macro_expansion
     cmp     r10, r13
     jae     .copy_byte
     movzx   eax, byte [r12 + r10]
+    cmp     al, '%'
+    je      .copy_local
+    cmp     al, '0'
+    je      .copy_arg_count
     cmp     al, '1'
     jb      .copy_percent
     cmp     al, '8'
@@ -1209,8 +1231,6 @@ er_fn build_macro_expansion
     sub     al, '1'
     movzx   r11d, al
     mov     r15, [rel macro_arg_len + r11 * 8]
-    test    r15, r15
-    jz      .bad
     mov     r10, [rel macro_arg_ptr + r11 * 8]
 .copy_arg:
     test    r15, r15
@@ -1229,6 +1249,49 @@ er_fn build_macro_expansion
 .arg_done:
     add     rbx, 2
     jmp     .copy
+.copy_arg_count:
+    mov     rdi, [rel macro_arg_active_count]
+    call    append_macro_u64_value
+    test    eax, eax
+    jz      .bad
+    add     rbx, 2
+    jmp     .copy
+.copy_local:
+    mov     r10, rbx
+    add     r10, 2
+    mov     r11, r10
+.local_scan:
+    cmp     r11, r13
+    jae     .local_done
+    movzx   eax, byte [r12 + r11]
+    cmp     al, '_'
+    je      .local_next
+    cmp     al, '0'
+    jb      .local_done
+    cmp     al, '9'
+    jbe     .local_next
+    cmp     al, 'A'
+    jb      .local_done
+    cmp     al, 'Z'
+    jbe     .local_next
+    cmp     al, 'a'
+    jb      .local_done
+    cmp     al, 'z'
+    ja      .local_done
+.local_next:
+    inc     r11
+    jmp     .local_scan
+.local_done:
+    sub     r11, r10
+    test    r11, r11
+    jz      .bad
+    lea     r10, [r12 + r10]
+    call    append_macro_local_label
+    test    eax, eax
+    jz      .bad
+    add     rbx, 2
+    add     rbx, r11
+    jmp     .copy
 .copy_percent:
     mov     eax, '%'
 .copy_byte:
@@ -1242,7 +1305,7 @@ er_fn build_macro_expansion
     inc     rbx
     jmp     .copy
 .finish:
-    lea     rax, [rel macro_expand_buf]
+    mov     rax, [rel macro_expand_base_ptr]
     mov     rdx, r14
     sub     rdx, rax
     mov     rax, rdx
@@ -1258,13 +1321,105 @@ er_fn build_macro_expansion
     ret
 
 er_fn macro_expand_room
-    lea     rax, [rel macro_expand_buf]
-    add     rax, ER_ASM_MACRO_EXPAND_CAP
+    mov     rax, [rel macro_expand_limit_ptr]
     cmp     r14, rax
     jae     .no
     mov     eax, 1
     ret
 .no:
+    xor     eax, eax
+    ret
+
+; append_macro_local_label(r10=name ptr, r11=name len, r14=out) -> eax=1/0.
+er_fn append_macro_local_label
+    er_push rbx, r10, r11, r12, r13, r15
+    mov     r12, r10
+    mov     r13, r11
+    mov     eax, '_'
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+    mov     eax, '_'
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+    mov     eax, 'm'
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+    mov     rdi, [rel macro_invocation_id]
+    call    append_macro_u64_value
+    test    eax, eax
+    jz      .bad
+    mov     eax, '_'
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+.name_copy:
+    test    r13, r13
+    jz      .yes
+    movzx   eax, byte [r12]
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+    inc     r12
+    dec     r13
+    jmp     .name_copy
+.yes:
+    mov     eax, 1
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx, r10, r11, r12, r13, r15
+    ret
+
+; append_macro_u64_value(rdi=value, r14=out) -> eax=1/0.
+er_fn append_macro_u64_value
+    er_push rbx, r12, r15
+    lea     r15, [rel num_buf + 31]
+    mov     rax, rdi
+    mov     ecx, 10
+.num_loop:
+    xor     edx, edx
+    div     rcx
+    add     dl, '0'
+    dec     r15
+    mov     [r15], dl
+    test    rax, rax
+    jnz     .num_loop
+.num_copy:
+    lea     rbx, [rel num_buf + 31]
+    cmp     r15, rbx
+    jae     .yes
+    movzx   eax, byte [r15]
+    call    append_macro_expand_byte
+    test    eax, eax
+    jz      .bad
+    inc     r15
+    jmp     .num_copy
+.yes:
+    mov     eax, 1
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx, r12, r15
+    ret
+
+; append_macro_expand_byte(al=byte, r14=out) -> eax=1/0, advances r14.
+er_fn append_macro_expand_byte
+    push    rax
+    call    macro_expand_room
+    test    eax, eax
+    jz      .bad
+    pop     rax
+    mov     [r14], al
+    inc     r14
+    mov     eax, 1
+    ret
+.bad:
+    pop     rax
     xor     eax, eax
     ret
 

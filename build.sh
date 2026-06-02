@@ -47,6 +47,7 @@ asm_x86_obj() {
 	local format="$1"; shift
 	local dst="$1"; shift
 	local src="$1"; shift
+	src="$(materialize_asm_source "$(resolve_asm_source "$src")")"
 	local err="${dst}.asm.err"
 	local assembler="${ER_ASM:-$YASM}"
 	if ! "$assembler" -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src" 2>"$err"; then
@@ -63,6 +64,39 @@ asm_x86_obj() {
 	fi
 	rm -f "$err"
 	test -f "$dst"
+}
+
+source_entry_stem() {
+	local src="$1"
+	src="${src%.erobj}"
+	src="${src%.asm}"
+	printf '%s\n' "$src"
+}
+
+resolve_asm_source() {
+	local src="$1"
+	if [ -f "$src" ]; then
+		printf '%s\n' "$src"
+	elif [ -f "${src}.erobj" ]; then
+		printf '%s\n' "${src}.erobj"
+	else
+		printf '%s\n' "$src"
+	fi
+}
+
+materialize_asm_source() {
+	local src="$1"
+	case "$src" in
+		*.asm.erobj)
+			local out="${ASM_BUILD}/source/${src%.erobj}"
+			mkdir -p "${out%/*}"
+			object_body "$src" > "$out"
+			printf '%s\n' "$out"
+			;;
+		*)
+			printf '%s\n' "$src"
+			;;
+	esac
 }
 
 object_body() {
@@ -103,7 +137,7 @@ kernel_objs() {
 	local prefix="$1" suffix="$2"; shift 2
 	local objs=""
 	for src in ${KERNEL_ASM_SRCS}; do
-		local name="${src%.asm}"; name="${name##*/}"
+		local name="$(source_entry_stem "$src")"; name="${name##*/}"
 		objs="${objs} ${ASM_BUILD}/${prefix}_${name}${suffix}"
 	done
 	for extra; do
@@ -118,7 +152,7 @@ KERNEL_ASM_SRCS="$(object_body "${KERNEL_X86_SOURCES}")"
 # ---- assemble_kernel ----
 assemble_kernel() {
 	for src in ${KERNEL_ASM_SRCS}; do
-		local base="${src%.asm}"
+		local base="$(source_entry_stem "$src")"
 		local name="${base##*/}"
 		local src_path="${ASM_DIR}/${src}"
 		local dst="${ASM_BUILD}/kernel_${name}.o"
@@ -135,7 +169,7 @@ assemble_kernel() {
 # ---- assemble_kernel_efi (elf64, for PE32+) ----
 assemble_kernel_efi() {
 	for src in ${KERNEL_ASM_SRCS}; do
-		local base="${src%.asm}"
+		local base="$(source_entry_stem "$src")"
 		local name="${base##*/}"
 		local src_path="${ASM_DIR}/${src}"
 		if [ "$name" = "entry" ]; then
@@ -874,7 +908,7 @@ cmd_test_er_asm_cli() {
   rm -f "$out"
  }
  expect_er_asm_builds() {
-  local build_src="$1"
+  local build_src="$(materialize_asm_source "$(resolve_asm_source "$1")")"
   local build_label="$2"
   "${HOST_BUILD}/er_asm" -f flat -I kernel -o "$out" "$build_src"
   if [ ! -s "$out" ]; then
@@ -2277,18 +2311,18 @@ cmd_deps_audit() {
 		-name '*.ucode' -o -name '*.wasm' -o -name '*.jar' -o -name '*.class' -o -name '*.pyc' \
 		\) -print | sort | while IFS= read -r path; do
 		case "$path" in
-			./app/build_steps.erobj|\
-			./app/test_roots.erobj|\
-			./docs/build-help-bottom.erobj|\
-			./docs/build-help-top.erobj|\
+			*.erobj)
+				if object_body "$path" >/dev/null 2>&1; then
+					:
+				else
+					printf '%s\n' "$path"
+				fi
+				;;
 			./app/src/gen/icon_asset_pack_index.bin|\
 			./app/src/gen/icon_asset_pack_ir.bin|\
 			./app/src/gen/icon_names.bin|\
 			./kernel/driver/font_atlas.bin|\
 			./kernel/driver/font_glyph_table.bin|\
-			./kernel/arm/pi/kernel_sources.erobj|\
-			./kernel/test/registry.erobj|\
-			./kernel/x86_64/kernel_sources.erobj|\
 			./kernel/x86_64/wasm/agent_minimal.wasm|\
 			./kernel/x86_64/wasm/da_test.wasm|\
 			./kernel/x86_64/wasm/test_imports.wasm|\

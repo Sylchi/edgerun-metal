@@ -27,6 +27,7 @@ ER_ASM_PATH_SIZE equ 4096
 ER_ASM_MACRO_CAP equ 64
 ER_ASM_MACRO_ARG_CAP equ 8
 ER_ASM_MACRO_EXPAND_CAP equ 16384
+ER_ASM_MACRO_DEPTH_CAP equ 8
 ASCII_0 equ '0'
 ASCII_9 equ '9'
 ASCII_A equ 'A'
@@ -62,6 +63,15 @@ exit_subset_bad: resq 1
 generic_instr_bad: resq 1
 text_len:       resq 1
 imm_u32_value:  resq 1
+generic_op1_kind: resq 1
+generic_op1_width: resq 1
+generic_op1_reg: resq 1
+generic_op1_imm: resq 1
+generic_op2_kind: resq 1
+generic_op2_width: resq 1
+generic_op2_reg: resq 1
+generic_op2_index: resq 1
+generic_op2_imm: resq 1
 branch1_patch_off: resq 1
 branch2_patch_off: resq 1
 equ_name_ptr:   resq ER_ASM_EQU_CAP
@@ -96,7 +106,13 @@ macro_body_len: resq ER_ASM_MACRO_CAP
 macro_count: resq 1
 macro_arg_ptr: resq ER_ASM_MACRO_ARG_CAP
 macro_arg_len: resq ER_ASM_MACRO_ARG_CAP
-macro_expand_buf: resb ER_ASM_MACRO_EXPAND_CAP
+macro_arg_active_count: resq 1
+macro_expand_depth: resq 1
+macro_expand_base_ptr: resq 1
+macro_expand_limit_ptr: resq 1
+macro_invocation_seq: resq 1
+macro_invocation_id: resq 1
+macro_expand_buf: resb ER_ASM_MACRO_EXPAND_CAP * ER_ASM_MACRO_DEPTH_CAP
 source_dir_buf: resb ER_ASM_PATH_SIZE
 include_path_buf: resb ER_ASM_PATH_SIZE
 num_buf:        resb 32

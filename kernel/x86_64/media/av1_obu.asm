@@ -362,13 +362,8 @@ er_fn er_av1_obu_route_sample
     mov     ecx, AV1_OBU_ROUTE_SIZE / 8
     cld
     rep     stosq
-    mov     rdi, r12
-    mov     esi, r13d
-    mov     rdx, r14
-    call    er_av1_obu_scan_units
-    er_check_nonzero edx, .done
-    mov     r15d, eax
     xor     ebx, ebx
+    xor     r15d, r15d
 .loop:
     cmp     ebx, r13d
     je      .ok
@@ -381,14 +376,19 @@ er_fn er_av1_obu_route_sample
     er_check_nonzero edx, .done
     er_check_zero eax, .corrupt
     movzx   eax, byte [rsp + AV1_OBU_DESC_TYPE]
+    inc     dword [r14 + AV1_OBU_STATS_TYPE_COUNTS + rax * 4]
     av1_route_first_payload AV1_OBU_TYPE_SEQUENCE_HEADER, AV1_OBU_ROUTE_SEQUENCE_OFFSET, AV1_OBU_ROUTE_SEQUENCE_LEN
     av1_route_first_payload AV1_OBU_TYPE_FRAME_HEADER, AV1_OBU_ROUTE_FRAME_HEADER_OFFSET, AV1_OBU_ROUTE_FRAME_HEADER_LEN
     av1_route_first_payload AV1_OBU_TYPE_TILE_GROUP, AV1_OBU_ROUTE_TILE_GROUP_OFFSET, AV1_OBU_ROUTE_TILE_GROUP_LEN
     av1_route_first_payload AV1_OBU_TYPE_FRAME, AV1_OBU_ROUTE_FRAME_OFFSET, AV1_OBU_ROUTE_FRAME_LEN
     add     ebx, [rsp + AV1_OBU_DESC_TOTAL_LEN]
     jc      .corrupt
+    cmp     r15d, AV1_LEB128_U32_MAX
+    je      .corrupt
+    inc     r15d
     jmp     .loop
 .ok:
+    mov     [r14 + AV1_OBU_STATS_TOTAL], r15d
     mov     eax, r15d
     er_ok
     jmp     .done

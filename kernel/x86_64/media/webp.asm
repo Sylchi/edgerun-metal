@@ -7,6 +7,7 @@
 
 extern er_vp8_parse_key_frame_header
 extern er_vp8_decode_key_frame
+extern er_vp8_memset
 
 SECTION .text
 
@@ -358,7 +359,7 @@ er_fn er_webp_parse_header
     mov     rdi, r14
     xor     esi, esi
     mov     edx, WEBP_HDR_SIZE
-    call    er_webp_memset
+    call    er_vp8_memset
     er_check_nonzero edx, .done_parse
     mov     rdi, r12
     mov     esi, r13d
@@ -696,20 +697,6 @@ er_fn er_webp_apply_alpha_values
     er_err  ERROR_CORRUPT
 .done_alpha:
     er_pop  rbx, r12, r13, r14, r15
-    er_ret
-
-; er_webp_memset(dst, value, len) -> eax=1, rdx=error
-er_fn er_webp_memset
-    er_check_zero rdi, .invalid_param
-    mov     ecx, edx
-    mov     eax, esi
-    rep     stosb
-    mov     eax, 1
-    er_ok
-    er_ret
-.invalid_param:
-    xor     eax, eax
-    er_err  ERROR_INVALID_PARAM
     er_ret
 
 ; er_webp_chunk_is_critical(type) -> eax=1 if unknown critical chunk

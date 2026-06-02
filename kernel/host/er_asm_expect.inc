@@ -680,16 +680,48 @@ er_fn expect_u64_operand
     ret
 
 er_fn expect_value_operand
+    er_push rbx
     push    r14
     call    expect_u32_operand
     test    eax, eax
     jz      .symbol
     pop     r11
-    mov     eax, 1
-    ret
+    jmp     .maybe_plus
 .symbol:
     pop     r14
     call    expect_symbol_value_operand
+    test    eax, eax
+    jz      .bad
+.maybe_plus:
+    mov     rbx, [rel imm_u32_value]
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .yes
+    cmp     byte [r14], '+'
+    jne     .yes
+    inc     r14
+    push    r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .plus_symbol
+    pop     r11
+    jmp     .plus_ok
+.plus_symbol:
+    pop     r14
+    call    expect_symbol_value_operand
+    test    eax, eax
+    jz      .bad
+.plus_ok:
+    add     rbx, [rel imm_u32_value]
+    mov     [rel imm_u32_value], rbx
+    jmp     .maybe_plus
+.yes:
+    mov     eax, 1
+    jmp     .done
+.bad:
+    xor     eax, eax
+.done:
+    er_pop  rbx
     ret
 
 er_fn expect_symbol_value_operand
@@ -718,8 +750,19 @@ er_fn expect_symbol_value_operand
     mov     ecx, tok_error_timeout_len
     call    token_eq
     test    eax, eax
-    jz      .label
+    jz      .error_not_present
     mov     qword [rel imm_u32_value], 20
+    mov     eax, 1
+    jmp     .done
+.error_not_present:
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_error_not_present]
+    mov     ecx, tok_error_not_present_len
+    call    token_eq
+    test    eax, eax
+    jz      .label
+    mov     qword [rel imm_u32_value], 22
     mov     eax, 1
     jmp     .done
 .label:
