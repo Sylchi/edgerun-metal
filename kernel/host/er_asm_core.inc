@@ -109,6 +109,8 @@ er_fn is_supported_exit_subset
     jne     .no
     cmp     qword [rel pending_call_count], 0
     jne     .no
+    cmp     qword [rel pending_rel_count], 0
+    jne     .no
     cmp     qword [rel generic_instr_bad], 0
     jne     .no
     cmp     qword [rel generic_instr_mode], 1
@@ -274,6 +276,7 @@ er_fn scan_source
     call    record_label_symbol
     call    patch_pending_branches_for_label
     call    patch_pending_calls_for_label
+    call    patch_pending_rels_for_label
     call    handle_code_label
     call    record_pending_global_label
     inc     r14
@@ -431,6 +434,9 @@ er_fn record_er_fn_directive
     mov     rax, [rel text_len]
     call    add_global_symbol
     call    add_current_label_const
+    call    patch_pending_branches_for_label
+    call    patch_pending_calls_for_label
+    call    patch_pending_rels_for_label
     mov     qword [rel exit_instr_step], 0
     inc     qword [rel label_count]
     mov     eax, 1
@@ -818,6 +824,50 @@ er_fn remove_pending_call_at
     jmp     .shift
 .finish:
     dec     qword [rel pending_call_count]
+    ret
+
+er_fn patch_pending_rels_for_label
+    er_push rbx, r12, r13, r14, r15
+    xor     ebx, ebx
+.loop:
+    cmp     rbx, [rel pending_rel_count]
+    jae     .done
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, [rel pending_rel_ptr + rbx * 8]
+    mov     rcx, [rel pending_rel_len + rbx * 8]
+    call    token_eq
+    test    eax, eax
+    jz      .next
+    mov     rdi, [rel pending_rel_off + rbx * 8]
+    mov     rsi, [rel pending_rel_addend + rbx * 8]
+    call    patch_rel32_to_current
+    call    remove_pending_rel_at
+    jmp     .loop
+.next:
+    inc     rbx
+    jmp     .loop
+.done:
+    er_pop  rbx, r12, r13, r14, r15
+    ret
+
+er_fn remove_pending_rel_at
+    mov     r14, rbx
+.shift:
+    inc     r14
+    cmp     r14, [rel pending_rel_count]
+    jae     .finish
+    mov     r15, [rel pending_rel_ptr + r14 * 8]
+    mov     [rel pending_rel_ptr + r14 * 8 - 8], r15
+    mov     r15, [rel pending_rel_len + r14 * 8]
+    mov     [rel pending_rel_len + r14 * 8 - 8], r15
+    mov     r15, [rel pending_rel_off + r14 * 8]
+    mov     [rel pending_rel_off + r14 * 8 - 8], r15
+    mov     r15, [rel pending_rel_addend + r14 * 8]
+    mov     [rel pending_rel_addend + r14 * 8 - 8], r15
+    jmp     .shift
+.finish:
+    dec     qword [rel pending_rel_count]
     ret
 
 er_fn add_global_symbol

@@ -547,6 +547,15 @@ er_fn track_real_instruction
     push    r14
     call    match_direct_add_eax_imm8
     test    eax, eax
+    jz      .direct_add_r11d
+    pop     r11
+    mov     eax, 1
+    ret
+.direct_add_r11d:
+    pop     r14
+    push    r14
+    call    match_direct_add_r11d_reg32
+    test    eax, eax
     jz      .direct_add_dl
     pop     r11
     mov     eax, 1
@@ -591,6 +600,15 @@ er_fn track_real_instruction
     pop     r14
     push    r14
     call    match_direct_test_al_imm8
+    test    eax, eax
+    jz      .direct_or_reg32
+    pop     r11
+    mov     eax, 1
+    ret
+.direct_or_reg32:
+    pop     r14
+    push    r14
+    call    match_direct_or_reg32
     test    eax, eax
     jz      .direct_test_r9d
     pop     r11
@@ -1032,9 +1050,18 @@ er_fn track_real_instruction
     push    r14
     call    match_xor_edi_edi
     test    eax, eax
-    jz      .xor_more_runtime
+    jz      .xor_same32
     pop     r11
     call    emit_xor_edi_edi
+    mov     eax, 1
+    ret
+.xor_same32:
+    pop     r14
+    push    r14
+    call    match_direct_xor_same32
+    test    eax, eax
+    jz      .xor_more_runtime
+    pop     r11
     mov     eax, 1
     ret
 .xor_more_runtime:
@@ -2293,6 +2320,207 @@ er_fn match_direct_add_dl_imm8
 .no_pop:
     pop     r14
 .no:
+    xor     eax, eax
+    ret
+
+er_fn match_direct_add_r11d_reg32
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_add]
+    mov     ecx, tok_add_len
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    lea     rdi, [rel tok_r11d]
+    mov     esi, tok_r11d_len
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    call    expect_comma
+    test    eax, eax
+    jz      .no_pop
+    push    r14
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .try_esi
+    pop     r11
+    mov     r10d, 0xc3
+    jmp     .emit
+.try_esi:
+    pop     r14
+    lea     rdi, [rel tok_esi]
+    mov     esi, tok_esi_len
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    mov     r10d, 0xf3
+.emit:
+    call    expect_line_end
+    test    eax, eax
+    jz      .no_pop
+    pop     r14
+    mov     edi, 0x41
+    call    append_text_byte
+    mov     edi, 0x01
+    call    append_text_byte
+    mov     edi, r10d
+    call    append_text_byte
+    mov     eax, 1
+    ret
+.no_pop:
+    pop     r14
+.no:
+    xor     eax, eax
+    ret
+
+er_fn match_direct_xor_same32
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_xor]
+    mov     ecx, tok_xor_len
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    lea     rdi, [rel tok_esi]
+    mov     esi, tok_esi_len
+    mov     r10d, 0xf6
+    xor     r11d, r11d
+    call    match_emit_xor_same32_operand
+    test    eax, eax
+    jnz     .yes
+    lea     rdi, [rel tok_r9d]
+    mov     esi, tok_r9d_len
+    mov     r10d, 0xc9
+    mov     r11d, 0x45
+    call    match_emit_xor_same32_operand
+    test    eax, eax
+    jnz     .yes
+.no:
+    xor     eax, eax
+    ret
+.yes:
+    mov     eax, 1
+    ret
+
+er_fn match_emit_xor_same32_operand
+    push    r10
+    push    r11
+    push    rdi
+    push    rsi
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    call    expect_comma
+    test    eax, eax
+    jz      .no_pop
+    mov     rdi, [rsp + 16]
+    mov     rsi, [rsp + 8]
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    call    expect_line_end
+    test    eax, eax
+    jz      .no_pop
+    pop     rax
+    pop     rsi
+    pop     rdi
+    pop     r11
+    pop     r10
+    test    r11d, r11d
+    jz      .opcode
+    mov     edi, r11d
+    call    append_text_byte
+.opcode:
+    mov     edi, 0x31
+    call    append_text_byte
+    mov     edi, r10d
+    call    append_text_byte
+    mov     eax, 1
+    ret
+.no_pop:
+    pop     r14
+    pop     rsi
+    pop     rdi
+    pop     r11
+    pop     r10
+    xor     eax, eax
+    ret
+
+er_fn match_direct_or_reg32
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_or]
+    mov     ecx, tok_or_len
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    lea     rdx, [rel tok_ebx]
+    mov     ecx, tok_ebx_len
+    mov     r10d, 0xd8
+    call    match_emit_two_reg32_operands
+    test    eax, eax
+    jnz     .yes
+    lea     rdi, [rel tok_ebx]
+    mov     esi, tok_ebx_len
+    lea     rdx, [rel tok_eax]
+    mov     ecx, tok_eax_len
+    mov     r10d, 0xc3
+    call    match_emit_two_reg32_operands
+    test    eax, eax
+    jz      .no
+.yes:
+    mov     edi, 0x09
+    call    append_text_byte
+    mov     edi, r10d
+    call    append_text_byte
+    mov     eax, 1
+    ret
+.no:
+    xor     eax, eax
+    ret
+
+er_fn match_emit_two_reg32_operands
+    push    r10
+    push    rdx
+    push    rcx
+    push    rdi
+    push    rsi
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    call    expect_comma
+    test    eax, eax
+    jz      .no_pop
+    mov     rdi, [rsp + 32]
+    mov     rsi, [rsp + 24]
+    call    expect_operand
+    test    eax, eax
+    jz      .no_pop
+    call    expect_line_end
+    test    eax, eax
+    jz      .no_pop
+    pop     rax
+    pop     rsi
+    pop     rdi
+    pop     rcx
+    pop     rdx
+    pop     r10
+    mov     eax, 1
+    ret
+.no_pop:
+    pop     r14
+    pop     rsi
+    pop     rdi
+    pop     rcx
+    pop     rdx
+    pop     r10
     xor     eax, eax
     ret
 
@@ -5284,11 +5512,32 @@ er_fn match_generic_common_instruction
     jnz     .not
     mov     rdi, r12
     mov     rsi, r13
+    lea     rdx, [rel tok_mul]
+    mov     ecx, tok_mul_len
+    call    token_eq
+    test    eax, eax
+    jnz     .mul
+    mov     rdi, r12
+    mov     rsi, r13
     lea     rdx, [rel tok_lea]
     mov     ecx, tok_lea_len
     call    token_eq
     test    eax, eax
     jnz     .lea
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_setz]
+    mov     ecx, tok_setz_len
+    call    token_eq
+    test    eax, eax
+    jnz     .setz
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rel tok_setne]
+    mov     ecx, tok_setne_len
+    call    token_eq
+    test    eax, eax
+    jnz     .setne
     xor     eax, eax
     ret
 .mov:
@@ -5321,6 +5570,7 @@ er_fn match_generic_common_instruction
 .xor:
     mov     r10d, 6
 .group1:
+    mov     [rel generic_opcode_ext], r10
     call    parse_generic_two_operands
     test    eax, eax
     jz      .bad
@@ -5332,6 +5582,7 @@ er_fn match_generic_common_instruction
 .shr:
     mov     r10d, 5
 .shift:
+    mov     [rel generic_opcode_ext], r10
     call    parse_generic_two_operands
     test    eax, eax
     jz      .bad
@@ -5359,17 +5610,36 @@ er_fn match_generic_common_instruction
     jmp     .group3
 .not:
     mov     r10d, 2
+    jmp     .group3
+.mul:
+    mov     r10d, 4
 .group3:
+    mov     [rel generic_opcode_ext], r10
     call    parse_generic_one_reg_operand
     test    eax, eax
     jz      .bad
     call    emit_generic_group3
     ret
 .lea:
-    call    parse_generic_lea_rsp_disp
+    call    parse_generic_lea_mem
     test    eax, eax
     jz      .bad
-    call    emit_generic_lea_rsp_disp
+    call    emit_generic_lea_mem
+    ret
+.setz:
+    mov     r10d, 0x94
+    jmp     .setcc
+.setne:
+    mov     r10d, 0x95
+.setcc:
+    mov     [rel generic_opcode_ext], r10
+    call    parse_generic_one_reg_operand
+    test    eax, eax
+    jz      .bad
+    cmp     qword [rel generic_op1_width], 8
+    jne     .bad
+    mov     r10, [rel generic_opcode_ext]
+    call    emit_generic_setcc
     ret
 .bad:
     xor     eax, eax
@@ -5427,6 +5697,10 @@ er_fn parse_generic_movzx_operands
     mov     qword [rel generic_op2_kind], 4
     mov     [rel generic_op2_reg], rdx
     mov     [rel generic_op2_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op2_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op2_sym_len], rax
     jmp     .line_end
 .mem_ok:
     pop     r11
@@ -5517,6 +5791,31 @@ er_fn parse_generic_lea_rsp_disp
     xor     eax, eax
     ret
 
+er_fn parse_generic_lea_mem
+    call    parse_generic_operand1
+    test    eax, eax
+    jz      .bad
+    cmp     qword [rel generic_op1_kind], 1
+    jne     .bad
+    call    expect_comma
+    test    eax, eax
+    jz      .bad
+    call    parse_generic_mem_operand
+    test    eax, eax
+    jz      .bad
+    mov     qword [rel generic_op2_kind], 4
+    mov     [rel generic_op2_reg], rdx
+    mov     [rel generic_op2_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op2_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op2_sym_len], rax
+    call    expect_line_end
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
 er_fn parse_generic_byte_mem_operand2
     lea     rdi, [rel tok_byte]
     mov     esi, tok_byte_len
@@ -5586,9 +5885,24 @@ er_fn parse_generic_byte_mem_operand2
     call    match_generic_mem_base
     test    eax, eax
     jnz     .yes
+    push    r14
     call    parse_generic_rdx_plus_rbx_mem
     test    eax, eax
-    jnz     .yes
+    jz      .generic_mem
+    pop     r11
+    jmp     .yes
+.generic_mem:
+    pop     r14
+    call    parse_generic_mem_operand
+    test    eax, eax
+    jz      .bad
+    mov     [rel generic_op2_reg], rdx
+    mov     [rel generic_op2_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op2_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op2_sym_len], rax
+    jmp     .yes
 .bad:
     xor     eax, eax
     ret
@@ -5636,6 +5950,15 @@ er_fn parse_generic_rdx_plus_rbx_mem
 
 er_fn parse_generic_operand1
     push    r14
+    call    parse_generic_sized_mem_operand1
+    test    eax, eax
+    jz      .not_sized_mem
+    pop     r11
+    mov     eax, 1
+    ret
+.not_sized_mem:
+    pop     r14
+    push    r14
     call    parse_generic_reg_operand
     test    eax, eax
     jz      .mem
@@ -5653,9 +5976,77 @@ er_fn parse_generic_operand1
     mov     qword [rel generic_op1_kind], 4
     mov     [rel generic_op1_reg], rdx
     mov     [rel generic_op1_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op1_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op1_sym_len], rax
     mov     eax, 1
     ret
 .bad:
+    xor     eax, eax
+    ret
+
+er_fn parse_generic_sized_mem_operand1
+    push    r14
+    lea     rdi, [rel tok_byte]
+    mov     esi, tok_byte_len
+    mov     r10d, 8
+    call    match_generic_size_prefix
+    test    eax, eax
+    jnz     .have_size
+    lea     rdi, [rel tok_word]
+    mov     esi, tok_word_len
+    mov     r10d, 16
+    call    match_generic_size_prefix
+    test    eax, eax
+    jnz     .have_size
+    lea     rdi, [rel tok_dword]
+    mov     esi, tok_dword_len
+    mov     r10d, 32
+    call    match_generic_size_prefix
+    test    eax, eax
+    jnz     .have_size
+    lea     rdi, [rel tok_qword]
+    mov     esi, tok_qword_len
+    mov     r10d, 64
+    call    match_generic_size_prefix
+    test    eax, eax
+    jnz     .have_size
+    pop     r14
+    xor     eax, eax
+    ret
+.have_size:
+    pop     r11
+    call    parse_generic_mem_operand
+    test    eax, eax
+    jz      .bad
+    mov     qword [rel generic_op1_kind], 4
+    mov     [rel generic_op1_width], r10
+    mov     [rel generic_op1_reg], rdx
+    mov     [rel generic_op1_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op1_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op1_sym_len], rax
+    mov     eax, 1
+    ret
+.bad:
+    xor     eax, eax
+    ret
+
+er_fn match_generic_size_prefix
+    push    r10
+    push    r14
+    call    expect_operand
+    test    eax, eax
+    jz      .no
+    pop     r11
+    pop     r10
+    mov     eax, 1
+    ret
+.no:
+    pop     r14
+    pop     r10
     xor     eax, eax
     ret
 
@@ -5680,6 +6071,10 @@ er_fn parse_generic_operand2
     mov     qword [rel generic_op2_kind], 4
     mov     [rel generic_op2_reg], rdx
     mov     [rel generic_op2_imm], r8
+    mov     rax, [rel generic_mem_sym_ptr]
+    mov     [rel generic_op2_sym_ptr], rax
+    mov     rax, [rel generic_mem_sym_len]
+    mov     [rel generic_op2_sym_len], rax
     mov     eax, 1
     ret
 .imm_real:
@@ -5696,9 +6091,11 @@ er_fn parse_generic_operand2
     xor     eax, eax
     ret
 
-; parse_generic_mem_operand() -> eax=1, rdx=base reg, r8=disp.
+; parse_generic_mem_operand() -> eax=1, rdx=base reg or -1 for RIP symbol, r8=disp.
 er_fn parse_generic_mem_operand
     er_push r10, r11, r12, r13
+    mov     qword [rel generic_mem_sym_ptr], 0
+    mov     qword [rel generic_mem_sym_len], 0
     call    skip_space_inline
     cmp     r14, r15
     jae     .bad
@@ -5726,7 +6123,7 @@ er_fn parse_generic_mem_operand
     jz      .bad
     call    parse_generic_reg_token
     test    eax, eax
-    jz      .bad
+    jz      .symbol_or_rel
     cmp     rcx, 64
     jne     .bad
     mov     r12, rdx
@@ -5750,6 +6147,61 @@ er_fn parse_generic_mem_operand
     jne     .bad
 .close:
     inc     r14
+    mov     rdx, r12
+    mov     r8, r13
+    mov     eax, 1
+    jmp     .done
+.symbol_or_rel:
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_rel]
+    mov     ecx, tok_rel_len
+    call    token_eq
+    test    eax, eax
+    jz      .symbol_have_name
+    call    skip_space_inline
+    mov     r10, r14
+.rel_name:
+    cmp     r14, r15
+    jae     .bad
+    movzx   eax, byte [r14]
+    cmp     al, ' '
+    je      .rel_name_done
+    cmp     al, '+'
+    je      .rel_name_done
+    cmp     al, ']'
+    je      .rel_name_done
+    inc     r14
+    jmp     .rel_name
+.rel_name_done:
+    mov     r11, r14
+    sub     r11, r10
+    test    r11, r11
+    jz      .bad
+.symbol_have_name:
+    mov     r12, -1
+    xor     r13d, r13d
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], ']'
+    je      .symbol_close
+    cmp     byte [r14], '+'
+    jne     .bad
+    inc     r14
+    call    expect_value_operand
+    test    eax, eax
+    jz      .bad
+    mov     r13, [rel imm_u32_value]
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], ']'
+    jne     .bad
+.symbol_close:
+    inc     r14
+    mov     [rel generic_mem_sym_ptr], r10
+    mov     [rel generic_mem_sym_len], r11
     mov     rdx, r12
     mov     r8, r13
     mov     eax, 1
@@ -5872,6 +6324,55 @@ er_fn parse_generic_reg_token
     call    token_eq
     test    eax, eax
     jnz     .r15b
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_ax]
+    mov     ecx, tok_ax_len
+    call    token_eq
+    test    eax, eax
+    jnz     .ax
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_cx]
+    mov     ecx, tok_cx_len
+    call    token_eq
+    test    eax, eax
+    jnz     .cx
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_dx]
+    mov     ecx, tok_dx_len
+    call    token_eq
+    test    eax, eax
+    jnz     .dxw
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_bx]
+    mov     ecx, tok_bx_len
+    call    token_eq
+    test    eax, eax
+    jnz     .bxw
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_si]
+    mov     ecx, tok_si_len
+    call    token_eq
+    test    eax, eax
+    jnz     .si
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_di]
+    mov     ecx, tok_di_len
+    call    token_eq
+    test    eax, eax
+    jnz     .di
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_r8w]
+    mov     ecx, tok_r8w_len
+    call    token_eq
+    test    eax, eax
+    jnz     .r8w
     mov     rdi, r10
     mov     rsi, r11
     lea     rdx, [rel tok_eax]
@@ -6007,6 +6508,13 @@ er_fn parse_generic_reg_token
     jnz     .rbx
     mov     rdi, r10
     mov     rsi, r11
+    lea     rdx, [rel tok_rsp]
+    mov     ecx, tok_rsp_len
+    call    token_eq
+    test    eax, eax
+    jnz     .rsp
+    mov     rdi, r10
+    mov     rsi, r11
     lea     rdx, [rel tok_rbp]
     mov     ecx, tok_rbp_len
     call    token_eq
@@ -6140,6 +6648,34 @@ er_fn parse_generic_reg_token
        mov ecx, 8
        mov eax, 1
        ret
+.ax:   xor edx, edx
+       mov ecx, 16
+       mov eax, 1
+       ret
+.cx:   mov edx, 1
+       mov ecx, 16
+       mov eax, 1
+       ret
+.dxw:  mov edx, 2
+       mov ecx, 16
+       mov eax, 1
+       ret
+.bxw:  mov edx, 3
+       mov ecx, 16
+       mov eax, 1
+       ret
+.si:   mov edx, 6
+       mov ecx, 16
+       mov eax, 1
+       ret
+.di:   mov edx, 7
+       mov ecx, 16
+       mov eax, 1
+       ret
+.r8w:  mov edx, 8
+       mov ecx, 16
+       mov eax, 1
+       ret
 .eax:  xor edx, edx
        mov ecx, 32
        mov eax, 1
@@ -6213,6 +6749,10 @@ er_fn parse_generic_reg_token
        mov eax, 1
        ret
 .rbx:  mov edx, 3
+       mov ecx, 64
+       mov eax, 1
+       ret
+.rsp:  mov edx, 4
        mov ecx, 64
        mov eax, 1
        ret
@@ -6292,6 +6832,11 @@ er_fn emit_generic_modrm_reg_reg
     mov     rbx, rdi
     mov     r12, rdx
     mov     r13, rcx
+    cmp     rsi, 16
+    jne     .rex_setup
+    mov     edi, 0x66
+    call    append_text_byte
+.rex_setup:
     mov     rdi, rsi
     mov     rsi, r12
     mov     rdx, r13
@@ -6320,6 +6865,89 @@ er_fn emit_generic_modrm_reg_reg
     er_pop  rbx, r12, r13
     ret
 
+; emit_generic_modrm_reg_rip(rdi=opcode, rsi=width, rdx=reg, r8=addend, r9=sym, r10=sym_len).
+er_fn emit_generic_modrm_reg_rip
+    er_push rbx, r12, r13, r14, r15
+    mov     rbx, rdi
+    mov     r12, rdx
+    mov     r13, r8
+    mov     r14, r9
+    mov     r15, r10
+    test    r15, r15
+    jz      .bad
+    cmp     rsi, 16
+    jne     .rex_setup
+    mov     edi, 0x66
+    call    append_text_byte
+.rex_setup:
+    mov     rdi, rsi
+    mov     rsi, r12
+    xor     edx, edx
+    xor     r8d, r8d
+    call    emit_generic_rex
+    mov     edi, ebx
+    call    append_text_byte
+    mov     rdx, r12
+    mov     r8, r13
+    mov     r9, r14
+    mov     r10, r15
+    call    emit_generic_modrm_rip_tail
+    er_pop  rbx, r12, r13, r14, r15
+    ret
+.bad:
+    xor     eax, eax
+    er_pop  rbx, r12, r13, r14, r15
+    ret
+
+; emit_generic_modrm_rip_tail(rdx=reg field, r8=addend, r9=sym, r10=sym_len).
+er_fn emit_generic_modrm_rip_tail
+    er_push rbx, r12, r13, r14
+    mov     rbx, rdx
+    mov     r12, r8
+    mov     r13, r9
+    mov     r14, r10
+    test    r14, r14
+    jz      .bad
+    mov     rdi, rbx
+    and     edi, 7
+    shl     edi, 3
+    or      edi, 5
+    call    append_text_byte
+    mov     rax, [rel text_len]
+    mov     rbx, rax
+    xor     edi, edi
+    call    append_text_u32
+    mov     r10, r13
+    mov     r11, r14
+    call    find_label_value
+    test    eax, eax
+    jz      .pending
+    mov     rax, rdx
+    add     rax, r12
+    sub     rax, rbx
+    sub     rax, 4
+    lea     rdx, [rel text_buf]
+    mov     [rdx + rbx], eax
+    mov     eax, 1
+    jmp     .done
+.pending:
+    mov     rax, [rel pending_rel_count]
+    cmp     rax, ER_ASM_BRANCH_CAP
+    jae     .bad
+    mov     [rel pending_rel_ptr + rax * 8], r13
+    mov     [rel pending_rel_len + rax * 8], r14
+    mov     [rel pending_rel_off + rax * 8], rbx
+    mov     [rel pending_rel_addend + rax * 8], r12
+    inc     qword [rel pending_rel_count]
+    mov     eax, 1
+    jmp     .done
+.bad:
+    mov     qword [rel exit_subset_bad], 1
+    xor     eax, eax
+.done:
+    er_pop  rbx, r12, r13, r14
+    ret
+
 er_fn emit_generic_modrm_reg_mem
     ; rdi=opcode, rsi=width, rdx=reg field, rcx=base field, r8=disp.
     er_push rbx, r12, r13, r14, r15
@@ -6327,6 +6955,11 @@ er_fn emit_generic_modrm_reg_mem
     mov     r12, rdx
     mov     r13, rcx
     mov     r14, r8
+    cmp     rsi, 16
+    jne     .rex_setup
+    mov     edi, 0x66
+    call    append_text_byte
+.rex_setup:
     mov     rdi, rsi
     mov     rsi, r12
     mov     rdx, r13
@@ -6436,26 +7069,101 @@ er_fn emit_generic_mov
     jne     .mem_src_emit
     mov     edi, 0x8a
 .mem_src_emit:
+    cmp     qword [rel generic_op2_sym_len], 0
+    jne     .mem_src_rip
     mov     rsi, rax
     mov     rdx, [rel generic_op1_reg]
     mov     rcx, [rel generic_op2_reg]
     mov     r8, [rel generic_op2_imm]
     call    emit_generic_modrm_reg_mem
     ret
+.mem_src_rip:
+    mov     rsi, rax
+    mov     rdx, [rel generic_op1_reg]
+    mov     r8, [rel generic_op2_imm]
+    mov     r9, [rel generic_op2_sym_ptr]
+    mov     r10, [rel generic_op2_sym_len]
+    call    emit_generic_modrm_reg_rip
+    ret
 .mem_dest:
     cmp     qword [rel generic_op2_kind], 1
-    jne     .bad
+    je      .mem_dest_reg
+    cmp     qword [rel generic_op2_kind], 2
+    je      .mem_dest_imm
+    jmp     .bad
+.mem_dest_reg:
     mov     rax, [rel generic_op2_width]
     mov     edi, 0x89
     cmp     rax, 8
     jne     .mem_dest_emit
     mov     edi, 0x88
 .mem_dest_emit:
+    cmp     qword [rel generic_op1_sym_len], 0
+    jne     .mem_dest_rip
     mov     rsi, rax
     mov     rdx, [rel generic_op2_reg]
     mov     rcx, [rel generic_op1_reg]
     mov     r8, [rel generic_op1_imm]
     call    emit_generic_modrm_reg_mem
+    ret
+.mem_dest_rip:
+    mov     rsi, rax
+    mov     rdx, [rel generic_op2_reg]
+    mov     r8, [rel generic_op1_imm]
+    mov     r9, [rel generic_op1_sym_ptr]
+    mov     r10, [rel generic_op1_sym_len]
+    call    emit_generic_modrm_reg_rip
+    ret
+.mem_dest_imm:
+    mov     rax, [rel generic_op1_width]
+    test    rax, rax
+    jz      .bad
+    mov     edi, 0xc7
+    cmp     rax, 8
+    jne     .mem_imm_emit
+    mov     edi, 0xc6
+.mem_imm_emit:
+    cmp     qword [rel generic_op1_sym_len], 0
+    jne     .mem_imm_rip
+    mov     rsi, rax
+    xor     edx, edx
+    mov     rcx, [rel generic_op1_reg]
+    mov     r8, [rel generic_op1_imm]
+    call    emit_generic_modrm_reg_mem
+    jmp     .mem_imm_value
+.mem_imm_rip:
+    mov     rsi, rax
+    xor     edx, edx
+    mov     r8, [rel generic_op1_imm]
+    mov     r9, [rel generic_op1_sym_ptr]
+    mov     r10, [rel generic_op1_sym_len]
+    call    emit_generic_modrm_reg_rip
+.mem_imm_value:
+    mov     rax, [rel generic_op1_width]
+    cmp     rax, 8
+    je      .mem_imm8
+    cmp     rax, 16
+    je      .mem_imm16
+    mov     rdi, [rel generic_op2_imm]
+    call    append_text_u32
+    mov     eax, 1
+    ret
+.mem_imm16:
+    mov     rax, [rel generic_op2_imm]
+    mov     rdi, rax
+    and     rdi, 0xff
+    call    append_text_byte
+    mov     rax, [rel generic_op2_imm]
+    shr     rax, 8
+    mov     rdi, rax
+    and     rdi, 0xff
+    call    append_text_byte
+    mov     eax, 1
+    ret
+.mem_imm8:
+    mov     rdi, [rel generic_op2_imm]
+    call    append_text_byte
+    mov     eax, 1
     ret
 .imm:
     mov     rax, [rel generic_op1_width]
@@ -6534,6 +7242,7 @@ er_fn emit_generic_test
     ret
 .imm:
     xor     r10d, r10d
+    mov     [rel generic_opcode_ext], r10
     call    emit_generic_group_imm
     ret
 .bad:
@@ -6544,13 +7253,68 @@ er_fn emit_generic_group1
     cmp     qword [rel generic_op1_kind], 1
     jne     .bad
     cmp     qword [rel generic_op2_kind], 1
-    je      .reg
+    je      .reg_inline
     cmp     qword [rel generic_op2_kind], 2
     jne     .bad
     call    emit_generic_group_imm
     ret
-.reg:
-    call    emit_generic_group_reg
+.reg_inline:
+    mov     rax, [rel generic_op1_width]
+    cmp     rax, [rel generic_op2_width]
+    jne     .bad
+    cmp     r10, 0
+    je      .reg_add
+    cmp     r10, 1
+    je      .reg_or
+    cmp     r10, 4
+    je      .reg_and
+    cmp     r10, 5
+    je      .reg_sub
+    cmp     r10, 6
+    je      .reg_xor
+    cmp     r10, 7
+    je      .reg_cmp
+    jmp     .bad
+.reg_add:
+    mov     edi, 0x01
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x00
+    jmp     .reg_emit
+.reg_or:
+    mov     edi, 0x09
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x08
+    jmp     .reg_emit
+.reg_and:
+    mov     edi, 0x21
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x20
+    jmp     .reg_emit
+.reg_sub:
+    mov     edi, 0x29
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x28
+    jmp     .reg_emit
+.reg_xor:
+    mov     edi, 0x31
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x30
+    jmp     .reg_emit
+.reg_cmp:
+    mov     edi, 0x39
+    cmp     rax, 8
+    jne     .reg_emit
+    mov     edi, 0x38
+.reg_emit:
+    mov     rsi, rax
+    mov     rdx, [rel generic_op2_reg]
+    mov     rcx, [rel generic_op1_reg]
+    call    emit_generic_modrm_reg_reg
     ret
 .bad:
     xor     eax, eax
@@ -6619,9 +7383,9 @@ er_fn emit_generic_group_reg
     ret
 
 er_fn emit_generic_group_imm
-    ; r10=group extension.
+    ; generic_opcode_ext holds the group extension selected by dispatch.
     er_push rbx, r12
-    mov     rbx, r10
+    mov     rbx, [rel generic_opcode_ext]
     mov     r12, [rel generic_op1_width]
     cmp     qword [rel generic_op1_reg], 0
     jne     .normal
@@ -6761,13 +7525,13 @@ er_fn emit_generic_shift
     cmp     qword [rel generic_op2_kind], 2
     jne     .bad
     mov     rdi, [rel generic_op1_width]
-    mov     rsi, r10
+    mov     rsi, [rel generic_opcode_ext]
     mov     rdx, [rel generic_op1_reg]
     xor     r8d, r8d
     call    emit_generic_rex
     mov     edi, 0xc1
     call    append_text_byte
-    mov     rdi, r10
+    mov     rdi, [rel generic_opcode_ext]
     and     edi, 7
     shl     edi, 3
     mov     rax, [rel generic_op1_reg]
@@ -6805,7 +7569,7 @@ er_fn emit_generic_incdec
 
 er_fn emit_generic_group3
     mov     rdi, [rel generic_op1_width]
-    mov     rsi, r10
+    mov     rsi, [rel generic_opcode_ext]
     mov     rdx, [rel generic_op1_reg]
     xor     r8d, r8d
     cmp     rdi, 8
@@ -6819,7 +7583,7 @@ er_fn emit_generic_group3
     mov     edi, 0xf6
 .opcode:
     call    append_text_byte
-    mov     rdi, r10
+    mov     rdi, [rel generic_opcode_ext]
     and     edi, 7
     shl     edi, 3
     mov     rax, [rel generic_op1_reg]
@@ -6856,29 +7620,18 @@ er_fn emit_generic_movzx
     ret
 
 er_fn emit_generic_movzx_byte_mem
-    mov     edi, 0x0f
-    call    append_text_byte
-    mov     rdi, 0xb6
-    mov     rsi, 32
-    mov     rdx, [rel generic_op1_reg]
-    mov     rcx, [rel generic_op2_reg]
-    mov     r8, [rel generic_op2_imm]
-    call    emit_generic_modrm_reg_mem_after_opcode
-    ret
-
-er_fn emit_generic_modrm_reg_mem_after_opcode
-    ; First opcode byte already emitted; emits REX before second opcode is not possible.
-    ; Use only when no REX extension is required by opcode prefix users.
-    mov     r9, rdi
-    mov     rdi, rsi
-    mov     rsi, rdx
-    mov     rdx, rcx
+    er_push r12, r13, r14, r15
+    mov     rdi, 32
+    mov     rsi, [rel generic_op1_reg]
+    mov     rdx, [rel generic_op2_reg]
     xor     r8d, r8d
     call    emit_generic_rex
-    mov     rdi, r9
+    mov     edi, 0x0f
     call    append_text_byte
-    mov     rdi, r9
-    ; Re-enter full encoder is impossible after split; inline memory bytes.
+    mov     edi, 0xb6
+    call    append_text_byte
+    cmp     qword [rel generic_op2_sym_len], 0
+    jne     .rip
     mov     r12, [rel generic_op1_reg]
     mov     r13, [rel generic_op2_reg]
     mov     r14, [rel generic_op2_imm]
@@ -6927,16 +7680,27 @@ er_fn emit_generic_modrm_reg_mem_after_opcode
     cmp     r15d, 0x80
     je      .disp32
     mov     eax, 1
+    er_pop  r12, r13, r14, r15
     ret
 .disp8:
     mov     rdi, r14
     call    append_text_byte
     mov     eax, 1
+    er_pop  r12, r13, r14, r15
     ret
 .disp32:
     mov     rdi, r14
     call    append_text_u32
     mov     eax, 1
+    er_pop  r12, r13, r14, r15
+    ret
+.rip:
+    mov     rdx, [rel generic_op1_reg]
+    mov     r8, [rel generic_op2_imm]
+    mov     r9, [rel generic_op2_sym_ptr]
+    mov     r10, [rel generic_op2_sym_len]
+    call    emit_generic_modrm_rip_tail
+    er_pop  r12, r13, r14, r15
     ret
 
 er_fn emit_generic_lea_rsp_disp
@@ -6970,6 +7734,43 @@ er_fn emit_generic_lea_rsp_disp
     call    append_text_byte
     mov     rdi, [rel generic_op2_imm]
     call    append_text_u32
+    mov     eax, 1
+    ret
+
+er_fn emit_generic_lea_mem
+    cmp     qword [rel generic_op2_sym_len], 0
+    jne     .rip
+    mov     edi, 0x8d
+    mov     rsi, [rel generic_op1_width]
+    mov     rdx, [rel generic_op1_reg]
+    mov     rcx, [rel generic_op2_reg]
+    mov     r8, [rel generic_op2_imm]
+    call    emit_generic_modrm_reg_mem
+    ret
+.rip:
+    mov     edi, 0x8d
+    mov     rsi, [rel generic_op1_width]
+    mov     rdx, [rel generic_op1_reg]
+    mov     r8, [rel generic_op2_imm]
+    mov     r9, [rel generic_op2_sym_ptr]
+    mov     r10, [rel generic_op2_sym_len]
+    call    emit_generic_modrm_reg_rip
+    ret
+
+er_fn emit_generic_setcc
+    mov     rdi, 8
+    xor     esi, esi
+    mov     rdx, [rel generic_op1_reg]
+    mov     r8d, 1
+    call    emit_generic_rex
+    mov     edi, 0x0f
+    call    append_text_byte
+    mov     edi, r10d
+    call    append_text_byte
+    mov     rdi, [rel generic_op1_reg]
+    and     edi, 7
+    or      edi, 0xc0
+    call    append_text_byte
     mov     eax, 1
     ret
 

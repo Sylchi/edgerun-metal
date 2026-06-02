@@ -4,6 +4,9 @@
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/image_formats_constants.inc"
 
+extern er_media_msb_read_bit
+extern er_media_msb_read_bits
+
 SECTION .rodata
 deflate_length_base:
     dw 3, 4, 5, 6, 7, 8, 9, 10
@@ -163,62 +166,13 @@ er_fn er_jpeg_next_entropy_byte
 
 ; er_jpeg_read_bit(state) -> eax=bit, rdx=error
 er_fn er_jpeg_read_bit
-    er_check_zero rdi, .invalid_param
-    cmp     byte [rdi + JPEG_BIT_READER_BITS_LEFT_OFF], 0
-    jne     .have_bits
-    call    er_jpeg_next_entropy_byte
-    test    edx, edx
-    jnz     .done
-    mov     [rdi + JPEG_BIT_READER_BUFFER_OFF], al
-    mov     byte [rdi + JPEG_BIT_READER_BITS_LEFT_OFF], 8
-.have_bits:
-    dec     byte [rdi + JPEG_BIT_READER_BITS_LEFT_OFF]
-    movzx   ecx, byte [rdi + JPEG_BIT_READER_BITS_LEFT_OFF]
-    movzx   eax, byte [rdi + JPEG_BIT_READER_BUFFER_OFF]
-    shr     eax, cl
-    and     eax, 1
-    er_ok
-    er_ret
-.invalid_param:
-    xor     eax, eax
-    er_err  ERROR_INVALID_PARAM
-.done:
-    er_ret
+    mov     rsi, er_jpeg_next_entropy_byte
+    jmp     er_media_msb_read_bit
 
 ; er_jpeg_read_bits(state, count) -> eax=value, rdx=error
 er_fn er_jpeg_read_bits
-    er_push rbx, r12, r13
-    er_check_zero rdi, .invalid_param
-    cmp     esi, JPEG_MAX_CODE_LEN
-    ja      .corrupt
-    mov     r12, rdi
-    mov     ebx, esi
-    xor     r13d, r13d
-.loop:
-    test    ebx, ebx
-    jz      .ok
-    mov     rdi, r12
-    call    er_jpeg_read_bit
-    test    edx, edx
-    jnz     .done
-    shl     r13d, 1
-    or      r13d, eax
-    dec     ebx
-    jmp     .loop
-.ok:
-    mov     eax, r13d
-    er_ok
-    jmp     .done
-.invalid_param:
-    xor     eax, eax
-    er_err  ERROR_INVALID_PARAM
-    jmp     .done
-.corrupt:
-    xor     eax, eax
-    er_err  ERROR_CORRUPT
-.done:
-    er_pop  rbx, r12, r13
-    er_ret
+    mov     rdx, er_jpeg_next_entropy_byte
+    jmp     er_media_msb_read_bits
 
 ; er_jpeg_consume_marker(state) -> eax=marker, rdx=error
 er_fn er_jpeg_consume_marker
@@ -556,8 +510,8 @@ er_fn er_jpeg_decode_block
     er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
-; er_jpeg_clamp_u8(value) -> eax=0..255
-er_fn er_jpeg_clamp_u8
+; er_media_clamp_u8(value) -> eax=0..255
+er_fn er_media_clamp_u8
     test    edi, edi
     jle     .zero
     cmp     edi, 255
@@ -576,7 +530,7 @@ er_fn er_jpeg_clamp_u8
 
 ; er_jpeg_gray_color(value) -> eax=packed RGBA
 er_fn er_jpeg_gray_color
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     mov     ecx, eax
     shl     eax, 16
     mov     edx, ecx
@@ -601,7 +555,7 @@ er_fn er_jpeg_ycbcr_color
     sar     eax, JPEG_COLOR_SCALE_BITS
     add     eax, r12d
     mov     edi, eax
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     mov     r8d, eax
     mov     eax, ebx
     imul    eax, JPEG_YCBCR_G_CB_COEFF
@@ -612,7 +566,7 @@ er_fn er_jpeg_ycbcr_color
     sar     eax, JPEG_COLOR_SCALE_BITS
     mov     edi, r12d
     sub     edi, eax
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     mov     r9d, eax
     mov     eax, ebx
     imul    eax, JPEG_YCBCR_B_CB_COEFF
@@ -620,7 +574,7 @@ er_fn er_jpeg_ycbcr_color
     sar     eax, JPEG_COLOR_SCALE_BITS
     add     eax, r12d
     mov     edi, eax
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     shl     eax, 16
     shl     r9d, 8
     or      eax, r9d
@@ -1382,12 +1336,12 @@ er_fn er_jpeg_parse
     er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
-; er_jpeg_decode_scan_gray(state, scan, scan_len, out_pixels, out_count, scratch, scratch_cap)
+; er_jpeg_decode_scan(state, scan, scan_len, out_pixels, out_count, scratch, scratch_cap)
 ; -> eax=pixel_count, rdx=error
-er_fn er_jpeg_decode_scan_gray
+er_fn er_jpeg_decode_scan
     mov     r10, [rsp + 8]
     er_push rbx, rbp, r12, r13, r14, r15
-    sub     rsp, 80
+    sub     rsp, 128
     er_check_zero rdi, .invalid_param
     er_check_zero rsi, .invalid_param
     er_check_zero rcx, .invalid_param
@@ -1397,9 +1351,14 @@ er_fn er_jpeg_decode_scan_gray
     cmp     dword [rdi + JPEG_STATE_HAVE_FRAME_OFF], 1
     jne     .corrupt
     cmp     dword [rdi + JPEG_STATE_COMPONENT_COUNT_OFF], 1
+    je      .validate_gray
+    cmp     dword [rdi + JPEG_STATE_COMPONENT_COUNT_OFF], 3
     jne     .unsupported
+    jmp     .size_check
+.validate_gray:
     cmp     byte [rdi + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SAMPLING_OFF], 0x11
     jne     .unsupported
+.size_check:
     mov     eax, [rdi + JPEG_STATE_WIDTH_OFF]
     imul    eax, [rdi + JPEG_STATE_HEIGHT_OFF]
     jo      .memory
@@ -1418,66 +1377,158 @@ er_fn er_jpeg_decode_scan_gray
     test    edx, edx
     jnz     .done
     mov     rdi, [rsp]
+    mov     eax, [rdi + JPEG_STATE_MAX_H_OFF]
+    shl     eax, 3
+    mov     [rsp + 80], eax     ; MCU pixel width
+    mov     ecx, eax
     mov     eax, [rdi + JPEG_STATE_WIDTH_OFF]
-    add     eax, 7
-    shr     eax, 3
-    mov     [rsp + 28], eax     ; block columns
+    add     eax, ecx
+    dec     eax
+    xor     edx, edx
+    div     ecx
+    mov     [rsp + 28], eax     ; MCU columns
+    mov     eax, [rdi + JPEG_STATE_MAX_V_OFF]
+    shl     eax, 3
+    mov     [rsp + 84], eax     ; MCU pixel height
+    mov     ecx, eax
     mov     eax, [rdi + JPEG_STATE_HEIGHT_OFF]
-    add     eax, 7
-    shr     eax, 3
-    mov     [rsp + 32], eax     ; block rows
+    add     eax, ecx
+    dec     eax
+    xor     edx, edx
+    div     ecx
+    mov     [rsp + 32], eax     ; MCU rows
     mov     ecx, [rsp + 28]
     imul    ecx, eax
-    mov     [rsp + 68], ecx     ; total blocks
-    mov     dword [rsp + 72], 0 ; processed blocks
+    mov     [rsp + 68], ecx     ; total MCUs
+    mov     dword [rsp + 72], 0 ; processed MCUs
     mov     dword [rsp + 76], 0 ; restart count
     mov     dword [rsp + 44], JPEG_MARKER_RST0
-    xor     ebp, ebp            ; block y
-.block_y_loop:
+    xor     ebp, ebp            ; MCU y
+.mcu_y_loop:
     cmp     ebp, [rsp + 32]
     jae     .finish
-    xor     ebx, ebx            ; block x
-.block_x_loop:
+    xor     ebx, ebx            ; MCU x
+.mcu_x_loop:
     cmp     ebx, [rsp + 28]
-    jae     .next_block_y
+    jae     .next_mcu_y
+    mov     dword [rsp + 88], 0 ; component index
+.component_loop:
     mov     rdi, [rsp]
-    xor     esi, esi
+    mov     eax, [rsp + 88]
+    cmp     eax, [rdi + JPEG_STATE_COMPONENT_COUNT_OFF]
+    jae     .write_mcu
+    mov     ecx, eax
+    imul    ecx, JPEG_COMPONENT_SIZE
+    movzx   eax, byte [rdi + JPEG_STATE_COMPONENTS_OFF + rcx + JPEG_COMPONENT_SAMPLING_OFF]
+    mov     r12d, eax
+    shr     r12d, 4              ; component h
+    and     eax, 0x0f
+    mov     r13d, eax            ; component v
+    mov     dword [rsp + 92], 0  ; by
+.block_by_loop:
+    mov     eax, [rsp + 92]
+    cmp     eax, r13d
+    jae     .next_component
+    mov     dword [rsp + 96], 0  ; bx
+.block_bx_loop:
+    mov     eax, [rsp + 96]
+    cmp     eax, r12d
+    jae     .next_block_by
+    mov     eax, [rsp + 92]
+    imul    eax, r12d
+    add     eax, [rsp + 96]
+    shl     eax, 7
+    mov     ecx, [rsp + 88]
+    imul    ecx, JPEG_SCAN_COMPONENT_STRIDE
+    add     eax, ecx
     mov     rdx, [rsp + 16]
-    lea     rcx, [rdx + JPEG_SCAN_SCRATCH_BLOCK_OFF]
+    lea     rcx, [rdx + JPEG_SCAN_SCRATCH_BLOCKS_OFF + rax]
+    mov     rdi, [rsp]
+    mov     esi, [rsp + 88]
+    mov     rdx, [rsp + 16]
     call    er_jpeg_decode_component_block
     test    edx, edx
     jnz     .done
+    inc     dword [rsp + 96]
+    jmp     .block_bx_loop
+.next_block_by:
+    inc     dword [rsp + 92]
+    jmp     .block_by_loop
+.next_component:
+    inc     dword [rsp + 88]
+    jmp     .component_loop
+.write_mcu:
     mov     dword [rsp + 60], 0 ; local y
 .pixel_y_loop:
-    cmp     dword [rsp + 60], JPEG_BLOCK_SIDE
-    jae     .next_block_x
+    mov     eax, [rsp + 60]
+    cmp     eax, [rsp + 84]
+    jae     .next_mcu
     mov     eax, ebp
-    shl     eax, 3
+    imul    eax, [rsp + 84]
     add     eax, [rsp + 60]
     mov     rdi, [rsp]
     cmp     eax, [rdi + JPEG_STATE_HEIGHT_OFF]
-    jae     .next_block_x
+    jae     .next_mcu
     mov     [rsp + 36], eax     ; global y
     mov     dword [rsp + 64], 0 ; local x
 .pixel_x_loop:
-    cmp     dword [rsp + 64], JPEG_BLOCK_SIDE
+    mov     eax, [rsp + 64]
+    cmp     eax, [rsp + 80]
     jae     .next_pixel_y
     mov     eax, ebx
-    shl     eax, 3
+    imul    eax, [rsp + 80]
     add     eax, [rsp + 64]
     mov     rdi, [rsp]
     cmp     eax, [rdi + JPEG_STATE_WIDTH_OFF]
     jae     .next_pixel_y
     mov     [rsp + 40], eax     ; global x
     mov     rdi, [rsp + 16]
-    lea     rdi, [rdi + JPEG_SCAN_SCRATCH_BLOCK_OFF]
-    mov     esi, [rsp + 64]
-    mov     edx, [rsp + 60]
-    call    er_jpeg_idct_sample
+    lea     rdi, [rdi + JPEG_SCAN_SCRATCH_BLOCKS_OFF]
+    mov     r12, [rsp]
+    movzx   esi, byte [r12 + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SAMPLING_OFF]
+    mov     edx, [r12 + JPEG_STATE_MAX_H_OFF]
+    mov     ecx, [r12 + JPEG_STATE_MAX_V_OFF]
+    mov     r8d, [rsp + 64]
+    mov     r9d, [rsp + 60]
+    call    er_jpeg_sample_component
     test    edx, edx
     jnz     .done
-    mov     edi, eax
+    mov     r13d, eax
+    mov     rdi, [rsp]
+    cmp     dword [rdi + JPEG_STATE_COMPONENT_COUNT_OFF], 1
+    jne     .color_pixel
+    mov     edi, r13d
     call    er_jpeg_gray_color
+    jmp     .store_pixel
+.color_pixel:
+    mov     rdi, [rsp + 16]
+    lea     rdi, [rdi + JPEG_SCAN_SCRATCH_BLOCKS_OFF + JPEG_SCAN_COMPONENT_STRIDE]
+    mov     r12, [rsp]
+    movzx   esi, byte [r12 + JPEG_STATE_COMPONENTS_OFF + JPEG_COMPONENT_SIZE + JPEG_COMPONENT_SAMPLING_OFF]
+    mov     edx, [r12 + JPEG_STATE_MAX_H_OFF]
+    mov     ecx, [r12 + JPEG_STATE_MAX_V_OFF]
+    mov     r8d, [rsp + 64]
+    mov     r9d, [rsp + 60]
+    call    er_jpeg_sample_component
+    test    edx, edx
+    jnz     .done
+    mov     r14d, eax
+    mov     rdi, [rsp + 16]
+    lea     rdi, [rdi + JPEG_SCAN_SCRATCH_BLOCKS_OFF + JPEG_SCAN_COMPONENT_STRIDE * 2]
+    mov     r12, [rsp]
+    movzx   esi, byte [r12 + JPEG_STATE_COMPONENTS_OFF + 2 * JPEG_COMPONENT_SIZE + JPEG_COMPONENT_SAMPLING_OFF]
+    mov     edx, [r12 + JPEG_STATE_MAX_H_OFF]
+    mov     ecx, [r12 + JPEG_STATE_MAX_V_OFF]
+    mov     r8d, [rsp + 64]
+    mov     r9d, [rsp + 60]
+    call    er_jpeg_sample_component
+    test    edx, edx
+    jnz     .done
+    mov     edi, r13d
+    mov     esi, r14d
+    mov     edx, eax
+    call    er_jpeg_ycbcr_color
+.store_pixel:
     mov     rdi, [rsp]
     mov     ecx, [rsp + 36]
     imul    ecx, [rdi + JPEG_STATE_WIDTH_OFF]
@@ -1489,7 +1540,7 @@ er_fn er_jpeg_decode_scan_gray
 .next_pixel_y:
     inc     dword [rsp + 60]
     jmp     .pixel_y_loop
-.next_block_x:
+.next_mcu:
     inc     dword [rsp + 72]
     mov     rdi, [rsp]
     cmp     dword [rdi + JPEG_STATE_RESTART_INTERVAL_OFF], 0
@@ -1519,10 +1570,10 @@ er_fn er_jpeg_decode_scan_gray
     inc     dword [rsp + 44]
 .advance_block_x:
     inc     ebx
-    jmp     .block_x_loop
-.next_block_y:
+    jmp     .mcu_x_loop
+.next_mcu_y:
     inc     ebp
-    jmp     .block_y_loop
+    jmp     .mcu_y_loop
 .finish:
     mov     rdi, [rsp + 16]
     call    er_jpeg_consume_eoi
@@ -1551,7 +1602,7 @@ er_fn er_jpeg_decode_scan_gray
     xor     eax, eax
     er_err  ERROR_CORRUPT
 .done:
-    add     rsp, 80
+    add     rsp, 128
     er_pop  rbx, rbp, r12, r13, r14, r15
     er_ret
 
@@ -1597,7 +1648,7 @@ er_fn er_image_decode_jpeg
     mov     r8d, [rsp + 24]
     mov     r9, r13
     push    JPEG_SCAN_SCRATCH_SIZE
-    call    er_jpeg_decode_scan_gray
+    call    er_jpeg_decode_scan
     add     rsp, 8
     test    edx, edx
     jnz     .done

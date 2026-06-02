@@ -26,7 +26,7 @@ extern er_jpeg_build_huffman_table
 extern er_jpeg_huffman_decode
 extern er_jpeg_receive_extend
 extern er_jpeg_decode_block
-extern er_jpeg_clamp_u8
+extern er_media_clamp_u8
 extern er_jpeg_gray_color
 extern er_jpeg_ycbcr_color
 extern er_jpeg_idct_sample
@@ -38,7 +38,7 @@ extern er_jpeg_parse_dht
 extern er_jpeg_parse_sos
 extern er_jpeg_parse_dri
 extern er_jpeg_parse
-extern er_jpeg_decode_scan_gray
+extern er_jpeg_decode_scan
 extern er_image_decode_jpeg
 extern er_jpeg_reset_dc
 extern er_image_runtime_payload_len
@@ -464,6 +464,39 @@ jpeg_gray_full:
     db 0x50, 0x00, 0xff, JPEG_MARKER_EOI
 jpeg_gray_full_len equ $ - jpeg_gray_full
 
+jpeg_color_full:
+    db 0xff, JPEG_MARKER_SOI
+    db 0xff, JPEG_MARKER_DQT
+    db 0x00, 0x43
+    db 0x00
+    times 64 db 1
+    db 0xff, JPEG_MARKER_DHT
+    db 0x00, 0x26
+    db 0x00
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+    db 0x10
+    db 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0x00
+    db 0xff, JPEG_MARKER_SOF0
+    db 0x00, 0x11
+    db JPEG_PRECISION_8
+    db 0x00, 0x01
+    db 0x00, 0x01
+    db 0x03
+    db 0x01, 0x11, 0x00
+    db 0x02, 0x11, 0x00
+    db 0x03, 0x11, 0x00
+    db 0xff, JPEG_MARKER_SOS
+    db 0x00, 0x0c
+    db 0x03
+    db 0x01, 0x00
+    db 0x02, 0x00
+    db 0x03, 0x00
+    db 0x00, 0x3f, 0x00
+    db 0x00, 0xff, JPEG_MARKER_EOI
+jpeg_color_full_len equ $ - jpeg_color_full
+
 SECTION .text
 global _start
 _start:
@@ -662,13 +695,13 @@ _start:
 
 .jpeg_color_helpers:
     mov     edi, -3
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     test    eax, eax
     jnz     .fail_jpeg_color_helpers
     test    edx, edx
     jnz     .fail_jpeg_color_helpers
     mov     edi, 300
-    call    er_jpeg_clamp_u8
+    call    er_media_clamp_u8
     cmp     eax, 255
     jne     .fail_jpeg_color_helpers
     test    edx, edx
@@ -924,7 +957,7 @@ _start:
     mov     r8d, 1
     mov     r9, jpeg_scan_scratch
     push    JPEG_SCAN_SCRATCH_SIZE
-    call    er_jpeg_decode_scan_gray
+    call    er_jpeg_decode_scan
     add     rsp, 8
     cmp     eax, 1
     jne     .fail_jpeg_decode_scan_gray
@@ -962,7 +995,7 @@ _start:
     mov     r8d, 9
     mov     r9, jpeg_scan_scratch
     push    JPEG_SCAN_SCRATCH_SIZE
-    call    er_jpeg_decode_scan_gray
+    call    er_jpeg_decode_scan
     add     rsp, 8
     cmp     eax, 9
     jne     .fail_jpeg_decode_scan_gray
@@ -998,8 +1031,33 @@ _start:
     cmp     dword [rel jpeg_decode_pixels], 0xff8a8a8a
     jne     .fail_jpeg_decode_full_gray
     inc     qword [rel passed]
-    jmp     .png_is
+    jmp     .jpeg_decode_full_color
 .fail_jpeg_decode_full_gray:
+    inc     qword [rel failed]
+
+.jpeg_decode_full_color:
+    mov     rdi, jpeg_color_full
+    mov     esi, jpeg_color_full_len
+    mov     rdx, jpeg_decode_pixels
+    mov     ecx, 1
+    mov     r8, jpeg_decode_scratch
+    mov     r9d, JPEG_DECODE_SCRATCH_SIZE
+    push    hdr
+    call    er_image_decode_jpeg
+    add     rsp, 8
+    cmp     eax, 1
+    jne     .fail_jpeg_decode_full_color
+    test    edx, edx
+    jnz     .fail_jpeg_decode_full_color
+    cmp     dword [rel hdr + IMAGE_HEADER_WIDTH], 1
+    jne     .fail_jpeg_decode_full_color
+    cmp     dword [rel hdr + IMAGE_HEADER_HEIGHT], 1
+    jne     .fail_jpeg_decode_full_color
+    cmp     dword [rel jpeg_decode_pixels], 0xff808080
+    jne     .fail_jpeg_decode_full_color
+    inc     qword [rel passed]
+    jmp     .png_is
+.fail_jpeg_decode_full_color:
     inc     qword [rel failed]
 
 .png_is:

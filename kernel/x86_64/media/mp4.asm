@@ -253,6 +253,102 @@ er_fn er_mp4_find_child_box
     er_err  ERROR_CORRUPT
     er_ret
 
+; er_mp4_find_box_path(buf, len, parent_desc, path_types, path_count, out_desc) -> eax=next_offset, rdx=error
+; Walks a direct-child box type sequence. r9=out_desc.
+er_fn er_mp4_find_box_path
+    er_push rbx, rbp, r12, r13, r14, r15
+    er_stack_alloc MP4_BOX_DESC_SIZE * 2
+    er_check_zero rdi, .invalid_param
+    er_check_zero rdx, .invalid_param
+    er_check_zero rcx, .invalid_param
+    er_check_zero r9, .invalid_param
+    test    r8d, r8d
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rcx
+    mov     r15d, r8d
+    mov     rbp, r9
+    mov     rsi, rdx
+    mov     rdi, rsp
+    mov     ecx, MP4_BOX_DESC_SIZE / 8
+    cld
+    rep     movsq
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, r15d
+    jae     .copy_current
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     rdx, rsp
+    mov     ecx, [r14 + rbx * 4]
+    lea     r8, [rsp + MP4_BOX_DESC_SIZE]
+    call    er_mp4_find_child_box
+    er_check_nonzero edx, .done
+    inc     ebx
+    lea     rsi, [rsp + MP4_BOX_DESC_SIZE]
+    cmp     ebx, r15d
+    je      .copy_out
+    mov     rdi, rsp
+    mov     ecx, MP4_BOX_DESC_SIZE / 8
+    cld
+    rep     movsq
+    jmp     .loop
+.copy_current:
+    mov     rsi, rsp
+.copy_out:
+    mov     rdi, rbp
+    mov     ecx, MP4_BOX_DESC_SIZE / 8
+    cld
+    rep     movsq
+    mov     eax, [rbp + MP4_BOX_DESC_NEXT_OFFSET]
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_stack_free MP4_BOX_DESC_SIZE * 2
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
+; er_mp4_find_child_box_or(buf, len, parent_desc, primary_type, fallback_type, out_desc)
+; -> eax=next_offset, rdx=error. Tries fallback only when primary is absent.
+er_fn er_mp4_find_child_box_or
+    mov     r10, [rsp + 8]
+    er_push rbx, rbp, r12, r13, r14, r15
+    er_check_zero rdx, .invalid_param
+    er_check_zero r10, .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     ebx, ecx
+    mov     r15d, r8d
+    mov     rbp, r10
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     rdx, r14
+    mov     ecx, ebx
+    mov     r8, rbp
+    call    er_mp4_find_child_box
+    test    edx, edx
+    jz      .done
+    cmp     edx, ERROR_NO_DATA
+    jne     .done
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     rdx, r14
+    mov     ecx, r15d
+    mov     r8, rbp
+    call    er_mp4_find_child_box
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_pop  rbx, rbp, r12, r13, r14, r15
+    er_ret
+
 ; er_mp4_stsd_first_entry(buf, len, stsd_desc, entry_desc) -> eax=entry next offset, rdx=error
 ; Parses a SampleDescriptionBox fullbox header and returns its first sample entry.
 ; rdi=buf, esi=len, rdx=stsd_desc, rcx=entry_desc
@@ -299,13 +395,11 @@ er_fn er_mp4_stsd_first_entry
     er_ret
 
 ; er_mp4_sample_entry_find_child(buf, len, entry_desc, type, child_desc) -> eax=next_offset, rdx=error
-; Scans child boxes inside an AV1 visual sample entry after its fixed 78-byte header.
+; Scans child boxes inside a visual sample entry after its fixed 78-byte header.
 ; rdi=buf, esi=len, rdx=entry_desc, ecx=type, r8=child_desc
 er_fn er_mp4_sample_entry_find_child
     er_push rbx, r12
     er_check_zero rdx, .invalid_param
-    cmp     dword [rdx + MP4_BOX_DESC_TYPE], MP4_BOX_TYPE_AV01
-    jne     .unsupported
     mov     ebx, [rdx + MP4_BOX_DESC_PAYLOAD_OFFSET]
     mov     r12d, [rdx + MP4_BOX_DESC_PAYLOAD_LEN]
     cmp     ebx, esi
@@ -329,10 +423,6 @@ er_fn er_mp4_sample_entry_find_child
 .invalid_param:
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
-    jmp     .done
-.unsupported:
-    xor     eax, eax
-    er_err  ERROR_UNSUPPORTED
     jmp     .done
 .corrupt:
     xor     eax, eax
@@ -366,19 +456,12 @@ er_fn er_mp4_sample_tables_find
     mov     esi, r13d
     mov     rdx, r14
     mov     ecx, MP4_BOX_TYPE_STCO
-    lea     r8, [rbx + MP4_SAMPLE_TABLES_STCO_DESC]
-    call    er_mp4_find_child_box
-    er_check_zero edx, .find_stsc
-    cmp     edx, ERROR_NO_DATA
-    jne     .done
-    mov     rdi, r12
-    mov     esi, r13d
-    mov     rdx, r14
-    mov     ecx, MP4_BOX_TYPE_CO64
-    lea     r8, [rbx + MP4_SAMPLE_TABLES_STCO_DESC]
-    call    er_mp4_find_child_box
+    mov     r8d, MP4_BOX_TYPE_CO64
+    lea     rax, [rbx + MP4_SAMPLE_TABLES_STCO_DESC]
+    push    rax
+    call    er_mp4_find_child_box_or
+    add     rsp, 8
     er_check_nonzero edx, .done
-.find_stsc:
     mov     rdi, r12
     mov     esi, r13d
     mov     rdx, r14
@@ -463,19 +546,15 @@ er_fn er_mp4_video_stbl_find
     call    er_mp4_hdlr_is_video
     er_check_nonzero edx, .done
     er_check_zero eax, .trak_loop
+    mov     dword [rsp + MP4_VIDEO_STBL_END + 4], MP4_BOX_TYPE_MINF
+    mov     dword [rsp + MP4_VIDEO_STBL_END + 8], MP4_BOX_TYPE_STBL
     mov     rdi, r12
     mov     esi, r13d
     lea     rdx, [rsp + MP4_VIDEO_STBL_MDIA_DESC]
-    mov     ecx, MP4_BOX_TYPE_MINF
-    lea     r8, [rsp + MP4_VIDEO_STBL_MINF_DESC]
-    call    er_mp4_find_child_box
-    er_check_nonzero edx, .done
-    mov     rdi, r12
-    mov     esi, r13d
-    lea     rdx, [rsp + MP4_VIDEO_STBL_MINF_DESC]
-    mov     ecx, MP4_BOX_TYPE_STBL
-    mov     r8, r15
-    call    er_mp4_find_child_box
+    lea     rcx, [rsp + MP4_VIDEO_STBL_END + 4]
+    mov     r8d, 2
+    mov     r9, r15
+    call    er_mp4_find_box_path
     jmp     .done
 .invalid_param:
     xor     eax, eax

@@ -7,6 +7,12 @@
 %include "x86_64/macros.inc"
 %include "x86_64/object/object_constants.inc"
 
+OBJECT_VIEW_BODY_PTR        equ 0
+OBJECT_VIEW_BODY_LEN        equ 8
+OBJECT_VIEW_HEADER          equ 16
+OBJECT_STAMP_SIZE           equ 64
+OBJECT_REQ_FIELD_COUNT      equ OBJECT_REQUIREMENTS_SIZE / 4
+
 extern er_store16
 extern er_store32
 extern er_store64
@@ -48,48 +54,66 @@ _validate_u16_range:
 
 ; validate all 7 requirement enum values  rdi=req_ptr → eax=1
 _validate_requirements:
-    push    rbx
+    er_push rbx, rbp
     mov     rbx, rdi
-    mov     edi, [rbx + 0]   ; durability
+    xor     ebp, ebp
+.loop:
+    mov     edi, [rbx + rbp * 4]
+    call    _requirement_max_for_index
+    er_check_zero eax, .fail
+    mov     edx, eax
     mov     esi, 1
-    mov     edx, 3
     call    _validate_u32_range
     er_check_zero eax, .fail
-    mov     edi, [rbx + 4]   ; confidentiality
-    mov     esi, 1
-    mov     edx, 7
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    mov     edi, [rbx + 8]   ; portability
-    mov     esi, 1
-    mov     edx, 4
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    mov     edi, [rbx + 12]  ; integrity
-    mov     esi, 1
-    mov     edx, 3
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    mov     edi, [rbx + 16]  ; lifetime
-    mov     esi, 1
-    mov     edx, 5
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    mov     edi, [rbx + 20]  ; visibility
-    mov     esi, 1
-    mov     edx, 4
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    mov     edi, [rbx + 24]  ; access
-    mov     esi, 1
-    mov     edx, 2
-    call    _validate_u32_range
-    er_check_zero eax, .fail
-    pop     rbx
+    inc     ebp
+    cmp     ebp, OBJECT_REQ_FIELD_COUNT
+    jb      .loop
+    er_pop  rbx, rbp
     mov     eax, 1
     er_ret
-.fail: pop     rbx
+.fail:
+    er_pop  rbx, rbp
     xor     eax, eax
+    er_ret
+
+; select requirement enum max by field index  ebp=index → eax=max, eax=0 invalid
+_requirement_max_for_index:
+    cmp     ebp, REQ_OF_DURABILITY / 4
+    je      .durability
+    cmp     ebp, REQ_OF_CONFIDENTIALITY / 4
+    je      .confidentiality
+    cmp     ebp, REQ_OF_PORTABILITY / 4
+    je      .portability
+    cmp     ebp, REQ_OF_INTEGRITY / 4
+    je      .integrity
+    cmp     ebp, REQ_OF_LIFETIME / 4
+    je      .lifetime
+    cmp     ebp, REQ_OF_VISIBILITY / 4
+    je      .visibility
+    cmp     ebp, REQ_OF_ACCESS / 4
+    je      .access
+    xor     eax, eax
+    er_ret
+.durability:
+    mov     eax, OBJECT_DURABILITY_REPLICATED
+    er_ret
+.confidentiality:
+    mov     eax, OBJECT_CONFIDENTIALITY_LAYERED
+    er_ret
+.portability:
+    mov     eax, OBJECT_PORTABILITY_PUBLIC_PORTABLE
+    er_ret
+.integrity:
+    mov     eax, OBJECT_INTEGRITY_SEALED
+    er_ret
+.lifetime:
+    mov     eax, OBJECT_LIFETIME_PINNED
+    er_ret
+.visibility:
+    mov     eax, OBJECT_VISIBILITY_PUBLIC
+    er_ret
+.access:
+    mov     eax, OBJECT_ACCESS_HOT_MEMORY_ALLOWED
     er_ret
 
 ; validate Kind [1,2,4]  di=kind → eax=1
@@ -154,34 +178,15 @@ _envelope_owner_matches:
     cmp     edi, OBJECT_ENVELOPE_KIND_SIGNATURE
     je      .ok
     cmp     edi, OBJECT_ENVELOPE_KIND_DEVICE
-    je      .check_device
-    cmp     edi, OBJECT_ENVELOPE_KIND_STORAGE
-    je      .check_storage
-    cmp     edi, OBJECT_ENVELOPE_KIND_APP
-    je      .check_app
+    jb      .inv
     cmp     edi, OBJECT_ENVELOPE_KIND_USER
-    je      .check_user
+    ja      .inv
     xor     eax, eax
-    er_ret
-.check_device:
-    xor     eax, eax
-    cmp     esi, OBJECT_OWNER_KIND_DEVICE
+    cmp     esi, edi
     sete    al
     er_ret
-.check_storage:
+.inv:
     xor     eax, eax
-    cmp     esi, OBJECT_OWNER_KIND_STORAGE
-    sete    al
-    er_ret
-.check_app:
-    xor     eax, eax
-    cmp     esi, OBJECT_OWNER_KIND_APP
-    sete    al
-    er_ret
-.check_user:
-    xor     eax, eax
-    cmp     esi, OBJECT_OWNER_KIND_USER
-    sete    al
     er_ret
 .ok:
     mov     eax, 1
@@ -193,11 +198,7 @@ _envelope_algorithm_matches:
     je      .check_none
     cmp     edi, OBJECT_ENVELOPE_KIND_SIGNATURE
     je      .check_ed25519
-    cmp     si, OBJECT_ALGORITHM_AES_GCM_256
-    je      .ok
-    cmp     si, OBJECT_ALGORITHM_XCHACHA20_POLY1305
-    je      .ok
-    xor     eax, eax
+    call    _object_algorithm_is_encryption
     er_ret
 .check_none:
     xor     eax, eax
@@ -211,6 +212,50 @@ _envelope_algorithm_matches:
     er_ret
 .ok:
     mov     eax, 1
+    er_ret
+
+; si=algorithm → eax=1 for supported encryption algorithms.
+_object_algorithm_is_encryption:
+    cmp     si, OBJECT_ALGORITHM_AES_GCM_256
+    je      .ok
+    cmp     si, OBJECT_ALGORITHM_XCHACHA20_POLY1305
+    je      .ok
+    xor     eax, eax
+    er_ret
+.ok:
+    mov     eax, 1
+    er_ret
+
+; validate complete envelope policy against owner  rdi=envelope, rsi=owner → eax=1
+_object_envelope_policy_matches:
+    er_push rbx, r12
+    mov     rbx, rdi
+    mov     r12, rsi
+
+    mov     edi, [rbx + ENVELOPE_STRUCT_KIND]
+    call    _validate_envelope_kind
+    er_check_zero eax, .fail
+
+    mov     edi, [rbx + ENVELOPE_STRUCT_KIND]
+    mov     esi, [r12 + OWNER_STRUCT_KIND]
+    call    _envelope_owner_matches
+    er_check_zero eax, .fail
+
+    mov     edi, [rbx + ENVELOPE_STRUCT_KIND]
+    mov     si, [rbx + ENVELOPE_STRUCT_ALGORITHM]
+    call    _envelope_algorithm_matches
+    er_check_zero eax, .fail
+
+    mov     rdi, rbx
+    call    _validate_envelope_key_metadata
+    er_check_zero eax, .fail
+
+    er_pop  rbx, r12
+    mov     eax, 1
+    er_ret
+.fail:
+    er_pop  rbx, r12
+    xor     eax, eax
     er_ret
 
 ; validate envelope key_id/metadata_hash zero policy  rdi=envelope → eax=1
@@ -348,73 +393,32 @@ er_fn er_object_header_encode
     mov     rbx, rsi
 
     ; Validate epoch
-    lea     rdi, [rbx + 32]       ; epoch stamp in header struct
+    lea     rdi, [rbx + HEADER_STRUCT_EPOCH]
     call    er_stamp_valid
     er_check_zero eax, .bad_arg
 
     ; Zero header buffer
     mov     rdi, r12
-    mov     esi, 148
+    mov     esi, OBJECT_HEADER_SIZE
     call    er_bytes_zero
-    ; Actually er_bytes_zero takes (rdi=buf, esi=len) — no rdx/rcx
-    ; Let me re-read: it's `test esi, esi` then loop.
-    ; But my call set rdx and rcx which it ignores. That's fine.
 
     ; Magic
     mov     rax, OBJECT_MAGIC_QWORD
     mov     [r12], rax
 
+    mov     rdi, r12
+    mov     rsi, rbx
+    call    _object_header_scalars_encode
 
-
-    ; Version = 1
-    lea     rdi, [r12 + 8]
-    mov     esi, 1
-    call    er_store16
-
-    ; Kind (u16)
-    lea     rdi, [r12 + 10]
-    movzx   esi, word [rbx + 0]    ; HEADER_STRUCT offset 0 = kind
-    call    er_store16
-
-    ; Flags (u32)
-    lea     rdi, [r12 + 12]
-    mov     esi, [rbx + 4]         ; offset 4 = flags
-    call    er_store32
-
-    ; Logical_len (u64)
-    lea     rdi, [r12 + 16]
-    mov     rsi, [rbx + 8]         ; offset 8 = logical_len
-    call    er_store64
-
-    ; Owner_count (u16)
-    lea     rdi, [r12 + 24]
-    movzx   esi, word [rbx + 16]   ; offset 16 = owner_count
-    call    er_store16
-
-    ; Envelope_count (u16)
-    lea     rdi, [r12 + 26]
-    movzx   esi, word [rbx + 18]   ; offset 18 = envelope_count
-    call    er_store16
-
-    ; Child_count (u32)
-    lea     rdi, [r12 + 28]
-    mov     esi, [rbx + 20]        ; offset 20 = child_count
-    call    er_store32
-
-    ; Body_len (u64)
-    lea     rdi, [r12 + 32]
-    mov     rsi, [rbx + 24]        ; offset 24 = body_len
-    call    er_store64
-
-    ; Epoch (stamp at header_struct+32 → binary at out+40)
-    lea     rdi, [rbx + 32]        ; stamp
-    lea     rsi, [r12 + 40]        ; out
-    mov     edx, 64                ; out_len
+    ; Epoch
+    lea     rdi, [rbx + HEADER_STRUCT_EPOCH]
+    lea     rsi, [r12 + HEADER_OF_EPOCH]
+    mov     edx, OBJECT_STAMP_SIZE
     call    er_preimage_encode_epoch
 
-    ; Requirements (struct at header_struct+96 → binary at out+104)
-    lea     rdi, [r12 + 104]
-    lea     rsi, [rbx + 96]
+    ; Requirements
+    lea     rdi, [r12 + HEADER_OF_REQUIREMENTS]
+    lea     rsi, [rbx + HEADER_STRUCT_REQUIREMENTS]
     call    er_object_requirements_encode
 
     er_pop  rbx, r12, r13
@@ -444,66 +448,27 @@ er_fn er_object_header_decode
     cmp     rax, rcx
     jne     .corrupt
 
-    ; Version
-    lea     rdi, [r12 + 8]
-    call    er_load16
-    cmp     eax, 1
-    jne     .corrupt
-
     ; Reserved bytes must be zero
-    lea     rdi, [r12 + 132]
-    mov     esi, 16
+    lea     rdi, [r12 + HEADER_OF_RESERVED]
+    mov     esi, OBJECT_HEADER_RESERVED_SIZE
     call    er_bytes_nonzero
     er_check_nonzero eax, .corrupt
 
-    ; Kind
-    lea     rdi, [r12 + 10]
-    call    er_load16
-    mov     [rbx + 0], ax
-    mov     di, ax
-    call    _validate_kind
+    mov     rdi, r12
+    mov     rsi, rbx
+    call    _object_header_scalars_decode
     er_check_zero eax, .corrupt
 
-    ; Flags
-    lea     rdi, [r12 + 12]
-    call    er_load32
-    mov     [rbx + 4], eax
-
-    ; Logical_len
-    lea     rdi, [r12 + 16]
-    call    er_load64
-    mov     [rbx + 8], rax
-
-    ; Owner_count
-    lea     rdi, [r12 + 24]
-    call    er_load16
-    mov     [rbx + 16], ax
-
-    ; Envelope_count
-    lea     rdi, [r12 + 26]
-    call    er_load16
-    mov     [rbx + 18], ax
-
-    ; Child_count
-    lea     rdi, [r12 + 28]
-    call    er_load32
-    mov     [rbx + 20], eax
-
-    ; Body_len
-    lea     rdi, [r12 + 32]
-    call    er_load64
-    mov     [rbx + 24], rax
-
     ; Epoch
-    lea     rdi, [r12 + 40]
-    mov     esi, 64
-    lea     rdx, [rbx + 32]       ; stamp at header_struct+32
+    lea     rdi, [r12 + HEADER_OF_EPOCH]
+    mov     esi, OBJECT_STAMP_SIZE
+    lea     rdx, [rbx + HEADER_STRUCT_EPOCH]
     call    er_preimage_decode_epoch
     er_check_zero eax, .corrupt
 
     ; Requirements
-    lea     rdi, [r12 + 104]
-    lea     rsi, [rbx + 96]       ; requirements at header_struct+96
+    lea     rdi, [r12 + HEADER_OF_REQUIREMENTS]
+    lea     rsi, [rbx + HEADER_STRUCT_REQUIREMENTS]
     call    er_object_requirements_decode
     er_check_zero eax, .corrupt
 
@@ -545,8 +510,8 @@ er_fn er_object_owner_encode
     er_check_zero eax, .bad_arg
 
     ; Kind
-    lea     rdi, [r12 + 0]
-    mov     esi, [rbx + 0]
+    lea     rdi, [r12 + OWNER_OF_KIND]
+    mov     esi, [rbx + OWNER_STRUCT_KIND]
     call    er_store32
 
     lea     rdi, [r12 + OWNER_OF_NODE_ID]
@@ -574,9 +539,9 @@ er_fn er_object_owner_decode
     mov     r12, rdi
     mov     rbx, rsi
 
-    lea     rdi, [r12 + 0]
+    lea     rdi, [r12 + OWNER_OF_KIND]
     call    er_load32
-    mov     [rbx + 0], eax
+    mov     [rbx + OWNER_STRUCT_KIND], eax
     mov     edi, eax
     call    _validate_owner_kind
     er_check_zero eax, .corrupt
@@ -612,39 +577,26 @@ er_fn er_object_envelope_encode
     mov     rbx, rsi
     mov     r13, rdx
 
-    mov     edi, [rbx + 0]
-    call    _validate_envelope_kind
-    er_check_zero eax, .bad_arg
-
-    mov     edi, [rbx + 0]
-    mov     esi, [r13 + 0]
-    call    _envelope_owner_matches
-    er_check_zero eax, .bad_arg
-
-    mov     edi, [rbx + 0]
-    mov     si, [rbx + 6]       ; algorithm field (u16 at offset 6)
-    call    _envelope_algorithm_matches
-    er_check_zero eax, .bad_arg
-
     mov     rdi, rbx
-    call    _validate_envelope_key_metadata
+    mov     rsi, r13
+    call    _object_envelope_policy_matches
     er_check_zero eax, .bad_arg
 
 .write:
-    lea     rdi, [r12 + 0]
-    mov     esi, [rbx + 0]
+    lea     rdi, [r12 + ENVELOPE_OF_KIND]
+    mov     esi, [rbx + ENVELOPE_STRUCT_KIND]
     call    er_store32
 
-    lea     rdi, [r12 + 4]
-    movzx   esi, word [rbx + 4]
+    lea     rdi, [r12 + ENVELOPE_OF_OWNER_INDEX]
+    movzx   esi, word [rbx + ENVELOPE_STRUCT_OWNER_INDEX]
     call    er_store16
 
-    lea     rdi, [r12 + 6]
-    movzx   esi, word [rbx + 6]
+    lea     rdi, [r12 + ENVELOPE_OF_ALGORITHM]
+    movzx   esi, word [rbx + ENVELOPE_STRUCT_ALGORITHM]
     call    er_store16
 
-    lea     rdi, [r12 + 8]
-    mov     esi, [rbx + 8]
+    lea     rdi, [r12 + ENVELOPE_OF_FLAGS]
+    mov     esi, [rbx + ENVELOPE_STRUCT_FLAGS]
     call    er_store32
 
     lea     rdi, [r12 + ENVELOPE_OF_KEY_ID]
@@ -676,27 +628,27 @@ er_fn er_object_envelope_decode
     mov     r12, rdi
     mov     rbx, rsi
 
-    lea     rdi, [r12 + 0]
+    lea     rdi, [r12 + ENVELOPE_OF_KIND]
     call    er_load32
-    mov     [rbx + 0], eax
+    mov     [rbx + ENVELOPE_STRUCT_KIND], eax
     mov     edi, eax
     call    _validate_envelope_kind
     er_check_zero eax, .corrupt
 
-    lea     rdi, [r12 + 4]
+    lea     rdi, [r12 + ENVELOPE_OF_OWNER_INDEX]
     call    er_load16
-    mov     [rbx + 4], ax
+    mov     [rbx + ENVELOPE_STRUCT_OWNER_INDEX], ax
 
-    lea     rdi, [r12 + 6]
+    lea     rdi, [r12 + ENVELOPE_OF_ALGORITHM]
     call    er_load16
-    mov     [rbx + 6], ax
+    mov     [rbx + ENVELOPE_STRUCT_ALGORITHM], ax
     mov     di, ax
     call    _validate_algorithm
     er_check_zero eax, .corrupt
 
-    lea     rdi, [r12 + 8]
+    lea     rdi, [r12 + ENVELOPE_OF_FLAGS]
     call    er_load32
-    mov     [rbx + 8], eax
+    mov     [rbx + ENVELOPE_STRUCT_FLAGS], eax
 
     lea     rdi, [rbx + ENVELOPE_STRUCT_KEY_ID]
     lea     rsi, [r12 + ENVELOPE_OF_KEY_ID]
@@ -727,18 +679,9 @@ er_fn er_object_envelope_validate
     mov     rbx, rdi
     mov     r12, rsi
 
-    mov     edi, [rbx + 0]
-    mov     esi, [r12 + 0]
-    call    _envelope_owner_matches
-    er_check_zero eax, .corrupt
-
-    mov     edi, [rbx + 0]
-    mov     si, [rbx + 6]
-    call    _envelope_algorithm_matches
-    er_check_zero eax, .corrupt
-
     mov     rdi, rbx
-    call    _validate_envelope_key_metadata
+    mov     rsi, r12
+    call    _object_envelope_policy_matches
     er_check_zero eax, .corrupt
 
 .ok:
@@ -768,11 +711,11 @@ er_fn er_object_child_encode
     call    _object_id_nonzero
     er_check_zero eax, .bad_arg
 
-    movzx   edi, word [rbx + 48]
+    movzx   edi, word [rbx + CHILD_STRUCT_KIND]
     call    _validate_kind
     er_check_zero eax, .bad_arg
 
-    cmp     qword [rbx + 40], 0  ; logical_len
+    cmp     qword [rbx + CHILD_STRUCT_LOGICAL_LEN], 0
     je      .bad_arg
 
     lea     rdi, [rbx + CHILD_STRUCT_REQUIREMENTS_HASH]
@@ -784,22 +727,22 @@ er_fn er_object_child_encode
     call    _object_copy_id
 
     ; Logical_offset
-    lea     rdi, [r12 + 32]
-    mov     rsi, [rbx + 32]
+    lea     rdi, [r12 + CHILD_OF_LOGICAL_OFFSET]
+    mov     rsi, [rbx + CHILD_STRUCT_LOGICAL_OFFSET]
     call    er_store64
 
     ; Logical_len
-    lea     rdi, [r12 + 40]
-    mov     rsi, [rbx + 40]
+    lea     rdi, [r12 + CHILD_OF_LOGICAL_LEN]
+    mov     rsi, [rbx + CHILD_STRUCT_LOGICAL_LEN]
     call    er_store64
 
     ; Kind
-    lea     rdi, [r12 + 48]
-    movzx   esi, word [rbx + 48]
+    lea     rdi, [r12 + CHILD_OF_KIND]
+    movzx   esi, word [rbx + CHILD_STRUCT_KIND]
     call    er_store16
 
     ; Pad = 0
-    lea     rdi, [r12 + 50]
+    lea     rdi, [r12 + CHILD_OF_PAD]
     xor     esi, esi
     call    er_store16
 
@@ -831,7 +774,7 @@ er_fn er_object_child_decode
     mov     rbx, rdx
 
     ; Pad must be zero
-    lea     rdi, [r12 + 50]
+    lea     rdi, [r12 + CHILD_OF_PAD]
     call    er_load16
     er_check_nonzero eax, .corrupt
 
@@ -840,22 +783,22 @@ er_fn er_object_child_decode
     call    _object_copy_id
 
     ; Logical_offset
-    lea     rdi, [r12 + 32]
+    lea     rdi, [r12 + CHILD_OF_LOGICAL_OFFSET]
     call    er_load64
-    mov     [rbx + 32], rax
+    mov     [rbx + CHILD_STRUCT_LOGICAL_OFFSET], rax
     cmp     rax, r13
     jne     .corrupt
 
     ; Logical_len
-    lea     rdi, [r12 + 40]
+    lea     rdi, [r12 + CHILD_OF_LOGICAL_LEN]
     call    er_load64
-    mov     [rbx + 40], rax
+    mov     [rbx + CHILD_STRUCT_LOGICAL_LEN], rax
     er_check_zero rax, .corrupt
 
     ; Kind
-    lea     rdi, [r12 + 48]
+    lea     rdi, [r12 + CHILD_OF_KIND]
     call    er_load16
-    mov     [rbx + 48], ax
+    mov     [rbx + CHILD_STRUCT_KIND], ax
     mov     di, ax
     call    _validate_kind
     er_check_zero eax, .corrupt
@@ -914,26 +857,24 @@ er_fn er_object_canonical_size
 
 .compute:
     mov     rax, OBJECT_HEADER_SIZE
+    mov     r10, rsi
 
-    mov     rbx, rdx
-    imul    rbx, OBJECT_OWNER_SIZE
-    jo      .no_space
-    add     rax, rbx
-    jc      .no_space
+    mov     rdi, rdx
+    mov     esi, OBJECT_OWNER_SIZE
+    call    _object_size_add_section
+    er_check_nonzero edx, .no_space
 
-    mov     rbx, rcx
-    imul    rbx, OBJECT_ENVELOPE_SIZE
-    jo      .no_space
-    add     rax, rbx
-    jc      .no_space
+    mov     rdi, rcx
+    mov     esi, OBJECT_ENVELOPE_SIZE
+    call    _object_size_add_section
+    er_check_nonzero edx, .no_space
 
-    mov     rbx, r8
-    imul    rbx, OBJECT_CHILD_SIZE
-    jo      .no_space
-    add     rax, rbx
-    jc      .no_space
+    mov     rdi, r8
+    mov     esi, OBJECT_CHILD_SIZE
+    call    _object_size_add_section
+    er_check_nonzero edx, .no_space
 
-    add     rax, rsi
+    add     rax, r10
     jc      .no_space
 
     mov     [r9], rax
@@ -945,6 +886,23 @@ er_fn er_object_canonical_size
     pop     rbx
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
+    er_ret
+.no_space:
+    pop     rbx
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_NO_SPACE
+    er_ret
+
+; rax=current size, rdi=count, esi=item_size → rax=new size, edx=0 or no-space
+_object_size_add_section:
+    push    rbx
+    mov     rbx, rdi
+    imul    rbx, rsi
+    jo      .no_space
+    add     rax, rbx
+    jc      .no_space
+    pop     rbx
+    er_ok
     er_ret
 .no_space:
     pop     rbx
@@ -1033,24 +991,11 @@ er_fn er_object_write_bytes_node_owned
     call    _object_memcpy
     mov     rax, [rsp + 152]
     er_ok
-    add     rsp, 160
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
-.bad_arg:
-    xor     eax, eax
-    mov     edx, OBJECT_ERR_BAD_ARGUMENT
-    add     rsp, 160
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
+    jmp     .return
 .no_space:
     xor     eax, eax
     mov     edx, OBJECT_ERR_NO_SPACE
-    add     rsp, 160
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
+    jmp     .return
 .writer_fail:
     ; Preserve the callee's error code when possible.
     test    edx, edx
@@ -1058,6 +1003,7 @@ er_fn er_object_write_bytes_node_owned
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
 .writer_return_fail:
     xor     eax, eax
+.return:
     add     rsp, 160
     er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
@@ -1116,9 +1062,9 @@ er_fn er_object_write_tree_node_owned
 .validate_child_loop:
     cmp     rbx, [rbp + 24]
     jae     .children_valid
-    mov     rax, rbx
-    imul    rax, OBJECT_CHILD_SIZE
-    add     rax, [rbp + 16]
+    mov     rdi, [rbp + 16]
+    mov     rsi, rbx
+    call    _object_child_array_ptr
     mov     rcx, [rsp + 144]
     cmp     [rax + CHILD_STRUCT_LOGICAL_OFFSET], rcx
     jne     .bad_arg
@@ -1169,9 +1115,9 @@ er_fn er_object_write_tree_node_owned
 .child_copy_loop:
     cmp     r15, [rbp + 24]
     jae     .success
-    mov     rax, r15
-    imul    rax, OBJECT_CHILD_SIZE
-    add     rax, [rbp + 16]
+    mov     rdi, [rbp + 16]
+    mov     rsi, r15
+    call    _object_child_array_ptr
     lea     rdi, [r12 + rbx]
     mov     rsi, rax
     call    er_object_child_encode
@@ -1183,30 +1129,22 @@ er_fn er_object_write_tree_node_owned
 .success:
     mov     rax, [rsp + 160]
     er_ok
-    add     rsp, 176
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
+    jmp     .return
 .bad_arg:
     xor     eax, eax
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
-    add     rsp, 176
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
+    jmp     .return
 .no_space:
     xor     eax, eax
     mov     edx, OBJECT_ERR_NO_SPACE
-    add     rsp, 176
-    er_pop  rbx, r12, r13, r14, r15
-    er_frame_pop
-    er_ret
+    jmp     .return
 .writer_fail:
     test    edx, edx
     jnz     .writer_return_fail
     mov     edx, OBJECT_ERR_BAD_ARGUMENT
 .writer_return_fail:
     xor     eax, eax
+.return:
     add     rsp, 176
     er_pop  rbx, r12, r13, r14, r15
     er_frame_pop
@@ -1219,9 +1157,9 @@ er_fn er_object_write_tree_node_owned
 ; rdi=canonical, esi=len, rdx=view (ObjectView)
 ;
 ; ObjectView (144 bytes):
-;   +0: body_ptr (8)
-;   +8: body_len (8)
-;  +16: header (124 = HEADER_STRUCT_SIZE)
+;   +OBJECT_VIEW_BODY_PTR: body_ptr (8)
+;   +OBJECT_VIEW_BODY_LEN: body_len (8)
+;   +OBJECT_VIEW_HEADER: header (HEADER_STRUCT_SIZE)
 ; ==================================================================
 er_fn er_object_view_decode
     er_push rbx, r12, r13, r14, r15
@@ -1236,15 +1174,15 @@ er_fn er_object_view_decode
     sub     rsp, 192
 
     mov     rdi, r12
-    lea     rsi, [r14 + 16]
+    lea     rsi, [r14 + OBJECT_VIEW_HEADER]
     call    er_object_header_decode
     er_check_zero eax, .corrupt_pop
 
-    movzx   ebx, word [r14 + 16 + 16]
-    movzx   r8d, word [r14 + 16 + 18]
-    mov     r10d, [r14 + 16 + 20]
-    mov     r9,  [r14 + 16 + 24]
-    movzx   r15d, word [r14 + 16]
+    movzx   ebx, word [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_OWNER_COUNT]
+    movzx   r8d, word [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_ENVELOPE_COUNT]
+    mov     r10d, [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_CHILD_COUNT]
+    mov     r9,  [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_BODY_LEN]
+    movzx   r15d, word [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_KIND]
     mov     [rsp + 160], ebx
     mov     [rsp + 164], r8d
     mov     [rsp + 168], r10d
@@ -1266,7 +1204,7 @@ er_fn er_object_view_decode
 
     cmp     r15w, OBJECT_KIND_TREE
     je      .set_body
-    mov     rdx, [r14 + 16 + 8]
+    mov     rdx, [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_LOGICAL_LEN]
     cmp     rdx, [rsp + 176]
     jne     .corrupt_pop
 
@@ -1274,9 +1212,9 @@ er_fn er_object_view_decode
     mov     rax, [rsp + 184]
     sub     rax, [rsp + 176]
     add     rax, r12
-    mov     [r14], rax
+    mov     [r14 + OBJECT_VIEW_BODY_PTR], rax
     mov     rdx, [rsp + 176]
-    mov     [r14 + 8], rdx
+    mov     [r14 + OBJECT_VIEW_BODY_LEN], rdx
 
     mov     ebx, [rsp + 160]
     er_check_zero ebx, .check_env
@@ -1356,7 +1294,7 @@ er_fn er_object_view_decode
     er_pop  rbx, r8, r9, r10, r11, r12, r13, r14, r15
     er_check_zero eax, .corrupt_pop
 
-    mov     rax, [rsp + 40]
+    mov     rax, [rsp + CHILD_STRUCT_LOGICAL_LEN]
     add     r11, rax
     jc      .corrupt_pop
 
@@ -1364,9 +1302,9 @@ er_fn er_object_view_decode
     cmp     r15d, r10d
     jb      .cl
 
-    cmp     word [r14 + 16], OBJECT_KIND_TREE
+    cmp     word [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_KIND], OBJECT_KIND_TREE
     jne     .success
-    mov     rdx, [r14 + 16 + 8]
+    mov     rdx, [r14 + OBJECT_VIEW_HEADER + HEADER_STRUCT_LOGICAL_LEN]
     cmp     r11, rdx
     jne     .corrupt_pop
 
@@ -1380,6 +1318,101 @@ er_fn er_object_view_decode
     add     rsp, 192
 .corrupt:
     er_pop  rbx, r12, r13, r14, r15
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_CORRUPT
+    er_ret
+
+; Header scalar helpers. rdi=canonical header, rsi=decoded header.
+_object_header_scalars_encode:
+    er_push rbx, r12
+    mov     r12, rdi
+    mov     rbx, rsi
+
+    lea     rdi, [r12 + HEADER_OF_VERSION]
+    mov     esi, 1
+    call    er_store16
+
+    lea     rdi, [r12 + HEADER_OF_KIND]
+    movzx   esi, word [rbx + HEADER_STRUCT_KIND]
+    call    er_store16
+
+    lea     rdi, [r12 + HEADER_OF_FLAGS]
+    mov     esi, [rbx + HEADER_STRUCT_FLAGS]
+    call    er_store32
+
+    lea     rdi, [r12 + HEADER_OF_LOGICAL_LEN]
+    mov     rsi, [rbx + HEADER_STRUCT_LOGICAL_LEN]
+    call    er_store64
+
+    lea     rdi, [r12 + HEADER_OF_OWNER_COUNT]
+    movzx   esi, word [rbx + HEADER_STRUCT_OWNER_COUNT]
+    call    er_store16
+
+    lea     rdi, [r12 + HEADER_OF_ENVELOPE_COUNT]
+    movzx   esi, word [rbx + HEADER_STRUCT_ENVELOPE_COUNT]
+    call    er_store16
+
+    lea     rdi, [r12 + HEADER_OF_CHILD_COUNT]
+    mov     esi, [rbx + HEADER_STRUCT_CHILD_COUNT]
+    call    er_store32
+
+    lea     rdi, [r12 + HEADER_OF_BODY_LEN]
+    mov     rsi, [rbx + HEADER_STRUCT_BODY_LEN]
+    call    er_store64
+
+    er_pop  rbx, r12
+    mov     eax, 1
+    er_ok
+    er_ret
+
+; Header scalar decode validates version and kind. rdi=canonical, rsi=decoded.
+_object_header_scalars_decode:
+    er_push rbx, r12
+    mov     r12, rdi
+    mov     rbx, rsi
+
+    lea     rdi, [r12 + HEADER_OF_VERSION]
+    call    er_load16
+    cmp     eax, 1
+    jne     .corrupt
+
+    lea     rdi, [r12 + HEADER_OF_KIND]
+    call    er_load16
+    mov     [rbx + HEADER_STRUCT_KIND], ax
+    mov     di, ax
+    call    _validate_kind
+    er_check_zero eax, .corrupt
+
+    lea     rdi, [r12 + HEADER_OF_FLAGS]
+    call    er_load32
+    mov     [rbx + HEADER_STRUCT_FLAGS], eax
+
+    lea     rdi, [r12 + HEADER_OF_LOGICAL_LEN]
+    call    er_load64
+    mov     [rbx + HEADER_STRUCT_LOGICAL_LEN], rax
+
+    lea     rdi, [r12 + HEADER_OF_OWNER_COUNT]
+    call    er_load16
+    mov     [rbx + HEADER_STRUCT_OWNER_COUNT], ax
+
+    lea     rdi, [r12 + HEADER_OF_ENVELOPE_COUNT]
+    call    er_load16
+    mov     [rbx + HEADER_STRUCT_ENVELOPE_COUNT], ax
+
+    lea     rdi, [r12 + HEADER_OF_CHILD_COUNT]
+    call    er_load32
+    mov     [rbx + HEADER_STRUCT_CHILD_COUNT], eax
+
+    lea     rdi, [r12 + HEADER_OF_BODY_LEN]
+    call    er_load64
+    mov     [rbx + HEADER_STRUCT_BODY_LEN], rax
+
+    er_pop  rbx, r12
+    mov     eax, 1
+    er_ok
+    er_ret
+.corrupt:
+    er_pop  rbx, r12
     xor     eax, eax
     mov     edx, OBJECT_ERR_CORRUPT
     er_ret
@@ -1415,6 +1448,26 @@ _object_child_ptr:
     add     rax, rdi
     ret
 
+; Array element pointer helpers. Return rax=base + index * element_size.
+; rdi=array_base, rsi=index.
+_object_owner_array_ptr:
+    mov     rax, rsi
+    imul    rax, OBJECT_OWNER_SIZE
+    add     rax, rdi
+    ret
+
+_object_envelope_array_ptr:
+    mov     rax, rsi
+    imul    rax, OBJECT_ENVELOPE_SIZE
+    add     rax, rdi
+    ret
+
+_object_child_array_ptr:
+    mov     rax, rsi
+    imul    rax, OBJECT_CHILD_SIZE
+    add     rax, rdi
+    ret
+
 ; Internal header filler: rdi=header, esi=kind, rdx=logical_len,
 ; rcx=body_len, r8d=child_count, r9=requirements, r10=epoch,
 ; r11=owner_count, rax=envelope_count.
@@ -1433,7 +1486,7 @@ _object_fill_header:
     mov     [r12 + HEADER_STRUCT_BODY_LEN], rcx
 
     lea     rdi, [r12 + HEADER_STRUCT_EPOCH]
-    mov     esi, 64
+    mov     esi, OBJECT_STAMP_SIZE
     mov     rdx, rbx
     call    _object_memcpy
     lea     rdi, [r12 + HEADER_STRUCT_REQUIREMENTS]
@@ -1497,9 +1550,9 @@ _object_write_owners_envelopes:
 .owner_loop:
     cmp     rbp, r14
     jae     .envelope_loop_start
-    mov     rax, rbp
-    imul    rax, OBJECT_OWNER_SIZE
-    add     rax, r13
+    mov     rdi, r13
+    mov     rsi, rbp
+    call    _object_owner_array_ptr
     lea     rdi, [r12 + rbx]
     mov     rsi, rax
     call    er_object_owner_encode
@@ -1513,15 +1566,19 @@ _object_write_owners_envelopes:
 .envelope_loop:
     cmp     rbp, [rsp]
     jae     .success
-    mov     rax, rbp
-    imul    rax, OBJECT_ENVELOPE_SIZE
-    add     rax, r15
+    mov     rdi, r15
+    mov     rsi, rbp
+    call    _object_envelope_array_ptr
     movzx   ecx, word [rax + ENVELOPE_STRUCT_OWNER_INDEX]
     cmp     rcx, r14
     jae     .bad_arg
-    mov     rdx, rcx
-    imul    rdx, OBJECT_OWNER_SIZE
-    add     rdx, r13
+    mov     rdi, r13
+    mov     rsi, rcx
+    call    _object_owner_array_ptr
+    mov     rdx, rax
+    mov     rdi, r15
+    mov     rsi, rbp
+    call    _object_envelope_array_ptr
     lea     rdi, [r12 + rbx]
     mov     rsi, rax
     call    er_object_envelope_encode

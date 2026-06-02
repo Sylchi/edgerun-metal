@@ -237,6 +237,17 @@ er_fn patch_call_to_current
     mov     [rdx], eax
     ret
 
+; patch_rel32_to_current(rdi=disp offset, rsi=addend).
+er_fn patch_rel32_to_current
+    mov     rax, [rel text_len]
+    add     rax, rsi
+    sub     rax, rdi
+    sub     rax, 4
+    lea     rdx, [rel text_buf]
+    add     rdx, rdi
+    mov     [rdx], eax
+    ret
+
 ; emit_short_branch_operand(opcode=dil) -> eax=1/0.
 er_fn emit_short_branch_operand
     er_push rbx, r12, r13

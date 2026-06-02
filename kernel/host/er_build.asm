@@ -34,7 +34,7 @@ OBJECT_HEADER_SIZE equ 148
 OBJECT_BUF_SIZE    equ 1048576
 OBJECT_KIND_BYTES  equ 1
 OBJECT_VERSION     equ 1
-ASM_EROBJ_SUFFIX_LEN equ 10
+EROBJ_SUFFIX_LEN   equ 6
 
 section .bss
 object_buf: resb OBJECT_BUF_SIZE
@@ -43,6 +43,10 @@ byte_buf: resb 1
 wait_status: resd 1
 source_path_buf: resb 512
 source_object_path_buf: resb 512
+source_kind_buf: resb 32
+source_entry_buf: resb 512
+source_logical_buf: resb 512
+object_stem_buf: resb 128
 object_path_buf: resb 512
 binary_path_buf: resb 512
 stack_bottom: resb 65536
@@ -194,6 +198,12 @@ cmd_host_tools:
 .tool_loop:
     cmp     r12, r13
     jae     .tools_done
+    lea     rdi, [rel source_kind_buf]
+    mov     rsi, r12
+    mov     rdx, r13
+    call    copy_field
+    mov     r12, rax
+    call    validate_source_kind
     lea     rdi, [rel source_object_path_buf]
     mov     rsi, r12
     mov     rdx, r13
@@ -211,19 +221,7 @@ cmd_host_tools:
     mov     r12, rax
 
     call    build_host_source_path
-    lea     rdi, [rel source_object_path_buf]
-    call    cstr_len
-    mov     rsi, rax
-    lea     rdi, [rel source_object_path_buf]
-    lea     rdx, [rel asm_erobj_suffix]
-    mov     ecx, ASM_EROBJ_SUFFIX_LEN
-    call    has_suffix
-    test    eax, eax
-    jz      .tool_assemble
-    lea     rdi, [rel source_object_path_buf]
-    lea     rsi, [rel source_path_buf]
-    call    write_object_body_file
-.tool_assemble:
+    call    materialize_source_object_if_needed
     lea     rdi, [rel yasm_path]
     lea     rsi, [rel argv_yasm_host_tool]
     call    run_process
@@ -290,17 +288,32 @@ cmd_x86_objects:
     sub     r15, r14
     cmp     r15, 0
     je      .advance
-    mov     rdi, r14
-    mov     rsi, r15
+    lea     rdi, [rel source_kind_buf]
+    mov     rsi, r14
+    mov     rdx, r12
+    call    copy_field
+    mov     r14, rax
+    call    validate_source_kind
+    lea     rdi, [rel source_entry_buf]
+    mov     rsi, r14
+    mov     rdx, r12
+    call    copy_field
+    mov     r14, rax
+    lea     rdi, [rel object_stem_buf]
+    mov     rsi, r14
+    mov     rdx, r12
+    call    copy_field
+    mov     r14, rax
+    lea     rdi, [rel source_logical_buf]
+    mov     rsi, r14
+    mov     rdx, r12
+    call    copy_field
+    lea     rdi, [rel source_entry_buf]
+    call    cstr_len
+    mov     rsi, rax
+    lea     rdi, [rel source_entry_buf]
     call    build_x86_paths
-    test    eax, eax
-    jz      .assemble
-    lea     rdi, [rel source_path_buf]
-    call    ensure_parent_dir
-    lea     rdi, [rel source_object_path_buf]
-    lea     rsi, [rel source_path_buf]
-    call    write_object_body_file
-.assemble:
+    call    materialize_source_object_if_needed
     lea     rdi, [rel yasm_path]
     lea     rsi, [rel argv_yasm_x86_object]
     call    run_process
@@ -321,13 +334,7 @@ build_host_source_path:
     push    r12
     push    r14
     push    r15
-    lea     rdi, [rel source_object_path_buf]
-    call    cstr_len
-    mov     rsi, rax
-    lea     rdi, [rel source_object_path_buf]
-    lea     rdx, [rel asm_erobj_suffix]
-    mov     ecx, ASM_EROBJ_SUFFIX_LEN
-    call    has_suffix
+    call    source_kind_is_object
     test    eax, eax
     jnz     .object_source
     lea     rdi, [rel source_path_buf]
@@ -350,9 +357,9 @@ build_host_source_path:
 .base_found:
     mov     r15, r12
     sub     r15, r14
-    cmp     r15, ASM_EROBJ_SUFFIX_LEN
+    cmp     r15, EROBJ_SUFFIX_LEN
     jbe     build_fail
-    sub     r15, 6
+    sub     r15, EROBJ_SUFFIX_LEN
     lea     rdi, [rel source_path_buf]
     lea     rsi, [rel host_source_materialized_prefix]
     call    copy_cstr
@@ -412,24 +419,16 @@ build_x86_paths:
     mov     r15, rbx
     sub     r15, r14
     xor     r11d, r11d
-    mov     rdi, r10
-    mov     rsi, r13
-    lea     rdx, [rel asm_erobj_suffix]
-    mov     ecx, ASM_EROBJ_SUFFIX_LEN
-    call    has_suffix
+    call    source_kind_is_object
     test    eax, eax
     jz      .plain_source
-    sub     r15, 10
     mov     r11d, 1
     lea     rdi, [rel source_path_buf]
     lea     rsi, [rel x86_source_materialized_prefix]
     call    copy_cstr
     mov     rdi, rax
-    mov     rsi, r10
-    mov     rdx, r13
-    sub     rdx, 6
-    call    copy_bytes
-    mov     byte [rax], 0
+    lea     rsi, [rel source_logical_buf]
+    call    copy_cstr
     jmp     .object_path
 .plain_source:
     cmp     r15, 4
@@ -437,13 +436,16 @@ build_x86_paths:
     sub     r15, 4
 
 .object_path:
+    lea     rdi, [rel object_stem_buf]
+    call    cstr_len
+    test    rax, rax
+    jz      build_fail
     lea     rdi, [rel object_path_buf]
     lea     rsi, [rel x86_object_prefix]
     call    copy_cstr
     mov     rdi, rax
-    mov     rsi, r14
-    mov     rdx, r15
-    call    copy_bytes
+    lea     rsi, [rel object_stem_buf]
+    call    copy_cstr
     mov     rdi, rax
     lea     rsi, [rel object_suffix]
     call    copy_cstr
@@ -507,27 +509,40 @@ copy_field:
     pop     r12
     ret
 
-; has_suffix(buf, len, suffix, suffix_len) -> eax=1 when matched
-has_suffix:
-    cmp     rsi, rcx
-    jb      .no
-    add     rdi, rsi
-    sub     rdi, rcx
-.loop:
-    test    rcx, rcx
-    jz      .yes
-    mov     al, [rdi]
-    cmp     al, [rdx]
-    jne     .no
-    inc     rdi
-    inc     rdx
-    dec     rcx
-    jmp     .loop
-.yes:
+; materialize_source_object_if_needed() -> eax=1 when materialized, 0 otherwise
+materialize_source_object_if_needed:
+    call    source_kind_is_object
+    test    eax, eax
+    jz      .plain
+    lea     rdi, [rel source_path_buf]
+    call    ensure_parent_dir
+    lea     rdi, [rel source_object_path_buf]
+    lea     rsi, [rel source_path_buf]
+    call    write_object_body_file
     mov     eax, 1
     ret
-.no:
+.plain:
     xor     eax, eax
+    ret
+
+source_kind_is_object:
+    lea     rdi, [rel source_kind_buf]
+    lea     rsi, [rel source_kind_object]
+    call    streq
+    ret
+
+validate_source_kind:
+    lea     rdi, [rel source_kind_buf]
+    lea     rsi, [rel source_kind_source]
+    call    streq
+    test    eax, eax
+    jnz     .ok
+    lea     rdi, [rel source_kind_buf]
+    lea     rsi, [rel source_kind_object]
+    call    streq
+    test    eax, eax
+    jz      bad_object
+.ok:
     ret
 
 ; ensure_parent_dir(path)
@@ -926,7 +941,8 @@ arg_o: db "-o", 0
 arg_elf32: db "elf32", 0
 arg_nostdlib: db "-nostdlib", 0
 arg_static: db "-static", 0
-asm_erobj_suffix: db ".asm.erobj"
+source_kind_source: db "source", 0
+source_kind_object: db "object", 0
 x86_source_prefix: db "kernel/x86_64/", 0
 x86_source_materialized_prefix: db ".build/kernel/source/", 0
 host_source_materialized_prefix: db ".build/host/", 0

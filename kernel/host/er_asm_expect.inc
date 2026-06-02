@@ -681,6 +681,21 @@ er_fn expect_u64_operand
 
 er_fn expect_value_operand
     er_push rbx
+    call    skip_space_inline
+    cmp     r14, r15
+    jae     .bad
+    cmp     byte [r14], '-'
+    jne     .positive
+    inc     r14
+    call    expect_u32_operand
+    test    eax, eax
+    jz      .bad
+    mov     rax, [rel imm_u32_value]
+    neg     rax
+    mov     [rel imm_u32_value], rax
+    mov     eax, 1
+    jmp     .done
+.positive:
     push    r14
     call    expect_u32_operand
     test    eax, eax
@@ -761,10 +776,66 @@ er_fn expect_symbol_value_operand
     mov     ecx, tok_error_not_present_len
     call    token_eq
     test    eax, eax
-    jz      .label
+    jz      .error_bad_argument
     mov     qword [rel imm_u32_value], 22
     mov     eax, 1
     jmp     .done
+.error_bad_argument:
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_error_bad_argument]
+    mov     ecx, tok_error_bad_argument_len
+    call    token_eq
+    test    eax, eax
+    jz      .error_ok
+    mov     qword [rel imm_u32_value], 29
+    mov     eax, 1
+    jmp     .done
+.error_ok:
+    mov     rdi, r10
+    mov     rsi, r11
+    lea     rdx, [rel tok_error_ok]
+    mov     ecx, tok_error_ok_len
+    mov     r8d, 0
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_unsupported]
+    mov     ecx, tok_error_unsupported_len
+    mov     r8d, 1
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_not_implemented]
+    mov     ecx, tok_error_not_implemented_len
+    mov     r8d, 8
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_io]
+    mov     ecx, tok_error_io_len
+    mov     r8d, 21
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_no_space]
+    mov     ecx, tok_error_no_space_len
+    mov     r8d, 27
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_not_found]
+    mov     ecx, tok_error_not_found_len
+    mov     r8d, 28
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
+    lea     rdx, [rel tok_error_invalid_response]
+    mov     ecx, tok_error_invalid_response_len
+    mov     r8d, 34
+    call    match_builtin_error_value
+    test    eax, eax
+    jnz     .done
 .label:
     call    find_label_value
     test    eax, eax
@@ -785,6 +856,20 @@ er_fn expect_symbol_value_operand
     xor     eax, eax
 .done:
     er_pop  r10, r11
+    ret
+
+; match_builtin_error_value(r10/r11=name, rdx/rcx=token, r8=value) -> eax=1/0.
+er_fn match_builtin_error_value
+    mov     rdi, r10
+    mov     rsi, r11
+    call    token_eq
+    test    eax, eax
+    jz      .no
+    mov     [rel imm_u32_value], r8
+    mov     eax, 1
+    ret
+.no:
+    xor     eax, eax
     ret
 
 er_fn expect_rel_label_value

@@ -67,10 +67,37 @@ asm_x86_obj() {
 }
 
 source_entry_stem() {
-	local src="$1"
+	local entry="$1" kind path stem rest
+	case "$entry" in
+		source\|*|object\|*)
+			IFS='|' read -r kind path stem rest <<EOF
+$entry
+EOF
+			if [ -n "$stem" ]; then
+				printf '%s\n' "$stem"
+				return
+			fi
+			;;
+	esac
+	local src="$(source_entry_path "$entry")"
 	src="${src%.erobj}"
 	src="${src%.asm}"
 	printf '%s\n' "$src"
+}
+
+source_entry_path() {
+	local entry="$1" kind path stem logical rest
+	case "$entry" in
+		source\|*|object\|*)
+			IFS='|' read -r kind path stem logical rest <<EOF
+$entry
+EOF
+			printf '%s\n' "$path"
+			;;
+		*)
+			printf '%s\n' "$entry"
+			;;
+	esac
 }
 
 resolve_asm_source() {
@@ -154,7 +181,7 @@ assemble_kernel() {
 	for src in ${KERNEL_ASM_SRCS}; do
 		local base="$(source_entry_stem "$src")"
 		local name="${base##*/}"
-		local src_path="${ASM_DIR}/${src}"
+		local src_path="${ASM_DIR}/$(source_entry_path "$src")"
 		local dst="${ASM_BUILD}/kernel_${name}.o"
 		elf32 "$src_path" "$dst"
 		echo "  AS  ${dst}"
@@ -171,7 +198,7 @@ assemble_kernel_efi() {
 	for src in ${KERNEL_ASM_SRCS}; do
 		local base="$(source_entry_stem "$src")"
 		local name="${base##*/}"
-		local src_path="${ASM_DIR}/${src}"
+		local src_path="${ASM_DIR}/$(source_entry_path "$src")"
 		if [ "$name" = "entry" ]; then
 			src_path="${ASM_DIR}/efi_entry.asm"
 		fi
@@ -1429,7 +1456,7 @@ cmd_test_status_one() {
  mkdir -p "$status_dir"
  local log_path="${status_dir}/${wanted}.log"
  local status="pass"
- if ! "$meta_runner" >"$log_path" 2>&1; then
+ if ! (set +e; "$meta_runner") >"$log_path" 2>&1; then
   status="fail"
  fi
  printf '%s\t%s\t%s\t%s\t%s\n' "$wanted" "$meta_category" "$meta_subsystem" "$status" "$log_path"
@@ -1864,7 +1891,7 @@ cmd_test_vp9() {
 }
 
 cmd_test_image_formats() {
-	build_test "test_image_formats_self" "${TEST_DIR}/test_image_formats_self.asm" "media/image_formats"
+	build_test "test_image_formats_self" "${TEST_DIR}/test_image_formats_self.asm" "media/bitreader" "media/image_formats"
 }
 
 cmd_test_webp() {

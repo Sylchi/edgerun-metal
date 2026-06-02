@@ -213,6 +213,8 @@ tok_imul: db "imul"
 tok_imul_len equ $ - tok_imul
 tok_setz: db "setz"
 tok_setz_len equ $ - tok_setz
+tok_setne: db "setne"
+tok_setne_len equ $ - tok_setne
 tok_call: db "call"
 tok_call_len equ $ - tok_call
 tok_push: db "push"
@@ -335,6 +337,8 @@ tok_r15: db "r15"
 tok_r15_len equ $ - tok_r15
 tok_ax: db "ax"
 tok_ax_len equ $ - tok_ax
+tok_cx: db "cx"
+tok_cx_len equ $ - tok_cx
 tok_bx: db "bx"
 tok_bx_len equ $ - tok_bx
 tok_dil: db "dil"
@@ -351,6 +355,8 @@ tok_sil: db "sil"
 tok_sil_len equ $ - tok_sil
 tok_dx: db "dx"
 tok_dx_len equ $ - tok_dx
+tok_si: db "si"
+tok_si_len equ $ - tok_si
 tok_di: db "di"
 tok_di_len equ $ - tok_di
 tok_qword: db "qword"
@@ -469,6 +475,22 @@ tok_error_timeout: db "ERROR_TIMEOUT"
 tok_error_timeout_len equ $ - tok_error_timeout
 tok_error_not_present: db "ERROR_NOT_PRESENT"
 tok_error_not_present_len equ $ - tok_error_not_present
+tok_error_bad_argument: db "ERROR_BAD_ARGUMENT"
+tok_error_bad_argument_len equ $ - tok_error_bad_argument
+tok_error_ok: db "ERROR_OK"
+tok_error_ok_len equ $ - tok_error_ok
+tok_error_unsupported: db "ERROR_UNSUPPORTED"
+tok_error_unsupported_len equ $ - tok_error_unsupported
+tok_error_not_implemented: db "ERROR_NOT_IMPLEMENTED"
+tok_error_not_implemented_len equ $ - tok_error_not_implemented
+tok_error_io: db "ERROR_IO"
+tok_error_io_len equ $ - tok_error_io
+tok_error_no_space: db "ERROR_NO_SPACE"
+tok_error_no_space_len equ $ - tok_error_no_space
+tok_error_not_found: db "ERROR_NOT_FOUND"
+tok_error_not_found_len equ $ - tok_error_not_found
+tok_error_invalid_response: db "ERROR_INVALID_RESPONSE"
+tok_error_invalid_response_len equ $ - tok_error_invalid_response
 tok_er_in_al_dx_sym: db "er_in_al_dx"
 tok_er_in_al_dx_sym_len equ $ - tok_er_in_al_dx_sym
 tok_er_out_dx_al_sym: db "er_out_dx_al"
@@ -505,3 +527,5 @@ tok_three_close: db "3]"
 tok_three_close_len equ $ - tok_three_close
 tok_rel_open: db "[rel"
 tok_rel_open_len equ $ - tok_rel_open
+tok_rel: db "rel"
+tok_rel_len equ $ - tok_rel
