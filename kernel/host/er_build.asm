@@ -1482,9 +1482,9 @@ msg_x86_objects_ok: db "x86-objects: .build/kernel/kernel_*.o", 10, 0
 test_status_header: db "target", 9, "category", 9, "subsystem", 9, "status", 9, "log", 10, 0
 test_status_registry_pass: db "test-registry", 9, "unit", 9, "build", 9, "pass", 9, "registry object validated", 10, 0
 test_status_registry_fail: db "test-registry", 9, "unit", 9, "build", 9, "fail", 9, "registry object invalid", 10, 0
-test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm parsed kernel/x86_64/macros.inc", 10, 0
+test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm parsed committed source object", 10, 0
 test_status_er_asm_parse_fail: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "fail", 9, "er_asm parse probe failed", 10, 0
-test_status_er_asm_cli_pass: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "pass", 9, "er_asm accepted flat CLI shape", 10, 0
+test_status_er_asm_cli_pass: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "pass", 9, "er_asm assembled committed source object", 10, 0
 test_status_er_asm_cli_fail: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "fail", 9, "er_asm CLI probe failed", 10, 0
 test_status_unknown_tail: db 9, "unknown", 9, "unknown", 9, "fail", 9, "unsupported test-status target", 10, 0
 build_dir: db ".build", 0
@@ -1513,13 +1513,13 @@ x86_object_prefix: db ".build/kernel/kernel_", 0
 object_suffix: db ".o", 0
 kernel_source_build_dir: db ".build/kernel/source", 0
 er_asm_path: db ".build/host/er_asm", 0
-macros_inc_path: db "kernel/x86_64/macros.inc", 0
-er_asm_cli_source_path: db "kernel/test/test_flat_runtime.asm", 0
+er_asm_source_object_path: db "kernel/host/er_asm.asm.erobj", 0
+er_asm_cli_source_path: db "kernel/test/test_flat_runtime.asm.erobj", 0
 er_asm_cli_probe_path: db ".build/host/er_asm_cli_probe.bin", 0
 dev_null_path: db "/dev/null", 0
 null_env: dq 0
 argv_yasm_host_tool: dq arg_yasm, arg_f, arg_elf64, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
 argv_ld_host_tool: dq arg_ld, arg_nostdlib, arg_static, arg_o, binary_path_buf, object_path_buf, 0
 argv_yasm_x86_object: dq arg_yasm, arg_f, arg_elf32, arg_include, arg_kernel, arg_o, object_path_buf, source_path_buf, 0
-argv_er_asm_parse_test: dq er_asm_path, arg_parse_only, macros_inc_path, 0
+argv_er_asm_parse_test: dq er_asm_path, arg_parse_only, er_asm_source_object_path, 0
 argv_er_asm_cli_test: dq er_asm_path, arg_f, arg_flat, arg_include, arg_kernel, arg_o, er_asm_cli_probe_path, er_asm_cli_source_path, 0
