@@ -164,6 +164,7 @@ er_fn parse_file
     call    read_file_to_buffer
     test    rax, rax
     js      .bad
+    mov     [rel source_body_len], rax
     lea     r14, [rel source_buf]
     lea     r15, [r14 + rax]
     call    scan_source

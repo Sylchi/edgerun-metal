@@ -54,6 +54,7 @@ output_format:  resq 1
 include_dir_ptr: resq ER_ASM_INCLUDE_CAP
 include_dir_count: resq 1
 source_dir_path: resq 1
+source_body_len: resq 1
 report_fd:      resd 1
 assemble_mode:  resq 1
 line_count:     resq 1

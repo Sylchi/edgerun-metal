@@ -69,6 +69,9 @@ er_fn token_eq
 er_fn print_report
     lea     rdi, [rel key_magic]
     call    write_report_cstr
+    lea     rdi, [rel key_source_body_len]
+    mov     rsi, [rel source_body_len]
+    call    print_kv
     lea     rdi, [rel key_lines]
     mov     rsi, [rel line_count]
     call    print_kv

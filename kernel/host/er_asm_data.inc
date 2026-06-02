@@ -8,7 +8,8 @@ arg_i: db "-I", 0
 msg_usage: db "usage: er_asm --interpret <source.asm.erobj> | --parse-only <source.asm> | -f flat [-I path] -o <out> <source.asm.erobj>", 10, 0
 msg_fail: db "er_asm: assembly failed", 10, 0
 msg_unsupported: db "er_asm: unsupported source shape", 10, 0
-key_magic: db "er_asm_parse", 9, "1", 10, 0
+key_magic: db "er_asm_interpret", 9, "1", 10, 0
+key_source_body_len: db "source_body_len", 0
 key_lines: db "lines", 0
 key_preproc: db "preproc", 0
 key_directives: db "directives", 0
