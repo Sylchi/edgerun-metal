@@ -3573,7 +3573,13 @@ create table asm_zero_size_data_symbol_fact (
 );
 
 insert into asm_zero_size_data_symbol_fact(path, label_name, symbol_kind) values
-  ('kernel/host/er_obj_body.asm.erobj', 'stack_top', 'reserved_stack_end_anchor');
+  ('kernel/host/er_obj_body.asm.erobj', 'stack_top', 'reserved_stack_end_anchor'),
+  ('kernel/test/test_av1_ivf_self.asm', 'ivf_av1', 'labelled_data_block_anchor'),
+  ('kernel/test/test_av1_mp4_self.asm', 'mp4_headers', 'labelled_data_block_anchor'),
+  ('kernel/test/test_av1_mp4_self.asm', 'mp4_tables', 'labelled_data_block_anchor'),
+  ('kernel/test/test_av1_mp4_self.asm', 'mp4_time_tables', 'labelled_data_block_anchor'),
+  ('kernel/test/test_curve25519_self.asm', 't1', 'labelled_data_block_anchor'),
+  ('kernel/test/test_curve25519_self.asm', 't3', 'labelled_data_block_anchor');
 
 create view repo_asm_data_reference_fact as
 select path,
@@ -3600,6 +3606,24 @@ from repo_asm_operation
 where target_isa_id = 4
   and op_name = 'ldr'
   and operand_text like '%, =%'
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       replace(definition.label_name, ':', '') as target_name,
+       'absolute_symbol_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_data_definition_fact definition
+  on definition.repo_file_id = operation.repo_file_id
+ and replace(definition.label_name, ':', '') = trim(substr(operation.operand_text,
+                                                         instr(operation.operand_text, '[') + 1,
+                                                         instr(substr(operation.operand_text,
+                                                                      instr(operation.operand_text, '[') + 1), ']') - 1))
+where operation.op_name in ('mov','lea','add')
+  and operation.operand_text like '%, [%]%'
+  and operation.operand_text not like '%[rel %]%'
 union all
 select operation.path,
        operation.repo_file_id,

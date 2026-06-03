@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Lowered same-file absolute symbol memory operands and labelled fixture data-block anchors into data-reference facts, covering host buffers, file descriptors, framebuffer state, Tor IDs, and AV1 fixture tables without treating symbols as fixed instruction bytes.
 - Added 47 more verified exact ASM encoding facts from the current post-relocation known-gap queue, covering common x86 register/stack forms and the next ARM register/immediate forms.
 - Lowered ARM branch/call targets and `ldr ..., =...` pseudo-literal operands into relocation/data-reference facts, and carried target ISA through operation fact status for cleaner blocker ranking.
 - Added ISA-scoped exact ASM rule matching and 32 verified ARMv6 fixed-encoding facts for high-frequency Pi loads, stores, compares, conditionals, pushes/pops, and stack adjusts, so ARM facts can reduce known gaps without matching x86 source.
