@@ -3172,7 +3172,10 @@ insert into asm_exact_fixed_encoding_fact(encoding_id, name, rule_name, op_name,
   (2297, 'x86_64_exact_imul_eax_rsp_vp8_height', 'asm_x86_exact_imul_eax_rsp_vp8_height_exact', 'imul', 'eax, [rsp + VP8_DECODE_STACK_HEIGHT]', '0faf84246d0b0000'),
   (2298, 'x86_64_exact_imul_ecx_vp8_motion_vector_size', 'asm_x86_exact_imul_ecx_vp8_motion_vector_size_exact', 'imul', 'ecx, VP8_MOTION_VECTOR_SIZE', '6bc904'),
   (2299, 'x86_64_exact_imul_r11d_r12d', 'asm_x86_exact_imul_r11d_r12d_exact', 'imul', 'r11d, r12d', '450fafdc'),
-  (2300, 'x86_64_exact_mov_edx_av1_cdf_prob_top', 'asm_x86_exact_mov_edx_av1_cdf_prob_top_exact', 'mov', 'edx, AV1_CDF_PROB_TOP', 'ba00800000');
+  (2300, 'x86_64_exact_mov_edx_av1_cdf_prob_top', 'asm_x86_exact_mov_edx_av1_cdf_prob_top_exact', 'mov', 'edx, AV1_CDF_PROB_TOP', 'ba00800000'),
+  (2301, 'x86_64_exact_mov_rdx_rcx8_minus_8_rax', 'asm_x86_exact_mov_rdx_rcx8_minus_8_rax_exact', 'mov', '[rdx + rcx*8 - 8], rax', '488944caf8'),
+  (2302, 'x86_64_exact_cmp_rdx_error_arithmetic_trap', 'asm_x86_exact_cmp_rdx_error_arithmetic_trap_exact', 'cmp', 'rdx, ERROR_ARITHMETIC_TRAP', '4883fa11'),
+  (2303, 'x86_64_exact_cmp_byte_rsi_rdx_0', 'asm_x86_exact_cmp_byte_rsi_rdx_0_exact', 'cmp', 'byte [rsi + rdx], 0', '803c1600');
 
 insert into asm_exact_fixed_encoding_fact(encoding_id, isa_id, name, rule_name, op_name, operand_text, fixed_hex) values
   (1953, 4, 'arm32_exact_add_r3_r3_imm_1', 'asm_arm32_exact_add_r3_r3_imm_1_exact', 'add', 'r3, r3, #1', '013083e2'),

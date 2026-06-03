@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added checked exact facts for the WASM float self-test's final scaled-index store, arithmetic-trap compare, and byte-scan compare blockers, converted it into a committed source object, and deleted its text `.asm` source.
 - Added the checked `mov edx, AV1_CDF_PROB_TOP` exact fact, converted the AV1 sequence self-test into a committed source object, and deleted its text `.asm` source.
 - Converted the now fact-backed AV1 tile self-test into a committed source object and deleted its text `.asm` source.
 - Added conflict-checked parametric x86 encoding facts for register/register, register/immediate, stack-memory, base-register memory, shift, and unary register templates, dropping `known_gap` by 5,329 rows without enumerating exact instruction strings.
