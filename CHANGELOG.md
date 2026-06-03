@@ -8,6 +8,7 @@
 - Materialized and indexed the repo ASM operation, rule-match, and operation-status relations so each new lowering round can query the next gaps quickly instead of recomputing nested source-import views.
 - Added tradeoff decision, option, metric, assessment, and selected-option facts so source deletion and operator-loop choices can be ranked from queryable cost, benefit, risk, and canonical-alignment data.
 - Added full-line ASM parse coverage, source-deletion planning, and gap-impact rankings so unparsed significant lines are fatal blockers and next deletion work is ranked by bytes and file unlocks.
+- Added 51 high-impact exact x86 encoding facts for common `mov`, `xor`, `cmp`, `or`, `test`, and `div` forms, reducing remaining known ASM fact gaps by 2,689 operations while preserving the same deletion blockers for unsupported source.
 - Converted `kernel/test/stubs_xhci.asm`, `kernel/x86_64/rt/std.asm`, and `kernel/x86_64/rt/runtime.asm` into source objects; updated the x86 source registry to use `runtime.asm.erobj` and fixed runtime source-object includes to resolve through repo-root paths.
 - Added source-deletion include blockers so fact-backed text is not deleted while live text includes still reference it; `wasm_interpreter.asm` is now fact-backed but correctly blocked by six inbound test includes.
 - Added finite facts for `default rel` metadata and `mov edx, UNEXPECTED_NTOR_STUB_EXIT`, then converted `kernel/test/stubs_tor_ntor.asm` into a source object and deleted the text source.
