@@ -4940,17 +4940,68 @@ from repo_asm_constant_candidate_operation;
 create index repo_asm_constant_candidate_operand_text_line_idx
   on repo_asm_constant_candidate_operand_text(repo_file_id, function_name, line_no);
 
+create table repo_asm_constant_candidate_operand_token as
+with recursive token_rows as (
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         operand_text,
+         ltrim(normalized_operand_text) as remaining_text,
+         '' as token_text
+  from repo_asm_constant_candidate_operand_text
+  union all
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         operand_text,
+         ltrim(substr(remaining_text, instr(remaining_text, ' ') + 1)) as remaining_text,
+         trim(substr(remaining_text, 1, instr(remaining_text, ' ') - 1)) as token_text
+  from token_rows
+  where instr(remaining_text, ' ') > 0
+)
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       token_text
+from token_rows
+where token_text <> '';
+
+create index repo_asm_constant_candidate_operand_token_idx
+  on repo_asm_constant_candidate_operand_token(token_text, repo_file_id, function_name, line_no);
+
 create table repo_asm_constant_operand_symbol_match as
-select operation.path,
-       operation.repo_file_id,
-       operation.function_name,
-       operation.line_no,
-       operation.op_name,
-       operation.operand_text,
+select token.path,
+       token.repo_file_id,
+       token.function_name,
+       token.line_no,
+       token.op_name,
+       token.operand_text,
        symbol.symbol_name
-from repo_asm_constant_candidate_operand_text operation
+from repo_asm_constant_candidate_operand_token token
 join asm_constant_expression_symbol_fact symbol
-  on operation.normalized_operand_text like '% ' || symbol.symbol_name || ' %';
+  on symbol.symbol_name = token.token_text
+union
+select token.path,
+       token.repo_file_id,
+       token.function_name,
+       token.line_no,
+       token.op_name,
+       token.operand_text,
+       constant.symbol_name
+from repo_asm_constant_candidate_operand_token token
+join repo_asm_all_unique_constant_fact constant
+  on constant.symbol_name = token.token_text
+where length(constant.symbol_name) >= 2
+  and constant.symbol_name not like '%:%'
+  and substr(constant.symbol_name, 1, 1) <> '%'
+  and constant.symbol_name not glob '*[^A-Za-z0-9_.$]*';
 
 create index repo_asm_constant_operand_symbol_match_symbol_idx
   on repo_asm_constant_operand_symbol_match(symbol_name);
@@ -4996,7 +5047,7 @@ select match.path,
        constant.symbol_name,
        constant.expression_text
 from repo_asm_constant_operand_symbol_match match
-join repo_asm_unique_constant_fact constant
+join repo_asm_all_unique_constant_fact constant
   on constant.symbol_name = match.symbol_name
 where not exists (select 1
                   from repo_asm_scoped_constant_expression_match scoped
@@ -6591,6 +6642,214 @@ where fixed_hex is not null
 create unique index repo_asm_unary_parametric_encoding_fact_line_idx
   on repo_asm_unary_parametric_encoding_fact(repo_file_id, function_name, line_no);
 
+create table repo_asm_stack_alias_parametric_encoding_fact as
+with binary_operand as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.op_name,
+         match.operand_text,
+         trim(substr(match.operand_text, 1, instr(match.operand_text, ',') - 1)) as lhs,
+         trim(substr(match.operand_text, instr(match.operand_text, ',') + 1)) as rhs,
+         constant_expr.symbol_name,
+         trim(constant_expr.expression_text) as expression_text
+  from repo_asm_rule_match match
+  join repo_asm_constant_expression_fact constant_expr
+    on constant_expr.repo_file_id = match.repo_file_id
+   and constant_expr.function_name = match.function_name
+   and constant_expr.line_no = match.line_no
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and constant_expr.symbol_count = 1
+    and instr(coalesce(match.operand_text, ''), ',') > 0
+), normalized as (
+  select *,
+         case when lhs like 'byte %' then 'byte'
+              when lhs like 'word %' then 'word'
+              when lhs like 'dword %' then 'dword'
+              when lhs like 'qword %' then 'qword'
+              else null end as lhs_size,
+         case when lhs like 'byte %' then trim(substr(lhs, 6))
+              when lhs like 'word %' then trim(substr(lhs, 6))
+              when lhs like 'dword %' then trim(substr(lhs, 7))
+              when lhs like 'qword %' then trim(substr(lhs, 7))
+              else lhs end as lhs_value,
+         case when rhs like 'byte %' then 'byte'
+              when rhs like 'word %' then 'word'
+              when rhs like 'dword %' then 'dword'
+              when rhs like 'qword %' then 'qword'
+              else null end as rhs_size,
+         case when rhs like 'byte %' then trim(substr(rhs, 6))
+              when rhs like 'word %' then trim(substr(rhs, 6))
+              when rhs like 'dword %' then trim(substr(rhs, 7))
+              when rhs like 'qword %' then trim(substr(rhs, 7))
+              else rhs end as rhs_value
+  from binary_operand
+), alias_value as (
+  select *,
+         case
+           when replace(expression_text, ' ', '') glob 'rsp+[0-9]*'
+            and substr(replace(expression_text, ' ', ''), 5) not glob '*[^0-9]*'
+             then cast(substr(replace(expression_text, ' ', ''), 5) as integer)
+           when replace(expression_text, ' ', '') glob 'rsp-[0-9]*'
+            and substr(replace(expression_text, ' ', ''), 5) not glob '*[^0-9]*'
+             then -cast(substr(replace(expression_text, ' ', ''), 5) as integer)
+           when replace(expression_text, ' ', '') = 'rsp' then 0
+         end as displacement
+  from normalized
+), memory_operand as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         lhs_value,
+         rhs_value,
+         lhs_size as size_name,
+         rhs_value as register_name,
+         displacement,
+         symbol_name,
+         'lhs' as memory_side
+  from alias_value
+  where lhs_value like '[%]'
+    and substr(lhs_value, 2, length(lhs_value) - 2) = symbol_name
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         lhs_value,
+         rhs_value,
+         rhs_size as size_name,
+         lhs_value as register_name,
+         displacement,
+         symbol_name,
+         'rhs' as memory_side
+  from alias_value
+  where rhs_value like '[%]'
+    and substr(rhs_value, 2, length(rhs_value) - 2) = symbol_name
+), memory_bytes as (
+  select memory_operand.*,
+         reg.width_bits,
+         reg.reg_code,
+         reg.requires_rex,
+         case
+           when displacement = 0 then 0
+           when displacement between -128 and 127 then 1
+           else 2
+         end as mod_bits,
+         case
+           when displacement = 0 then ''
+           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+           else printf('%02x%02x%02x%02x',
+                       displacement & 255,
+                       (displacement >> 8) & 255,
+                       (displacement >> 16) & 255,
+                       (displacement >> 24) & 255)
+         end as displacement_hex
+  from memory_operand
+  join x86_register_encoding_fact reg
+    on reg.register_name = memory_operand.register_name
+  where displacement is not null
+    and reg.width_bits in (32,64)
+), generated as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_stack_alias_reg' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end)
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end)
+             else ''
+           end
+           || case
+                when op_name = 'mov' then '89'
+                when op_name = 'add' then '01'
+                when op_name = 'sub' then '29'
+                when op_name = 'cmp' then '39'
+                when op_name = 'and' then '21'
+                when op_name = 'or' then '09'
+                when op_name = 'xor' then '31'
+              end
+           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + 4)
+           || '24'
+           || displacement_hex
+         ) as fixed_hex
+  from memory_bytes
+  where memory_side = 'lhs'
+    and op_name in ('mov','add','sub','cmp','and','or','xor')
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg_stack_alias' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end)
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end)
+             else ''
+           end
+           || case op_name
+                when 'mov' then '8b'
+                when 'add' then '03'
+                when 'sub' then '2b'
+                when 'cmp' then '3b'
+                when 'and' then '23'
+                when 'or' then '0b'
+                when 'xor' then '33'
+                when 'lea' then '8d'
+              end
+           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + 4)
+           || '24'
+           || displacement_hex
+         ) as fixed_hex
+  from memory_bytes
+  where memory_side = 'rhs'
+    and op_name in ('mov','add','sub','cmp','and','or','xor','lea')
+)
+select repo_file_id,
+       function_name,
+       line_no,
+       parametric_rule_name,
+       fixed_hex
+from generated
+where fixed_hex is not null
+  and not exists (select 1
+                  from repo_asm_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_symbolic_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_indexed_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_numeric_symbol_memory_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_numeric_immediate_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_unary_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no);
+
+create unique index repo_asm_stack_alias_parametric_encoding_fact_line_idx
+  on repo_asm_stack_alias_parametric_encoding_fact(repo_file_id, function_name, line_no);
+
 create table repo_asm_all_parametric_encoding_fact as
 select *
 from repo_asm_parametric_encoding_fact
@@ -6608,7 +6867,10 @@ select *
 from repo_asm_numeric_immediate_parametric_encoding_fact
 union all
 select *
-from repo_asm_unary_parametric_encoding_fact;
+from repo_asm_unary_parametric_encoding_fact
+union all
+select *
+from repo_asm_stack_alias_parametric_encoding_fact;
 
 create unique index repo_asm_all_parametric_encoding_fact_line_idx
   on repo_asm_all_parametric_encoding_fact(repo_file_id, function_name, line_no);
