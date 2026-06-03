@@ -7,9 +7,6 @@
 %include "x86_64/macros.inc"
 %include "x86_64/object/object_constants.inc"
 
-OBJECT_VIEW_BODY_PTR        equ 0
-OBJECT_VIEW_BODY_LEN        equ 8
-OBJECT_VIEW_HEADER          equ 16
 OBJECT_STAMP_SIZE           equ 64
 OBJECT_REQ_FIELD_COUNT      equ OBJECT_REQUIREMENTS_SIZE / 4
 
@@ -116,13 +113,17 @@ _requirement_max_for_index:
     mov     eax, OBJECT_ACCESS_HOT_MEMORY_ALLOWED
     er_ret
 
-; validate Kind [1,2,4]  di=kind → eax=1
+; validate Kind [1,2,4,8,16]  di=kind → eax=1
 _validate_kind:
     cmp     di, OBJECT_KIND_BYTES
     je      .ok
     cmp     di, OBJECT_KIND_TREE
     je      .ok
     cmp     di, OBJECT_KIND_RECEIPT
+    je      .ok
+    cmp     di, OBJECT_KIND_CODE
+    je      .ok
+    cmp     di, OBJECT_KIND_ISA
     je      .ok
     xor     eax, eax
     er_ret
@@ -848,6 +849,10 @@ er_fn er_object_canonical_size
     je      .no_children
     cmp     di, OBJECT_KIND_RECEIPT
     je      .no_children
+    cmp     di, OBJECT_KIND_ISA
+    je      .no_children
+    cmp     di, OBJECT_KIND_CODE
+    je      .compute
     jmp     .check_tree
 .no_children:
     er_check_nonzero r8, .bad_arg
@@ -928,6 +933,127 @@ er_fn er_object_write_bytes_node
     xor     r9d, r9d            ; owner_count
     call    er_object_write_bytes_node_owned
     add     rsp, 32
+    er_ret
+
+; ==================================================================
+; er_object_write_code_node
+; int er_object_write_code_node(uint8_t* out, uint64_t out_len,
+;                               const uint8_t req[28], const void* epoch,
+;                               const uint8_t* body, uint64_t body_len)
+; rdi=out, rsi=out_len, rdx=req, rcx=epoch, r8=body, r9=body_len
+; Returns eax=written bytes, edx=0 on success.
+; ==================================================================
+er_fn er_object_write_code_node
+    mov     r10d, OBJECT_KIND_CODE
+    jmp     _object_write_plain_body_node
+
+; ==================================================================
+; er_object_write_receipt_node
+; int er_object_write_receipt_node(uint8_t* out, uint64_t out_len,
+;                                  const uint8_t req[28], const void* epoch,
+;                                  const uint8_t* body, uint64_t body_len)
+; rdi=out, rsi=out_len, rdx=req, rcx=epoch, r8=body, r9=body_len
+; Returns eax=written bytes, edx=0 on success.
+; ==================================================================
+er_fn er_object_write_receipt_node
+    mov     r10d, OBJECT_KIND_RECEIPT
+    jmp     _object_write_plain_body_node
+
+; ==================================================================
+; er_object_write_isa_node
+; int er_object_write_isa_node(uint8_t* out, uint64_t out_len,
+;                              const uint8_t req[28], const void* epoch,
+;                              const uint8_t* body, uint64_t body_len)
+; rdi=out, rsi=out_len, rdx=req, rcx=epoch, r8=body, r9=body_len
+; Returns eax=written bytes, edx=0 on success.
+; ==================================================================
+er_fn er_object_write_isa_node
+    mov     r10d, OBJECT_KIND_ISA
+
+; _object_write_plain_body_node: r10d=object kind, other args match wrapper ABI.
+_object_write_plain_body_node:
+    er_frame_push_regs rbx, r12, r13, r14, r15
+    sub     rsp, 160
+
+    mov     r12, rdi            ; out
+    mov     r13, rsi            ; out_len
+    mov     r14, rdx            ; req
+    mov     r15, rcx            ; epoch
+    mov     [rsp + 128], r8     ; body
+    mov     [rsp + 136], r9     ; body_len
+    mov     [rsp + 144], r10    ; kind
+
+    cmp     r10d, OBJECT_KIND_CODE
+    jne     .check_isa
+    mov     rdi, [rsp + 128]
+    mov     rsi, [rsp + 136]
+    call    er_code_validate_body
+    er_check_nonzero edx, .writer_fail
+    jmp     .size_check
+
+.check_isa:
+    cmp     r10d, OBJECT_KIND_ISA
+    jne     .size_check
+    mov     rdi, [rsp + 128]
+    mov     rsi, [rsp + 136]
+    call    er_isa_validate_body
+    er_check_nonzero edx, .writer_fail
+
+.size_check:
+    mov     edi, [rsp + 144]
+    mov     rsi, [rsp + 136]
+    xor     edx, edx
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [rsp + 152]
+    call    er_object_canonical_size
+    er_check_zero eax, .writer_fail
+    mov     rax, [rsp + 152]
+    cmp     r13, rax
+    jb      .no_space
+
+    mov     rdi, rsp
+    mov     esi, [rsp + 144]
+    mov     rdx, [rsp + 136]
+    mov     rcx, [rsp + 136]
+    xor     r8d, r8d
+    mov     r9, r14
+    mov     r10, r15
+    xor     r11d, r11d
+    xor     eax, eax
+    call    _object_fill_header
+
+    mov     rdi, r12
+    mov     rsi, rsp
+    xor     edx, edx
+    xor     ecx, ecx
+    xor     r8d, r8d
+    xor     r9d, r9d
+    call    _object_write_header_sections
+    er_check_zero eax, .writer_fail
+    mov     rbx, rax
+
+    lea     rdi, [r12 + rbx]
+    mov     rsi, [rsp + 136]
+    mov     rdx, [rsp + 128]
+    call    _object_memcpy
+    mov     rax, [rsp + 152]
+    er_ok
+    jmp     .return
+.no_space:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_NO_SPACE
+    jmp     .return
+.writer_fail:
+    test    edx, edx
+    jnz     .writer_return_fail
+    mov     edx, OBJECT_ERR_BAD_ARGUMENT
+.writer_return_fail:
+    xor     eax, eax
+.return:
+    add     rsp, 160
+    er_pop  rbx, r12, r13, r14, r15
+    er_frame_pop
     er_ret
 
 ; ==================================================================
@@ -1631,4 +1757,253 @@ _object_memcpy:
     cmp     rcx, rsi
     jb      .loop
 .done:
+    ret
+
+; ==================================================================
+; er_isa_validate_body
+; Validate a canonical instruction-set body.
+; rdi=body, rsi=body_len
+; returns eax=definition_count, edx=0 on success or object error.
+; ==================================================================
+er_fn er_isa_validate_body
+    er_push rbx, r12, r13, r14, r15
+    mov     r12, rdi
+    mov     r13, rsi
+
+    er_check_zero r12, .bad_arg
+    cmp     r13, ISA_BODY_HEADER_SIZE
+    jb      .bad_arg
+    mov     rax, [r12 + ISA_BODY_OF_MAGIC]
+    mov     rdx, ISA_BODY_MAGIC_QWORD
+    cmp     rax, rdx
+    jne     .bad_arg
+    cmp     word [r12 + ISA_BODY_OF_VERSION], ISA_BODY_VERSION
+    jne     .bad_arg
+    movzx   eax, word [r12 + ISA_BODY_OF_ISA]
+    cmp     eax, ISA_ID_X86_64
+    jb      .unsupported
+    cmp     eax, ISA_ID_WASM
+    ja      .unsupported
+
+    mov     r14d, [r12 + ISA_BODY_OF_DEF_COUNT]
+    test    r14d, r14d
+    jz      .bad_arg
+    mov     rax, r14
+    imul    rax, ISA_DEF_SIZE
+    jo      .bad_arg
+    add     rax, ISA_BODY_HEADER_SIZE
+    jc      .bad_arg
+    cmp     rax, r13
+    jne     .bad_arg
+
+    xor     ebx, ebx
+    xor     r15d, r15d
+.def_loop:
+    cmp     ebx, r14d
+    jae     .success
+    mov     r9, rbx
+    imul    r9, ISA_DEF_SIZE
+    lea     r9, [r12 + ISA_BODY_HEADER_SIZE + r9]
+    mov     eax, [r9 + ISA_DEF_OF_INSTRUCTION_ID]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     eax, r15d
+    jbe     .bad_arg
+    mov     r15d, eax
+    cmp     word [r9 + ISA_DEF_OF_MNEMONIC_ID], 0
+    je      .bad_arg
+    cmp     word [r9 + ISA_DEF_OF_OPERAND_SHAPE], 0
+    je      .bad_arg
+    cmp     word [r9 + ISA_DEF_OF_ENCODING_SHAPE], 0
+    je      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_INPUT_COUNT], 8
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_OUTPUT_COUNT], 8
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_IMPLICIT_COUNT], 16
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_RESERVED], 0
+    jne     .bad_arg
+    inc     ebx
+    jmp     .def_loop
+.success:
+    mov     eax, r14d
+    er_ok
+    jmp     .done_out
+.bad_arg:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_BAD_ARGUMENT
+    jmp     .done_out
+.unsupported:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_UNSUPPORTED
+.done_out:
+    er_pop  rbx, r12, r13, r14, r15
+    ret
+
+; ==================================================================
+; er_code_validate_body
+; Validate a canonical CODE body.
+; rdi=body, rsi=body_len
+; returns eax=record_count, edx=0 on success or object error.
+; ==================================================================
+er_fn er_code_validate_body
+    er_push rbx, r12, r13, r14
+    mov     r12, rdi
+    mov     r13, rsi
+
+    er_check_zero r12, .bad_arg
+    cmp     r13, CODE_BODY_HEADER_SIZE
+    jb      .bad_arg
+    mov     rax, [r12 + CODE_BODY_OF_MAGIC]
+    mov     rdx, CODE_BODY_MAGIC_QWORD
+    cmp     rax, rdx
+    jne     .bad_arg
+    cmp     word [r12 + CODE_BODY_OF_VERSION], CODE_BODY_VERSION
+    jne     .bad_arg
+    cmp     word [r12 + CODE_BODY_OF_ISA], CODE_ISA_X86_64
+    jne     .unsupported
+
+    mov     r14d, [r12 + CODE_BODY_OF_RECORD_COUNT]
+    mov     rax, r14
+    imul    rax, CODE_RECORD_SIZE
+    jo      .bad_arg
+    add     rax, CODE_BODY_HEADER_SIZE
+    jc      .bad_arg
+    cmp     rax, r13
+    jne     .bad_arg
+
+    xor     ebx, ebx
+.record_loop:
+    cmp     ebx, r14d
+    jae     .success
+    mov     r9, rbx
+    imul    r9, CODE_RECORD_SIZE
+    lea     r9, [r12 + CODE_BODY_HEADER_SIZE + r9]
+    movzx   eax, word [r9 + CODE_RECORD_OF_KIND]
+    cmp     eax, CODE_RECORD_KIND_EXPORT
+    je      .next
+    cmp     eax, CODE_RECORD_KIND_IMPORT
+    je      .next
+    cmp     eax, CODE_RECORD_KIND_INSTR
+    jne     .unsupported
+    movzx   eax, word [r9 + CODE_RECORD_OF_OPCODE]
+    cmp     eax, CODE_OP_X86_MOV_EAX_IMM32
+    je      .next
+    cmp     eax, CODE_OP_X86_RET
+    je      .next
+    jmp     .unsupported
+.next:
+    inc     ebx
+    jmp     .record_loop
+.success:
+    mov     eax, r14d
+    er_ok
+    jmp     .done_out
+.bad_arg:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_BAD_ARGUMENT
+    jmp     .done_out
+.unsupported:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_UNSUPPORTED
+.done_out:
+    er_pop  rbx, r12, r13, r14
+    ret
+
+; ==================================================================
+; er_code_materialize_flat
+; Materialize a canonical CODE body into flat x86_64 bytes.
+; rdi=body, rsi=body_len, rdx=out, rcx=out_len, r8=receipt[32]
+; returns eax=bytes written, edx=0 on success or object error.
+; ==================================================================
+er_fn er_code_materialize_flat
+    er_push rbx, rbp, r12, r13, r14, r15
+    mov     r12, rdi        ; body
+    mov     r13, rsi        ; body_len
+    mov     r14, rdx        ; out
+    mov     r15, rcx        ; out_len
+    mov     rbx, r8         ; receipt
+
+    er_check_zero r14, .bad_arg
+    er_check_zero rbx, .bad_arg
+    mov     rdi, r12
+    mov     rsi, r13
+    call    er_code_validate_body
+    er_check_nonzero edx, .done_out
+    mov     r10d, eax
+
+    xor     ebp, ebp        ; record index
+    xor     r11d, r11d      ; output offset
+.record_loop:
+    cmp     ebp, r10d
+    jae     .success
+    mov     r9, rbp
+    imul    r9, CODE_RECORD_SIZE
+    lea     r9, [r12 + CODE_BODY_HEADER_SIZE + r9]
+
+    movzx   eax, word [r9 + CODE_RECORD_OF_KIND]
+    cmp     eax, CODE_RECORD_KIND_EXPORT
+    je      .metadata_record
+    cmp     eax, CODE_RECORD_KIND_IMPORT
+    je      .metadata_record
+    cmp     eax, CODE_RECORD_KIND_INSTR
+    jne     .unsupported
+    movzx   eax, word [r9 + CODE_RECORD_OF_OPCODE]
+    cmp     eax, CODE_OP_X86_MOV_EAX_IMM32
+    je      .mov_eax_imm32
+    cmp     eax, CODE_OP_X86_RET
+    je      .ret_instr
+    jmp     .unsupported
+
+.mov_eax_imm32:
+    mov     rax, r11
+    add     rax, 5
+    jc      .no_space
+    cmp     rax, r15
+    ja      .no_space
+    mov     byte [r14 + r11], 0xb8
+    mov     eax, [r9 + CODE_RECORD_OF_IMM64]
+    mov     [r14 + r11 + 1], eax
+    add     r11, 5
+    inc     ebp
+    jmp     .record_loop
+
+.ret_instr:
+    mov     rax, r11
+    inc     rax
+    jc      .no_space
+    cmp     rax, r15
+    ja      .no_space
+    mov     byte [r14 + r11], 0xc3
+    inc     r11
+    inc     ebp
+    jmp     .record_loop
+
+.metadata_record:
+    inc     ebp
+    jmp     .record_loop
+
+.success:
+    mov     rax, CODE_RECEIPT_MAGIC_QWORD
+    mov     [rbx + CODE_RECEIPT_OF_MAGIC], rax
+    mov     [rbx + CODE_RECEIPT_OF_RECORD_COUNT], r10
+    mov     [rbx + CODE_RECEIPT_OF_OUTPUT_LEN], r11
+    mov     qword [rbx + CODE_RECEIPT_OF_ISA], CODE_ISA_X86_64
+    mov     rax, r11
+    er_ok
+    jmp     .done_out
+.bad_arg:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_BAD_ARGUMENT
+    jmp     .done_out
+.unsupported:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_UNSUPPORTED
+    jmp     .done_out
+.no_space:
+    xor     eax, eax
+    mov     edx, OBJECT_ERR_NO_SPACE
+.done_out:
+    er_pop  rbx, rbp, r12, r13, r14, r15
     ret

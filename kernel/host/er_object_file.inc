@@ -1,6 +1,6 @@
 ; Shared EROBJ001 bytes-object file helpers for Linux host ASM tools.
 ; Requires caller-provided constants: SYS_open, SYS_read, O_RDONLY,
-; OBJECT_HEADER_SIZE, OBJECT_BUF_SIZE, OBJECT_VERSION, OBJECT_KIND_BYTES.
+; OBJECT_HEADER_SIZE, OBJECT_BUF_SIZE, OBJECT_VERSION, OBJECT_KIND_*.
 ; Requires caller-provided BSS symbol: object_buf.
 
 ; read_object(path) -> rax=bytes read or negative syscall error
@@ -29,8 +29,18 @@ validate_object:
     jne     .invalid
     cmp     word [rel object_buf + 8], OBJECT_VERSION
     jne     .invalid
-    cmp     word [rel object_buf + 10], OBJECT_KIND_BYTES
+    movzx   eax, word [rel object_buf + 10]
+    cmp     eax, OBJECT_KIND_BYTES
+    je      .kind_ok
+    cmp     eax, OBJECT_KIND_TREE
+    je      .kind_ok
+    cmp     eax, OBJECT_KIND_RECEIPT
+    je      .kind_ok
+    cmp     eax, OBJECT_KIND_CODE
+    je      .kind_ok
+    cmp     eax, OBJECT_KIND_ISA
     jne     .invalid
+.kind_ok:
     cmp     dword [rel object_buf + 12], 0
     jne     .invalid
     cmp     word [rel object_buf + 24], 0

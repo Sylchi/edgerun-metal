@@ -14,6 +14,7 @@
 ;   er_build view OBJECT
 ;   er_build body-to-file OBJECT OUTPUT
 ;   er_build file-to-object INPUT OUTPUT.erobj
+;   er_build materialize-code-body BODY.erobj OUTPUT RECEIPT.erobj
 ;   er_build replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj
 ;
 ; The runner reads build graph data from EdgeRun EROBJ001 bytes objects instead
@@ -41,8 +42,53 @@ FILE_MODE_0644 equ 0644o
 OBJECT_HEADER_SIZE equ 148
 OBJECT_BUF_SIZE    equ 1048576
 OBJECT_KIND_BYTES  equ 1
+OBJECT_KIND_TREE   equ 2
+OBJECT_KIND_RECEIPT equ 4
+OBJECT_KIND_CODE   equ 8
+OBJECT_KIND_ISA    equ 16
 OBJECT_VERSION     equ 1
 EROBJ_SUFFIX_LEN   equ 6
+ISA_BODY_MAGIC_QWORD         equ 0x3130304153495245
+ISA_BODY_VERSION             equ 1
+ISA_ID_X86_64                equ 1
+ISA_ID_WASM                  equ 5
+ISA_BODY_HEADER_SIZE         equ 16
+ISA_DEF_SIZE                 equ 16
+ISA_BODY_OF_MAGIC            equ 0
+ISA_BODY_OF_VERSION          equ 8
+ISA_BODY_OF_ISA              equ 10
+ISA_BODY_OF_DEF_COUNT        equ 12
+ISA_DEF_OF_INSTRUCTION_ID    equ 0
+ISA_DEF_OF_MNEMONIC_ID       equ 4
+ISA_DEF_OF_OPERAND_SHAPE     equ 6
+ISA_DEF_OF_ENCODING_SHAPE    equ 8
+ISA_DEF_OF_INPUT_COUNT       equ 12
+ISA_DEF_OF_OUTPUT_COUNT      equ 13
+ISA_DEF_OF_IMPLICIT_COUNT    equ 14
+ISA_DEF_OF_RESERVED          equ 15
+CODE_BODY_MAGIC_QWORD        equ 0x313045444f435245
+CODE_RECEIPT_MAGIC_QWORD     equ 0x313054414d435245
+CODE_BODY_VERSION            equ 1
+CODE_ISA_X86_64              equ 1
+CODE_BODY_HEADER_SIZE        equ 16
+CODE_RECORD_SIZE             equ 16
+CODE_BODY_OF_MAGIC           equ 0
+CODE_BODY_OF_VERSION         equ 8
+CODE_BODY_OF_ISA             equ 10
+CODE_BODY_OF_RECORD_COUNT    equ 12
+CODE_RECORD_OF_KIND          equ 0
+CODE_RECORD_OF_OPCODE        equ 2
+CODE_RECORD_OF_IMM64         equ 8
+CODE_RECORD_KIND_INSTR       equ 1
+CODE_RECORD_KIND_EXPORT      equ 2
+CODE_RECORD_KIND_IMPORT      equ 3
+CODE_OP_X86_MOV_EAX_IMM32    equ 1
+CODE_OP_X86_RET              equ 2
+CODE_RECEIPT_SIZE            equ 32
+CODE_RECEIPT_OF_MAGIC        equ 0
+CODE_RECEIPT_OF_RECORD_COUNT equ 8
+CODE_RECEIPT_OF_OUTPUT_LEN   equ 16
+CODE_RECEIPT_OF_ISA          equ 24
 
 section .bss
 object_buf: resb OBJECT_BUF_SIZE
@@ -162,6 +208,11 @@ _start:
     call    streq
     test    eax, eax
     jnz     .file_to_object
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_file_to_isa_object]
+    call    streq
+    test    eax, eax
+    jnz     .file_to_isa_object
     jmp     .usage
 
 .argc5:
@@ -170,6 +221,11 @@ _start:
     call    streq
     test    eax, eax
     jnz     .test_status_3
+    mov     rdi, [r13 + 8]
+    lea     rsi, [rel arg_materialize_code_body]
+    call    streq
+    test    eax, eax
+    jnz     .materialize_code_body
     jmp     .usage
 
 .argc3:
@@ -234,6 +290,14 @@ _start:
     xor     edi, edi
     jmp     exit_now
 
+.materialize_code_body:
+    mov     rdi, [r13 + 16]
+    mov     rsi, [r13 + 24]
+    mov     rdx, [r13 + 32]
+    call    cmd_materialize_code_body
+    xor     edi, edi
+    jmp     exit_now
+
 .help:
     call    cmd_help
     xor     edi, edi
@@ -289,6 +353,13 @@ _start:
     mov     rdi, [r13 + 16]
     mov     rsi, [r13 + 24]
     call    write_file_object
+    xor     edi, edi
+    jmp     exit_now
+
+.file_to_isa_object:
+    mov     rdi, [r13 + 16]
+    mov     rsi, [r13 + 24]
+    call    write_file_isa_object
     xor     edi, edi
     jmp     exit_now
 
@@ -1028,12 +1099,320 @@ write_object_body_file:
     pop     r12
     ret
 
-; write_file_object(input_path, output_path)
-write_file_object:
+; cmd_materialize_code_body(body_object, output_path, receipt_path)
+cmd_materialize_code_body:
     push    r12
     push    r13
     push    r14
+    mov     r12, rsi            ; output path
+    mov     r13, rdx            ; receipt path
+    call    read_object
+    test    rax, rax
+    js      bad_object
+    mov     rdi, rax
+    call    validate_object
+    test    eax, eax
+    jz      bad_object
+    mov     eax, [rel object_buf + 32]
+    mov     edx, [rel object_buf + 36]
+    test    edx, edx
+    jnz     bad_object
+    lea     rdi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rsi, rax
+    lea     rdx, [rel source_list_buf]
+    mov     ecx, OBJECT_BUF_SIZE
+    lea     r8, [rel edit_buf]
+    call    materialize_code_body
+    test    edx, edx
+    jnz     build_fail
+    mov     r14, rax
+    mov     rdi, r12
+    lea     rsi, [rel source_list_buf]
+    mov     rdx, r14
+    call    write_raw_file
+    mov     r14, r13
+    mov     r13d, CODE_RECEIPT_SIZE
+    call    init_object_header_receipt
+    lea     rdi, [rel object_buf + OBJECT_HEADER_SIZE]
+    lea     rsi, [rel edit_buf]
+    mov     edx, CODE_RECEIPT_SIZE
+    call    copy_bytes
+    mov     rdi, r14
+    call    write_current_object_file
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+write_raw_file:
+    push    r12
+    push    r13
+    push    r14
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     rdi, r12
+    call    ensure_parent_dir
+    mov     rdi, r12
+    mov     esi, O_WRONLY_CREAT_TRUNC
+    mov     edx, FILE_MODE_0644
+    mov     eax, SYS_open
+    syscall
+    test    rax, rax
+    js      build_fail
+    mov     r12, rax
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     eax, SYS_write
+    syscall
+    cmp     rax, r14
+    jne     build_fail
+    mov     rdi, r12
+    mov     eax, SYS_close
+    syscall
+    test    rax, rax
+    js      build_fail
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+materialize_code_body:
+    push    rbx
+    push    rbp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r12, rdi            ; body
+    mov     r13, rsi            ; body_len
+    mov     r14, rdx            ; out
+    mov     r15, rcx            ; out_len
+    mov     rbx, r8             ; receipt
+    call    validate_code_body
+    test    edx, edx
+    jnz     .done
+    mov     r10d, eax           ; record count
+    xor     ebp, ebp
+    xor     r11d, r11d
+.record_loop:
+    cmp     ebp, r10d
+    jae     .success
+    mov     r9, rbp
+    imul    r9, CODE_RECORD_SIZE
+    lea     r9, [r12 + CODE_BODY_HEADER_SIZE + r9]
+    movzx   eax, word [r9 + CODE_RECORD_OF_KIND]
+    cmp     eax, CODE_RECORD_KIND_EXPORT
+    je      .metadata_record
+    cmp     eax, CODE_RECORD_KIND_IMPORT
+    je      .metadata_record
+    movzx   eax, word [r9 + CODE_RECORD_OF_OPCODE]
+    cmp     eax, CODE_OP_X86_MOV_EAX_IMM32
+    je      .mov_eax_imm32
+    cmp     eax, CODE_OP_X86_RET
+    je      .ret_instr
+    jmp     .unsupported
+.mov_eax_imm32:
+    mov     rax, r11
+    add     rax, 5
+    jc      .no_space
+    cmp     rax, r15
+    ja      .no_space
+    mov     byte [r14 + r11], 0xb8
+    mov     eax, [r9 + CODE_RECORD_OF_IMM64]
+    mov     [r14 + r11 + 1], eax
+    add     r11, 5
+    inc     ebp
+    jmp     .record_loop
+.ret_instr:
+    mov     rax, r11
+    inc     rax
+    jc      .no_space
+    cmp     rax, r15
+    ja      .no_space
+    mov     byte [r14 + r11], 0xc3
+    inc     r11
+    inc     ebp
+    jmp     .record_loop
+.metadata_record:
+    inc     ebp
+    jmp     .record_loop
+.success:
+    mov     rax, CODE_RECEIPT_MAGIC_QWORD
+    mov     [rbx + CODE_RECEIPT_OF_MAGIC], rax
+    mov     [rbx + CODE_RECEIPT_OF_RECORD_COUNT], r10
+    mov     [rbx + CODE_RECEIPT_OF_OUTPUT_LEN], r11
+    mov     qword [rbx + CODE_RECEIPT_OF_ISA], CODE_ISA_X86_64
+    mov     rax, r11
+    xor     edx, edx
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    mov     edx, 4
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    mov     edx, 2
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    ret
+
+validate_code_body:
+    mov     r12, rdi
+    mov     r13, rsi
+    test    r12, r12
+    jz      .bad_arg
+    cmp     r13, CODE_BODY_HEADER_SIZE
+    jb      .bad_arg
+    mov     rax, [r12 + CODE_BODY_OF_MAGIC]
+    mov     rdx, CODE_BODY_MAGIC_QWORD
+    cmp     rax, rdx
+    jne     .bad_arg
+    cmp     word [r12 + CODE_BODY_OF_VERSION], CODE_BODY_VERSION
+    jne     .bad_arg
+    cmp     word [r12 + CODE_BODY_OF_ISA], CODE_ISA_X86_64
+    jne     .unsupported
+    mov     r10d, [r12 + CODE_BODY_OF_RECORD_COUNT]
+    mov     rax, r10
+    imul    rax, CODE_RECORD_SIZE
+    jo      .bad_arg
+    add     rax, CODE_BODY_HEADER_SIZE
+    jc      .bad_arg
+    cmp     rax, r13
+    jne     .bad_arg
+    xor     ecx, ecx
+.record_loop:
+    cmp     ecx, r10d
+    jae     .success
+    mov     r9, rcx
+    imul    r9, CODE_RECORD_SIZE
+    lea     r9, [r12 + CODE_BODY_HEADER_SIZE + r9]
+    movzx   eax, word [r9 + CODE_RECORD_OF_KIND]
+    cmp     eax, CODE_RECORD_KIND_EXPORT
+    je      .next
+    cmp     eax, CODE_RECORD_KIND_IMPORT
+    je      .next
+    cmp     eax, CODE_RECORD_KIND_INSTR
+    jne     .unsupported
+    movzx   eax, word [r9 + CODE_RECORD_OF_OPCODE]
+    cmp     eax, CODE_OP_X86_MOV_EAX_IMM32
+    je      .next
+    cmp     eax, CODE_OP_X86_RET
+    je      .next
+    jmp     .unsupported
+.next:
+    inc     ecx
+    jmp     .record_loop
+.success:
+    mov     eax, r10d
+    xor     edx, edx
+    ret
+.bad_arg:
+    xor     eax, eax
+    mov     edx, 1
+    ret
+.unsupported:
+    xor     eax, eax
+    mov     edx, 4
+    ret
+
+validate_isa_body:
+    push    r12
+    push    r13
+    mov     r12, rdi
+    mov     r13, rsi
+    test    r12, r12
+    jz      .bad_arg
+    cmp     r13, ISA_BODY_HEADER_SIZE
+    jb      .bad_arg
+    mov     rax, [r12 + ISA_BODY_OF_MAGIC]
+    mov     rdx, ISA_BODY_MAGIC_QWORD
+    cmp     rax, rdx
+    jne     .bad_arg
+    cmp     word [r12 + ISA_BODY_OF_VERSION], ISA_BODY_VERSION
+    jne     .bad_arg
+    movzx   eax, word [r12 + ISA_BODY_OF_ISA]
+    cmp     eax, ISA_ID_X86_64
+    jb      .unsupported
+    cmp     eax, ISA_ID_WASM
+    ja      .unsupported
+    mov     r10d, [r12 + ISA_BODY_OF_DEF_COUNT]
+    test    r10d, r10d
+    jz      .bad_arg
+    mov     rax, r10
+    imul    rax, ISA_DEF_SIZE
+    jo      .bad_arg
+    add     rax, ISA_BODY_HEADER_SIZE
+    jc      .bad_arg
+    cmp     rax, r13
+    jne     .bad_arg
+    xor     ecx, ecx
+    xor     r11d, r11d
+.record_loop:
+    cmp     ecx, r10d
+    jae     .success
+    mov     r9, rcx
+    imul    r9, ISA_DEF_SIZE
+    lea     r9, [r12 + ISA_BODY_HEADER_SIZE + r9]
+    mov     eax, [r9 + ISA_DEF_OF_INSTRUCTION_ID]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     eax, r11d
+    jbe     .bad_arg
+    mov     r11d, eax
+    cmp     word [r9 + ISA_DEF_OF_MNEMONIC_ID], 0
+    je      .bad_arg
+    cmp     word [r9 + ISA_DEF_OF_OPERAND_SHAPE], 0
+    je      .bad_arg
+    cmp     word [r9 + ISA_DEF_OF_ENCODING_SHAPE], 0
+    je      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_INPUT_COUNT], 8
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_OUTPUT_COUNT], 8
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_IMPLICIT_COUNT], 16
+    ja      .bad_arg
+    cmp     byte [r9 + ISA_DEF_OF_RESERVED], 0
+    jne     .bad_arg
+    inc     ecx
+    jmp     .record_loop
+.success:
+    mov     eax, r10d
+    xor     edx, edx
+    jmp     .done
+.bad_arg:
+    xor     eax, eax
+    mov     edx, 1
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    mov     edx, 4
+.done:
+    pop     r13
+    pop     r12
+    ret
+
+; write_file_object(input_path, output_path)
+write_file_object:
+    mov     edx, OBJECT_KIND_BYTES
+    jmp     write_file_object_kind
+
+write_file_isa_object:
+    mov     edx, OBJECT_KIND_ISA
+
+write_file_object_kind:
+    push    r12
+    push    r13
+    push    r14
+    push    r15
     mov     r12, rsi
+    mov     r15d, edx
 
     mov     rsi, O_RDONLY
     xor     edx, edx
@@ -1060,7 +1439,17 @@ write_file_object:
     test    rax, rax
     js      build_fail
 
-    call    init_object_header
+    cmp     r15d, OBJECT_KIND_ISA
+    jne     .header
+    lea     rdi, [rel object_buf + OBJECT_HEADER_SIZE]
+    mov     rsi, r13
+    call    validate_isa_body
+    test    edx, edx
+    jnz     build_fail
+
+.header:
+    mov     edi, r15d
+    call    init_object_header_kind
 
     mov     rdi, r12
     call    ensure_parent_dir
@@ -1087,6 +1476,7 @@ write_file_object:
     syscall
     test    rax, rax
     js      build_fail
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1246,6 +1636,10 @@ parse_u64_or_fail:
     ret
 
 init_object_header:
+    mov     edi, OBJECT_KIND_BYTES
+
+init_object_header_kind:
+    mov     r8d, edi
     lea     rdi, [rel object_buf]
     mov     ecx, OBJECT_HEADER_SIZE
 .zero:
@@ -1255,10 +1649,14 @@ init_object_header:
     mov     rax, 0x3130304a424f5245
     mov     [rel object_buf], rax
     mov     word [rel object_buf + 8], OBJECT_VERSION
-    mov     word [rel object_buf + 10], OBJECT_KIND_BYTES
+    mov     word [rel object_buf + 10], r8w
     mov     qword [rel object_buf + 16], r13
     mov     qword [rel object_buf + 32], r13
     ret
+
+init_object_header_receipt:
+    mov     edi, OBJECT_KIND_RECEIPT
+    jmp     init_object_header_kind
 
 write_registry_test_list:
     mov     eax, [rel object_buf + 32]
@@ -1458,6 +1856,8 @@ arg_validate_object: db "validate-object", 0
 arg_view: db "view", 0
 arg_body_to_file: db "body-to-file", 0
 arg_file_to_object: db "file-to-object", 0
+arg_file_to_isa_object: db "file-to-isa-object", 0
+arg_materialize_code_body: db "materialize-code-body", 0
 arg_replace_range: db "replace-range", 0
 registry_path: db "kernel/test/registry.erobj", 0
 x86_sources_path: db "kernel/x86_64/kernel_sources.erobj", 0
@@ -1474,7 +1874,7 @@ test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|view OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj|replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|view OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj|file-to-isa-object INPUT OUTPUT.erobj|materialize-code-body BODY.erobj OUTPUT RECEIPT.erobj|replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
 msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm", 10, 0

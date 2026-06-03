@@ -18,6 +18,12 @@ OBJECT_MAX_CHILDREN             equ 65536
 OBJECT_SIGNATURE_FIXED_SIZE     equ 112
 OBJECT_SIGNATURE_MAX_SIZE       equ 128
 
+; ObjectView decoded layout
+OBJECT_VIEW_BODY_PTR            equ 0
+OBJECT_VIEW_BODY_LEN            equ 8
+OBJECT_VIEW_HEADER              equ 16
+OBJECT_VIEW_SIZE                equ OBJECT_VIEW_HEADER + HEADER_STRUCT_SIZE
+
 ; ==================================================================
 ; Magic strings (as little-endian qwords for immediate comparison)
 ; =================================================================
@@ -39,6 +45,94 @@ OBJECT_ERR_UNSUPPORTED          equ 4
 OBJECT_KIND_BYTES               equ 1
 OBJECT_KIND_TREE                equ 2
 OBJECT_KIND_RECEIPT             equ 4
+OBJECT_KIND_CODE                equ 8
+OBJECT_KIND_ISA                 equ 16
+
+; ==================================================================
+; Canonical instruction-set body records
+; ==================================================================
+ISA_BODY_MAGIC_QWORD            equ 0x3130304153495245  ; "ERISA001"
+ISA_BODY_VERSION                equ 1
+ISA_ID_X86_64                   equ 1
+ISA_ID_X86_32                   equ 2
+ISA_ID_AARCH64                  equ 3
+ISA_ID_ARM32                    equ 4
+ISA_ID_WASM                     equ 5
+
+ISA_BODY_OF_MAGIC               equ 0   ; 8 bytes
+ISA_BODY_OF_VERSION             equ 8   ; u16
+ISA_BODY_OF_ISA                 equ 10  ; u16
+ISA_BODY_OF_DEF_COUNT           equ 12  ; u32
+ISA_BODY_HEADER_SIZE            equ 16
+
+ISA_DEF_OF_INSTRUCTION_ID       equ 0   ; u32
+ISA_DEF_OF_MNEMONIC_ID          equ 4   ; u16
+ISA_DEF_OF_OPERAND_SHAPE        equ 6   ; u16
+ISA_DEF_OF_ENCODING_SHAPE       equ 8   ; u16
+ISA_DEF_OF_FLAGS                equ 10  ; u16
+ISA_DEF_OF_INPUT_COUNT          equ 12  ; u8
+ISA_DEF_OF_OUTPUT_COUNT         equ 13  ; u8
+ISA_DEF_OF_IMPLICIT_COUNT       equ 14  ; u8
+ISA_DEF_OF_RESERVED             equ 15  ; u8
+ISA_DEF_SIZE                    equ 16
+
+ISA_MNEMONIC_MOV                equ 1
+ISA_MNEMONIC_RET                equ 2
+ISA_MNEMONIC_NOP                equ 3
+ISA_MNEMONIC_B                  equ 4
+ISA_MNEMONIC_END                equ 5
+ISA_OPERAND_SHAPE_NONE          equ 1
+ISA_OPERAND_SHAPE_REG_IMM32     equ 2
+ISA_ENCODING_X86_MOV_EAX_IMM32  equ 1
+ISA_ENCODING_X86_RET_NEAR       equ 2
+ISA_ENCODING_X86_NOP            equ 3
+ISA_ENCODING_A64_RET            equ 101
+ISA_ENCODING_A64_NOP            equ 102
+ISA_ENCODING_ARM32_BX_LR        equ 201
+ISA_ENCODING_ARM32_NOP          equ 202
+ISA_ENCODING_WASM_END           equ 301
+ISA_ENCODING_WASM_NOP           equ 302
+ISA_INSTR_X86_MOV_EAX_IMM32     equ 1
+ISA_INSTR_X86_RET               equ 2
+ISA_INSTR_X86_NOP               equ 3
+ISA_INSTR_A64_RET               equ 1
+ISA_INSTR_A64_NOP               equ 2
+ISA_INSTR_ARM32_BX_LR           equ 1
+ISA_INSTR_ARM32_NOP             equ 2
+ISA_INSTR_WASM_END              equ 1
+ISA_INSTR_WASM_NOP              equ 2
+
+; ==================================================================
+; Canonical code body records
+; ==================================================================
+CODE_BODY_MAGIC_QWORD           equ 0x313045444f435245  ; "ERCODE01"
+CODE_RECEIPT_MAGIC_QWORD        equ 0x313054414d435245  ; "ERCMAT01"
+CODE_BODY_VERSION               equ 1
+CODE_ISA_X86_64                 equ ISA_ID_X86_64
+
+CODE_BODY_OF_MAGIC              equ 0   ; 8 bytes
+CODE_BODY_OF_VERSION            equ 8   ; u16
+CODE_BODY_OF_ISA                equ 10  ; u16
+CODE_BODY_OF_RECORD_COUNT       equ 12  ; u32
+CODE_BODY_HEADER_SIZE           equ 16
+
+CODE_RECORD_OF_KIND             equ 0   ; u16
+CODE_RECORD_OF_OPCODE           equ 2   ; u16
+CODE_RECORD_OF_FLAGS            equ 4   ; u32
+CODE_RECORD_OF_IMM64            equ 8   ; u64
+CODE_RECORD_SIZE                equ 16
+
+CODE_RECORD_KIND_INSTR          equ 1
+CODE_RECORD_KIND_EXPORT         equ 2
+CODE_RECORD_KIND_IMPORT         equ 3
+CODE_OP_X86_MOV_EAX_IMM32       equ 1
+CODE_OP_X86_RET                 equ 2
+
+CODE_RECEIPT_OF_MAGIC           equ 0   ; 8 bytes
+CODE_RECEIPT_OF_RECORD_COUNT    equ 8   ; u64
+CODE_RECEIPT_OF_OUTPUT_LEN      equ 16  ; u64
+CODE_RECEIPT_OF_ISA             equ 24  ; u64
+CODE_RECEIPT_SIZE               equ 32
 
 ; ==================================================================
 ; Durability enum (u32)

@@ -7,7 +7,7 @@
 - Errors are fatal.
 - No shortcuts.
 - No external dependencies beyond what's required for self-hosted builds.
-- All host-side production code is x86_64 assembly using the project's own macro DSL (`macros.inc`).
+- All current host-side production code is x86_64 assembly using the project's own macro DSL (`macros.inc`). The target is not a better textual assembler; the target is canonical code objects whose instruction records are addressed and linked by object hash.
 - No C, no Python, no CMake in host-side production code paths. Existing app-side Zig is transitional legacy code being ported to owned ASM/self-hosted paths; do not add new Zig code.
 - Host-side test harnesses may temporarily use C for linking purposes, but must be migrated to pure ASM self-hosted runners.
 - The permitted vendor binary exceptions are explicit and narrow: device radio firmware needed to operate a radio block, such as CYW43438 RAM/NVRAM/CLM files, and Raspberry Pi Zero-family boot firmware needed for the Broadcom mask-ROM/GPU boot chain to load repo-owned `kernel.img` on Pi Zero W v1.1 bring-up hardware. These exceptions do not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
@@ -33,13 +33,13 @@
 
 The repository has two code worlds separated by a hard boundary:
 
-- **Host-side** — runs on bare metal or Linux userspace. Written in x86_64
+- **Host-side** — runs on bare metal or Linux userspace. Currently written in x86_64
   assembly using the project's own DSL (`macros.inc`). Owns the kernel, drivers,
   boot path, PCI, MMIO, serial, TPM, framebuffer, WASM interpreter, render IR,
   UI shell, and all host tooling.
 - **App-side** — application logic that runs inside the canonical host-side
   EdgeRun WASM interpreter. Existing Zig app sources are a temporary bootstrap
-  surface and must be ported to owned ASM/self-hosted compiler paths to reach
+  surface and must be ported to owned code-object/self-hosted paths to reach
   100% owned code. Do not add new Zig app code. Apps must have zero host
   assumptions: no syscalls, no libc, no POSIX, no platform intrinsics.
   Authority enters only through explicit EdgeRun import contracts backed by
@@ -48,8 +48,8 @@ The repository has two code worlds separated by a hard boundary:
 ## Workspace & Language
 
 - **The project is consolidating to owned code on both sides of the boundary:**
-  - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
-  - **App-side:** Existing Zig source compiled to WASM is legacy bootstrap code. Port app logic, UI contracts, object/grant helpers, media helpers, and host-facing app utilities to owned ASM/self-hosted source-to-WASM paths. Do not add new Zig files, tests, examples, generators, or app features. App-side code must not contain a competing WASM interpreter.
+  - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This is the current dogfooding surface, not the final source authority. The final form is canonical code objects: instruction records, labels, control edges, data records, and imports stored in `.erobj` graphs and addressed by hash.
+  - **App-side:** Existing Zig source compiled to WASM is legacy bootstrap code. Port app logic, UI contracts, object/grant helpers, media helpers, and host-facing app utilities to owned code-object/self-hosted source-to-WASM paths. Do not add new Zig files, tests, examples, generators, or app features. App-side code must not contain a competing WASM interpreter.
 - `kernel/x86_64/` — canonical hardware-near implementation, organized by subsystem:
   - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
   - `drv/` — hardware drivers
@@ -68,11 +68,54 @@ The repository has two code worlds separated by a hard boundary:
 - `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
 - `app/` — transitional app-side Zig frontend and browser-facing app runtime. Treat existing Zig as porting input, not a place for new implementation. App code compiles to WASM and runs on the canonical host-side WASM interpreter/import contract. Do not add an app-side WASM interpreter.
 
+## Canonical Program Model
+
+Do not model the future as “finish `er_asm` so it replaces `yasm`.” A textual assembler parses syntax, expands macros, resolves symbols, encodes instructions, emits sections/relocations, and feeds a linker. EdgeRun does not need to preserve that tool shape.
+
+The target model is:
+
+- A program is an `.erobj` graph: code, data, requirements, receipts, and dependencies are objects addressed by hash.
+- Code is a chain or graph of canonical instruction records, not free-form text. Labels and branches are graph edges or symbolic records resolved inside the object graph.
+- Instruction sets are finite object tables kept resident as needed. `ERISA001` objects define canonical instruction vocabularies for x86_64, x86_32, AArch64, ARM32, WASM, and later languages/runtimes; CODE records should reference these definitions instead of encoding every instruction as one-off materializer branches.
+- “Compiling” is not required for already-canonical code objects. The owned path validates object records, resolves hash-linked dependencies, and materializes bytes only when hardware or a WASM runtime needs executable representation.
+- `er_asm` is transitional. It should shrink toward source-object interpretation, canonicalization, and record emission. Do not grow it into a full `yasm` clone unless that removes more legacy text machinery than it adds.
+- `er_build` should prefer object graph validation, object graph closure, receipt emission, and deterministic materialization over shell-like build orchestration or text-source rebuild loops.
+- Text `.asm` bodies are an editing/inspection bridge for current code. The source of truth moves toward canonical `.erobj` records and hashes.
+
+## Pipeline And View Model
+
+Source code, drivers, tools, UI, and tests are not separate conceptual worlds. They are layers that pipeline canonical object records into other forms:
+
+- Drivers materialize instruction/data records into hardware effects and device-facing cells.
+- Runtimes materialize instruction/data records into WASM execution, host execution, or receipts.
+- Build tools validate graph closure, resolve object hashes, and materialize only the requested depth.
+- The UI is a graph viewer and pipeline editor: it should visualize instruction chains, dependencies, receipts, cells, grants, and materialized views at different depths instead of forcing users to read text source.
+- Agents should prefer materializing the view needed for the task: instruction record, function graph, dependency closure, receipt chain, source text bridge, flat bytes, image bytes, or runtime trace.
+
+Do not reduce this back to “read code, compile code, run binary.” Code is one view over object records. Executable bytes are another view. UI graphs, driver pipelines, receipts, and source text are also views over the same canonical graph.
+
+Authority is not an ambient side model. Pipeline edges carry requirements, grants, identities, and receipts as object data. A pipeline can connect anything to anything only when the graph records the required constraints and receipts; missing constraints fail closed.
+
+## Canonical Migration Plan
+
+There is one migration path. Do not invent alternate assemblers, linkers, package graphs, compiler IRs, permission systems, or UI source models.
+
+1. Define canonical record bodies inside existing `EROBJ001` objects.
+2. Add first-class object kinds only when the object serializer, validator, and tests accept them.
+3. Represent instruction sets as canonical ISA objects, then represent code as instruction records, label/control-edge records, data records, import records, requirement records, and receipt records that reference those ISA definitions.
+4. Build materializers that consume canonical records and emit one requested view: flat bytes, image bytes, WASM bytes, runtime trace, source text bridge, graph view, or receipt chain.
+5. Convert one small committed path at a time from text `.asm.erobj` to canonical code records.
+6. Make `er_asm` emit canonical records from the text bridge, then delete text-specific machinery as converted objects no longer need it.
+7. Move `er_build` toward object graph closure, hash resolution, validation, materialization, and receipt emission.
+8. Move UI work toward graph/pipeline views over records, not a text editor or app framework.
+
+Current concrete target: grow first-class ISA/CODE object graphs. ISA objects define finite instruction vocabularies; CODE objects relate those instruction definitions to operands, labels, imports, data, requirements, and receipts; materializers emit flat bytes or runtime views only when requested.
+
 ## External Dependencies (to eliminate)
 
 ### Build tools (minimum to bootstrap)
-- `yasm` (or `nasm`) — assembler for the DSL. Long-term goal: own assembler.
-- `ld` / `objcopy` (binutils) — linker. Long-term goal: own linker.
+- `yasm` (or `nasm`) — temporary parser/encoder for current textual ASM bootstrap. Long-term goal: bypass textual assembly with canonical instruction objects.
+- `ld` / `objcopy` (binutils) — temporary materialization tools. Long-term goal: owned object graph closure and direct byte/image materialization.
 
 ### Current bootstrap dependencies to eliminate
 - `zig` — temporary bootstrap compiler for existing app-side code only. It is being eliminated; new Zig code is not allowed.
@@ -103,6 +146,8 @@ Owned runner checks:
 ./.build/host/er_build x86-sources
 ./.build/host/er_build x86-objects
 ./.build/host/er_build validate-object kernel/test/registry.erobj
+./.build/host/er_build file-to-isa-object .build/host/x86_64_isa.body kernel/x86_64/object/x86_64_isa.erobj
+./.build/host/er_build materialize-code-body .build/host/code-body.erobj .build/host/code.bin .build/host/code.receipt.erobj
 ```
 
 Source-object editing workflow:
@@ -129,13 +174,24 @@ Workflow rules:
 - Do not make `host-tools` rebuilds part of routine work. The goal is to get off host build tools, not preserve a rebuild loop around them.
 - After editing `er_build.asm` or `er_asm.asm`, regenerate the matching `.asm.erobj` with `er_build file-to-object` and verify the existing owned tool path directly.
 - If a workflow is missing, add an owned `er_build` command or registry object; do not add shell wrappers.
+- If a workflow can be represented as canonical records, do that instead of adding more text assembler compatibility.
+- Use `file-to-isa-object` for checked `ERISA001` instruction-set bodies; malformed ISA bodies must fail before they enter the object graph.
+- Use `materialize-code-body` as the current bridge from canonical `ERCODE01` instruction records to flat bytes plus a canonical RECEIPT object. Extend that path before adding text assembler compatibility.
+- Use `kernel/x86_64/object/catalog.sql` as the compact SQL authoring/index view for finite code-object vocabularies. Do not treat SQL as runtime authority or an external dependency; materialized `.erobj` files are still the graph objects that validators and materializers consume.
+- Keep the operand vocabulary as materialized objects too: `ERTYPE01`, `EROPK001`, `EROPSH01`, and `ERADDR01` bodies define value types, operand kinds, operand shapes, and addressing modes. Concrete CODE operands should reference these records instead of embedding ad hoc operand tags.
+- Treat functions as materialization query roots. `ERFUNC01` objects identify function graph roots; SQL may emit deterministic machine-code views from function records, but the object closure and receipts remain the authority.
+- SQL editing should target canonical program graph tables: modules, functions, blocks, instruction instances, operand bindings, control edges, symbols, and relocations. Do not model codebase import as generic source lines; text is provenance/inspection, not authority.
+- Language import is a pure extraction into abstractions: languages, syntax atoms, semantic rules, abstraction nodes/edges, pipelines, and lowering rules. If a construct has no rule, it cannot exist in the imported graph. Do not add import receipts or source-text authority to this model.
+- For SQL parsing/import, the query tool is the active authority operating over relations. Source bytes are input data; token streams, parse trees, abstraction graphs, function graphs, and materialized target bytes are query results over canonical tables.
+- The SQL rule engine should unify interpreter/compiler/assembler behavior through relations: operation kinds/signatures, type rules, effect rules, operation/value instances, data edges, lowering rules, encoding rows, and byte views. Prove changes with queries that interpret, lower, and assemble the same graph.
+- The AI operator should use SQL gap views as the work queue. For `edgerun_asm_dsl`, run `asm_dsl_agent_next_gaps`, add missing syntax/semantic/lowering/encoding rows or objects, then rerun materialization views until real repository functions import and emit target bytes.
 
 ## Host-Side ASM Rules
 
-- All new production code must be written in the project's ASM DSL (`macros.inc`).
+- All new production code must use the project's owned code path. Today that is the ASM DSL (`macros.inc`); when canonical instruction objects exist for a path, prefer those over new textual assembly.
 - Do not add C test harnesses or C startup bridges.
 - Build and link ASM tests directly through owned host tooling and `ld` until
-  the repo-owned linker replaces `ld`.
+  owned object graph materialization replaces `ld`.
 - Keep behavior and tests coherent across `er_build.asm`, registry objects, and
   module-local tests.
 - Do not reintroduce C compatibility wrappers or shims at the ASM boundary.
