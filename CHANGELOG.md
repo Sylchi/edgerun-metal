@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Lowered 676 indexed x86 memory forms from finite operand/addressing facts, dropping `known_gap` to 18,543 without broad memory string scans.
 - Added finite operand, memory operand-term, and memory-addressing facts so base, symbolic, indexed, and rel memory shapes are queryable once instead of reparsed inside each materializer.
 - Added reusable numeric constant-value facts for unique decimal, hex, octal, and simple arithmetic definitions, moving 36 more symbolic constant operations into fixed encodings.
 - Extended symbolic x86 parametric lowering to base-register memory displacements and numeric memory immediates, moving 98 more constant-expression operations into fixed encodings without per-line exact facts.
