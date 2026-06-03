@@ -2590,6 +2590,155 @@ order by full_unlock_bytes desc, impacted_bytes desc, occurrence_count desc;
 create index repo_asm_gap_delete_impact_unlock_idx on repo_asm_gap_delete_impact(full_unlock_bytes, impacted_bytes);
 create index repo_asm_gap_delete_impact_gap_idx on repo_asm_gap_delete_impact(gap_kind, op_name, operand_text);
 
+create table repo_asm_gap_example as
+select path,
+       line_no,
+       gap_kind,
+       op_name,
+       operand_text,
+       raw_text,
+       row_number() over (
+         partition by gap_kind, op_name, operand_text
+         order by path, line_no
+       ) as example_rank
+from repo_asm_remaining_gap;
+
+create index repo_asm_gap_example_gap_idx on repo_asm_gap_example(gap_kind, op_name, operand_text, example_rank);
+
+create table repo_asm_next_operator_action as
+select 0 as action_rank,
+       'wrap_delete_ready_source' as action_kind,
+       'Wrap and delete ready text source' as action_name,
+       path,
+       null as line_no,
+       null as gap_kind,
+       null as op_name,
+       null as operand_text,
+       byte_len as impacted_bytes,
+       1 as impacted_file_count,
+       1 as full_unlock_file_count,
+       byte_len as full_unlock_bytes,
+       remaining_count,
+       'file-to-object ' || path || ' ' || source_object_path as action_hint,
+       'Planner reports zero remaining blockers for tracked text source.' as rationale
+from repo_asm_source_deletion_plan
+where deletion_state = 'ready_to_wrap_and_delete_text'
+union all
+select 10 + row_number() over (
+         order by impact.full_unlock_bytes desc,
+                  impact.impacted_bytes desc,
+                  impact.occurrence_count desc,
+                  impact.gap_kind,
+                  impact.op_name,
+                  impact.operand_text
+       ) as action_rank,
+       'close_full_unlock_gap' as action_kind,
+       'Lower gap that fully unlocks source files' as action_name,
+       example.path,
+       example.line_no,
+       impact.gap_kind,
+       impact.op_name,
+       impact.operand_text,
+       impact.impacted_bytes,
+       impact.impacted_file_count,
+       impact.full_unlock_file_count,
+       impact.full_unlock_bytes,
+       impact.min_remaining_after_gap as remaining_count,
+       case
+         when impact.gap_kind = 'known_gap' then impact.op_name || ' ' || impact.operand_text
+         else impact.gap_kind || ':' || impact.op_name || ' ' || impact.operand_text
+       end as action_hint,
+       'This gap class is sufficient to make at least one source file deletion-ready.' as rationale
+from repo_asm_gap_delete_impact impact
+left join repo_asm_gap_example example
+  on example.gap_kind = impact.gap_kind
+ and example.op_name = impact.op_name
+ and example.operand_text = impact.operand_text
+ and example.example_rank = 1
+where impact.full_unlock_file_count > 0
+union all
+select 500 + row_number() over (
+         order by plan.remaining_count asc,
+                  plan.byte_len desc,
+                  gap.path,
+                  gap.line_no
+       ) as action_rank,
+       'lower_near_ready_gap' as action_kind,
+       'Lower gap blocking a near-ready source file' as action_name,
+       gap.path,
+       gap.line_no,
+       gap.gap_kind,
+       gap.op_name,
+       gap.operand_text,
+       plan.byte_len as impacted_bytes,
+       1 as impacted_file_count,
+       1 as full_unlock_file_count,
+       case when plan.remaining_count = 1 then plan.byte_len else 0 end as full_unlock_bytes,
+       plan.remaining_count,
+       case
+         when gap.gap_kind = 'known_gap' then gap.op_name || ' ' || coalesce(gap.operand_text, '')
+         else gap.gap_kind || ':' || gap.op_name || ' ' || coalesce(gap.operand_text, '')
+       end as action_hint,
+       'This exact remaining gap belongs to a file with eight or fewer blockers.' as rationale
+from repo_asm_remaining_gap gap
+join repo_asm_source_deletion_plan plan using (path)
+where plan.deletion_state = 'blocked_by_fact_gaps'
+  and plan.remaining_count <= 8
+union all
+select 1000 + row_number() over (order by remaining_count asc, byte_len desc, path) as action_rank,
+       'inspect_near_ready_file' as action_kind,
+       'Inspect near-ready source file gaps' as action_name,
+       path,
+       null as line_no,
+       null as gap_kind,
+       null as op_name,
+       null as operand_text,
+       byte_len as impacted_bytes,
+       1 as impacted_file_count,
+       0 as full_unlock_file_count,
+       0 as full_unlock_bytes,
+       remaining_count,
+       'remaining gaps for ' || path as action_hint,
+       'Small remaining gap count can expose targeted file deletion opportunities.' as rationale
+from repo_asm_source_deletion_plan
+where deletion_state = 'blocked_by_fact_gaps'
+  and remaining_count <= 8
+union all
+select 2000 + row_number() over (
+         order by impact.impacted_bytes desc,
+                  impact.occurrence_count desc,
+                  impact.gap_kind,
+                  impact.op_name,
+                  impact.operand_text
+       ) as action_rank,
+       'lower_high_impact_gap' as action_kind,
+       'Lower highest-impact remaining gap' as action_name,
+       example.path,
+       example.line_no,
+       impact.gap_kind,
+       impact.op_name,
+       impact.operand_text,
+       impact.impacted_bytes,
+       impact.impacted_file_count,
+       impact.full_unlock_file_count,
+       impact.full_unlock_bytes,
+       impact.min_remaining_after_gap as remaining_count,
+       case
+         when impact.gap_kind = 'known_gap' then impact.op_name || ' ' || impact.operand_text
+         else impact.gap_kind || ':' || impact.op_name || ' ' || impact.operand_text
+       end as action_hint,
+       'Largest byte impact among remaining blockers after immediate unlocks and near-ready files.' as rationale
+from repo_asm_gap_delete_impact impact
+left join repo_asm_gap_example example
+  on example.gap_kind = impact.gap_kind
+ and example.op_name = impact.op_name
+ and example.operand_text = impact.operand_text
+ and example.example_rank = 1
+where impact.full_unlock_file_count = 0;
+
+create index repo_asm_next_operator_action_rank_idx on repo_asm_next_operator_action(action_rank);
+create index repo_asm_next_operator_action_kind_idx on repo_asm_next_operator_action(action_kind, action_rank);
+
 -- Universal transformer substrate. Domain tables above remain compact authoring
 -- views; these relations prove that unrelated domains can lower through the
 -- same rule application and byte materialization path.
@@ -4198,6 +4347,7 @@ create table engine_tradeoff_assessment_fact (
 insert into engine_tradeoff_decision_fact(decision_id, decision_name, decision_goal, source_name) values
   ('asm_source_object_conversion', 'Convert tracked ASM test source to source objects', 'Delete textual source only when equivalent source-object and fact-readiness data exist.', 'catalog.sql'),
   ('repo_asm_operator_loop', 'Materialize repo ASM operator-loop relations', 'Reduce repeated work needed to choose the next source-to-fact lowering step.', 'catalog.sql'),
+  ('repo_asm_next_action_workflow', 'Use a single next-action queue for source deletion work', 'Reduce per-round operator work by ranking ready deletion, full unlocks, near-ready files, and broad impact gaps in one relation.', 'catalog.sql'),
   ('exact_encoding_increment', 'Add exact fixed encodings one finite fact at a time', 'Increase materializable ASM coverage without growing a competing assembler.', 'catalog.sql'),
   ('source_deletion_acceleration', 'Choose fastest safe source deletion accelerator', 'Maximize deletable source bytes without losing unparsed meaning or growing fallback compiler behavior.', 'catalog.sql');
 
@@ -4206,6 +4356,8 @@ insert into engine_tradeoff_option_fact(option_id, decision_id, option_name, opt
   ('asm_source_object_conversion.keep_text', 'asm_source_object_conversion', 'Keep tracked text source', 'Preserve existing .asm files as source authority while building facts beside them.', 'rejected'),
   ('repo_asm_operator_loop.materialize_indexed', 'repo_asm_operator_loop', 'Materialize indexed operation status', 'Build indexed operation, match, and status tables during catalog load for fast next-gap queries.', 'selected'),
   ('repo_asm_operator_loop.nested_views', 'repo_asm_operator_loop', 'Recompute nested views', 'Leave all operator-loop queries as derived views over file import and source parsing.', 'rejected'),
+  ('repo_asm_next_action_workflow.single_queue', 'repo_asm_next_action_workflow', 'Query one ranked action table', 'Read one deterministic action queue that carries the next action, sample line, impacted bytes, unlock count, and rationale.', 'selected'),
+  ('repo_asm_next_action_workflow.manual_queries', 'repo_asm_next_action_workflow', 'Run manual planner queries', 'Manually query deletion states, near-ready files, gap impact, and examples every operator round.', 'rejected'),
   ('exact_encoding_increment.exact_facts', 'exact_encoding_increment', 'Add exact encoding facts', 'Add checked exact instruction encodings that remove high-count known gaps.', 'selected'),
   ('exact_encoding_increment.generic_encoder', 'exact_encoding_increment', 'Add a generic encoder', 'Grow generalized textual assembler logic before finite fact coverage proves the need.', 'rejected'),
   ('source_deletion_acceleration.expand_parse_coverage', 'source_deletion_acceleration', 'Expand parse coverage first', 'Treat unparsed significant lines as fatal blockers and import top-level labels/data/test entry forms before more encodings.', 'selected'),
@@ -4230,6 +4382,14 @@ insert into engine_tradeoff_assessment_fact(assessment_id, option_id, metric_id,
   ('repo_asm_operator_loop.materialize_indexed.canonical_alignment', 'repo_asm_operator_loop.materialize_indexed', 'canonical_alignment', 4, 5, 'Operator queue reads resident relations instead of re-parsing source views.'),
   ('repo_asm_operator_loop.nested_views.round_query_cost', 'repo_asm_operator_loop.nested_views', 'round_query_cost', 1, 5, 'Repeated next-gap queries took tens of seconds.'),
   ('repo_asm_operator_loop.nested_views.catalog_load_cost', 'repo_asm_operator_loop.nested_views', 'catalog_load_cost', 4, 3, 'Initial catalog load was lower, but each round paid the query cost again.'),
+  ('repo_asm_next_action_workflow.single_queue.round_query_cost', 'repo_asm_next_action_workflow.single_queue', 'round_query_cost', 5, 5, 'One relation ranks ready deletion, unlock gaps, near-ready files, and broad impact gaps.'),
+  ('repo_asm_next_action_workflow.single_queue.source_deletion_progress', 'repo_asm_next_action_workflow.single_queue', 'source_deletion_progress', 5, 5, 'The queue prioritizes ready deletion and full file unlocks before broad aggregate gap reduction.'),
+  ('repo_asm_next_action_workflow.single_queue.canonical_alignment', 'repo_asm_next_action_workflow.single_queue', 'canonical_alignment', 5, 5, 'Workflow state is stored as finite queryable facts instead of operator notes.'),
+  ('repo_asm_next_action_workflow.single_queue.scope_risk', 'repo_asm_next_action_workflow.single_queue', 'scope_risk', 1, 5, 'Only ranks existing facts; it adds no parser, fallback, or broad encoder behavior.'),
+  ('repo_asm_next_action_workflow.manual_queries.round_query_cost', 'repo_asm_next_action_workflow.manual_queries', 'round_query_cost', 1, 5, 'Each round repeats separate deletion, impact, near-ready, and example lookups.'),
+  ('repo_asm_next_action_workflow.manual_queries.source_deletion_progress', 'repo_asm_next_action_workflow.manual_queries', 'source_deletion_progress', 3, 5, 'Manual querying can find the same work but wastes loop time and misses easy unlocks.'),
+  ('repo_asm_next_action_workflow.manual_queries.canonical_alignment', 'repo_asm_next_action_workflow.manual_queries', 'canonical_alignment', 2, 5, 'Decision state lives in transient operator context instead of catalog relations.'),
+  ('repo_asm_next_action_workflow.manual_queries.scope_risk', 'repo_asm_next_action_workflow.manual_queries', 'scope_risk', 2, 5, 'Manual loops invite inconsistent ranking but do not add executable behavior.'),
   ('exact_encoding_increment.exact_facts.source_deletion_progress', 'exact_encoding_increment.exact_facts', 'source_deletion_progress', 4, 4, 'dec ecx and dec eax moved 154 inventory operations to fixed encodings.'),
   ('exact_encoding_increment.exact_facts.scope_risk', 'exact_encoding_increment.exact_facts', 'scope_risk', 1, 5, 'Finite exact facts do not grow a textual assembler.'),
   ('exact_encoding_increment.generic_encoder.source_deletion_progress', 'exact_encoding_increment.generic_encoder', 'source_deletion_progress', 3, 4, 'Could cover more syntax quickly, but would move toward broad assembler behavior.'),
