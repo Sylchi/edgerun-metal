@@ -6295,12 +6295,25 @@ with recursive rhs_decimal as (
     on value.symbol_name = operand.operand_value
   where operand.target_isa_id = 1
     and operand.operand_index = 1
+), rhs_char as (
+  select operand.repo_file_id,
+         operand.function_name,
+         operand.line_no,
+         unicode(substr(operand.operand_value, 2, 1)) as immediate_value
+  from repo_asm_binary_operand_fact operand
+  where operand.target_isa_id = 1
+    and operand.operand_index = 1
+    and length(operand.operand_value) = 3
+    and substr(operand.operand_value, 1, 1) = char(39)
+    and substr(operand.operand_value, 3, 1) = char(39)
 ), rhs_value as (
   select * from rhs_decimal
   union all
   select * from rhs_hex
   union all
   select * from rhs_symbol
+  union all
+  select * from rhs_char
 ), rhs_unique_value as (
   select repo_file_id,
          function_name,
