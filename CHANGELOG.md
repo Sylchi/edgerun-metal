@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added 35 verified x86 exact facts for the next VP8 stack/register, `movsx`, `movsxd`, `movzx`, shift, and arithmetic blocker batch, including symbolic VP8 loop-filter/YUV constants checked through the real include.
 - Added 30 more verified x86 exact facts for the current VP8 stack, indexed-memory, `movsxd`, `setcc`, arithmetic, and address-generation blocker queue.
 - Added a verified ARM `mov r11, r9` exact fact plus 31 verified x86 exact facts for the current shared media and VP8 blocker queue, preserving ISA-scoped lowering for identical operand text.
 - Added high-impact VP8 constant-expression facts for bool-reader, frame/header, macroblock, stack-offset, motion-vector, and fixture constants, moving another broad VP8 blocker cluster out of `known_gap`.
