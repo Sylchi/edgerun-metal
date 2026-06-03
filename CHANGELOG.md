@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added conflict-checked parametric x86 encoding facts for register/register, register/immediate, stack-memory, base-register memory, shift, and unary register templates, dropping `known_gap` by 5,329 rows without enumerating exact instruction strings.
 - Added 40 verified x86 exact facts for the next VP8 arithmetic, mask, compare, and `imul` blocker batch, including symbolic reference, stack-layout, coefficient, and motion-vector constants checked through the real include.
 - Added 35 verified x86 exact facts for the next VP8 stack/register, `movsx`, `movsxd`, `movzx`, shift, and arithmetic blocker batch, including symbolic VP8 loop-filter/YUV constants checked through the real include.
 - Added 30 more verified x86 exact facts for the current VP8 stack, indexed-memory, `movsxd`, `setcc`, arithmetic, and address-generation blocker queue.
