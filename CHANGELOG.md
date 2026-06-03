@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added 120 more verified exact x86 encoding facts from the highest-frequency `known_gap` queue, covering common compares, moves, byte loads, stack accesses, shifts, increments/decrements, port I/O, `rdtsc`, and small immediates.
 - Added a finite exact fixed-encoding relation that generates encoding and DSL rule facts for checked VP8 symbolic operands plus high-impact x86 forms such as `inc rdx`, `dec r8d`, byte `movzx`, stack-slot moves, and small immediates, reducing the largest remaining big-file blockers without duplicate rule boilerplate.
 - Added an explicit zero-size data-symbol fact for `er_obj_body`'s stack-end anchor so `mov rsp, stack_top` lowers as a checked symbol data reference instead of a known gap.
 - Added 68 verified high-impact x86 encoding facts for common register, stack, arithmetic, compare, shift, and addressing forms across the largest source files; this moved the big-file blocker queue from generic x86 operand gaps toward symbolic VP8 constant-expression gaps.
