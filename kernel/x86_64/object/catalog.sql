@@ -1754,8 +1754,18 @@ join repo_file on repo_file.repo_file_id = repo_asm_function_span.repo_file_id;
 
 create table repo_asm_operation as
 with trimmed as (
-  select path, repo_file_id, function_name, line_no, text, trim(replace(text, char(9), ' ')) as t
-  from repo_asm_function_lines
+  select repo_file.path,
+         repo_asm_line.repo_file_id,
+         coalesce(repo_asm_function_span.function_name, '') as function_name,
+         repo_asm_line.line_no,
+         repo_asm_line.text,
+         trim(replace(repo_asm_line.text, char(9), ' ')) as t
+  from repo_asm_line
+  join repo_file using (repo_file_id)
+  left join repo_asm_function_span
+    on repo_asm_function_span.repo_file_id = repo_asm_line.repo_file_id
+   and repo_asm_line.line_no between repo_asm_function_span.start_line_no and repo_asm_function_span.end_line_no
+  where repo_file.file_kind in ('asm', 'source_object_asm')
 ), parsed as (
   select path,
          repo_file_id,
@@ -1795,6 +1805,47 @@ where line_kind <> 0;
 create index repo_asm_operation_line_idx on repo_asm_operation(repo_file_id, function_name, line_no);
 create index repo_asm_operation_op_idx on repo_asm_operation(line_kind, op_name, operand_text);
 create index repo_asm_operation_path_idx on repo_asm_operation(path);
+
+create view repo_asm_significant_line as
+select repo_file.path,
+       repo_asm_line.repo_file_id,
+       repo_asm_line.line_no,
+       repo_asm_line.text,
+       trim(replace(repo_asm_line.text, char(9), ' ')) as trimmed_text
+from repo_asm_line
+join repo_file using (repo_file_id)
+where trim(replace(repo_asm_line.text, char(9), ' ')) <> ''
+  and substr(trim(replace(repo_asm_line.text, char(9), ' ')), 1, 1) <> ';';
+
+create view repo_asm_unparsed_significant_line as
+select line.path,
+       line.repo_file_id,
+       line.line_no,
+       line.text,
+       'unparsed_significant_line' as gap_kind
+from repo_asm_significant_line line
+left join repo_asm_operation operation
+  on operation.repo_file_id = line.repo_file_id
+ and operation.line_no = line.line_no
+where operation.line_no is null;
+
+create table repo_asm_parse_coverage as
+select repo_file.path,
+       repo_file.repo_file_id,
+       count(line.line_no) as significant_line_count,
+       sum(case when operation.line_no is not null then 1 else 0 end) as parsed_line_count,
+       sum(case when operation.line_no is null then 1 else 0 end) as unparsed_line_count,
+       (100 * sum(case when operation.line_no is not null then 1 else 0 end)) / count(line.line_no) as parsed_percent
+from repo_file
+join repo_asm_significant_line line using (repo_file_id)
+left join repo_asm_operation operation
+  on operation.repo_file_id = line.repo_file_id
+ and operation.line_no = line.line_no
+where repo_file.file_kind in ('asm', 'source_object_asm')
+group by repo_file.path;
+
+create unique index repo_asm_parse_coverage_path_idx on repo_asm_parse_coverage(path);
+create index repo_asm_parse_coverage_unparsed_idx on repo_asm_parse_coverage(unparsed_line_count);
 
 create view repo_asm_rule_gaps as
 select repo_asm_operation.path,
@@ -2128,7 +2179,10 @@ select path,
        sum(case when fact_status = 'data_definition' then 1 else 0 end) as data_definition_count,
        sum(case when fact_status = 'metadata' then 1 else 0 end) as metadata_count,
        sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end) as fact_backed_count,
-       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end) as remaining_count,
+       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end)
+         + coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as remaining_count,
+       coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as unparsed_line_count,
+       coalesce((select parsed_percent from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as parsed_percent,
        (100 * sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end)) / count(*) as fact_backed_percent
 from repo_asm_operation_fact_status
 group by path
@@ -2146,6 +2200,27 @@ select path,
 from repo_asm_operation_fact_status
 where fact_status in ('known_gap', 'syntax_gap');
 
+create view repo_asm_remaining_meaning_gap as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       raw_text,
+       gap_kind
+from repo_asm_remaining_gap
+union all
+select path,
+       repo_file_id,
+       '' as function_name,
+       line_no,
+       '' as op_name,
+       '' as operand_text,
+       text as raw_text,
+       gap_kind
+from repo_asm_unparsed_significant_line;
+
 create view repo_asm_remaining_gap_summary as
 select gap_kind,
        op_name,
@@ -2156,6 +2231,87 @@ select gap_kind,
 from repo_asm_remaining_gap
 group by gap_kind, op_name, operand_text
 order by occurrence_count desc, gap_kind, op_name, operand_text;
+
+create view repo_asm_remaining_meaning_gap_summary as
+select gap_kind,
+       op_name,
+       operand_text,
+       count(*) as occurrence_count,
+       count(distinct path) as file_count
+from repo_asm_remaining_meaning_gap
+group by gap_kind, op_name, operand_text
+order by occurrence_count desc, gap_kind, op_name, operand_text;
+
+create table repo_asm_source_deletion_plan as
+select repo_file.path,
+       repo_file.file_kind,
+       repo_file.byte_len,
+       readiness.operation_count,
+       coverage.significant_line_count,
+       readiness.parsed_percent,
+       readiness.fact_backed_percent,
+       readiness.unparsed_line_count,
+       readiness.remaining_count,
+       case
+         when repo_file.file_kind = 'source_object_asm' and readiness.remaining_count = 0 then 'text_deleted_fact_backed'
+         when repo_file.file_kind = 'asm' and readiness.remaining_count = 0 then 'ready_to_wrap_and_delete_text'
+         when readiness.unparsed_line_count > 0 then 'blocked_by_parse_coverage'
+         else 'blocked_by_fact_gaps'
+       end as deletion_state,
+       case
+         when repo_file.file_kind = 'asm' then repo_file.path || '.erobj'
+         else repo_file.path
+       end as source_object_path,
+       exists (
+         select 1
+         from repo_file source_object
+         where source_object.path = repo_file.path || '.erobj'
+       ) as source_object_exists
+from repo_asm_deletion_readiness readiness
+join repo_file using (path)
+join repo_asm_parse_coverage coverage using (path)
+where repo_file.file_kind in ('asm', 'source_object_asm')
+order by
+  case deletion_state
+    when 'ready_to_wrap_and_delete_text' then 0
+    when 'blocked_by_fact_gaps' then 1
+    when 'blocked_by_parse_coverage' then 2
+    else 3
+  end,
+  remaining_count,
+  byte_len desc;
+
+create unique index repo_asm_source_deletion_plan_path_idx on repo_asm_source_deletion_plan(path);
+create index repo_asm_source_deletion_plan_state_idx on repo_asm_source_deletion_plan(deletion_state, remaining_count, byte_len);
+
+create table repo_asm_gap_delete_impact as
+with per_gap_file as (
+  select path,
+         gap_kind,
+         op_name,
+         coalesce(operand_text, '') as operand_text,
+         count(*) as gap_count_in_file
+  from repo_asm_remaining_meaning_gap
+  group by path, gap_kind, op_name, coalesce(operand_text, '')
+)
+select gap_kind,
+       op_name,
+       operand_text,
+       count(*) as impacted_file_count,
+       sum(repo_file.byte_len) as impacted_bytes,
+       sum(gap_count_in_file) as occurrence_count,
+       sum(case when plan.remaining_count = gap_count_in_file then 1 else 0 end) as full_unlock_file_count,
+       sum(case when plan.remaining_count = gap_count_in_file then repo_file.byte_len else 0 end) as full_unlock_bytes,
+       min(plan.remaining_count - gap_count_in_file) as min_remaining_after_gap
+from per_gap_file
+join repo_asm_source_deletion_plan plan using (path)
+join repo_file using (path)
+where plan.deletion_state in ('blocked_by_parse_coverage', 'blocked_by_fact_gaps')
+group by gap_kind, op_name, operand_text
+order by full_unlock_bytes desc, impacted_bytes desc, occurrence_count desc;
+
+create index repo_asm_gap_delete_impact_unlock_idx on repo_asm_gap_delete_impact(full_unlock_bytes, impacted_bytes);
+create index repo_asm_gap_delete_impact_gap_idx on repo_asm_gap_delete_impact(gap_kind, op_name, operand_text);
 
 -- Universal transformer substrate. Domain tables above remain compact authoring
 -- views; these relations prove that unrelated domains can lower through the
@@ -3765,7 +3921,8 @@ create table engine_tradeoff_assessment_fact (
 insert into engine_tradeoff_decision_fact(decision_id, decision_name, decision_goal, source_name) values
   ('asm_source_object_conversion', 'Convert tracked ASM test source to source objects', 'Delete textual source only when equivalent source-object and fact-readiness data exist.', 'catalog.sql'),
   ('repo_asm_operator_loop', 'Materialize repo ASM operator-loop relations', 'Reduce repeated work needed to choose the next source-to-fact lowering step.', 'catalog.sql'),
-  ('exact_encoding_increment', 'Add exact fixed encodings one finite fact at a time', 'Increase materializable ASM coverage without growing a competing assembler.', 'catalog.sql');
+  ('exact_encoding_increment', 'Add exact fixed encodings one finite fact at a time', 'Increase materializable ASM coverage without growing a competing assembler.', 'catalog.sql'),
+  ('source_deletion_acceleration', 'Choose fastest safe source deletion accelerator', 'Maximize deletable source bytes without losing unparsed meaning or growing fallback compiler behavior.', 'catalog.sql');
 
 insert into engine_tradeoff_option_fact(option_id, decision_id, option_name, option_summary, option_status) values
   ('asm_source_object_conversion.source_object', 'asm_source_object_conversion', 'Use committed source objects', 'Keep .asm.erobj as authority and delete matching tracked text once deletion-readiness is complete.', 'selected'),
@@ -3773,7 +3930,10 @@ insert into engine_tradeoff_option_fact(option_id, decision_id, option_name, opt
   ('repo_asm_operator_loop.materialize_indexed', 'repo_asm_operator_loop', 'Materialize indexed operation status', 'Build indexed operation, match, and status tables during catalog load for fast next-gap queries.', 'selected'),
   ('repo_asm_operator_loop.nested_views', 'repo_asm_operator_loop', 'Recompute nested views', 'Leave all operator-loop queries as derived views over file import and source parsing.', 'rejected'),
   ('exact_encoding_increment.exact_facts', 'exact_encoding_increment', 'Add exact encoding facts', 'Add checked exact instruction encodings that remove high-count known gaps.', 'selected'),
-  ('exact_encoding_increment.generic_encoder', 'exact_encoding_increment', 'Add a generic encoder', 'Grow generalized textual assembler logic before finite fact coverage proves the need.', 'rejected');
+  ('exact_encoding_increment.generic_encoder', 'exact_encoding_increment', 'Add a generic encoder', 'Grow generalized textual assembler logic before finite fact coverage proves the need.', 'rejected'),
+  ('source_deletion_acceleration.expand_parse_coverage', 'source_deletion_acceleration', 'Expand parse coverage first', 'Treat unparsed significant lines as fatal blockers and import top-level labels/data/test entry forms before more encodings.', 'selected'),
+  ('source_deletion_acceleration.more_exact_encodings', 'source_deletion_acceleration', 'Add more exact encodings first', 'Continue adding fixed instruction facts while many files still have unparsed significant lines.', 'rejected'),
+  ('source_deletion_acceleration.delete_near_ready_only', 'source_deletion_acceleration', 'Delete near-ready files only', 'Only wrap/delete files already close to fact-backed and ignore broad parser coverage.', 'rejected');
 
 insert into engine_tradeoff_metric_fact(metric_id, metric_name, metric_kind, polarity, description) values
   ('round_query_cost', 'Per-round query cost', 'cost', 1, 'Desirability score for time spent recomputing the next work queue after catalog load; higher means lower cost.'),
@@ -3783,7 +3943,7 @@ insert into engine_tradeoff_metric_fact(metric_id, metric_name, metric_kind, pol
   ('scope_risk', 'Scope risk', 'risk', -1, 'Risk of expanding into a parallel assembler, hidden workflow, or broad unsupported behavior.');
 
 insert into engine_tradeoff_assessment_fact(assessment_id, option_id, metric_id, score, weight, evidence) values
-  ('asm_source_object_conversion.source_object.source_deletion_progress', 'asm_source_object_conversion.source_object', 'source_deletion_progress', 5, 5, 'test_flat_runtime and test_render_ir_self report 100 percent deletion readiness.'),
+  ('asm_source_object_conversion.source_object.source_deletion_progress', 'asm_source_object_conversion.source_object', 'source_deletion_progress', 4, 5, 'Converted source objects retain authority; full-line facts now distinguish text deletion from complete fact backing.'),
   ('asm_source_object_conversion.source_object.canonical_alignment', 'asm_source_object_conversion.source_object', 'canonical_alignment', 5, 5, 'Source object is committed authority and catalog facts classify operations.'),
   ('asm_source_object_conversion.source_object.scope_risk', 'asm_source_object_conversion.source_object', 'scope_risk', 1, 4, 'No new parser or fallback source path is added.'),
   ('asm_source_object_conversion.keep_text.source_deletion_progress', 'asm_source_object_conversion.keep_text', 'source_deletion_progress', 0, 5, 'Tracked text remains source authority.'),
@@ -3796,7 +3956,14 @@ insert into engine_tradeoff_assessment_fact(assessment_id, option_id, metric_id,
   ('exact_encoding_increment.exact_facts.source_deletion_progress', 'exact_encoding_increment.exact_facts', 'source_deletion_progress', 4, 4, 'dec ecx and dec eax moved 154 inventory operations to fixed encodings.'),
   ('exact_encoding_increment.exact_facts.scope_risk', 'exact_encoding_increment.exact_facts', 'scope_risk', 1, 5, 'Finite exact facts do not grow a textual assembler.'),
   ('exact_encoding_increment.generic_encoder.source_deletion_progress', 'exact_encoding_increment.generic_encoder', 'source_deletion_progress', 3, 4, 'Could cover more syntax quickly, but would move toward broad assembler behavior.'),
-  ('exact_encoding_increment.generic_encoder.scope_risk', 'exact_encoding_increment.generic_encoder', 'scope_risk', 5, 5, 'High risk of growing a competing yasm-like path.');
+  ('exact_encoding_increment.generic_encoder.scope_risk', 'exact_encoding_increment.generic_encoder', 'scope_risk', 5, 5, 'High risk of growing a competing yasm-like path.'),
+  ('source_deletion_acceleration.expand_parse_coverage.source_deletion_progress', 'source_deletion_acceleration.expand_parse_coverage', 'source_deletion_progress', 5, 5, 'Full-line ASM import brings unparsed significant lines to zero across repo ASM candidates.'),
+  ('source_deletion_acceleration.expand_parse_coverage.canonical_alignment', 'source_deletion_acceleration.expand_parse_coverage', 'canonical_alignment', 5, 5, 'Every non-comment ASM line must enter facts before source text can be deleted safely.'),
+  ('source_deletion_acceleration.expand_parse_coverage.scope_risk', 'source_deletion_acceleration.expand_parse_coverage', 'scope_risk', 1, 5, 'Coverage facts fail closed instead of pretending partially parsed files are ready.'),
+  ('source_deletion_acceleration.more_exact_encodings.source_deletion_progress', 'source_deletion_acceleration.more_exact_encodings', 'source_deletion_progress', 2, 5, 'Top exact encoding gaps impact many bytes but unlock no files while parse coverage is missing.'),
+  ('source_deletion_acceleration.more_exact_encodings.scope_risk', 'source_deletion_acceleration.more_exact_encodings', 'scope_risk', 2, 5, 'Finite encodings are safe, but they do not cover top-level unparsed meaning.'),
+  ('source_deletion_acceleration.delete_near_ready_only.source_deletion_progress', 'source_deletion_acceleration.delete_near_ready_only', 'source_deletion_progress', 1, 5, 'Only already converted source-object tests are currently fully fact-backed.'),
+  ('source_deletion_acceleration.delete_near_ready_only.canonical_alignment', 'source_deletion_acceleration.delete_near_ready_only', 'canonical_alignment', 2, 5, 'Avoids loss but does not address broad source authority.');
 
 create view engine_tradeoff_option_score as
 select option.decision_id,
