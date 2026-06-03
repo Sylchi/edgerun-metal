@@ -8622,7 +8622,32 @@ join repo_asm_data_definition_fact definition
                                                         instr(trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1)), ' + ') - 1))
 where operation.op_name in ('mov','lea','add','sub','cmp')
   and operation.operand_text like '%, % + %'
-  and operation.operand_text not like '%[rel %]%';
+  and operation.operand_text not like '%[rel %]%'
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       unique_definition.target_name,
+       'absolute_symbol_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_memory_addressing_fact memory
+  on memory.repo_file_id = operation.repo_file_id
+ and memory.function_name = operation.function_name
+ and memory.line_no = operation.line_no
+join (
+  select replace(label_name, ':', '') as target_name
+  from repo_asm_data_definition_fact
+  where label_name <> ''
+  group by replace(label_name, ':', '')
+  having count(distinct path) = 1
+) unique_definition
+  on unique_definition.target_name = memory.first_symbol_term
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx')
+  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.symbol_term_count = 1
+  and memory.rel_marker_count = 0;
 
 create table repo_asm_data_definition_fact as
 select path,
@@ -8717,7 +8742,48 @@ select path,
        end as data_definition_kind
 from repo_asm_operation
 where op_name in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','resw','resd','resq')
-  and operand_text is not null;
+  and operand_text is not null
+union all
+select path,
+       repo_file_id,
+       null as function_name,
+       line_no,
+       trim(substr(t, 1, instr(t, ':'))) as label_name,
+       trim(substr(t, instr(t, ':') + 1)) as operand_text,
+       case
+         when trim(substr(t, instr(t, ':') + 1)) like 'resb %' then 'reserved_bytes'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resw %' then 'reserved_words'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resd %' then 'reserved_dwords'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resq %' then 'reserved_qwords'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dq %' then 'quadword_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dd %' then 'dword_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dw %' then 'word_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'db %' then 'byte_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'times % db %' then 'repeated_byte_data'
+         else 'unknown_data_definition'
+       end as data_definition_kind
+from (
+  select repo_file.path,
+         include_line.repo_file_id,
+         include_line.line_no,
+         case
+           when instr(trim(replace(include_line.text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(include_line.text, char(9), ' ')), 1, instr(trim(replace(include_line.text, char(9), ' ')), ';') - 1))
+           else trim(replace(include_line.text, char(9), ' '))
+         end as t
+  from repo_asm_include_line include_line
+  join repo_file using (repo_file_id)
+)
+where t like '%: %'
+  and (trim(substr(t, instr(t, ':') + 1)) like 'resb %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resw %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resd %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resq %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dq %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dd %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dw %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'db %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'times % db %');
 
 create index repo_asm_data_definition_fact_line_idx
   on repo_asm_data_definition_fact(repo_file_id, function_name, line_no);
