@@ -699,6 +699,25 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1403, 'x86_64_mov_r8d_2', 1, 1, '41b802000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r8d_2.erobj'),
   (1404, 'x86_64_mov_edx_8', 1, 1, 'ba08000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_8.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1405, 'x86_64_mov_rdi_0x1234', 1, 1, '48c7c734120000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_0x1234.erobj'),
+  (1406, 'x86_64_mov_r9d_2', 1, 1, '41b902000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r9d_2.erobj'),
+  (1407, 'x86_64_mov_esi_2500', 1, 1, 'bec4090000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_2500.erobj'),
+  (1408, 'x86_64_mov_rdi_1', 1, 1, '48c7c701000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_1.erobj'),
+  (1409, 'x86_64_mov_rdx_37', 1, 1, '48c7c225000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_37.erobj'),
+  (1410, 'x86_64_mov_rax_1', 1, 1, '48c7c001000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rax_1.erobj'),
+  (1411, 'x86_64_mov_eax_0x0100000a', 1, 1, 'b80a000001', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x0100000a.erobj'),
+  (1412, 'x86_64_mov_eax_12', 1, 1, 'b80c000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_12.erobj'),
+  (1413, 'x86_64_mov_rdx_ptr_0x01020304', 1, 1, 'c70204030201', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_ptr_0x01020304.erobj'),
+  (1414, 'x86_64_mov_eax_4', 1, 1, 'b804000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_4.erobj'),
+  (1415, 'x86_64_mov_dx_0xf4', 1, 1, '66baf400', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_dx_0xf4.erobj'),
+  (1416, 'x86_64_mov_eax_unexpected_http_stub_exit', 1, 1, 'b856000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_unexpected_http_stub_exit.erobj'),
+  (1417, 'x86_64_out_dx_eax', 1, 1, 'ef', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/out_dx_eax.erobj'),
+  (1418, 'x86_64_cli', 1, 1, 'fa', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cli.erobj'),
+  (1419, 'x86_64_hlt', 1, 1, 'f4', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/hlt.erobj'),
+  (1420, 'x86_64_mov_edi_unexpected_http_stub_exit', 1, 1, 'bf56000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_unexpected_http_stub_exit.erobj'),
+  (1421, 'x86_64_mov_eax_sys_exit', 1, 1, 'b83c000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_sys_exit.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -1984,6 +2003,25 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1403, 'asm_x86_mov_r8d_2_exact', 'r8d, 2', 0),
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1404, 'asm_x86_mov_edx_8_exact', 'edx, 8', 0);
 
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1405, 'asm_x86_mov_rdi_0x1234_exact', 'rdi, 0x1234', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1406, 'asm_x86_mov_r9d_2_exact', 'r9d, 2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1407, 'asm_x86_mov_esi_2500_exact', 'esi, 2500', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1408, 'asm_x86_mov_rdi_1_exact', 'rdi, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1409, 'asm_x86_mov_rdx_37_exact', 'rdx, 37', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1410, 'asm_x86_mov_rax_1_exact', 'rax, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1411, 'asm_x86_mov_eax_0x0100000a_exact', 'eax, 0x0100000a', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1412, 'asm_x86_mov_eax_12_exact', 'eax, 12', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1413, 'asm_x86_mov_rdx_ptr_0x01020304_exact', 'dword [rdx], 0x01020304', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1414, 'asm_x86_mov_eax_4_exact', 'eax, 4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1415, 'asm_x86_mov_dx_0xf4_exact', 'dx, 0xf4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1416, 'asm_x86_mov_eax_unexpected_http_stub_exit_exact', 'eax, UNEXPECTED_HTTP_STUB_EXIT', 0),
+  (3, 'out', null, 'kernel/x86_64/object/instruction/x86_64/out.erobj', null, 1417, 'asm_x86_out_dx_eax_exact', 'dx, eax', 0),
+  (3, 'cli', null, 'kernel/x86_64/object/instruction/x86_64/cli.erobj', null, 1418, 'asm_x86_cli_exact', '', 0),
+  (3, 'hlt', null, 'kernel/x86_64/object/instruction/x86_64/hlt.erobj', null, 1419, 'asm_x86_hlt_exact', '', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1420, 'asm_x86_mov_edi_unexpected_http_stub_exit_exact', 'edi, UNEXPECTED_HTTP_STUB_EXIT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1421, 'asm_x86_mov_eax_sys_exit_exact', 'eax, SYS_EXIT', 0);
+
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
   (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
 
@@ -2618,7 +2656,22 @@ select path,
                    instr(substr(operand_text, instr(operand_text, '[rel ') + 5), ']') - 1)) as target_name,
        'rip_rel32_data' as relocation_kind
 from repo_asm_operation
-where operand_text like '%[rel %]%';
+where operand_text like '%[rel %]%'
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       replace(definition.label_name, ':', '') as target_name,
+       'symbol_data_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_data_definition_fact definition
+  on definition.repo_file_id = operation.repo_file_id
+ and replace(definition.label_name, ':', '') = trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1))
+where operation.op_name in ('mov','lea')
+  and operation.operand_text like '%, %'
+  and operation.operand_text not like '%[rel %]%';
 
 create view repo_asm_data_definition_fact as
 select path,
