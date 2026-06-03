@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added exact host-import, agent-flag, and byte-pattern encoding facts, then converted the local-route and byte utility self-tests into source objects and deleted their text files; the planner now reports 29 text files deleted/fact-backed.
 - Added exact symbolic-size encoding facts for local route, seal, Ed25519, preimage, and BLAKE3 test blockers, then converted five ready test sources into source objects and deleted their text files; the planner now reports 27 text files deleted/fact-backed.
 - Reduced ASM `syntax_gap` inventory from 8,010 to 263 by adding verified x86 encoding facts, directive metadata, source-defined macro-lowering facts, and known-gap instruction relations for operand-dependent ARM/x86 forms; remaining syntax blockers are now mostly label-prefixed operations and small one-off helpers.
 - Lowered missing test macros and broader data directives into facts, then converted SHA3, SHA512, and the ESP32 firmware image text sources into source objects.
