@@ -425,7 +425,7 @@ The kernel routes it there like any other identity.
 
 ---
 
-## 17-control-protocol.md — Controller Protocol
+## Tor Control Protocol — Controller Protocol
 
 | Tor | OS |
 |---|---|
@@ -462,7 +462,7 @@ or DA admin tool).
 
 ---
 
-## 19-bandwidth-file.md — Bandwidth File Format
+## Tor Bandwidth File Format
 
 | Tor | OS |
 |---|---|

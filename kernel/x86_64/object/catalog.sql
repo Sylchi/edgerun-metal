@@ -3,6 +3,9 @@
 -- This SQL is not the runtime authority and must not become an external build
 -- dependency. It is the compact, queryable editing/index form for finite code
 -- vocabularies. The materialized authority remains the checked .erobj objects.
+-- Workflows load the relation set into memory first; only useful state changes
+-- are materialized back to disk as object/source updates. Do not use an on-disk
+-- database file as active engine state.
 
 pragma foreign_keys = on;
 
@@ -64,45 +67,7 @@ create table value_type (
 );
 
 insert into value_type(type_id, name, class_id, width_bits, flags, object_path) values
-  (1, 'void', 0, 0, 0, 'kernel/x86_64/object/type/void.erobj'),
-  (2, 'u1', 1, 1, 0, 'kernel/x86_64/object/type/u1.erobj'),
-  (3, 'u8', 1, 8, 0, 'kernel/x86_64/object/type/u8.erobj'),
-  (4, 'u16', 1, 16, 0, 'kernel/x86_64/object/type/u16.erobj'),
-  (5, 'u32', 1, 32, 0, 'kernel/x86_64/object/type/u32.erobj'),
-  (6, 'u64', 1, 64, 0, 'kernel/x86_64/object/type/u64.erobj'),
-  (7, 'u128', 1, 128, 0, 'kernel/x86_64/object/type/u128.erobj'),
-  (8, 'u256', 1, 256, 0, 'kernel/x86_64/object/type/u256.erobj'),
-  (9, 'u512', 1, 512, 0, 'kernel/x86_64/object/type/u512.erobj'),
-  (20, 'i8', 2, 8, 1, 'kernel/x86_64/object/type/i8.erobj'),
-  (21, 'i16', 2, 16, 1, 'kernel/x86_64/object/type/i16.erobj'),
-  (22, 'i32', 2, 32, 1, 'kernel/x86_64/object/type/i32.erobj'),
-  (23, 'i64', 2, 64, 1, 'kernel/x86_64/object/type/i64.erobj'),
-  (24, 'i128', 2, 128, 1, 'kernel/x86_64/object/type/i128.erobj'),
-  (40, 'f16', 3, 16, 0, 'kernel/x86_64/object/type/f16.erobj'),
-  (41, 'f32', 3, 32, 0, 'kernel/x86_64/object/type/f32.erobj'),
-  (42, 'f64', 3, 64, 0, 'kernel/x86_64/object/type/f64.erobj'),
-  (43, 'f80', 3, 80, 0, 'kernel/x86_64/object/type/f80.erobj'),
-  (44, 'f128', 3, 128, 0, 'kernel/x86_64/object/type/f128.erobj'),
-  (60, 'ptr16', 4, 16, 0, 'kernel/x86_64/object/type/ptr16.erobj'),
-  (61, 'ptr32', 4, 32, 0, 'kernel/x86_64/object/type/ptr32.erobj'),
-  (62, 'ptr64', 4, 64, 0, 'kernel/x86_64/object/type/ptr64.erobj'),
-  (70, 'rel8', 5, 8, 0, 'kernel/x86_64/object/type/rel8.erobj'),
-  (71, 'rel16', 5, 16, 0, 'kernel/x86_64/object/type/rel16.erobj'),
-  (72, 'rel32', 5, 32, 0, 'kernel/x86_64/object/type/rel32.erobj'),
-  (73, 'rel64', 5, 64, 0, 'kernel/x86_64/object/type/rel64.erobj'),
-  (100, 'wasm_i32', 6, 32, 0, 'kernel/x86_64/object/type/wasm_i32.erobj'),
-  (101, 'wasm_i64', 6, 64, 0, 'kernel/x86_64/object/type/wasm_i64.erobj'),
-  (102, 'wasm_f32', 6, 32, 0, 'kernel/x86_64/object/type/wasm_f32.erobj'),
-  (103, 'wasm_f64', 6, 64, 0, 'kernel/x86_64/object/type/wasm_f64.erobj'),
-  (104, 'wasm_v128', 6, 128, 0, 'kernel/x86_64/object/type/wasm_v128.erobj'),
-  (105, 'wasm_funcref', 7, 64, 0, 'kernel/x86_64/object/type/wasm_funcref.erobj'),
-  (106, 'wasm_externref', 7, 64, 0, 'kernel/x86_64/object/type/wasm_externref.erobj'),
-  (120, 'flags', 8, 0, 0, 'kernel/x86_64/object/type/flags.erobj'),
-  (121, 'memory', 9, 0, 0, 'kernel/x86_64/object/type/memory.erobj'),
-  (122, 'table', 10, 0, 0, 'kernel/x86_64/object/type/table.erobj'),
-  (123, 'label', 11, 0, 0, 'kernel/x86_64/object/type/label.erobj'),
-  (124, 'import_ref', 12, 0, 0, 'kernel/x86_64/object/type/import_ref.erobj'),
-  (125, 'data_ref', 13, 0, 0, 'kernel/x86_64/object/type/data_ref.erobj');
+  (1, 'void', 0, 0, 0, 'kernel/x86_64/object/type/void.erobj'), (2, 'u1', 1, 1, 0, 'kernel/x86_64/object/type/u1.erobj'), (3, 'u8', 1, 8, 0, 'kernel/x86_64/object/type/u8.erobj'), (4, 'u16', 1, 16, 0, 'kernel/x86_64/object/type/u16.erobj'), (5, 'u32', 1, 32, 0, 'kernel/x86_64/object/type/u32.erobj'), (6, 'u64', 1, 64, 0, 'kernel/x86_64/object/type/u64.erobj'), (7, 'u128', 1, 128, 0, 'kernel/x86_64/object/type/u128.erobj'), (8, 'u256', 1, 256, 0, 'kernel/x86_64/object/type/u256.erobj'), (9, 'u512', 1, 512, 0, 'kernel/x86_64/object/type/u512.erobj'), (20, 'i8', 2, 8, 1, 'kernel/x86_64/object/type/i8.erobj'), (21, 'i16', 2, 16, 1, 'kernel/x86_64/object/type/i16.erobj'), (22, 'i32', 2, 32, 1, 'kernel/x86_64/object/type/i32.erobj'), (23, 'i64', 2, 64, 1, 'kernel/x86_64/object/type/i64.erobj'), (24, 'i128', 2, 128, 1, 'kernel/x86_64/object/type/i128.erobj'), (40, 'f16', 3, 16, 0, 'kernel/x86_64/object/type/f16.erobj'), (41, 'f32', 3, 32, 0, 'kernel/x86_64/object/type/f32.erobj'), (42, 'f64', 3, 64, 0, 'kernel/x86_64/object/type/f64.erobj'), (43, 'f80', 3, 80, 0, 'kernel/x86_64/object/type/f80.erobj'), (44, 'f128', 3, 128, 0, 'kernel/x86_64/object/type/f128.erobj'), (60, 'ptr16', 4, 16, 0, 'kernel/x86_64/object/type/ptr16.erobj'), (61, 'ptr32', 4, 32, 0, 'kernel/x86_64/object/type/ptr32.erobj'), (62, 'ptr64', 4, 64, 0, 'kernel/x86_64/object/type/ptr64.erobj'), (70, 'rel8', 5, 8, 0, 'kernel/x86_64/object/type/rel8.erobj'), (71, 'rel16', 5, 16, 0, 'kernel/x86_64/object/type/rel16.erobj'), (72, 'rel32', 5, 32, 0, 'kernel/x86_64/object/type/rel32.erobj'), (73, 'rel64', 5, 64, 0, 'kernel/x86_64/object/type/rel64.erobj'), (100, 'wasm_i32', 6, 32, 0, 'kernel/x86_64/object/type/wasm_i32.erobj'), (101, 'wasm_i64', 6, 64, 0, 'kernel/x86_64/object/type/wasm_i64.erobj'), (102, 'wasm_f32', 6, 32, 0, 'kernel/x86_64/object/type/wasm_f32.erobj'), (103, 'wasm_f64', 6, 64, 0, 'kernel/x86_64/object/type/wasm_f64.erobj'), (104, 'wasm_v128', 6, 128, 0, 'kernel/x86_64/object/type/wasm_v128.erobj'), (105, 'wasm_funcref', 7, 64, 0, 'kernel/x86_64/object/type/wasm_funcref.erobj'), (106, 'wasm_externref', 7, 64, 0, 'kernel/x86_64/object/type/wasm_externref.erobj'), (120, 'flags', 8, 0, 0, 'kernel/x86_64/object/type/flags.erobj'), (121, 'memory', 9, 0, 0, 'kernel/x86_64/object/type/memory.erobj'), (122, 'table', 10, 0, 0, 'kernel/x86_64/object/type/table.erobj'), (123, 'label', 11, 0, 0, 'kernel/x86_64/object/type/label.erobj'), (124, 'import_ref', 12, 0, 0, 'kernel/x86_64/object/type/import_ref.erobj'), (125, 'data_ref', 13, 0, 0, 'kernel/x86_64/object/type/data_ref.erobj');
 
 create table operand_kind_object (
   operand_kind_id integer primary key,
@@ -113,23 +78,7 @@ create table operand_kind_object (
 );
 
 insert into operand_kind_object(operand_kind_id, name, flags, default_type_id, object_path) values
-  (1, 'none', 0, 1, 'kernel/x86_64/object/operand_kind/none.erobj'),
-  (2, 'register', 1, null, 'kernel/x86_64/object/operand_kind/register.erobj'),
-  (3, 'immediate', 2, null, 'kernel/x86_64/object/operand_kind/immediate.erobj'),
-  (4, 'memory', 4, 121, 'kernel/x86_64/object/operand_kind/memory.erobj'),
-  (5, 'branch_target', 8, 123, 'kernel/x86_64/object/operand_kind/branch_target.erobj'),
-  (6, 'label', 8, 123, 'kernel/x86_64/object/operand_kind/label.erobj'),
-  (7, 'data_ref', 16, 125, 'kernel/x86_64/object/operand_kind/data_ref.erobj'),
-  (8, 'import_ref', 32, 124, 'kernel/x86_64/object/operand_kind/import_ref.erobj'),
-  (9, 'register_list', 64, null, 'kernel/x86_64/object/operand_kind/register_list.erobj'),
-  (10, 'condition_code', 128, 120, 'kernel/x86_64/object/operand_kind/condition_code.erobj'),
-  (20, 'wasm_local_index', 256, 100, 'kernel/x86_64/object/operand_kind/wasm_local_index.erobj'),
-  (21, 'wasm_global_index', 512, 100, 'kernel/x86_64/object/operand_kind/wasm_global_index.erobj'),
-  (22, 'wasm_table_index', 1024, 100, 'kernel/x86_64/object/operand_kind/wasm_table_index.erobj'),
-  (23, 'wasm_memory_index', 2048, 100, 'kernel/x86_64/object/operand_kind/wasm_memory_index.erobj'),
-  (24, 'wasm_block_type', 4096, 123, 'kernel/x86_64/object/operand_kind/wasm_block_type.erobj'),
-  (25, 'wasm_memarg', 8192, 121, 'kernel/x86_64/object/operand_kind/wasm_memarg.erobj'),
-  (26, 'wasm_value_stack', 16384, null, 'kernel/x86_64/object/operand_kind/wasm_value_stack.erobj');
+  (1, 'none', 0, 1, 'kernel/x86_64/object/operand_kind/none.erobj'), (2, 'register', 1, null, 'kernel/x86_64/object/operand_kind/register.erobj'), (3, 'immediate', 2, null, 'kernel/x86_64/object/operand_kind/immediate.erobj'), (4, 'memory', 4, 121, 'kernel/x86_64/object/operand_kind/memory.erobj'), (5, 'branch_target', 8, 123, 'kernel/x86_64/object/operand_kind/branch_target.erobj'), (6, 'label', 8, 123, 'kernel/x86_64/object/operand_kind/label.erobj'), (7, 'data_ref', 16, 125, 'kernel/x86_64/object/operand_kind/data_ref.erobj'), (8, 'import_ref', 32, 124, 'kernel/x86_64/object/operand_kind/import_ref.erobj'), (9, 'register_list', 64, null, 'kernel/x86_64/object/operand_kind/register_list.erobj'), (10, 'condition_code', 128, 120, 'kernel/x86_64/object/operand_kind/condition_code.erobj'), (20, 'wasm_local_index', 256, 100, 'kernel/x86_64/object/operand_kind/wasm_local_index.erobj'), (21, 'wasm_global_index', 512, 100, 'kernel/x86_64/object/operand_kind/wasm_global_index.erobj'), (22, 'wasm_table_index', 1024, 100, 'kernel/x86_64/object/operand_kind/wasm_table_index.erobj'), (23, 'wasm_memory_index', 2048, 100, 'kernel/x86_64/object/operand_kind/wasm_memory_index.erobj'), (24, 'wasm_block_type', 4096, 123, 'kernel/x86_64/object/operand_kind/wasm_block_type.erobj'), (25, 'wasm_memarg', 8192, 121, 'kernel/x86_64/object/operand_kind/wasm_memarg.erobj'), (26, 'wasm_value_stack', 16384, null, 'kernel/x86_64/object/operand_kind/wasm_value_stack.erobj');
 
 create table operand_shape (
   shape_id integer primary key,
@@ -243,22 +192,7 @@ create table register_class (
 );
 
 insert into register_class(class_id, name) values
-  (1, 'gpr'),
-  (2, 'program_counter'),
-  (3, 'flags'),
-  (4, 'segment'),
-  (5, 'control'),
-  (6, 'debug'),
-  (7, 'x87'),
-  (8, 'mmx'),
-  (9, 'vector'),
-  (10, 'mask'),
-  (20, 'wasm_stack'),
-  (21, 'wasm_index_space'),
-  (22, 'wasm_memory'),
-  (23, 'wasm_table'),
-  (24, 'wasm_value_type'),
-  (25, 'wasm_ref_type');
+  (1, 'gpr'), (2, 'program_counter'), (3, 'flags'), (4, 'segment'), (5, 'control'), (6, 'debug'), (7, 'x87'), (8, 'mmx'), (9, 'vector'), (10, 'mask'), (20, 'wasm_stack'), (21, 'wasm_index_space'), (22, 'wasm_memory'), (23, 'wasm_table'), (24, 'wasm_value_type'), (25, 'wasm_ref_type');
 
 create table instruction (
   isa_id integer not null references isa(isa_id),
@@ -313,11 +247,7 @@ create table register_set (
 );
 
 insert into register_set(isa_id, register_count, object_path) values
-  (1, 213, 'kernel/x86_64/object/register_set/x86_64.erobj'),
-  (2, 73,  'kernel/x86_64/object/register_set/x86_32.erobj'),
-  (3, 260, 'kernel/x86_64/object/register_set/aarch64.erobj'),
-  (4, 101, 'kernel/x86_64/object/register_set/arm32.erobj'),
-  (5, 13,  'kernel/x86_64/object/register_set/wasm.erobj');
+  (1, 213, 'kernel/x86_64/object/register_set/x86_64.erobj'), (2, 73,  'kernel/x86_64/object/register_set/x86_32.erobj'), (3, 260, 'kernel/x86_64/object/register_set/aarch64.erobj'), (4, 101, 'kernel/x86_64/object/register_set/arm32.erobj'), (5, 13,  'kernel/x86_64/object/register_set/wasm.erobj');
 
 create table concrete_operand (
   operand_id integer primary key,
@@ -333,22 +263,7 @@ create table concrete_operand (
 );
 
 insert into concrete_operand(operand_id, name, operand_kind_id, type_id, isa_id, register_id, address_mode_id, immediate_value, flags, object_path) values
-  (1, 'none', 1, 1, null, 0, null, 0, 0, 'kernel/x86_64/object/operand/none.erobj'),
-  (100, 'x86_64_eax', 2, 5, 1, 101, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/eax.erobj'),
-  (101, 'x86_64_rax', 2, 6, 1, 1, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/rax.erobj'),
-  (102, 'x86_64_imm32_42', 3, 5, 1, 0, null, 42, 0, 'kernel/x86_64/object/operand/x86_64/imm32_42.erobj'),
-  (103, 'x86_64_imm32_0', 3, 5, 1, 0, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/imm32_0.erobj'),
-  (200, 'x86_32_eax', 2, 5, 2, 1, null, 0, 0, 'kernel/x86_64/object/operand/x86_32/eax.erobj'),
-  (201, 'x86_32_imm32_42', 3, 5, 2, 0, null, 42, 0, 'kernel/x86_64/object/operand/x86_32/imm32_42.erobj'),
-  (300, 'aarch64_x0', 2, 6, 3, 1, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/x0.erobj'),
-  (301, 'aarch64_x30', 2, 6, 3, 31, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/x30.erobj'),
-  (302, 'aarch64_imm12_0', 3, 5, 3, 0, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/imm12_0.erobj'),
-  (400, 'arm32_r0', 2, 5, 4, 1, null, 0, 0, 'kernel/x86_64/object/operand/arm32/r0.erobj'),
-  (401, 'arm32_lr', 2, 5, 4, 101, null, 0, 0, 'kernel/x86_64/object/operand/arm32/lr.erobj'),
-  (402, 'arm32_imm12_0', 3, 5, 4, 0, null, 0, 0, 'kernel/x86_64/object/operand/arm32/imm12_0.erobj'),
-  (500, 'wasm_none', 1, 1, 5, 0, null, 0, 0, 'kernel/x86_64/object/operand/wasm/none.erobj'),
-  (501, 'wasm_i32_const_42', 3, 100, 5, 0, null, 42, 0, 'kernel/x86_64/object/operand/wasm/i32_const_42.erobj'),
-  (502, 'wasm_local_index_0', 20, 100, 5, 0, null, 0, 0, 'kernel/x86_64/object/operand/wasm/local_index_0.erobj');
+  (1, 'none', 1, 1, null, 0, null, 0, 0, 'kernel/x86_64/object/operand/none.erobj'), (100, 'x86_64_eax', 2, 5, 1, 101, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/eax.erobj'), (101, 'x86_64_rax', 2, 6, 1, 1, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/rax.erobj'), (102, 'x86_64_imm32_42', 3, 5, 1, 0, null, 42, 0, 'kernel/x86_64/object/operand/x86_64/imm32_42.erobj'), (103, 'x86_64_imm32_0', 3, 5, 1, 0, null, 0, 0, 'kernel/x86_64/object/operand/x86_64/imm32_0.erobj'), (200, 'x86_32_eax', 2, 5, 2, 1, null, 0, 0, 'kernel/x86_64/object/operand/x86_32/eax.erobj'), (201, 'x86_32_imm32_42', 3, 5, 2, 0, null, 42, 0, 'kernel/x86_64/object/operand/x86_32/imm32_42.erobj'), (300, 'aarch64_x0', 2, 6, 3, 1, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/x0.erobj'), (301, 'aarch64_x30', 2, 6, 3, 31, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/x30.erobj'), (302, 'aarch64_imm12_0', 3, 5, 3, 0, null, 0, 0, 'kernel/x86_64/object/operand/aarch64/imm12_0.erobj'), (400, 'arm32_r0', 2, 5, 4, 1, null, 0, 0, 'kernel/x86_64/object/operand/arm32/r0.erobj'), (401, 'arm32_lr', 2, 5, 4, 101, null, 0, 0, 'kernel/x86_64/object/operand/arm32/lr.erobj'), (402, 'arm32_imm12_0', 3, 5, 4, 0, null, 0, 0, 'kernel/x86_64/object/operand/arm32/imm12_0.erobj'), (500, 'wasm_none', 1, 1, 5, 0, null, 0, 0, 'kernel/x86_64/object/operand/wasm/none.erobj'), (501, 'wasm_i32_const_42', 3, 100, 5, 0, null, 42, 0, 'kernel/x86_64/object/operand/wasm/i32_const_42.erobj'), (502, 'wasm_local_index_0', 20, 100, 5, 0, null, 0, 0, 'kernel/x86_64/object/operand/wasm/local_index_0.erobj');
 
 create table encoding_pattern (
   encoding_id integer primary key,
@@ -363,24 +278,7 @@ create table encoding_pattern (
 );
 
 insert into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
-  (1, 'x86_64_mov_eax_imm32', 1, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_imm32.erobj'),
-  (2, 'x86_64_ret', 1, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ret.erobj'),
-  (3, 'x86_64_nop', 1, 1, '90', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/nop.erobj'),
-  (82, 'x86_64_mov_rcx_rsi', 1, 1, '4889f1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rcx_rsi.erobj'),
-  (83, 'x86_64_sub_rcx_rdi', 1, 1, '4829f9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sub_rcx_rdi.erobj'),
-  (84, 'x86_64_jle_rel8_10', 1, 1, '7e0a', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/jle_rel8_10.erobj'),
-  (85, 'x86_64_xor_eax_eax', 1, 1, '31c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_eax_eax.erobj'),
-  (86, 'x86_64_cld', 1, 1, 'fc', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cld.erobj'),
-  (87, 'x86_64_shr_rcx_3', 1, 1, '48c1e903', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_rcx_3.erobj'),
-  (88, 'x86_64_rep_stosq', 1, 1, 'f348ab', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_stosq.erobj'),
-  (20, 'x86_32_mov_eax_imm32', 2, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_32/mov_eax_imm32.erobj'),
-  (21, 'x86_32_ret', 2, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_32/ret.erobj'),
-  (40, 'aarch64_ret', 3, 2, 'c0035fd6', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/ret.erobj'),
-  (41, 'aarch64_nop', 3, 2, '1f2003d5', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/nop.erobj'),
-  (60, 'arm32_bx_lr', 4, 2, '1eff2fe1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/bx_lr.erobj'),
-  (61, 'arm32_nop', 4, 2, '00f020e3', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/nop.erobj'),
-  (80, 'wasm_end', 5, 3, '0b', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/end.erobj'),
-  (81, 'wasm_nop', 5, 3, '01', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/nop.erobj');
+  (1, 'x86_64_mov_eax_imm32', 1, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_imm32.erobj'), (2, 'x86_64_ret', 1, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ret.erobj'), (3, 'x86_64_nop', 1, 1, '90', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/nop.erobj'), (82, 'x86_64_mov_rcx_rsi', 1, 1, '4889f1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rcx_rsi.erobj'), (83, 'x86_64_sub_rcx_rdi', 1, 1, '4829f9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sub_rcx_rdi.erobj'), (84, 'x86_64_jle_rel8_10', 1, 1, '7e0a', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/jle_rel8_10.erobj'), (85, 'x86_64_xor_eax_eax', 1, 1, '31c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_eax_eax.erobj'), (86, 'x86_64_cld', 1, 1, 'fc', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cld.erobj'), (87, 'x86_64_shr_rcx_3', 1, 1, '48c1e903', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_rcx_3.erobj'), (88, 'x86_64_rep_stosq', 1, 1, 'f348ab', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_stosq.erobj'), (20, 'x86_32_mov_eax_imm32', 2, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_32/mov_eax_imm32.erobj'), (21, 'x86_32_ret', 2, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_32/ret.erobj'), (40, 'aarch64_ret', 3, 2, 'c0035fd6', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/ret.erobj'), (41, 'aarch64_nop', 3, 2, '1f2003d5', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/nop.erobj'), (60, 'arm32_bx_lr', 4, 2, '1eff2fe1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/bx_lr.erobj'), (61, 'arm32_nop', 4, 2, '00f020e3', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/nop.erobj'), (80, 'wasm_end', 5, 3, '0b', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/end.erobj'), (81, 'wasm_nop', 5, 3, '01', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/nop.erobj');
 
 create table function_object (
   function_id integer primary key,
@@ -424,13 +322,10 @@ insert into function_object(function_id, name, isa_id, entry_record_id, object_p
   (1, 'return_42_x86_64', 1, 1, 'kernel/x86_64/object/function/return_42_x86_64.erobj');
 
 insert into function_record(function_id, record_id, sequence, record_kind, form_path, encoding_id) values
-  (1, 1, 1, 1, 'kernel/x86_64/object/form/x86_64/mov_eax_imm32.erobj', 1),
-  (1, 2, 2, 1, 'kernel/x86_64/object/form/x86_64/ret.erobj', 2);
+  (1, 1, 1, 1, 'kernel/x86_64/object/form/x86_64/mov_eax_imm32.erobj', 1), (1, 2, 2, 1, 'kernel/x86_64/object/form/x86_64/ret.erobj', 2);
 
 insert into function_operand(function_id, record_id, operand_index, operand_id) values
-  (1, 1, 0, 100),
-  (1, 1, 1, 102),
-  (1, 2, 0, 1);
+  (1, 1, 0, 100), (1, 1, 1, 102), (1, 2, 0, 1);
 
 insert into function_edge(function_id, from_record_id, edge_kind, to_record_id) values
   (1, 1, 1, 2);
@@ -2784,56 +2679,6 @@ from browser_spec_source
 join json_each(cast(browser_spec_source.content as text), '$.built_in_objects')
 where browser_spec_source.namespace = 'ecmascript';
 
-create view browser_spec_fact_summary as
-select 'source' as fact_kind, namespace as subject, 1 as fact_count, byte_len
-from browser_spec_source
-union all
-select 'html_tokenizer_transition', 'html.tokenizer', count(*), null from browser_html_tokenizer_transition
-union all
-select 'html_tokenizer_action', 'html.tokenizer', count(*), null from browser_html_tokenizer_action
-union all
-select 'html_tree_rule', 'html.tree_builder', count(*), null from browser_html_tree_rule
-union all
-select 'html_tree_rule_action', 'html.tree_builder', count(*), null from browser_html_tree_rule_action
-union all
-select 'html_named_entity', 'html.entities', count(*), null from browser_html_named_entity
-union all
-select 'html_element', 'html.elements', count(*), null from browser_html_element_fact
-union all
-select 'css_property', 'css.properties', count(*), null from browser_css_property_fact
-union all
-select 'css_selector', 'css.selectors', count(*), null from browser_css_selector_fact
-union all
-select 'fetch_field', 'fetch', count(*), null from browser_fetch_field_fact
-union all
-select 'ecmascript_builtin', 'ecmascript', count(*), null from browser_ecmascript_builtin_fact;
-
-create view browser_spec_lookup_proofs as
-select 'tokenizer_lt_from_data' as proof_name,
-       current_state || '+' || char_class || '->' || next_state as proof_value
-from browser_html_tokenizer_transition
-where current_state = 'DATA_STATE' and char_class = 'CHAR_CLASS_LT'
-union all
-select 'entity_amp', name || '=' || cast(code_point_1 as text)
-from browser_html_named_entity
-where name = 'AMP'
-union all
-select 'element_div', tag_name || '=' || dom_interface
-from browser_html_element_fact
-where tag_name = 'div'
-union all
-select 'css_background_color', name || '=' || initial_value
-from browser_css_property_fact
-where name = 'background-color'
-union all
-select 'fetch_request_method', name || ':' || field_type
-from browser_fetch_field_fact
-where object_kind = 'request_init' and name = 'method'
-union all
-select 'ecmascript_object', name || ':' || constructor_signature
-from browser_ecmascript_builtin_fact
-where name = 'Object';
-
 create table browser_url_parser_state_fact (
   state_id integer primary key,
   name text not null unique
@@ -2948,36 +2793,6 @@ join json_each(cast(browser_spec_source.content as text), '$.interfaces') interf
 join json_each(interface_entry.value, '$.methods') method_entry
 where browser_spec_source.namespace = 'dom';
 
-create view browser_spec_extended_fact_summary as
-select * from browser_spec_fact_summary
-union all
-select 'url_parser_state', 'url', count(*), null from browser_url_parser_state_fact
-union all
-select 'url_property', 'url', count(*), null from browser_url_property_fact
-union all
-select 'encoding', 'encoding', count(*), null from browser_encoding_fact
-union all
-select 'encoding_label', 'encoding', count(*), null from browser_encoding_label_fact
-union all
-select 'dom_interface', 'dom', count(*), null from browser_dom_interface_fact
-union all
-select 'dom_attribute', 'dom', count(*), null from browser_dom_attribute_fact
-union all
-select 'dom_method', 'dom', count(*), null from browser_dom_method_fact;
-
-create view browser_spec_extended_lookup_proofs as
-select * from browser_spec_lookup_proofs
-union all
-select 'url_state_scheme_start', name from browser_url_parser_state_fact where name = 'SchemeStart'
-union all
-select 'encoding_utf8_label', name || ':' || label
-from browser_encoding_fact join browser_encoding_label_fact using (encoding_id)
-where browser_encoding_fact.name = 'UTF-8' and browser_encoding_label_fact.label = 'utf-8'
-union all
-select 'dom_interface_event', name || ':' || parent
-from browser_dom_interface_fact
-where name = 'Event';
-
 -- Edgerun standards fact import. These facts are mined from /home/ken/edgerun
 -- standards TOML/corpus files and utility codec tables. The current TOML parser
 -- is useful for scalar tables but does not preserve repeated [[table]] arrays as
@@ -3045,26 +2860,10 @@ create table edgerun_protocol_fact (
 );
 
 insert into edgerun_protocol_fact(protocol_id, id, name, layer, summary) values
-  (1, 'udp', 'User Datagram Protocol', 'transport', 'Connectionless transport datagram format over IP.'),
-  (2, 'tftp', 'Trivial File Transfer Protocol', 'application', 'Simple lock-step file transfer over UDP.'),
-  (3, 'hpack', 'HPACK', 'presentation', 'Header compression format for HTTP/2.'),
-  (4, 'quic', 'QUIC', 'transport', 'UDP-based multiplexed secure transport.');
+  (1, 'udp', 'User Datagram Protocol', 'transport', 'Connectionless transport datagram format over IP.'), (2, 'tftp', 'Trivial File Transfer Protocol', 'application', 'Simple lock-step file transfer over UDP.'), (3, 'hpack', 'HPACK', 'presentation', 'Header compression format for HTTP/2.'), (4, 'quic', 'QUIC', 'transport', 'UDP-based multiplexed secure transport.');
 
 insert or ignore into edgerun_protocol_fact(protocol_id, id, name, layer, summary) values
-  (5, 'ethernet', 'Ethernet', 'link', 'Link-layer Ethernet frame transport.'),
-  (6, 'arp', 'Address Resolution Protocol', 'link', 'IPv4 address resolution over link-layer networks.'),
-  (7, 'ipv4', 'Internet Protocol Version 4', 'network', 'IPv4 packet format and routing semantics.'),
-  (8, 'ipv6', 'Internet Protocol Version 6', 'network', 'IPv6 packet format and routing semantics.'),
-  (9, 'icmpv4', 'Internet Control Message Protocol for IPv4', 'network', 'ICMP control messages for IPv4.'),
-  (10, 'icmpv6', 'Internet Control Message Protocol for IPv6', 'network', 'ICMP control messages for IPv6.'),
-  (11, 'tcp', 'Transmission Control Protocol', 'transport', 'Reliable ordered byte stream over IP.'),
-  (12, 'dns', 'Domain Name System', 'application', 'Domain name query and resource record protocol.'),
-  (13, 'dhcpv4', 'Dynamic Host Configuration Protocol for IPv4', 'application', 'IPv4 host configuration over UDP.'),
-  (14, 'dhcpv6', 'Dynamic Host Configuration Protocol for IPv6', 'application', 'IPv6 host configuration over UDP.'),
-  (15, 'http', 'HTTP', 'application', 'Application semantics and message mappings for HTTP/1.1, HTTP/2, and HTTP/3.'),
-  (16, 'nfc', 'Near Field Communication', 'link', 'Near-field radio communication protocols.'),
-  (17, 'qpack', 'QPACK', 'presentation', 'Header compression format for HTTP/3.'),
-  (18, 'tls', 'Transport Layer Security', 'security', 'Authenticated encrypted transport security protocol.');
+  (5, 'ethernet', 'Ethernet', 'link', 'Link-layer Ethernet frame transport.'), (6, 'arp', 'Address Resolution Protocol', 'link', 'IPv4 address resolution over link-layer networks.'), (7, 'ipv4', 'Internet Protocol Version 4', 'network', 'IPv4 packet format and routing semantics.'), (8, 'ipv6', 'Internet Protocol Version 6', 'network', 'IPv6 packet format and routing semantics.'), (9, 'icmpv4', 'Internet Control Message Protocol for IPv4', 'network', 'ICMP control messages for IPv4.'), (10, 'icmpv6', 'Internet Control Message Protocol for IPv6', 'network', 'ICMP control messages for IPv6.'), (11, 'tcp', 'Transmission Control Protocol', 'transport', 'Reliable ordered byte stream over IP.'), (12, 'dns', 'Domain Name System', 'application', 'Domain name query and resource record protocol.'), (13, 'dhcpv4', 'Dynamic Host Configuration Protocol for IPv4', 'application', 'IPv4 host configuration over UDP.'), (14, 'dhcpv6', 'Dynamic Host Configuration Protocol for IPv6', 'application', 'IPv6 host configuration over UDP.'), (15, 'http', 'HTTP', 'application', 'Application semantics and message mappings for HTTP/1.1, HTTP/2, and HTTP/3.'), (16, 'nfc', 'Near Field Communication', 'link', 'Near-field radio communication protocols.'), (17, 'qpack', 'QPACK', 'presentation', 'Header compression format for HTTP/3.'), (18, 'tls', 'Transport Layer Security', 'security', 'Authenticated encrypted transport security protocol.');
 
 create table edgerun_protocol_dependency_fact (
   protocol_id integer not null references edgerun_protocol_fact(protocol_id),
@@ -3074,37 +2873,10 @@ create table edgerun_protocol_dependency_fact (
 );
 
 insert into edgerun_protocol_dependency_fact(protocol_id, dependency, edge_kind) values
-  (1, 'IPv4', 'runs_over'),
-  (1, 'IPv6', 'runs_over'),
-  (2, 'UDP', 'runs_over'),
-  (3, 'HTTP/2', 'runs_over'),
-  (4, 'UDP', 'runs_over'),
-  (4, 'TLS 1.3', 'depends_on');
+  (1, 'IPv4', 'runs_over'), (1, 'IPv6', 'runs_over'), (2, 'UDP', 'runs_over'), (3, 'HTTP/2', 'runs_over'), (4, 'UDP', 'runs_over'), (4, 'TLS 1.3', 'depends_on');
 
 insert or ignore into edgerun_protocol_dependency_fact(protocol_id, dependency, edge_kind) values
-  (6, 'Ethernet', 'runs_over'),
-  (7, 'Ethernet', 'runs_over'),
-  (8, 'Ethernet', 'runs_over'),
-  (9, 'IPv4', 'runs_over'),
-  (10, 'IPv6', 'runs_over'),
-  (11, 'IPv4', 'runs_over'),
-  (11, 'IPv6', 'runs_over'),
-  (12, 'UDP', 'runs_over'),
-  (12, 'TCP', 'runs_over'),
-  (12, 'TLS', 'runs_over'),
-  (12, 'HTTPS', 'runs_over'),
-  (12, 'QUIC', 'runs_over'),
-  (13, 'UDP', 'runs_over'),
-  (13, 'IPv4', 'runs_over'),
-  (14, 'UDP', 'runs_over'),
-  (14, 'IPv6', 'runs_over'),
-  (15, 'TCP', 'runs_over'),
-  (15, 'TLS', 'runs_over'),
-  (15, 'QUIC', 'runs_over'),
-  (17, 'HTTP/3', 'runs_over'),
-  (17, 'QUIC', 'runs_over'),
-  (18, 'TCP', 'runs_over'),
-  (18, 'QUIC', 'runs_over');
+  (6, 'Ethernet', 'runs_over'), (7, 'Ethernet', 'runs_over'), (8, 'Ethernet', 'runs_over'), (9, 'IPv4', 'runs_over'), (10, 'IPv6', 'runs_over'), (11, 'IPv4', 'runs_over'), (11, 'IPv6', 'runs_over'), (12, 'UDP', 'runs_over'), (12, 'TCP', 'runs_over'), (12, 'TLS', 'runs_over'), (12, 'HTTPS', 'runs_over'), (12, 'QUIC', 'runs_over'), (13, 'UDP', 'runs_over'), (13, 'IPv4', 'runs_over'), (14, 'UDP', 'runs_over'), (14, 'IPv6', 'runs_over'), (15, 'TCP', 'runs_over'), (15, 'TLS', 'runs_over'), (15, 'QUIC', 'runs_over'), (17, 'HTTP/3', 'runs_over'), (17, 'QUIC', 'runs_over'), (18, 'TCP', 'runs_over'), (18, 'QUIC', 'runs_over');
 
 create table edgerun_protocol_standard_fact (
   protocol_id integer not null references edgerun_protocol_fact(protocol_id),
@@ -3152,16 +2924,7 @@ create table edgerun_protocol_behavior_fact (
 );
 
 insert into edgerun_protocol_behavior_fact(behavior_id, protocol_id, behavior_name, behavior_kind, status) values
-  (1, 1, 'udp-header-parse', 'packet-format', 'unknown'),
-  (2, 1, 'udp-checksum', 'checksum', 'unknown'),
-  (3, 2, 'tftp-message-parse', 'message-format', 'unknown'),
-  (4, 3, 'hpack-integer-codec', 'codec', 'unknown'),
-  (5, 3, 'hpack-dynamic-table', 'state-machine', 'unknown'),
-  (6, 4, 'quic-varint', 'codec', 'unknown'),
-  (7, 15, 'http-message-parsing', 'message-format', 'unknown'),
-  (8, 15, 'http-content-coding', 'semantics', 'unknown'),
-  (9, 17, 'qpack-integer-codec', 'codec', 'unknown'),
-  (10, 18, 'tls-record-parse', 'record-format', 'unknown');
+  (1, 1, 'udp-header-parse', 'packet-format', 'unknown'), (2, 1, 'udp-checksum', 'checksum', 'unknown'), (3, 2, 'tftp-message-parse', 'message-format', 'unknown'), (4, 3, 'hpack-integer-codec', 'codec', 'unknown'), (5, 3, 'hpack-dynamic-table', 'state-machine', 'unknown'), (6, 4, 'quic-varint', 'codec', 'unknown'), (7, 15, 'http-message-parsing', 'message-format', 'unknown'), (8, 15, 'http-content-coding', 'semantics', 'unknown'), (9, 17, 'qpack-integer-codec', 'codec', 'unknown'), (10, 18, 'tls-record-parse', 'record-format', 'unknown');
 
 create table edgerun_protocol_environment_fact (
   protocol_id integer primary key references edgerun_protocol_fact(protocol_id),
@@ -3174,24 +2937,7 @@ create table edgerun_protocol_environment_fact (
 );
 
 insert into edgerun_protocol_environment_fact(protocol_id, requires_network_io, requires_packet_io, requires_stream_io, requires_crypto, requires_allocator, no_std_viability) values
-  (1, 1, 1, 0, 0, 0, 'plausible'),
-  (2, 1, 0, 0, 0, 0, 'plausible'),
-  (3, 0, 0, 0, 0, 1, 'plausible-with-alloc'),
-  (4, 1, 1, 1, 1, 1, 'complex'),
-  (5, 1, 1, 0, 0, 0, 'plausible'),
-  (6, 1, 1, 0, 0, 0, 'plausible'),
-  (7, 1, 1, 0, 0, 0, 'plausible'),
-  (8, 1, 1, 0, 0, 0, 'plausible'),
-  (9, 1, 1, 0, 0, 0, 'plausible'),
-  (10, 1, 1, 0, 0, 0, 'plausible'),
-  (11, 1, 1, 1, 0, 1, 'plausible-with-alloc'),
-  (12, 1, 1, 1, 0, 1, 'plausible-with-alloc'),
-  (13, 1, 1, 0, 0, 1, 'plausible-with-alloc'),
-  (14, 1, 1, 0, 0, 1, 'plausible-with-alloc'),
-  (15, 1, 0, 1, 0, 1, 'plausible-with-alloc'),
-  (16, 1, 1, 0, 0, 0, 'plausible'),
-  (17, 0, 0, 0, 0, 1, 'plausible-with-alloc'),
-  (18, 1, 0, 1, 1, 1, 'complex');
+  (1, 1, 1, 0, 0, 0, 'plausible'), (2, 1, 0, 0, 0, 0, 'plausible'), (3, 0, 0, 0, 0, 1, 'plausible-with-alloc'), (4, 1, 1, 1, 1, 1, 'complex'), (5, 1, 1, 0, 0, 0, 'plausible'), (6, 1, 1, 0, 0, 0, 'plausible'), (7, 1, 1, 0, 0, 0, 'plausible'), (8, 1, 1, 0, 0, 0, 'plausible'), (9, 1, 1, 0, 0, 0, 'plausible'), (10, 1, 1, 0, 0, 0, 'plausible'), (11, 1, 1, 1, 0, 1, 'plausible-with-alloc'), (12, 1, 1, 1, 0, 1, 'plausible-with-alloc'), (13, 1, 1, 0, 0, 1, 'plausible-with-alloc'), (14, 1, 1, 0, 0, 1, 'plausible-with-alloc'), (15, 1, 0, 1, 0, 1, 'plausible-with-alloc'), (16, 1, 1, 0, 0, 0, 'plausible'), (17, 0, 0, 0, 0, 1, 'plausible-with-alloc'), (18, 1, 0, 1, 1, 1, 'complex');
 
 create table edgerun_definition_fact (
   definition_id integer primary key,
@@ -3220,23 +2966,13 @@ create table edgerun_definition_variant_fact (
 );
 
 insert into edgerun_definition_fact(definition_id, id, kind, standard, section) values
-  (1, 'udp-datagram', 'frame', 'RFC768', 'Format'),
-  (2, 'tftp-message', 'sum-frame', 'RFC1350', '5');
+  (1, 'udp-datagram', 'frame', 'RFC768', 'Format'), (2, 'tftp-message', 'sum-frame', 'RFC1350', '5');
 
 insert into edgerun_definition_field_fact(definition_id, field_order, name, field_type, length_expr, constraint_expr) values
-  (1, 1, 'source_port', 'u16be', '', ''),
-  (1, 2, 'destination_port', 'u16be', '', ''),
-  (1, 3, 'length', 'u16be', '', 'length >= 8'),
-  (1, 4, 'checksum', 'u16be', '', ''),
-  (1, 5, 'payload', 'bytes', 'length - 8', ''),
-  (2, 1, 'opcode', 'u16be', '', '');
+  (1, 1, 'source_port', 'u16be', '', ''), (1, 2, 'destination_port', 'u16be', '', ''), (1, 3, 'length', 'u16be', '', 'length >= 8'), (1, 4, 'checksum', 'u16be', '', ''), (1, 5, 'payload', 'bytes', 'length - 8', ''), (2, 1, 'opcode', 'u16be', '', '');
 
 insert into edgerun_definition_variant_fact(definition_id, variant_name, tag_field, tag_value) values
-  (2, 'rrq', 'opcode', 1),
-  (2, 'wrq', 'opcode', 2),
-  (2, 'data', 'opcode', 3),
-  (2, 'ack', 'opcode', 4),
-  (2, 'error', 'opcode', 5);
+  (2, 'rrq', 'opcode', 1), (2, 'wrq', 'opcode', 2), (2, 'data', 'opcode', 3), (2, 'ack', 'opcode', 4), (2, 'error', 'opcode', 5);
 
 create table edgerun_clause_fact (
   clause_id integer primary key,
@@ -3251,84 +2987,7 @@ create table edgerun_clause_fact (
 );
 
 insert into edgerun_clause_fact(clause_id, id, standard, section, keyword, subject, predicate_expr, violation_code, violation_message) values
-  (1, 'udp-rfc768-length-0001', 'RFC768', 'Format', 'MUST', 'udp-datagram', 'length >= 8 && length == payload_len + 8', 'UDP_LENGTH_INVALID', 'UDP length does not match header plus payload length.'),
-  (2, 'tftp-rfc1350-opcode-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'byte_len >= 2 && opcode in [1, 2, 3, 4, 5, 6]', 'TFTP_OPCODE_INVALID', 'TFTP opcode is missing or unknown.'),
-  (3, 'tftp-rfc1350-ack-length-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'opcode != 4 || byte_len == 4', 'TFTP_ACK_LENGTH_INVALID', 'TFTP ACK packets must be exactly four octets.'),
-  (4, 'tftp-rfc1350-data-length-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'opcode != 3 || byte_len >= 4', 'TFTP_DATA_LENGTH_INVALID', 'TFTP DATA packets must include a two-octet block number.'),
-  (5, 'tftp-message-definition', 'RFC1350', '5', 'MUST', 'tftp-message', 'byte_len >= 2', 'TFTP_MESSAGE_TOO_SHORT', 'TFTP messages must include a two-octet opcode.');
-
-create table edgerun_corpus_case_fact (
-  case_id integer primary key,
-  corpus_name text not null,
-  case_name text not null unique,
-  hex_bytes text not null,
-  description text not null,
-  expect_exit integer not null
-);
-
-create table edgerun_corpus_expectation_fact (
-  case_id integer not null references edgerun_corpus_case_fact(case_id),
-  clause_id integer not null references edgerun_clause_fact(clause_id),
-  expected_result text not null,
-  primary key (case_id, clause_id)
-);
-
-insert into edgerun_corpus_case_fact(case_id, corpus_name, case_name, hex_bytes, description, expect_exit) values
-  (1, 'tftp', 'valid-ack', '00040001', 'Valid TFTP ACK for block 1.', 0),
-  (2, 'tftp', 'invalid-short', '00', 'TFTP message is shorter than the two-octet opcode.', 2),
-  (3, 'tftp', 'invalid-ack-length', '0004000100', 'TFTP ACK opcode with an extra trailing octet.', 2),
-  (4, 'tftp', 'invalid-data-length', '0003', 'TFTP DATA opcode without a two-octet block number.', 2),
-  (5, 'tftp', 'invalid-opcode', '00090001', 'TFTP message with an unknown opcode.', 2);
-
-insert into edgerun_corpus_expectation_fact(case_id, clause_id, expected_result) values
-  (1, 2, 'pass'), (1, 3, 'pass'), (1, 4, 'pass'),
-  (2, 5, 'reject'),
-  (3, 2, 'pass'), (3, 3, 'reject'), (3, 4, 'pass'),
-  (4, 2, 'pass'), (4, 3, 'pass'), (4, 4, 'reject'),
-  (5, 2, 'reject'), (5, 3, 'pass'), (5, 4, 'pass');
-
-create view edgerun_tftp_case_fields as
-select case_id,
-       case_name,
-       hex_bytes,
-       length(hex_bytes) / 2 as byte_len,
-       case when length(hex_bytes) >= 4 then
-         ((instr('0123456789abcdef', lower(substr(hex_bytes, 1, 1))) - 1) << 12) |
-         ((instr('0123456789abcdef', lower(substr(hex_bytes, 2, 1))) - 1) << 8) |
-         ((instr('0123456789abcdef', lower(substr(hex_bytes, 3, 1))) - 1) << 4) |
-         (instr('0123456789abcdef', lower(substr(hex_bytes, 4, 1))) - 1)
-       else null end as opcode
-from edgerun_corpus_case_fact
-where corpus_name = 'tftp';
-
-create view edgerun_tftp_clause_results as
-select fields.case_id,
-       fields.case_name,
-       clause.id as clause_name,
-       case clause.id
-          when 'tftp-rfc1350-opcode-0001' then
-            case when fields.byte_len >= 2 and fields.opcode in (1, 2, 3, 4, 5, 6) then 'pass' else 'reject' end
-          when 'tftp-message-definition' then
-            case when fields.byte_len >= 2 then 'pass' else 'reject' end
-         when 'tftp-rfc1350-ack-length-0001' then
-           case when fields.opcode != 4 or fields.byte_len = 4 then 'pass' else 'reject' end
-         when 'tftp-rfc1350-data-length-0001' then
-           case when fields.opcode != 3 or fields.byte_len >= 4 then 'pass' else 'reject' end
-       end as actual_result
-from edgerun_tftp_case_fields fields
-join edgerun_clause_fact clause on clause.subject = 'tftp-message';
-
-create view edgerun_tftp_corpus_proof as
-select results.case_name,
-       results.clause_name,
-       expected.expected_result,
-       results.actual_result,
-       case when expected.expected_result = results.actual_result then 1 else 0 end as matches_expectation
-from edgerun_tftp_clause_results results
-left join edgerun_corpus_expectation_fact expected
-  on expected.case_id = results.case_id
- and expected.clause_id = (select clause_id from edgerun_clause_fact where id = results.clause_name)
-where expected.expected_result is not null;
+  (1, 'udp-rfc768-length-0001', 'RFC768', 'Format', 'MUST', 'udp-datagram', 'length >= 8 && length == payload_len + 8', 'UDP_LENGTH_INVALID', 'UDP length does not match header plus payload length.'), (2, 'tftp-rfc1350-opcode-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'byte_len >= 2 && opcode in [1, 2, 3, 4, 5, 6]', 'TFTP_OPCODE_INVALID', 'TFTP opcode is missing or unknown.'), (3, 'tftp-rfc1350-ack-length-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'opcode != 4 || byte_len == 4', 'TFTP_ACK_LENGTH_INVALID', 'TFTP ACK packets must be exactly four octets.'), (4, 'tftp-rfc1350-data-length-0001', 'RFC1350', '5', 'MUST', 'tftp-message', 'opcode != 3 || byte_len >= 4', 'TFTP_DATA_LENGTH_INVALID', 'TFTP DATA packets must include a two-octet block number.'), (5, 'tftp-message-definition', 'RFC1350', '5', 'MUST', 'tftp-message', 'byte_len >= 2', 'TFTP_MESSAGE_TOO_SHORT', 'TFTP messages must include a two-octet opcode.');
 
 create table engine_field_type_fact (
   field_type text primary key,
@@ -3337,19 +2996,36 @@ create table engine_field_type_fact (
 );
 
 insert into engine_field_type_fact(field_type, byte_len, endian) values
-  ('u16be', 2, 'big');
+  ('u16be', 2, 'big'), ('bytes', 0, 'variable');
 
-create table engine_corpus_definition_binding_fact (
-  corpus_name text not null,
-  definition_id text not null,
-  base_byte_offset integer not null,
-  primary key (corpus_name, definition_id)
+create table engine_corpus_root_fact (
+  corpus_name text primary key,
+  root_definition_id text not null
 );
 
-insert into engine_corpus_definition_binding_fact(corpus_name, definition_id, base_byte_offset) values
-  ('tftp', 'tftp-message', 0),
-  ('udp-tftp', 'udp-datagram', 0),
-  ('udp-tftp', 'tftp-message', 8);
+insert into engine_corpus_root_fact(corpus_name, root_definition_id) values
+  ('tftp', 'tftp-message'), ('udp-tftp', 'udp-datagram');
+
+create table engine_definition_composition_fact (
+  parent_definition_id text not null,
+  child_definition_id text not null,
+  parent_field_name text not null,
+  primary key (parent_definition_id, child_definition_id, parent_field_name)
+);
+
+insert into engine_definition_composition_fact(parent_definition_id, child_definition_id, parent_field_name) values
+  ('udp-datagram', 'tftp-message', 'payload');
+
+create table engine_case_value_derivation_fact (
+  definition_id text not null,
+  value_name text not null,
+  source_value_name text not null,
+  integer_add integer not null,
+  primary key (definition_id, value_name)
+);
+
+insert into engine_case_value_derivation_fact(definition_id, value_name, source_value_name, integer_add) values
+  ('*', 'byte_len', 'corpus_byte_len', 0), ('udp-datagram', 'payload_len', 'byte_len', -8);
 
 create view engine_definition_field_layout_fact as
 select definition.id as definition_id,
@@ -3366,54 +3042,768 @@ from edgerun_definition_field_fact field
 join edgerun_definition_fact definition using (definition_id)
 join engine_field_type_fact field_type on field_type.field_type = field.field_type;
 
+create view engine_corpus_definition_binding_fact as
+select corpus_name,
+       root_definition_id as definition_id,
+       0 as base_byte_offset
+from engine_corpus_root_fact
+union all
+select root.corpus_name,
+       composition.child_definition_id,
+       parent_layout.byte_offset
+from engine_corpus_root_fact root
+join engine_definition_composition_fact composition
+  on composition.parent_definition_id = root.root_definition_id
+join engine_definition_field_layout_fact parent_layout
+  on parent_layout.definition_id = composition.parent_definition_id
+ and parent_layout.field_name = composition.parent_field_name;
+
+create table engine_predicate_operator_fact (
+  operator_name text primary key,
+  operator_kind text not null,
+  operand_kind text not null
+);
+
+insert into engine_predicate_operator_fact(operator_name, operator_kind, operand_kind) values
+  ('>=', 'compare', 'integer'),
+  ('==', 'compare', 'integer'),
+  ('!=', 'compare', 'integer'),
+  ('in', 'membership', 'integer_set');
+
 create table engine_clause_predicate_atom_fact (
   clause_id integer not null references edgerun_clause_fact(clause_id),
   group_index integer not null,
   atom_index integer not null,
   lhs_name text not null,
-  operator_name text not null,
+  operator_name text not null references engine_predicate_operator_fact(operator_name),
   rhs_integer integer,
-  rhs_value_name text not null default '',
-  rhs_integer_add integer not null default 0,
-  rhs_set_csv text not null default '',
+  rhs_value_name text not null,
+  rhs_integer_add integer not null,
   primary key (clause_id, group_index, atom_index)
 );
 
-insert into engine_clause_predicate_atom_fact(clause_id, group_index, atom_index, lhs_name, operator_name, rhs_integer, rhs_value_name, rhs_integer_add, rhs_set_csv) values
-  (1, 1, 1, 'length', '>=', 8, '', 0, ''),
-  (1, 1, 2, 'length', '==', null, 'payload_len', 8, ''),
-  (2, 1, 1, 'byte_len', '>=', 2, '', 0, ''),
-  (2, 1, 2, 'opcode', 'in', null, '', 0, '1,2,3,4,5,6'),
-  (3, 1, 1, 'opcode', '!=', 4, '', 0, ''),
-  (3, 2, 1, 'byte_len', '==', 4, '', 0, ''),
-  (4, 1, 1, 'opcode', '!=', 3, '', 0, ''),
-  (4, 2, 1, 'byte_len', '>=', 4, '', 0, ''),
-  (5, 1, 1, 'byte_len', '>=', 2, '', 0, '');
+insert into engine_clause_predicate_atom_fact(clause_id, group_index, atom_index, lhs_name, operator_name, rhs_integer, rhs_value_name, rhs_integer_add) values
+  (1, 1, 1, 'length', '>=', 8, '', 0),
+  (1, 1, 2, 'length', '==', null, 'payload_len', 8),
+  (2, 1, 1, 'byte_len', '>=', 2, '', 0),
+  (2, 1, 2, 'opcode', 'in', null, '', 0),
+  (3, 1, 1, 'opcode', '!=', 4, '', 0),
+  (3, 2, 1, 'byte_len', '==', 4, '', 0),
+  (4, 1, 1, 'opcode', '!=', 3, '', 0),
+  (4, 2, 1, 'byte_len', '>=', 4, '', 0),
+  (5, 1, 1, 'byte_len', '>=', 2, '', 0);
+
+create table engine_clause_predicate_set_member_fact (
+  clause_id integer not null,
+  group_index integer not null,
+  atom_index integer not null,
+  member_integer integer not null,
+  primary key (clause_id, group_index, atom_index, member_integer),
+  foreign key (clause_id, group_index, atom_index) references engine_clause_predicate_atom_fact(clause_id, group_index, atom_index)
+);
+
+insert into engine_clause_predicate_set_member_fact(clause_id, group_index, atom_index, member_integer) values
+  (2, 1, 2, 1),
+  (2, 1, 2, 2),
+  (2, 1, 2, 3),
+  (2, 1, 2, 4),
+  (2, 1, 2, 5),
+  (2, 1, 2, 6);
+
+create view engine_clause_predicate_parse_gap as
+select clause.id as clause_name,
+       clause.clause_id,
+       0 as group_index,
+       0 as atom_index,
+       clause.predicate_expr as atom_text,
+       'missing_predicate_atom_fact' as gap_kind
+from edgerun_clause_fact clause
+left join engine_clause_predicate_atom_fact atom using (clause_id)
+where atom.clause_id is null;
+
+create table engine_category_fact (
+  category_name text primary key,
+  description text not null
+);
+
+insert into engine_category_fact(category_name, description) values
+  ('driver', 'Code or object that drives a device.'),
+  ('device', 'Hardware or virtual device entity.'),
+  ('clock', 'Clock source or clock domain.'),
+  ('frequency', 'Rate measured as cycles per time.'),
+  ('register', 'Addressable register entity.'),
+  ('field', 'Sub-register or protocol field entity.'),
+  ('offset', 'Byte or bit displacement.'),
+  ('width', 'Width in bits or bytes.'),
+  ('encoder', 'Entity that maps values to bytes or symbols.'),
+  ('media_format', 'Concrete media container or canonical media byte format.'),
+  ('codec', 'Codec identifier or payload coding used by a media format.'),
+  ('protocol', 'Message or transport protocol.'),
+  ('message', 'Structured protocol message.'),
+  ('unit', 'Measurement unit.'),
+  ('constant', 'Imported immutable symbolic value.'),
+  ('relation', 'Typed relation between entities or values.'),
+  ('standard', 'External or internal specification source.'),
+  ('clause', 'Executable requirement or validation predicate.');
+
+create table engine_category_relation_fact (
+  child_category text not null references engine_category_fact(category_name),
+  relation_name text not null,
+  parent_category text not null references engine_category_fact(category_name),
+  primary key (child_category, relation_name, parent_category)
+);
+
+insert into engine_category_relation_fact(child_category, relation_name, parent_category) values
+  ('frequency', 'measured_in', 'unit'),
+  ('offset', 'measured_in', 'unit'),
+  ('width', 'measured_in', 'unit'),
+  ('register', 'has_field', 'field'),
+  ('device', 'has_register', 'register'),
+  ('device', 'has_clock', 'clock'),
+  ('clock', 'has_rate', 'frequency'),
+  ('protocol', 'has_message', 'message'),
+  ('message', 'has_field', 'field'),
+  ('media_format', 'has_field', 'field'),
+  ('media_format', 'supports_codec', 'codec'),
+  ('encoder', 'emits', 'message'),
+  ('clause', 'constrains', 'message'),
+  ('clause', 'defined_by', 'standard');
+
+create table engine_unit_fact (
+  unit_name text primary key,
+  category_name text not null references engine_category_fact(category_name),
+  base_unit_name text not null,
+  scale_to_base integer not null
+);
+
+insert into engine_unit_fact(unit_name, category_name, base_unit_name, scale_to_base) values
+  ('hz', 'frequency', 'hz', 1),
+  ('khz', 'frequency', 'hz', 1000),
+  ('mhz', 'frequency', 'hz', 1000000),
+  ('bit', 'width', 'bit', 1),
+  ('byte', 'width', 'bit', 8),
+  ('byte_offset', 'offset', 'byte_offset', 1),
+  ('bit_offset', 'offset', 'bit_offset', 1);
+
+create table engine_relation_kind_fact (
+  relation_name text primary key,
+  relation_kind text not null,
+  cardinality text not null
+);
+
+insert into engine_relation_kind_fact(relation_name, relation_kind, cardinality) values
+  ('clock_rate', 'measurement', 'single'),
+  ('register_offset', 'layout', 'single'),
+  ('field_offset', 'layout', 'single'),
+  ('field_width', 'layout', 'single'),
+  ('measured_in', 'measurement', 'many'),
+  ('has_field', 'structure', 'many'),
+  ('has_message', 'structure', 'many'),
+  ('has_clock', 'structure', 'many'),
+  ('has_register', 'structure', 'many'),
+  ('has_command', 'structure', 'many'),
+  ('has_reply_code', 'structure', 'many'),
+  ('has_rate', 'measurement', 'single'),
+  ('has_constant', 'structure', 'many'),
+  ('constant_value', 'measurement', 'single'),
+  ('emits_event', 'event', 'many'),
+  ('supports_codec', 'structure', 'many'),
+  ('has_signature', 'identity', 'many'),
+  ('constrains', 'constraint', 'many'),
+  ('defined_by', 'provenance', 'many'),
+  ('emits', 'transform', 'many'),
+  ('encodes', 'transform', 'many'),
+  ('decodes', 'transform', 'many'),
+  ('drives', 'authority', 'many'),
+  ('depends_on', 'dependency', 'many'),
+  ('compatible_with', 'compatibility', 'many');
+
+create table tor_control_command_fact (
+  command_name text primary key,
+  command_kind text not null,
+  host_surface_status text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_command_fact(command_name, command_kind, host_surface_status, source_name, source_line) values
+  ('SETCONF', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 20), ('RESETCONF', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 37), ('GETCONF', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 47), ('SETEVENTS', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 77), ('AUTHENTICATE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 95), ('SAVECONF', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 128), ('SIGNAL', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 144), ('MAPADDRESS', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 195), ('GETINFO', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 256), ('EXTENDCIRCUIT', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 900), ('SETCIRCUITPURPOSE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 922), ('SETROUTERPURPOSE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 932), ('ATTACHSTREAM', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 944), ('POSTDESCRIPTOR', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 966), ('REDIRECTSTREAM', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 983), ('CLOSESTREAM', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 997), ('CLOSECIRCUIT', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1009), ('QUIT', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1024), ('USEFEATURE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1028), ('EXTENDED_EVENTS', 'feature', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1047), ('VERBOSE_NAMES', 'feature', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1053), ('RESOLVE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1059), ('PROTOCOLINFO', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1073), ('LOADCONF', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1128), ('TAKEOWNERSHIP', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1140), ('AUTHCHALLENGE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1180), ('DROPGUARDS', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1228), ('HSFETCH', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1242), ('ADD_ONION', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1284), ('DEL_ONION', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1452), ('HSPOST', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1473), ('ONION_CLIENT_AUTH_ADD', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1506), ('ONION_CLIENT_AUTH_REMOVE', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1546), ('ONION_CLIENT_AUTH_VIEW', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1565), ('DROPOWNERSHIP', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1601), ('DROPTIMEOUTS', 'command', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 1617);
+
+create table tor_control_event_fact (
+  event_name text primary key,
+  event_area text not null,
+  host_surface_status text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_event_fact(event_name, event_area, host_surface_status, source_name, source_line) values
+  ('CIRC', 'circuit', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2472), ('STREAM', 'stream', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2620), ('ORCONN', 'or_connection', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2742), ('BW', 'bandwidth', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2811), ('DEBUG', 'log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2826), ('INFO', 'log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2826), ('NOTICE', 'log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2826), ('WARN', 'log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2826), ('ERR', 'log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2826), ('NEWDESC', 'directory', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2842), ('ADDRMAP', 'address_mapping', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2858), ('AUTHDIR_NEWDESCS', 'directory', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2887), ('DESCCHANGED', 'directory', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2904), ('STATUS_GENERAL', 'status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2914), ('STATUS_CLIENT', 'status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2914), ('STATUS_SERVER', 'status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 2914), ('GUARD', 'guard', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3244), ('NS', 'directory', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3277), ('STREAM_BW', 'bandwidth', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3289), ('CLIENTS_SEEN', 'statistics', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3309), ('NEWCONSENSUS', 'directory', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3339), ('BUILDTIMEOUT_SET', 'circuit', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3352), ('SIGNAL', 'signal', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3381), ('CONF_CHANGED', 'configuration', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3399), ('CIRC_MINOR', 'circuit', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3413), ('TRANSPORT_LAUNCHED', 'transport', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3437), ('CONN_BW', 'bandwidth', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3453), ('CIRC_BW', 'bandwidth', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3481), ('CELL_STATS', 'statistics', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3527), ('TB_EMPTY', 'bandwidth', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3584), ('HS_DESC', 'onion_service', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3621), ('HS_DESC_CONTENT', 'onion_service', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3676), ('NETWORK_LIVENESS', 'network', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3702), ('PT_LOG', 'transport', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3716), ('PT_STATUS', 'transport', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 3747);
+
+create table tor_control_reply_code_fact (
+  reply_code integer primary key,
+  reply_class text not null,
+  meaning text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_reply_code_fact(reply_code, reply_class, meaning, source_name, source_line) values
+  (250, 'success', 'OK or data line', 'docs/tor-spec/17-control-protocol.md', 31), (251, 'success', 'descriptor accepted with explanation body', 'docs/tor-spec/17-control-protocol.md', 981), (451, 'transient_error', 'resource exhausted', 'docs/tor-spec/17-control-protocol.md', 210), (512, 'syntax_error', 'syntax error in command argument or missing arguments', 'docs/tor-spec/17-control-protocol.md', 210), (513, 'syntax_error', 'syntax error in configuration values or unrecognized value', 'docs/tor-spec/17-control-protocol.md', 31), (515, 'authentication_error', 'bad authentication', 'docs/tor-spec/17-control-protocol.md', 116), (551, 'operation_error', 'unable to write or internal/transient failure', 'docs/tor-spec/17-control-protocol.md', 136), (552, 'not_found', 'unrecognized option, event, signal, stream, circuit, or value', 'docs/tor-spec/17-control-protocol.md', 31), (553, 'semantic_error', 'impossible configuration setting', 'docs/tor-spec/17-control-protocol.md', 31), (554, 'semantic_error', 'invalid descriptor', 'docs/tor-spec/17-control-protocol.md', 981), (555, 'semantic_error', 'inappropriate stream state for attachment', 'docs/tor-spec/17-control-protocol.md', 958), (650, 'asynchronous_event', 'asynchronous event line', 'docs/tor-spec/17-control-protocol.md', 2415);
+
+create table tor_control_signal_fact (
+  signal_name text primary key,
+  posix_alias text not null,
+  effect_summary text not null,
+  host_surface_status text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_signal_fact(signal_name, posix_alias, effect_summary, host_surface_status, source_name, source_line) values
+  ('RELOAD', 'HUP', 'reload config items', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 150), ('SHUTDOWN', 'INT', 'controlled shutdown', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 150), ('DUMP', 'USR1', 'dump connection and circuit stats', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 150), ('DEBUG', 'USR2', 'switch logs to debug level', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 150), ('HALT', 'TERM', 'immediate shutdown', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 150), ('CLEARDNSCACHE', '', 'clear client-side DNS cache', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 152), ('NEWNYM', '', 'switch to clean circuits and clear client DNS cache', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 151), ('HEARTBEAT', '', 'emit unscheduled heartbeat log', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 152), ('DORMANT', '', 'enter dormant mode', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 152), ('ACTIVE', '', 'leave dormant mode', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 152);
+
+create table tor_control_getinfo_key_fact (
+  key_pattern text primary key,
+  key_group text not null,
+  value_kind text not null,
+  host_surface_status text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_getinfo_key_fact(key_pattern, key_group, value_kind, host_surface_status, source_name, source_line) values
+  ('version', 'software', 'version_string', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 282), ('config-file', 'configuration', 'path', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 286), ('config-defaults-file', 'configuration', 'path', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 288), ('config-text', 'configuration', 'text', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 293), ('exit-policy/default', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 297), ('exit-policy/reject-private/default', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 300), ('exit-policy/reject-private/relay', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 304), ('exit-policy/ipv4', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 312), ('exit-policy/ipv6', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 313), ('exit-policy/full', 'exit_policy', 'policy_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 314), ('desc/id/<OR identity>', 'descriptor', 'server_descriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 318), ('desc/name/<OR nickname>', 'descriptor', 'server_descriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 318), ('md/all', 'microdescriptor', 'microdescriptor_set', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 324), ('md/id/<OR identity>', 'microdescriptor', 'microdescriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 328), ('md/name/<OR nickname>', 'microdescriptor', 'microdescriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 328), ('desc/download-enabled', 'descriptor', 'boolean', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 333), ('md/download-enabled', 'microdescriptor', 'boolean', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 336), ('dormant', 'runtime_state', 'integer', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 339), ('desc-annotations/id/<OR identity>', 'descriptor', 'annotation_text', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 343), ('extra-info/digest/<digest>', 'descriptor', 'extra_info_document', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 347), ('ns/id/<OR identity>', 'directory', 'router_status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 351), ('ns/name/<OR nickname>', 'directory', 'router_status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 351), ('ns/all', 'directory', 'router_status_set', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 362), ('ns/purpose/<purpose>', 'directory', 'router_status_set', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 367), ('desc/all-recent', 'descriptor', 'server_descriptor_set', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 377), ('network-status', 'directory', 'deprecated_removed', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 380), ('address-mappings/all', 'address_mapping', 'mapping_set_with_expiry', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 383), ('address-mappings/config', 'address_mapping', 'mapping_set_with_expiry', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 384), ('address-mappings/cache', 'address_mapping', 'mapping_set_with_expiry', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 385), ('address-mappings/control', 'address_mapping', 'mapping_set_with_expiry', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 386), ('addr-mappings/*', 'address_mapping', 'deprecated_mapping_set_without_expiry', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 397), ('address', 'network_identity', 'ip_address', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 401), ('address/v4', 'network_identity', 'ipv4_address', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 404), ('address/v6', 'network_identity', 'ipv6_address', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 405), ('fingerprint', 'relay_identity', 'fingerprint_text', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 409), ('circuit-status', 'circuit', 'circ_event_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 413), ('stream-status', 'stream', 'stream_event_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 419), ('orconn-status', 'or_connection', 'orconn_event_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 423), ('entry-guards', 'guard', 'guard_status_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 434), ('traffic/read', 'traffic', 'byte_count', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 462), ('traffic/written', 'traffic', 'byte_count', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 464), ('uptime', 'runtime_state', 'seconds', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 466), ('accounting/*', 'accounting', 'accounting_state', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 469), ('config/names', 'configuration', 'option_schema_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 486), ('config/defaults', 'configuration', 'option_default_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 499), ('info/names', 'introspection', 'getinfo_schema_lines', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 507), ('events/names', 'introspection', 'event_name_list', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 517), ('features/names', 'introspection', 'feature_name_list', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 521), ('signal/names', 'introspection', 'signal_name_list', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 525), ('ip-to-country/*', 'geoip', 'country_code', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 529), ('process/*', 'process', 'process_metadata', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 538), ('dir/status-vote/current/consensus', 'directory', 'consensus_document', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 547), ('dir/status-vote/current/consensus-microdesc', 'directory', 'microdesc_consensus_document', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 548), ('dir/status/*', 'directory', 'directory_status_document', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 549), ('dir/server/*', 'directory', 'directory_server_document', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 553), ('status/*', 'status', 'status_value', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 573), ('net/listeners/*', 'listener', 'listener_addresses', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 613), ('dir-usage', 'directory', 'removed_usage_counters', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 674), ('bw-event-cache', 'bandwidth', 'recent_bw_tuples', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 686), ('consensus/*', 'directory', 'consensus_time', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 694), ('hs/client/desc/id/<ADDR>', 'onion_service', 'client_descriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 701), ('hs/service/desc/id/<ADDR>', 'onion_service', 'service_descriptor', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 714), ('onions/current', 'onion_service', 'current_onion_service_list', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 727), ('onions/detached', 'onion_service', 'detached_onion_service_list', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 728), ('network-liveness', 'network', 'up_down', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 739), ('downloads/*', 'download_status', 'serialized_download_status', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 743), ('sr/current', 'shared_random', 'base64_value', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 854), ('sr/previous', 'shared_random', 'base64_value', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 855), ('current-time/local', 'clock', 'datetime', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 860), ('current-time/utc', 'clock', 'datetime', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 861), ('stats/ntor/*', 'statistics', 'ntor_rephist_value', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 865), ('stats/tap/*', 'statistics', 'tap_rephist_value', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 870), ('config-can-saveconf', 'configuration', 'boolean', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 875), ('limits/max-mem-in-queues', 'resource_limit', 'byte_count', 'unsupported', 'docs/tor-spec/17-control-protocol.md', 879);
+
+create table tor_control_bootstrap_phase_fact (
+  progress integer primary key,
+  stage integer not null,
+  tag text not null unique,
+  summary text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_control_bootstrap_phase_fact(progress, stage, tag, summary, source_name, source_line) values
+  (0, 1, 'starting', 'Starting', 'docs/tor-spec/17-control-protocol.md', 1813), (1, 1, 'conn_pt', 'Connecting to pluggable transport', 'docs/tor-spec/17-control-protocol.md', 1817), (2, 1, 'conn_done_pt', 'Connected to pluggable transport', 'docs/tor-spec/17-control-protocol.md', 1825), (3, 1, 'conn_proxy', 'Connecting to proxy', 'docs/tor-spec/17-control-protocol.md', 1833), (4, 1, 'conn_done_proxy', 'Connected to proxy', 'docs/tor-spec/17-control-protocol.md', 1841), (5, 1, 'conn', 'Connecting to a relay', 'docs/tor-spec/17-control-protocol.md', 1849), (10, 1, 'conn_done', 'Connected to a relay', 'docs/tor-spec/17-control-protocol.md', 1858), (14, 1, 'handshake', 'Handshaking with a relay', 'docs/tor-spec/17-control-protocol.md', 1864), (15, 1, 'handshake_done', 'Handshake with a relay done', 'docs/tor-spec/17-control-protocol.md', 1870), (20, 2, 'onehop_create', 'Establishing an encrypted directory connection', 'docs/tor-spec/17-control-protocol.md', 1880), (25, 2, 'requesting_status', 'Asking for networkstatus consensus', 'docs/tor-spec/17-control-protocol.md', 1888), (30, 2, 'loading_status', 'Loading networkstatus consensus', 'docs/tor-spec/17-control-protocol.md', 1896), (40, 2, 'loading_keys', 'Loading authority key certs', 'docs/tor-spec/17-control-protocol.md', 1906), (45, 2, 'requesting_descriptors', 'Asking for relay descriptors', 'docs/tor-spec/17-control-protocol.md', 1910), (50, 2, 'loading_descriptors', 'Loading relay descriptors', 'docs/tor-spec/17-control-protocol.md', 1920), (75, 2, 'enough_dirinfo', 'Loaded enough directory info to build circuits', 'docs/tor-spec/17-control-protocol.md', 1928), (76, 3, 'ap_conn_pt', 'Connecting to pluggable transport to build circuits', 'docs/tor-spec/17-control-protocol.md', 1938), (77, 3, 'ap_conn_done_pt', 'Connected to pluggable transport to build circuits', 'docs/tor-spec/17-control-protocol.md', 1947), (78, 3, 'ap_conn_proxy', 'Connecting to proxy to build circuits', 'docs/tor-spec/17-control-protocol.md', 1955), (79, 3, 'ap_conn_done_proxy', 'Connected to proxy to build circuits', 'docs/tor-spec/17-control-protocol.md', 1963), (80, 3, 'ap_conn', 'Connecting to a relay to build circuits', 'docs/tor-spec/17-control-protocol.md', 1971), (85, 3, 'ap_conn_done', 'Connected to a relay to build circuits', 'docs/tor-spec/17-control-protocol.md', 1979), (89, 3, 'ap_handshake', 'Finishing handshake with a relay to build circuits', 'docs/tor-spec/17-control-protocol.md', 1987), (90, 3, 'ap_handshake_done', 'Handshake finished with a relay to build circuits', 'docs/tor-spec/17-control-protocol.md', 1995), (95, 3, 'circuit_create', 'Establishing a Tor circuit', 'docs/tor-spec/17-control-protocol.md', 2003), (100, 3, 'done', 'Done', 'docs/tor-spec/17-control-protocol.md', 2017);
+
+create table tor_control_status_action_fact (
+  status_type text not null,
+  action_name text not null,
+  severity_set text not null,
+  argument_set text not null,
+  source_name text not null,
+  source_line integer not null,
+  primary key (status_type, action_name)
+);
+
+insert into tor_control_status_action_fact(status_type, action_name, severity_set, argument_set, source_name, source_line) values
+  ('STATUS_GENERAL', 'CLOCK_JUMPED', 'NOTICE|WARN', 'TIME', 'docs/tor-spec/17-control-protocol.md', 2945), ('STATUS_GENERAL', 'DANGEROUS_VERSION', 'NOTICE|WARN', 'CURRENT|REASON|RECOMMENDED', 'docs/tor-spec/17-control-protocol.md', 2951), ('STATUS_GENERAL', 'TOO_MANY_CONNECTIONS', 'WARN', 'CURRENT', 'docs/tor-spec/17-control-protocol.md', 2958), ('STATUS_GENERAL', 'BUG', 'WARN', 'REASON', 'docs/tor-spec/17-control-protocol.md', 2962), ('STATUS_GENERAL', 'CLOCK_SKEW', 'WARN', 'SKEW|MIN_SKEW|SOURCE', 'docs/tor-spec/17-control-protocol.md', 2966), ('STATUS_GENERAL', 'BAD_LIBEVENT', 'WARN', 'METHOD|VERSION|BADNESS|RECOVERED', 'docs/tor-spec/17-control-protocol.md', 2973), ('STATUS_GENERAL', 'DIR_ALL_UNREACHABLE', 'WARN', '', 'docs/tor-spec/17-control-protocol.md', 2981), ('STATUS_CLIENT', 'BOOTSTRAP', 'NOTICE|WARN', 'PROGRESS|TAG|SUMMARY|WARNING|REASON|COUNT|RECOMMENDATION|HOST|HOSTADDR', 'docs/tor-spec/17-control-protocol.md', 2987), ('STATUS_CLIENT', 'ENOUGH_DIR_INFO', 'NOTICE', '', 'docs/tor-spec/17-control-protocol.md', 3042), ('STATUS_CLIENT', 'NOT_ENOUGH_DIR_INFO', 'WARN', '', 'docs/tor-spec/17-control-protocol.md', 3050), ('STATUS_CLIENT', 'CIRCUIT_ESTABLISHED', 'NOTICE', '', 'docs/tor-spec/17-control-protocol.md', 3058), ('STATUS_CLIENT', 'CIRCUIT_NOT_ESTABLISHED', 'WARN', 'REASON', 'docs/tor-spec/17-control-protocol.md', 3069), ('STATUS_CLIENT', 'CONSENSUS_ARRIVED', 'NOTICE', '', 'docs/tor-spec/17-control-protocol.md', 3079), ('STATUS_CLIENT', 'DANGEROUS_PORT', 'WARN', 'PORT|RESULT', 'docs/tor-spec/17-control-protocol.md', 3082);
+
+create table tor_bandwidth_file_version_fact (
+  format_version text primary key,
+  status text not null,
+  semantic_delta text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_bandwidth_file_version_fact(format_version, status, semantic_delta, source_name, source_line) values
+  ('1.0.0', 'legacy', 'timestamp plus relay lines; all Tor versions consume it', 'docs/tor-spec/19-bandwidth-file.md', 1069), ('1.1.0', 'compatible', 'adds header metadata and documents sbws/torflow relay keys', 'docs/tor-spec/19-bandwidth-file.md', 1071), ('1.2.0', 'compatible', 'adds eligible relay thresholds, countries, header statistics, and relay bandwidth variants', 'docs/tor-spec/19-bandwidth-file.md', 1074), ('1.4.0', 'compatible', 'adds monitoring keys and diagnostic relay lines marked vote=0', 'docs/tor-spec/19-bandwidth-file.md', 1084), ('1.5.0', 'compatible', 'removes recent_measurement_attempt_count header key', 'docs/tor-spec/19-bandwidth-file.md', 1094), ('1.6.0', 'compatible', 'adds congestion-control stream event keys', 'docs/tor-spec/19-bandwidth-file.md', 1095), ('1.7.0', 'compatible', 'adds stream ratio relay keys and network-average header keys', 'docs/tor-spec/19-bandwidth-file.md', 1096), ('1.8.0', 'compatible', 'adds dirauth_nickname header key', 'docs/tor-spec/19-bandwidth-file.md', 1098), ('1.9.0', 'compatible', 'allows node_id without a leading dollar sign', 'docs/tor-spec/19-bandwidth-file.md', 1099);
+
+create table tor_bandwidth_file_grammar_fact (
+  grammar_name text primary key,
+  expression text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_bandwidth_file_grammar_fact(grammar_name, expression, source_name, source_line) values
+  ('Line', 'ArgumentChar* NL', 'docs/tor-spec/19-bandwidth-file.md', 42), ('RelayLine', 'KeyValue (SP KeyValue)* NL', 'docs/tor-spec/19-bandwidth-file.md', 43), ('HeaderLine', 'KeyValue NL', 'docs/tor-spec/19-bandwidth-file.md', 44), ('KeyValue', 'Key "=" Value', 'docs/tor-spec/19-bandwidth-file.md', 45), ('Key', '(KeywordChar | "_")+', 'docs/tor-spec/19-bandwidth-file.md', 46), ('Value', 'ArgumentCharValue+', 'docs/tor-spec/19-bandwidth-file.md', 47), ('ArgumentCharValue', 'printing ASCII except NL and SP', 'docs/tor-spec/19-bandwidth-file.md', 48), ('Terminator', '"=====" or "===="; generators SHOULD use 5 characters', 'docs/tor-spec/19-bandwidth-file.md', 49), ('Timestamp', 'Int', 'docs/tor-spec/19-bandwidth-file.md', 51), ('Bandwidth', 'Int', 'docs/tor-spec/19-bandwidth-file.md', 52), ('MasterKey', 'base64 Ed25519 public key without padding', 'docs/tor-spec/19-bandwidth-file.md', 53), ('CountryCode', 'ISO 3166-1 alpha-2 plus ZZ', 'docs/tor-spec/19-bandwidth-file.md', 55), ('CountryCodeList', 'CountryCode (, CountryCode)*', 'docs/tor-spec/19-bandwidth-file.md', 58);
+
+create table tor_bandwidth_file_key_fact (
+  section_name text not null,
+  key_name text not null,
+  value_type text not null,
+  cardinality text not null,
+  introduced_version text not null,
+  removed_version text not null,
+  semantic_role text not null,
+  source_name text not null,
+  source_line integer not null,
+  primary key (section_name, key_name)
+);
+
+insert into tor_bandwidth_file_key_fact(section_name, key_name, value_type, cardinality, introduced_version, removed_version, semantic_role, source_name, source_line) values
+  ('header', 'timestamp', 'Timestamp', 'exactly_once_at_start', '1.0.0', '', 'most recent generator bandwidth result Unix epoch seconds', 'docs/tor-spec/19-bandwidth-file.md', 96), ('header', 'version', 'version_number', 'zero_or_one_second_position', '1.1.0', '', 'specification document format version; absent means 1.0.0', 'docs/tor-spec/19-bandwidth-file.md', 110), ('header', 'software', 'Value', 'zero_or_one', '1.1.0', '', 'generator software name; absent means torflow for 1.0.0', 'docs/tor-spec/19-bandwidth-file.md', 120), ('header', 'software_version', 'Value', 'zero_or_one', '1.1.0', '', 'generator software version', 'docs/tor-spec/19-bandwidth-file.md', 130), ('header', 'file_created', 'DateTime', 'zero_or_one', '1.1.0', '', 'file creation timestamp', 'docs/tor-spec/19-bandwidth-file.md', 138), ('header', 'generator_started', 'DateTime', 'zero_or_one', '1.1.0', '', 'generator start timestamp', 'docs/tor-spec/19-bandwidth-file.md', 146), ('header', 'earliest_bandwidth', 'DateTime', 'zero_or_one', '1.1.0', '', 'first relay bandwidth timestamp', 'docs/tor-spec/19-bandwidth-file.md', 154), ('header', 'latest_bandwidth', 'DateTime', 'zero_or_one', '1.1.0', '', 'most recent generator result; must match timestamp', 'docs/tor-spec/19-bandwidth-file.md', 162), ('header', 'number_eligible_relays', 'Int', 'zero_or_one', '1.2.0', '', 'relays with enough measurements', 'docs/tor-spec/19-bandwidth-file.md', 174), ('header', 'minimum_percent_eligible_relays', 'Int', 'zero_or_one', '1.2.0', '', 'minimum percentage of consensus relays that should be included', 'docs/tor-spec/19-bandwidth-file.md', 182), ('header', 'number_consensus_relays', 'Int', 'zero_or_one', '1.2.0', '', 'number of relays in the consensus', 'docs/tor-spec/19-bandwidth-file.md', 196), ('header', 'percent_eligible_relays', 'Int', 'zero_or_one', '1.2.0', '', 'number_eligible_relays percentage of number_consensus_relays', 'docs/tor-spec/19-bandwidth-file.md', 204), ('header', 'minimum_number_eligible_relays', 'Int', 'zero_or_one', '1.2.0', '', 'minimum relays that should be included', 'docs/tor-spec/19-bandwidth-file.md', 216), ('header', 'scanner_country', 'CountryCode', 'zero_or_one', '1.2.0', '', 'country where generator runs', 'docs/tor-spec/19-bandwidth-file.md', 229), ('header', 'destinations_countries', 'CountryCodeList', 'zero_or_one', '1.2.0', '', 'countries where measurement destinations are located', 'docs/tor-spec/19-bandwidth-file.md', 237), ('header', 'recent_consensus_count', 'Int', 'zero_or_one', '1.4.0', '', 'consensuses seen in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 247), ('header', 'recent_priority_list_count', 'Int', 'zero_or_one', '1.4.0', '', 'priority lists created in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 261), ('header', 'recent_priority_relay_count', 'Int', 'zero_or_one', '1.4.0', '', 'relays prioritized in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 278), ('header', 'recent_measurement_attempt_count', 'Int', 'zero_or_one', '1.4.0', '1.5.0', 'relay measurement queue attempts in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 295), ('header', 'recent_measurement_failure_count', 'Int', 'zero_or_one', '1.4.0', '', 'measurement attempts that failed in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 307), ('header', 'recent_measurements_excluded_error_count', 'Int', 'zero_or_one', '1.4.0', '', 'relays with no successful recent measurements', 'docs/tor-spec/19-bandwidth-file.md', 315), ('header', 'recent_measurements_excluded_near_count', 'Int', 'zero_or_one', '1.4.0', '', 'relays whose successful measurements were too close in time', 'docs/tor-spec/19-bandwidth-file.md', 325), ('header', 'recent_measurements_excluded_old_count', 'Int', 'zero_or_one', '1.4.0', '', 'relays whose successful measurements are too old', 'docs/tor-spec/19-bandwidth-file.md', 335), ('header', 'recent_measurements_excluded_few_count', 'Int', 'zero_or_one', '1.4.0', '', 'relays with too few recent successful measurements', 'docs/tor-spec/19-bandwidth-file.md', 347), ('header', 'time_to_report_half_network', 'Int', 'zero_or_one', '1.4.0', '', 'seconds to report measurements for half the network', 'docs/tor-spec/19-bandwidth-file.md', 359), ('header', 'tor_version', 'version_number', 'zero_or_one', '1.4.0', '', 'Tor process version controlled by generator', 'docs/tor-spec/19-bandwidth-file.md', 369), ('header', 'mu', 'Int', 'zero_or_one', '1.7.0', '', 'network stream bandwidth average', 'docs/tor-spec/19-bandwidth-file.md', 377), ('header', 'muf', 'Int', 'zero_or_one', '1.7.0', '', 'filtered network stream bandwidth average', 'docs/tor-spec/19-bandwidth-file.md', 385), ('header', 'dirauth_nickname', 'Value', 'zero_or_one', '1.8.0', '', 'directory authority nickname publishing the file', 'docs/tor-spec/19-bandwidth-file.md', 397), ('header', 'terminator', 'Terminator', 'zero_or_one', '1.1.0', '', 'header list terminator; 5 characters preferred', 'docs/tor-spec/19-bandwidth-file.md', 417),
+  ('relay', 'node_id', 'hexdigest', 'exactly_once', '1.0.0', '', 'relay RSA identity fingerprint; required by current Tor', 'docs/tor-spec/19-bandwidth-file.md', 761), ('relay', 'master_key_ed25519', 'MasterKey', 'zero_or_one', '1.1.0', '', 'relay master Ed25519 identity key', 'docs/tor-spec/19-bandwidth-file.md', 779), ('relay', 'bw', 'Bandwidth', 'exactly_once', '1.0.0', '', 'relay bandwidth in kilobytes per second; generators should not produce zero', 'docs/tor-spec/19-bandwidth-file.md', 789), ('relay', 'nick', 'nickname', 'exactly_once', '1.1.0', '', 'relay nickname', 'docs/tor-spec/19-bandwidth-file.md', 455), ('relay', 'rtt', 'Int', 'zero_or_one', '1.1.0', '', 'round trip time in milliseconds for one byte', 'docs/tor-spec/19-bandwidth-file.md', 463), ('relay', 'time', 'DateWsTime', 'exactly_once', '1.1.0', '', 'timestamp when last bandwidth was obtained', 'docs/tor-spec/19-bandwidth-file.md', 471), ('relay', 'success', 'Int', 'zero_or_one', '1.1.0', '', 'successful relay measurements count', 'docs/tor-spec/19-bandwidth-file.md', 479), ('relay', 'error_circ', 'Int', 'zero_or_one', '1.1.0', '', 'circuit failure measurement count', 'docs/tor-spec/19-bandwidth-file.md', 487), ('relay', 'error_stream', 'Int', 'zero_or_one', '1.1.0', '', 'stream failure measurement count', 'docs/tor-spec/19-bandwidth-file.md', 495), ('relay', 'error_destination', 'Int', 'zero_or_one', '1.4.0', '', 'destination unavailable measurement failures', 'docs/tor-spec/19-bandwidth-file.md', 503), ('relay', 'error_second_relay', 'Int', 'zero_or_one', '1.4.0', '', 'failure to find second relay for test circuit', 'docs/tor-spec/19-bandwidth-file.md', 511), ('relay', 'error_misc', 'Int', 'zero_or_one', '1.1.0', '', 'other measurement failure count', 'docs/tor-spec/19-bandwidth-file.md', 519), ('relay', 'bw_mean', 'Int', 'zero_or_one', '1.2.0', '', 'measured bandwidth mean bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 527), ('relay', 'bw_median', 'Int', 'zero_or_one', '1.2.0', '', 'measured bandwidth median bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 535), ('relay', 'desc_bw_avg', 'Int', 'zero_or_one', '1.2.0', '', 'descriptor average bandwidth bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 543), ('relay', 'desc_bw_obs_last', 'Int', 'zero_or_one', '1.2.0', '', 'last descriptor observed bandwidth bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 551), ('relay', 'desc_bw_obs_mean', 'Int', 'zero_or_one', '1.2.0', '', 'descriptor observed bandwidth mean bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 559), ('relay', 'desc_bw_bur', 'Int', 'zero_or_one', '1.2.0', '', 'descriptor burst bandwidth bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 567), ('relay', 'consensus_bandwidth', 'Int', 'zero_or_one', '1.2.0', '', 'consensus bandwidth bytes per second', 'docs/tor-spec/19-bandwidth-file.md', 575), ('relay', 'consensus_bandwidth_is_unmeasured', 'Bool', 'zero_or_one', '1.2.0', '', 'whether consensus bandwidth lacks three or more bandwidth authorities', 'docs/tor-spec/19-bandwidth-file.md', 583), ('relay', 'relay_in_recent_consensus_count', 'Int', 'zero_or_one', '1.4.0', '', 'relay appearances in consensus in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 591), ('relay', 'relay_recent_priority_list_count', 'Int', 'zero_or_one', '1.4.0', '', 'relay prioritization count in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 599), ('relay', 'relay_recent_measurement_attempt_count', 'Int', 'zero_or_one', '1.4.0', '', 'relay measurement attempts in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 607), ('relay', 'relay_recent_measurement_failure_count', 'Int', 'zero_or_one', '1.4.0', '', 'relay failed measurement attempts in last data_period days', 'docs/tor-spec/19-bandwidth-file.md', 615), ('relay', 'relay_recent_measurements_excluded_error_count', 'Int', 'zero_or_one', '1.4.0', '', 'recent relay measurement attempts that failed', 'docs/tor-spec/19-bandwidth-file.md', 623), ('relay', 'relay_recent_measurements_excluded_near_count', 'Int', 'zero_or_one', '1.4.0', '', 'recent successful measurements ignored because too near', 'docs/tor-spec/19-bandwidth-file.md', 633), ('relay', 'relay_recent_measurements_excluded_old_count', 'Int', 'zero_or_one', '1.4.0', '', 'successful measurements too old', 'docs/tor-spec/19-bandwidth-file.md', 643), ('relay', 'relay_recent_measurements_excluded_few_count', 'Int', 'zero_or_one', '1.4.0', '', 'successful measurements ignored because too few', 'docs/tor-spec/19-bandwidth-file.md', 655), ('relay', 'under_min_report', 'bool', 'zero_or_one', '1.4.0', '', 'not enough eligible relays; authorities may not vote on this relay', 'docs/tor-spec/19-bandwidth-file.md', 667), ('relay', 'unmeasured', 'bool', 'zero_or_one', '1.4.0', '', 'relay was not successfully measured; generators must set bw=1', 'docs/tor-spec/19-bandwidth-file.md', 679), ('relay', 'vote', 'bool', 'zero_or_one', '1.4.0', '', '0 means authorities should ignore relay entry; 1 or absent means use bw', 'docs/tor-spec/19-bandwidth-file.md', 691), ('relay', 'xoff_recv', 'Int', 'zero_or_one', '1.6.0', '', 'XOFF_RECV stream events while measuring relay', 'docs/tor-spec/19-bandwidth-file.md', 705), ('relay', 'xoff_sent', 'Int', 'zero_or_one', '1.6.0', '', 'XOFF_SENT stream events while measuring relay', 'docs/tor-spec/19-bandwidth-file.md', 713), ('relay', 'r_strm', 'Float', 'zero_or_one', '1.7.0', '', 'stream ratio for relay', 'docs/tor-spec/19-bandwidth-file.md', 721), ('relay', 'r_strm_filt', 'Float', 'zero_or_one', '1.7.0', '', 'filtered stream ratio for relay', 'docs/tor-spec/19-bandwidth-file.md', 729);
+
+create table tor_bandwidth_file_rule_fact (
+  rule_name text primary key,
+  rule_kind text not null,
+  rule_text text not null,
+  source_name text not null,
+  source_line integer not null
+);
+
+insert into tor_bandwidth_file_rule_fact(rule_name, rule_kind, rule_text, source_name, source_line) values
+  ('file_sections', 'parse', 'header list exactly once, then zero or more relay lines; ignore file if sections missing', 'docs/tor-spec/19-bandwidth-file.md', 72), ('header_duplicate_key', 'parse', 'header MUST NOT contain duplicate KeyValue keys; parser SHOULD choose arbitrary line if duplicated', 'docs/tor-spec/19-bandwidth-file.md', 405), ('header_unknown_key', 'parse', 'unknown header KeyValue line MUST be ignored', 'docs/tor-spec/19-bandwidth-file.md', 407), ('relay_duplicate_key', 'parse', 'relay line MUST NOT contain duplicate keys; parser SHOULD choose arbitrary value if duplicated', 'docs/tor-spec/19-bandwidth-file.md', 753), ('relay_duplicate_identity', 'parse', 'multiple RelayLines per relay identity SHOULD warn; parser may reject, choose arbitrary, or ignore both', 'docs/tor-spec/19-bandwidth-file.md', 755), ('relay_unknown_key', 'parse', 'unknown relay extra material MUST be ignored', 'docs/tor-spec/19-bandwidth-file.md', 757), ('node_id_current_required', 'parse', 'current Tor ignores master_key_ed25519, so node_id MUST be present', 'docs/tor-spec/19-bandwidth-file.md', 773), ('node_id_dollar_optional_1_9_0', 'parse', 'version 1.9.0 allows node_id without leading dollar sign', 'docs/tor-spec/19-bandwidth-file.md', 777), ('minimum_percent_1_3_or_earlier', 'vote', 'if threshold not reached, versions 1.3.0 and earlier SHOULD NOT contain relay lines', 'docs/tor-spec/19-bandwidth-file.md', 188), ('minimum_percent_1_4_or_later', 'vote', 'if threshold not reached, versions 1.4.0 and later SHOULD include diagnostics marked not voteable', 'docs/tor-spec/19-bandwidth-file.md', 190), ('under_min_report_behavior', 'vote', 'under_min_report=1 means not enough eligible relays; do not change bw for compatibility', 'docs/tor-spec/19-bandwidth-file.md', 671), ('unmeasured_behavior', 'vote', 'unmeasured=1 means not successfully measured; generator MUST set bw=1', 'docs/tor-spec/19-bandwidth-file.md', 683), ('vote_zero_behavior', 'vote', 'vote=0 means authorities SHOULD ignore relay entry; vote absent or 1 means use bw', 'docs/tor-spec/19-bandwidth-file.md', 695), ('legacy_vote_zero_gap', 'compatibility', 'Tor 0.4.0.3-alpha, 0.3.5.8, 0.3.4.11 and earlier do not understand vote=0', 'docs/tor-spec/19-bandwidth-file.md', 1107), ('atomic_write', 'write', 'write bandwidth files atomically using temp path then rename', 'docs/tor-spec/19-bandwidth-file.md', 431), ('zero_total_scaling', 'scaling', 'if total bandwidth is zero, give all relays equal bandwidths', 'docs/tor-spec/19-bandwidth-file.md', 958), ('zero_scaled_round_up', 'scaling', 'if scaled bandwidth is zero, round up to one', 'docs/tor-spec/19-bandwidth-file.md', 960), ('linear_scaling_quota', 'scaling', 'relay quota = total measured bandwidth in all votes / relays with measured bandwidth votes', 'docs/tor-spec/19-bandwidth-file.md', 970), ('linear_scaling_vote_quota', 'scaling', 'vote quota = relay quota * number of relays measured by authority', 'docs/tor-spec/19-bandwidth-file.md', 976), ('linear_scaling_factor', 'scaling', 'scaling factor = vote quota / total unscaled measured bandwidth in upcoming vote', 'docs/tor-spec/19-bandwidth-file.md', 980), ('linear_scaling_apply', 'scaling', 'scaled bandwidth = unscaled measured bandwidth * scaling factor', 'docs/tor-spec/19-bandwidth-file.md', 984), ('torflow_filtered_bandwidth', 'aggregation', 'bw_filt_i = mean(max(mean(bw_j), bw_j))', 'docs/tor-spec/19-bandwidth-file.md', 1001), ('torflow_network_averages', 'aggregation', 'bw_avg_filt = sum filtered bandwidth / n; bw_avg_strm = sum measured bandwidth / n', 'docs/tor-spec/19-bandwidth-file.md', 1010), ('torflow_ratios', 'aggregation', 'r_filt_i = bw_filt_i / bw_avg_filt; r_strm_i = bw_i / bw_avg_strm', 'docs/tor-spec/19-bandwidth-file.md', 1025), ('torflow_final_ratio', 'aggregation', 'r_i = max(r_filt_i, r_strm_i)', 'docs/tor-spec/19-bandwidth-file.md', 1037), ('torflow_scaled_bandwidth', 'aggregation', 'bw_new_i = r_i * bw_obs_i', 'docs/tor-spec/19-bandwidth-file.md', 1045);
+
+create table media_format_fact (
+  format_name text primary key,
+  media_kind text not null,
+  container_kind text not null,
+  header_decode_status text not null,
+  payload_decode_status text not null,
+  encode_status text not null
+);
+
+insert into media_format_fact(format_name, media_kind, container_kind, header_decode_status, payload_decode_status, encode_status) values
+  ('png', 'image', 'chunked', 'supported', 'supported', 'unsupported'), ('jpeg', 'image', 'marker-segment', 'supported', 'supported', 'unsupported'), ('jxl-codestream', 'image', 'codestream', 'detected', 'unsupported', 'unsupported'), ('jxl-container', 'image', 'box-container', 'detected', 'unsupported', 'unsupported'), ('tga', 'image', 'fixed-header', 'supported', 'supported', 'supported'), ('runtime-image', 'image', 'canonical-owned', 'supported', 'supported', 'supported'), ('ivf', 'video', 'fixed-header-frame-records', 'supported', 'container-only', 'unsupported'), ('webm-video', 'video', 'ebml', 'supported', 'container-only', 'unsupported'), ('webm-audio', 'audio', 'ebml', 'supported', 'packet-only', 'unsupported');
+
+create table media_codec_fact (
+  codec_name text primary key,
+  media_kind text not null,
+  wire_id text not null,
+  payload_decode_status text not null
+);
+
+insert into media_codec_fact(codec_name, media_kind, wire_id, payload_decode_status) values
+  ('vp8', 'video', 'VP80|V_VP8', 'unsupported'), ('opus', 'audio', 'A_OPUS', 'packet-only'), ('vorbis', 'audio', 'A_VORBIS', 'packet-only'), ('rgba8', 'image', '1', 'supported');
+
+create table media_format_codec_fact (
+  format_name text not null references media_format_fact(format_name),
+  codec_name text not null references media_codec_fact(codec_name),
+  wire_id text not null,
+  primary key (format_name, codec_name, wire_id)
+);
+
+insert into media_format_codec_fact(format_name, codec_name, wire_id) values
+  ('ivf', 'vp8', 'VP80'), ('webm-video', 'vp8', 'V_VP8'), ('webm-audio', 'opus', 'A_OPUS'), ('webm-audio', 'vorbis', 'A_VORBIS'), ('runtime-image', 'rgba8', '1');
+
+create table media_codec_constant_fact (
+  codec_name text not null references media_codec_fact(codec_name),
+  symbol_name text not null,
+  constant_group text not null,
+  value_text text not null,
+  value_integer integer not null,
+  source_name text not null,
+  source_line integer not null,
+  primary key (codec_name, symbol_name)
+);
+
+insert into media_codec_constant_fact(codec_name, symbol_name, constant_group, value_text, value_integer, source_name, source_line) values
+  ('vp8', 'VP8_FRAME_TAG_SIZE', 'frame_tag', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 6), ('vp8', 'VP8_KEY_FRAME_HEADER_SIZE', 'frame_tag', '10', 10, 'kernel/x86_64/media/vp8_constants.inc', 7), ('vp8', 'VP8_FRAME_TYPE_KEY', 'frame_tag', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 8), ('vp8', 'VP8_FRAME_TYPE_INTER', 'frame_tag', '1', 1, 'kernel/x86_64/media/vp8_constants.inc', 9), ('vp8', 'VP8_FRAME_TYPE_MASK', 'frame_tag', '0x01', 1, 'kernel/x86_64/media/vp8_constants.inc', 10), ('vp8', 'VP8_VERSION_MASK', 'frame_tag', '0x0e', 14, 'kernel/x86_64/media/vp8_constants.inc', 11), ('vp8', 'VP8_VERSION_SHIFT', 'frame_tag', '1', 1, 'kernel/x86_64/media/vp8_constants.inc', 12), ('vp8', 'VP8_VERSION_MAX', 'frame_tag', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 13), ('vp8', 'VP8_SHOW_FRAME_MASK', 'frame_tag', '0x10', 16, 'kernel/x86_64/media/vp8_constants.inc', 14), ('vp8', 'VP8_SHOW_FRAME_SHIFT', 'frame_tag', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 15), ('vp8', 'VP8_SHOW_FRAME_VISIBLE', 'frame_tag', '1', 1, 'kernel/x86_64/media/vp8_constants.inc', 16), ('vp8', 'VP8_FIRST_PARTITION_LEN_SHIFT', 'frame_tag', '5', 5, 'kernel/x86_64/media/vp8_constants.inc', 17), ('vp8', 'VP8_FIRST_PARTITION_LEN_BITS', 'frame_tag', '19', 19, 'kernel/x86_64/media/vp8_constants.inc', 18), ('vp8', 'VP8_FIRST_PARTITION_LEN_MAX', 'frame_tag', '0x7ffff', 524287, 'kernel/x86_64/media/vp8_constants.inc', 19), ('vp8', 'VP8_START_CODE_OFFSET', 'key_frame_header', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 20), ('vp8', 'VP8_KEY_FRAME_START_CODE_0', 'key_frame_header', '0x9d', 157, 'kernel/x86_64/media/vp8_constants.inc', 21), ('vp8', 'VP8_KEY_FRAME_START_CODE_1', 'key_frame_header', '0x01', 1, 'kernel/x86_64/media/vp8_constants.inc', 22), ('vp8', 'VP8_KEY_FRAME_START_CODE_2', 'key_frame_header', '0x2a', 42, 'kernel/x86_64/media/vp8_constants.inc', 23), ('vp8', 'VP8_DIMENSION_MASK', 'key_frame_header', '0x3fff', 16383, 'kernel/x86_64/media/vp8_constants.inc', 24), ('vp8', 'VP8_DIMENSION_WIDTH_OFFSET', 'key_frame_header', '6', 6, 'kernel/x86_64/media/vp8_constants.inc', 25), ('vp8', 'VP8_DIMENSION_HEIGHT_OFFSET', 'key_frame_header', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 26),
+  ('vp8', 'VP8_BOOL_INITIAL_BYTES', 'bool_reader', '2', 2, 'kernel/x86_64/media/vp8_constants.inc', 52), ('vp8', 'VP8_BOOL_PROBABILITY_HALF', 'bool_reader', '128', 128, 'kernel/x86_64/media/vp8_constants.inc', 53), ('vp8', 'VP8_BOOL_BYTE_BITS', 'bool_reader', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 54), ('vp8', 'VP8_BOOL_RANGE_INIT', 'bool_reader', '255', 255, 'kernel/x86_64/media/vp8_constants.inc', 55), ('vp8', 'VP8_BOOL_RANGE_RENORM_MIN', 'bool_reader', '128', 128, 'kernel/x86_64/media/vp8_constants.inc', 56), ('vp8', 'VP8_BOOL_PROBABILITY_MAX', 'bool_reader', '255', 255, 'kernel/x86_64/media/vp8_constants.inc', 57), ('vp8', 'VP8_BOOL_LITERAL_BITS_MAX', 'bool_reader', '32', 32, 'kernel/x86_64/media/vp8_constants.inc', 58), ('vp8', 'VP8_BOOL_READER_BUF', 'bool_reader_layout', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 60), ('vp8', 'VP8_BOOL_READER_LEN', 'bool_reader_layout', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 61), ('vp8', 'VP8_BOOL_READER_INPUT_INDEX', 'bool_reader_layout', '12', 12, 'kernel/x86_64/media/vp8_constants.inc', 62), ('vp8', 'VP8_BOOL_READER_RANGE', 'bool_reader_layout', '16', 16, 'kernel/x86_64/media/vp8_constants.inc', 63), ('vp8', 'VP8_BOOL_READER_VALUE', 'bool_reader_layout', '20', 20, 'kernel/x86_64/media/vp8_constants.inc', 64), ('vp8', 'VP8_BOOL_READER_BIT_COUNT', 'bool_reader_layout', '24', 24, 'kernel/x86_64/media/vp8_constants.inc', 65), ('vp8', 'VP8_BOOL_READER_SIZE', 'bool_reader_layout', '32', 32, 'kernel/x86_64/media/vp8_constants.inc', 66),
+  ('vp8', 'VP8_TOKEN_PARTITION_COUNT_MAX', 'token_partition', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 68), ('vp8', 'VP8_TOKEN_PARTITION_SIZE_BYTES', 'token_partition', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 69), ('vp8', 'VP8_TOKEN_PARTITIONS_COUNT', 'token_partition_layout', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 71), ('vp8', 'VP8_TOKEN_PARTITIONS_TABLE', 'token_partition_layout', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 72), ('vp8', 'VP8_TOKEN_PARTITION_ENTRY_SIZE', 'token_partition_layout', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 73), ('vp8', 'VP8_TOKEN_PARTITION_OFFSET', 'token_partition_layout', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 74), ('vp8', 'VP8_TOKEN_PARTITION_LEN', 'token_partition_layout', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 75),
+  ('vp8', 'VP8_QUANT_BASE_BITS', 'quant', '7', 7, 'kernel/x86_64/media/vp8_constants.inc', 78), ('vp8', 'VP8_QUANT_DELTA_BITS', 'quant', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 79), ('vp8', 'VP8_QUANT_INDEX_MAX', 'quant', '127', 127, 'kernel/x86_64/media/vp8_constants.inc', 80), ('vp8', 'VP8_SEGMENT_COUNT', 'segmentation', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 101), ('vp8', 'VP8_SEGMENT_PROB_COUNT', 'segmentation', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 102), ('vp8', 'VP8_SEGMENT_PROB_DEFAULT', 'segmentation', '255', 255, 'kernel/x86_64/media/vp8_constants.inc', 103), ('vp8', 'VP8_LOOP_FILTER_LEVEL_BITS', 'loop_filter', '6', 6, 'kernel/x86_64/media/vp8_constants.inc', 115), ('vp8', 'VP8_LOOP_FILTER_SHARPNESS_BITS', 'loop_filter', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 116), ('vp8', 'VP8_LOOP_FILTER_LEVEL_MAX', 'loop_filter', '63', 63, 'kernel/x86_64/media/vp8_constants.inc', 129),
+  ('vp8', 'VP8_LUMA_MODE_DC', 'prediction_mode', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 177), ('vp8', 'VP8_LUMA_MODE_VERTICAL', 'prediction_mode', '1', 1, 'kernel/x86_64/media/vp8_constants.inc', 178), ('vp8', 'VP8_LUMA_MODE_HORIZONTAL', 'prediction_mode', '2', 2, 'kernel/x86_64/media/vp8_constants.inc', 179), ('vp8', 'VP8_LUMA_MODE_TRUE_MOTION', 'prediction_mode', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 180), ('vp8', 'VP8_LUMA_MODE_B_PRED', 'prediction_mode', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 181), ('vp8', 'VP8_CHROMA_MODE_DC', 'prediction_mode', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 183), ('vp8', 'VP8_CHROMA_MODE_VERTICAL', 'prediction_mode', '1', 1, 'kernel/x86_64/media/vp8_constants.inc', 184), ('vp8', 'VP8_CHROMA_MODE_HORIZONTAL', 'prediction_mode', '2', 2, 'kernel/x86_64/media/vp8_constants.inc', 185), ('vp8', 'VP8_CHROMA_MODE_TRUE_MOTION', 'prediction_mode', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 186), ('vp8', 'VP8_INTRA4_MODE_COUNT', 'prediction_mode', '10', 10, 'kernel/x86_64/media/vp8_constants.inc', 206),
+  ('vp8', 'VP8_COEFF_TYPE_COUNT', 'coefficient', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 230), ('vp8', 'VP8_COEFF_BAND_COUNT', 'coefficient', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 231), ('vp8', 'VP8_COEFF_CONTEXT_COUNT', 'coefficient', '3', 3, 'kernel/x86_64/media/vp8_constants.inc', 232), ('vp8', 'VP8_COEFF_PROBABILITY_COUNT', 'coefficient', '11', 11, 'kernel/x86_64/media/vp8_constants.inc', 233), ('vp8', 'VP8_COEFF_BLOCK_COEFF_COUNT', 'coefficient', '16', 16, 'kernel/x86_64/media/vp8_constants.inc', 248), ('vp8', 'VP8_IDCT_COSPI8SQRT2MINUS1', 'transform', '20091', 20091, 'kernel/x86_64/media/vp8_constants.inc', 253), ('vp8', 'VP8_IDCT_SINPI8SQRT2', 'transform', '35468', 35468, 'kernel/x86_64/media/vp8_constants.inc', 254),
+  ('vp8', 'VP8_MACROBLOCK_SIZE', 'macroblock', '16', 16, 'kernel/x86_64/media/vp8_constants.inc', 263), ('vp8', 'VP8_BLOCK_SIZE', 'macroblock', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 264), ('vp8', 'VP8_CHROMA_BLOCK_SIZE', 'macroblock', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 265), ('vp8', 'VP8_Y_BLOCK_COUNT', 'macroblock', '16', 16, 'kernel/x86_64/media/vp8_constants.inc', 266), ('vp8', 'VP8_UV_BLOCK_COUNT', 'macroblock', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 267), ('vp8', 'VP8_MACROBLOCK_COEFF_BLOCK_COUNT', 'macroblock', '25', 25, 'kernel/x86_64/media/vp8_constants.inc', 269), ('vp8', 'VP8_NEUTRAL_LUMA', 'pixel', '128', 128, 'kernel/x86_64/media/vp8_constants.inc', 289), ('vp8', 'VP8_MAX_LEGACY_DIMENSION', 'dimension', '16384', 16384, 'kernel/x86_64/media/vp8_constants.inc', 292), ('vp8', 'VP8_YUV_CENTER', 'color', '128', 128, 'kernel/x86_64/media/vp8_constants.inc', 298), ('vp8', 'VP8_YUV_SHIFT', 'color', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 300), ('vp8', 'VP8_YUV_V_TO_R', 'color', '359', 359, 'kernel/x86_64/media/vp8_constants.inc', 301), ('vp8', 'VP8_YUV_U_TO_G', 'color', '88', 88, 'kernel/x86_64/media/vp8_constants.inc', 302), ('vp8', 'VP8_YUV_V_TO_G', 'color', '183', 183, 'kernel/x86_64/media/vp8_constants.inc', 303), ('vp8', 'VP8_YUV_U_TO_B', 'color', '454', 454, 'kernel/x86_64/media/vp8_constants.inc', 304), ('vp8', 'VP8_RGBA_ALPHA_OPAQUE', 'color', '255', 255, 'kernel/x86_64/media/vp8_constants.inc', 305),
+  ('vp8', 'VP8_MV_COMPONENT_COUNT', 'motion_vector', '2', 2, 'kernel/x86_64/media/vp8_constants.inc', 320), ('vp8', 'VP8_MV_PROBABILITY_COUNT', 'motion_vector', '19', 19, 'kernel/x86_64/media/vp8_constants.inc', 321), ('vp8', 'VP8_MOTION_VECTOR_ROW', 'motion_vector_layout', '0', 0, 'kernel/x86_64/media/vp8_constants.inc', 333), ('vp8', 'VP8_MOTION_VECTOR_COL', 'motion_vector_layout', '2', 2, 'kernel/x86_64/media/vp8_constants.inc', 334), ('vp8', 'VP8_MOTION_VECTOR_SIZE', 'motion_vector_layout', '4', 4, 'kernel/x86_64/media/vp8_constants.inc', 335), ('vp8', 'VP8_SUBPIXEL_FILTER_TAP_COUNT', 'subpixel_filter', '6', 6, 'kernel/x86_64/media/vp8_constants.inc', 362), ('vp8', 'VP8_SUBPIXEL_FILTER_ROUND', 'subpixel_filter', '64', 64, 'kernel/x86_64/media/vp8_constants.inc', 363), ('vp8', 'VP8_SUBPIXEL_FILTER_SHIFT', 'subpixel_filter', '7', 7, 'kernel/x86_64/media/vp8_constants.inc', 364), ('vp8', 'VP8_SUBPIXEL_FILTER_PHASE_COUNT', 'subpixel_filter', '8', 8, 'kernel/x86_64/media/vp8_constants.inc', 365);
+
+create table media_signature_fact (
+  format_name text not null references media_format_fact(format_name),
+  signature_kind text not null,
+  byte_offset integer,
+  byte_len integer not null,
+  signature_hex text not null,
+  signature_ascii text not null,
+  primary key (format_name, signature_kind)
+);
+
+insert into media_signature_fact(format_name, signature_kind, byte_offset, byte_len, signature_hex, signature_ascii) values
+  ('png', 'header', 0, 8, '89504e470d0a1a0a', ''), ('jpeg', 'header', 0, 2, 'ffd8', ''), ('jxl-codestream', 'header', 0, 2, 'ff0a', ''), ('jxl-container', 'header', 0, 12, '0000000c4a584c200d0a870a', ''), ('tga', 'footer', null, 18, '54525545564953494f4e2d5846494c452e00', 'TRUEVISION-XFILE.'), ('runtime-image', 'header', 0, 8, '4552494d47303031', 'ERIMG001'), ('ivf', 'header', 0, 4, '444b4946', 'DKIF'), ('webm-video', 'header', 0, 4, '1a45dfa3', ''), ('webm-audio', 'header', 0, 4, '1a45dfa3', '');
+
+create table media_container_field_fact (
+  format_name text not null references media_format_fact(format_name),
+  field_name text not null,
+  byte_offset integer not null,
+  byte_len integer not null,
+  endian text not null,
+  value_kind text not null,
+  required_value text not null,
+  primary key (format_name, field_name)
+);
+
+insert into media_container_field_fact(format_name, field_name, byte_offset, byte_len, endian, value_kind, required_value) values
+  ('png', 'ihdr.width', 16, 4, 'big', 'u32', ''), ('png', 'ihdr.height', 20, 4, 'big', 'u32', ''), ('png', 'ihdr.bit_depth', 24, 1, 'none', 'u8', '8'), ('png', 'ihdr.color_type', 25, 1, 'none', 'u8', '0|2|4|6'), ('png', 'ihdr.compression', 26, 1, 'none', 'u8', '0'), ('png', 'ihdr.filter', 27, 1, 'none', 'u8', '0'), ('png', 'ihdr.interlace', 28, 1, 'none', 'u8', '0'), ('runtime-image', 'abi_version', 8, 2, 'little', 'u16', '1'), ('runtime-image', 'format', 10, 2, 'little', 'u16', '1'), ('runtime-image', 'flags', 12, 4, 'little', 'u32', '0'), ('runtime-image', 'width', 16, 4, 'little', 'u32', ''), ('runtime-image', 'height', 20, 4, 'little', 'u32', ''), ('runtime-image', 'tile_w', 24, 2, 'little', 'u16', ''), ('runtime-image', 'tile_h', 26, 2, 'little', 'u16', ''), ('runtime-image', 'tile_count', 28, 4, 'little', 'u32', ''), ('runtime-image', 'payload_len', 32, 8, 'little', 'u64', ''), ('ivf', 'codec', 8, 4, 'none', 'ascii', 'VP80'), ('ivf', 'width', 12, 2, 'little', 'u16', ''), ('ivf', 'height', 14, 2, 'little', 'u16', ''), ('ivf', 'frame_count', 24, 4, 'little', 'u32', ''), ('tga', 'image_type', 2, 1, 'none', 'u8', '2'), ('tga', 'width', 12, 2, 'little', 'u16', ''), ('tga', 'height', 14, 2, 'little', 'u16', ''), ('tga', 'depth', 16, 1, 'none', 'u8', '24|32'), ('tga', 'descriptor', 17, 1, 'none', 'u8', '');
+
+create table media_ebml_element_fact (
+  format_name text not null references media_format_fact(format_name),
+  element_name text not null,
+  element_id_hex text not null,
+  value_kind text not null,
+  required_value text not null,
+  primary key (format_name, element_name)
+);
+
+insert into media_ebml_element_fact(format_name, element_name, element_id_hex, value_kind, required_value) values
+  ('webm-video', 'ebml', '1a45dfa3', 'master', ''), ('webm-video', 'segment', '18538067', 'master', ''), ('webm-video', 'tracks', '1654ae6b', 'master', ''), ('webm-video', 'track_entry', 'ae', 'master', ''), ('webm-video', 'track_type', '83', 'uint', '1'), ('webm-video', 'codec_id', '86', 'string', 'V_VP8'), ('webm-video', 'video', 'e0', 'master', ''), ('webm-video', 'pixel_width', 'b0', 'uint', ''), ('webm-video', 'pixel_height', 'ba', 'uint', ''), ('webm-video', 'cluster', '1f43b675', 'master', ''), ('webm-video', 'simple_block', 'a3', 'block', ''), ('webm-audio', 'ebml', '1a45dfa3', 'master', ''), ('webm-audio', 'segment', '18538067', 'master', ''), ('webm-audio', 'tracks', '1654ae6b', 'master', ''), ('webm-audio', 'track_entry', 'ae', 'master', ''), ('webm-audio', 'track_type', '83', 'uint', '2'), ('webm-audio', 'codec_id', '86', 'string', 'A_OPUS|A_VORBIS'), ('webm-audio', 'audio', 'e1', 'master', ''), ('webm-audio', 'sampling_frequency', 'b5', 'float', 'default:8000'), ('webm-audio', 'channels', '9f', 'uint', 'default:1'), ('webm-audio', 'cluster', '1f43b675', 'master', ''), ('webm-audio', 'simple_block', 'a3', 'block', '');
+
+create view engine_entity_fact as
+select 'category.' || category_name as entity_name,
+       'category' as entity_kind,
+       category_name,
+       description as label,
+       'engine.category' as provenance
+from engine_category_fact
+union all
+select 'unit.' || unit_name,
+       'unit',
+       'unit',
+       unit_name,
+       'engine.unit'
+from engine_unit_fact
+union all
+select 'relation.' || relation_name,
+       'relation',
+       'relation',
+       relation_name,
+       'engine.relation_kind'
+from engine_relation_kind_fact
+union all
+select 'tor.control',
+       'control_surface',
+       'control_surface',
+       'tor-control',
+       'tor_control_command_fact'
+union all
+select 'tor.control.command.' || command_name,
+       command_kind,
+       command_kind,
+       command_name,
+       'tor_control_command_fact'
+from tor_control_command_fact
+union all
+select 'tor.control.event.' || event_name,
+       'event',
+       'event',
+       event_name,
+       'tor_control_event_fact'
+from tor_control_event_fact
+union all
+select 'tor.control.reply.' || reply_code,
+       'reply_code',
+       'reply_code',
+       cast(reply_code as text),
+       'tor_control_reply_code_fact'
+from tor_control_reply_code_fact
+union all
+select 'media.constant.' || codec_name || '.' || symbol_name,
+       'constant',
+       'constant',
+       symbol_name,
+       'media_codec_constant_fact'
+from media_codec_constant_fact
+union all
+select 'protocol.' || id,
+       'protocol',
+       'protocol',
+       name,
+       'edgerun_protocol_fact'
+from edgerun_protocol_fact
+union all
+select 'definition.' || id,
+       case kind when 'sum-frame' then 'message' else 'message' end,
+       'message',
+       id,
+       'edgerun_definition_fact'
+from edgerun_definition_fact
+union all
+select 'field.' || definition.id || '.' || field.name,
+       'field',
+       'field',
+       field.name,
+       'edgerun_definition_field_fact'
+from edgerun_definition_field_fact field
+join edgerun_definition_fact definition using (definition_id)
+union all
+select 'clause.' || id,
+       'clause',
+       'clause',
+       id,
+       'edgerun_clause_fact'
+from edgerun_clause_fact
+union all
+select 'standard.' || standard,
+       'standard',
+       'standard',
+       standard,
+       'edgerun_clause_fact'
+from edgerun_clause_fact
+group by standard
+union all
+select 'media.format.' || format_name,
+       'media_format',
+       'media_format',
+       format_name,
+       'media_format_fact'
+from media_format_fact
+union all
+select 'media.codec.' || codec_name,
+       'codec',
+       'codec',
+       codec_name,
+       'media_codec_fact'
+from media_codec_fact
+union all
+select 'media.field.' || format_name || '.' || field_name,
+       'field',
+       'field',
+       field_name,
+       'media_container_field_fact'
+from media_container_field_fact
+union all
+select 'media.field.' || format_name || '.ebml.' || element_name,
+       'field',
+       'field',
+       element_name,
+       'media_ebml_element_fact'
+from media_ebml_element_fact;
+
+create view engine_relation_fact as
+select 'category.' || child_category as subject_entity,
+       relation_name,
+       'category.' || parent_category as object_entity,
+       null as object_value,
+       '' as unit_name,
+       'category_relation' as relation_source,
+       'engine.category_relation' as provenance
+from engine_category_relation_fact
+union all
+select 'unit.' || unit_name,
+       'measured_in',
+       'unit.' || base_unit_name,
+       cast(scale_to_base as text),
+       base_unit_name,
+       'unit_conversion',
+       'engine.unit'
+from engine_unit_fact
+union all
+select 'tor.control',
+       'has_command',
+       'tor.control.command.' || command_name,
+       host_surface_status,
+       '',
+       'tor_control_command',
+       'tor_control_command_fact'
+from tor_control_command_fact
+union all
+select 'tor.control',
+       'emits_event',
+       'tor.control.event.' || event_name,
+       host_surface_status,
+       '',
+       'tor_control_event',
+       'tor_control_event_fact'
+from tor_control_event_fact
+union all
+select 'tor.control',
+       'has_reply_code',
+       'tor.control.reply.' || reply_code,
+       reply_class,
+       '',
+       'tor_control_reply_code',
+       'tor_control_reply_code_fact'
+from tor_control_reply_code_fact
+union all
+select 'protocol.' || protocol.id,
+       'has_message',
+       'definition.' || definition.id,
+       null,
+       '',
+       'protocol_definition',
+       'edgerun_definition_fact'
+from edgerun_protocol_fact protocol
+join edgerun_definition_fact definition on definition.id like protocol.id || '%'
+union all
+select 'definition.' || definition.id,
+       'has_field',
+       'field.' || definition.id || '.' || field.name,
+       cast(field.field_order as text),
+       '',
+       'definition_field',
+       'edgerun_definition_field_fact'
+from edgerun_definition_field_fact field
+join edgerun_definition_fact definition using (definition_id)
+union all
+select 'field.' || definition.id || '.' || field.name,
+       'field_width',
+       null,
+       case field.field_type when 'u16be' then '16' else field.length_expr end,
+       case field.field_type when 'u16be' then 'bit' else 'byte' end,
+       'field_type_width',
+       'edgerun_definition_field_fact'
+from edgerun_definition_field_fact field
+join edgerun_definition_fact definition using (definition_id)
+union all
+select 'field.' || definition_id || '.' || field_name,
+       'field_offset',
+       null,
+       cast(byte_offset as text),
+       'byte_offset',
+       'field_layout',
+       'engine_definition_field_layout_fact'
+from engine_definition_field_layout_fact
+union all
+select 'clause.' || id,
+       'constrains',
+       'definition.' || subject,
+       predicate_expr,
+       '',
+       'clause_subject',
+       'edgerun_clause_fact'
+from edgerun_clause_fact
+union all
+select 'clause.' || id,
+       'defined_by',
+       'standard.' || standard,
+       section,
+       '',
+       'clause_standard',
+       'edgerun_clause_fact'
+from edgerun_clause_fact
+union all
+select 'media.format.' || format_name,
+       'has_signature',
+       null,
+       signature_kind || ':' || signature_hex,
+       'byte',
+       'media_signature',
+       'media_signature_fact'
+from media_signature_fact
+union all
+select 'media.format.' || format_name,
+       'supports_codec',
+       'media.codec.' || codec_name,
+       wire_id,
+       '',
+       'media_codec_binding',
+       'media_format_codec_fact'
+from media_format_codec_fact
+union all
+select 'media.codec.' || codec_name,
+       'has_constant',
+       'media.constant.' || codec_name || '.' || symbol_name,
+       constant_group,
+       '',
+       'media_codec_constant',
+       'media_codec_constant_fact'
+from media_codec_constant_fact
+union all
+select 'media.constant.' || codec_name || '.' || symbol_name,
+       'constant_value',
+       null,
+       cast(value_integer as text),
+       '',
+       'media_codec_constant',
+       'media_codec_constant_fact'
+from media_codec_constant_fact
+union all
+select 'media.format.' || format_name,
+       'has_field',
+       'media.field.' || format_name || '.' || field_name,
+       required_value,
+       '',
+       'media_container_field',
+       'media_container_field_fact'
+from media_container_field_fact
+union all
+select 'media.field.' || format_name || '.' || field_name,
+       'field_offset',
+       null,
+       cast(byte_offset as text),
+       'byte_offset',
+       'media_container_field',
+       'media_container_field_fact'
+from media_container_field_fact
+union all
+select 'media.field.' || format_name || '.' || field_name,
+       'field_width',
+       null,
+       cast(byte_len * 8 as text),
+       'bit',
+       'media_container_field',
+       'media_container_field_fact'
+from media_container_field_fact
+union all
+select 'media.format.' || format_name,
+       'has_field',
+       'media.field.' || format_name || '.ebml.' || element_name,
+       element_id_hex,
+       '',
+       'media_ebml_element',
+       'media_ebml_element_fact'
+from media_ebml_element_fact;
+
+create view engine_relation_conflict as
+select relation.subject_entity,
+       relation.relation_name,
+       relation.unit_name,
+       count(distinct relation.object_value) as distinct_value_count,
+       group_concat(distinct relation.object_value || ' ' || relation.unit_name) as values_seen
+from engine_relation_resident relation
+join engine_relation_kind_fact kind using (relation_name)
+where kind.cardinality = 'single'
+  and relation.object_value is not null
+group by relation.subject_entity, relation.relation_name, relation.unit_name
+having count(distinct relation.object_value) > 1;
+
+create table engine_relation_signature_fact (
+  relation_name text not null references engine_relation_kind_fact(relation_name),
+  subject_category text not null references engine_category_fact(category_name),
+  object_category text not null references engine_category_fact(category_name),
+  unit_category text not null references engine_category_fact(category_name),
+  primary key (relation_name, subject_category, object_category)
+);
+
+insert into engine_relation_signature_fact(relation_name, subject_category, object_category, unit_category) values
+  ('field_offset', 'field', 'offset', 'unit'),
+  ('field_width', 'field', 'width', 'unit');
+
+create view engine_relation_import_gap as
+select relation.subject_entity,
+       relation.relation_name,
+       relation.object_entity,
+       relation.object_value,
+       'unknown_relation_kind' as gap_kind,
+       relation.provenance
+from engine_relation_resident relation
+left join engine_relation_kind_fact kind using (relation_name)
+where kind.relation_name is null
+union all
+select relation.subject_entity,
+       relation.relation_name,
+       relation.object_entity,
+       relation.object_value,
+       'unknown_subject_entity',
+       relation.provenance
+from engine_relation_resident relation
+left join engine_entity_resident entity on entity.entity_name = relation.subject_entity
+where entity.entity_name is null
+union all
+select relation.subject_entity,
+       relation.relation_name,
+       relation.object_entity,
+       relation.object_value,
+       'unknown_object_entity',
+       relation.provenance
+from engine_relation_resident relation
+left join engine_entity_resident entity on entity.entity_name = relation.object_entity
+where relation.object_entity is not null
+  and entity.entity_name is null;
 
 create view engine_corpus_case_fact as
-select corpus_name,
-       case_name,
-       hex_bytes,
-       length(hex_bytes) / 2 as byte_len,
-       description,
-       expect_exit
-from edgerun_corpus_case_fact
-union all
 select derived.corpus_name,
        derived.case_name,
-       replace(replace(trim(cast(hex_source.content as text)), char(10), ''), char(13), ''),
-       length(replace(replace(trim(cast(hex_source.content as text)), char(10), ''), char(13), '')) / 2,
+       replace(replace(trim(cast(hex_source.content as text)), char(10), ''), char(13), '') as hex_bytes,
+       length(replace(replace(trim(cast(hex_source.content as text)), char(10), ''), char(13), '')) / 2 as byte_len,
        derived.description,
        derived.expect_exit
 from toml_derived_corpus_case_fact derived
 join edgerun_standards_source hex_source
-  on hex_source.path like '%/standards/corpus/' || derived.corpus_name || '/' || derived.file_name
-where not exists (
-  select 1
-  from edgerun_corpus_case_fact curated
-  where curated.corpus_name = derived.corpus_name
-    and curated.case_name = derived.case_name
-);
+  on hex_source.path like '%/standards/corpus/' || derived.corpus_name || '/' || derived.file_name;
 
 create view engine_extracted_field_fact as
 select corpus.case_name,
@@ -3437,13 +3827,16 @@ join engine_definition_field_layout_fact layout
   on layout.definition_id = binding.definition_id;
 
 create view engine_case_value_fact as
-select corpus_name,
-       case_name,
+select corpus.corpus_name,
+       corpus.case_name,
        binding.definition_id,
-       'byte_len' as value_name,
-       byte_len - binding.base_byte_offset as integer_value
-from engine_corpus_case_fact
+       derivation.value_name,
+       corpus.byte_len - binding.base_byte_offset + derivation.integer_add as integer_value
+from engine_corpus_case_fact corpus
 join engine_corpus_definition_binding_fact binding using (corpus_name)
+join engine_case_value_derivation_fact derivation
+  on derivation.definition_id = '*'
+  or derivation.definition_id = binding.definition_id
 union all
 select corpus_name,
        case_name,
@@ -3451,16 +3844,7 @@ select corpus_name,
        field_name,
        integer_value
 from engine_extracted_field_fact
-where integer_value is not null
-union all
-select corpus.corpus_name,
-       corpus.case_name,
-       binding.definition_id,
-       'payload_len',
-       corpus.byte_len - binding.base_byte_offset - 8
-from engine_corpus_case_fact corpus
-join engine_corpus_definition_binding_fact binding using (corpus_name)
-where binding.definition_id = 'udp-datagram';
+where integer_value is not null;
 
 create view engine_clause_atom_result as
 select expected.corpus_name,
@@ -3477,22 +3861,28 @@ select expected.corpus_name,
          when '>=' then case when value.integer_value >= coalesce(rhs_value.integer_value + atom.rhs_integer_add, atom.rhs_integer) then 1 else 0 end
          when '==' then case when value.integer_value = coalesce(rhs_value.integer_value + atom.rhs_integer_add, atom.rhs_integer) then 1 else 0 end
          when '!=' then case when value.integer_value != coalesce(rhs_value.integer_value + atom.rhs_integer_add, atom.rhs_integer) then 1 else 0 end
-         when 'in' then case when instr(',' || atom.rhs_set_csv || ',', ',' || cast(value.integer_value as text) || ',') > 0 then 1 else 0 end
+         when 'in' then case when set_member.member_integer is not null then 1 else 0 end
          else 0
        end as atom_matches
-from toml_derived_corpus_expectation_fact expected
+from engine_corpus_expectation_fact expected
 join edgerun_clause_fact clause on clause.id = expected.clause_name
 join engine_clause_predicate_atom_fact atom using (clause_id)
-left join engine_case_value_fact value
+join engine_predicate_operator_fact operator using (operator_name)
+left join engine_case_value_resident value
   on value.corpus_name = expected.corpus_name
  and value.case_name = expected.case_name
  and value.definition_id = clause.subject
  and value.value_name = atom.lhs_name
-left join engine_case_value_fact rhs_value
+left join engine_case_value_resident rhs_value
   on rhs_value.corpus_name = expected.corpus_name
  and rhs_value.case_name = expected.case_name
  and rhs_value.definition_id = clause.subject
- and rhs_value.value_name = atom.rhs_value_name;
+ and rhs_value.value_name = atom.rhs_value_name
+left join engine_clause_predicate_set_member_fact set_member
+  on set_member.clause_id = atom.clause_id
+ and set_member.group_index = atom.group_index
+ and set_member.atom_index = atom.atom_index
+ and set_member.member_integer = value.integer_value;
 
 create view engine_clause_group_result as
 select corpus_name,
@@ -3519,7 +3909,7 @@ select expected.corpus_name,
        expected.expected_result,
        result.actual_result,
        case when expected.expected_result = result.actual_result then 1 else 0 end as matches_expectation
-from toml_derived_corpus_expectation_fact expected
+from engine_corpus_expectation_fact expected
 join engine_clause_result result
   on result.corpus_name = expected.corpus_name
  and result.case_name = expected.case_name
@@ -3532,67 +3922,7 @@ create table hpack_static_table_fact (
 );
 
 insert into hpack_static_table_fact(hpack_index, header_name, header_value) values
-  (1, ':authority', ''),
-  (2, ':method', 'GET'),
-  (3, ':method', 'POST'),
-  (4, ':path', '/'),
-  (5, ':path', '/index.html'),
-  (6, ':scheme', 'http'),
-  (7, ':scheme', 'https'),
-  (8, ':status', '200'),
-  (9, ':status', '204'),
-  (10, ':status', '206'),
-  (11, ':status', '304'),
-  (12, ':status', '400'),
-  (13, ':status', '404'),
-  (14, ':status', '500'),
-  (15, 'accept-', ''),
-  (16, 'accept-encoding', 'gzip, deflate'),
-  (17, 'accept-language', ''),
-  (18, 'accept-ranges', ''),
-  (19, 'accept', ''),
-  (20, 'access-control-allow-origin', ''),
-  (21, 'age', ''),
-  (22, 'allow', ''),
-  (23, 'authorization', ''),
-  (24, 'cache-control', ''),
-  (25, 'content-disposition', ''),
-  (26, 'content-encoding', ''),
-  (27, 'content-language', ''),
-  (28, 'content-length', ''),
-  (29, 'content-location', ''),
-  (30, 'content-range', ''),
-  (31, 'content-type', ''),
-  (32, 'cookie', ''),
-  (33, 'date', ''),
-  (34, 'etag', ''),
-  (35, 'expect', ''),
-  (36, 'expires', ''),
-  (37, 'from', ''),
-  (38, 'host', ''),
-  (39, 'if-match', ''),
-  (40, 'if-modified-since', ''),
-  (41, 'if-none-match', ''),
-  (42, 'if-range', ''),
-  (43, 'if-unmodified-since', ''),
-  (44, 'last-modified', ''),
-  (45, 'link', ''),
-  (46, 'location', ''),
-  (47, 'max-forwards', ''),
-  (48, 'proxy-authenticate', ''),
-  (49, 'proxy-authorization', ''),
-  (50, 'range', ''),
-  (51, 'referer', ''),
-  (52, 'refresh', ''),
-  (53, 'retry-after', ''),
-  (54, 'server', ''),
-  (55, 'set-cookie', ''),
-  (56, 'strict-transport-security', ''),
-  (57, 'transfer-encoding', ''),
-  (58, 'user-agent', ''),
-  (59, 'vary', ''),
-  (60, 'via', ''),
-  (61, 'www-authenticate', '');
+  (1, ':authority', ''), (2, ':method', 'GET'), (3, ':method', 'POST'), (4, ':path', '/'), (5, ':path', '/index.html'), (6, ':scheme', 'http'), (7, ':scheme', 'https'), (8, ':status', '200'), (9, ':status', '204'), (10, ':status', '206'), (11, ':status', '304'), (12, ':status', '400'), (13, ':status', '404'), (14, ':status', '500'), (15, 'accept-', ''), (16, 'accept-encoding', 'gzip, deflate'), (17, 'accept-language', ''), (18, 'accept-ranges', ''), (19, 'accept', ''), (20, 'access-control-allow-origin', ''), (21, 'age', ''), (22, 'allow', ''), (23, 'authorization', ''), (24, 'cache-control', ''), (25, 'content-disposition', ''), (26, 'content-encoding', ''), (27, 'content-language', ''), (28, 'content-length', ''), (29, 'content-location', ''), (30, 'content-range', ''), (31, 'content-type', ''), (32, 'cookie', ''), (33, 'date', ''), (34, 'etag', ''), (35, 'expect', ''), (36, 'expires', ''), (37, 'from', ''), (38, 'host', ''), (39, 'if-match', ''), (40, 'if-modified-since', ''), (41, 'if-none-match', ''), (42, 'if-range', ''), (43, 'if-unmodified-since', ''), (44, 'last-modified', ''), (45, 'link', ''), (46, 'location', ''), (47, 'max-forwards', ''), (48, 'proxy-authenticate', ''), (49, 'proxy-authorization', ''), (50, 'range', ''), (51, 'referer', ''), (52, 'refresh', ''), (53, 'retry-after', ''), (54, 'server', ''), (55, 'set-cookie', ''), (56, 'strict-transport-security', ''), (57, 'transfer-encoding', ''), (58, 'user-agent', ''), (59, 'vary', ''), (60, 'via', ''), (61, 'www-authenticate', '');
 
 create table hpack_interop_case_fact (
   case_id integer primary key,
@@ -3655,66 +3985,6 @@ select example.value,
 from quic_varint_example_fact example
 join quic_varint_rule_fact rule
   on example.value between rule.min_value and rule.max_value;
-
-create view edgerun_standards_fact_summary as
-select 'standards_source' as fact_kind, count(*) as fact_count from edgerun_standards_source
-union all select 'protocol', count(*) from edgerun_protocol_fact
-union all select 'protocol_dependency', count(*) from edgerun_protocol_dependency_fact
-union all select 'protocol_standard', count(*) from edgerun_protocol_standard_fact
-union all select 'protocol_behavior', count(*) from edgerun_protocol_behavior_fact
-union all select 'protocol_environment', count(*) from edgerun_protocol_environment_fact
-union all select 'definition', count(*) from edgerun_definition_fact
-union all select 'definition_field', count(*) from edgerun_definition_field_fact
-union all select 'definition_variant', count(*) from edgerun_definition_variant_fact
-union all select 'clause', count(*) from edgerun_clause_fact
-union all select 'corpus_case', count(*) from edgerun_corpus_case_fact
-union all select 'corpus_expectation', count(*) from edgerun_corpus_expectation_fact
-union all select 'hpack_static_table', count(*) from hpack_static_table_fact
-union all select 'hpack_interop_case', count(*) from hpack_interop_case_fact
-union all select 'quic_varint_rule', count(*) from quic_varint_rule_fact
-union all select 'quic_varint_example', count(*) from quic_varint_example_fact;
-
-create view edgerun_standards_lookup_proofs as
-select 'hpack_index_2' as proof_name, header_name || ':' || header_value as proof_value
-from hpack_static_table_fact where hpack_index = 2
-union all
-select 'hpack_index_4', header_name || ':' || header_value
-from hpack_static_table_fact where hpack_index = 4
-union all
-select 'tftp_valid_ack_all_match', cast(min(matches_expectation) as text)
-from edgerun_tftp_corpus_proof where case_name = 'valid-ack'
-union all
-select 'quic_varint_64', actual_hex
-from quic_varint_materialized_examples where value = 64;
-
-create view edgerun_standards_gap_summary as
-select 'protocol_without_definition' as gap_kind,
-       protocol.id as subject,
-       1 as gap_count
-from edgerun_protocol_fact protocol
-left join edgerun_definition_fact definition on definition.id like protocol.id || '%'
-where definition.definition_id is null
-union all
-select 'behavior_without_executable_clause',
-       protocol.id || ':' || behavior.behavior_name,
-       1
-from edgerun_protocol_behavior_fact behavior
-join edgerun_protocol_fact protocol using (protocol_id)
-left join edgerun_clause_fact clause on clause.subject like protocol.id || '%'
-where clause.clause_id is null
-union all
-select 'source_unparsed_to_normalized_rows',
-       namespace,
-       1
-from edgerun_standards_source
-where namespace like 'standards.local.%'
-  and format in ('toml', 'hex', 'json')
-  and path not like '%/protocols/%'
-  and path not like '%/definitions/udp.toml'
-  and path not like '%/definitions/tftp.toml'
-  and path not like '%/clauses/udp.toml'
-  and path not like '%/clauses/tftp.toml'
-  and path not like '%/corpus/tftp/%';
 
 -- SQL TOML subset parser. This intentionally supports the local standards TOML
 -- subset first: scalar assignments, [table], [[array_table]], simple arrays,
@@ -3785,44 +4055,53 @@ select source_id,
 from sql_toml_line
 where line_kind in ('table_header', 'array_table_header');
 
+create view sql_toml_scope_event_resident as select * from sql_toml_scope_event;
+
 create view sql_toml_assignment as
+with assignment_line as (
+  select source_id,
+         row_number() over (partition by source_id order by line_no) as assignment_id,
+         line_no,
+         text,
+         raw_text
+  from sql_toml_line
+  where line_kind = 'assignment'
+), scoped_line as (
+  select line.source_id,
+         line.assignment_id,
+         line.line_no,
+         line.text,
+         line.raw_text,
+         max(scope.line_no) as scope_line_no,
+         max(parent.line_no) as parent_line_no
+  from assignment_line line
+  left join sql_toml_scope_event_resident scope
+    on scope.source_id = line.source_id
+   and scope.line_no < line.line_no
+  left join sql_toml_scope_event_resident parent
+    on parent.source_id = line.source_id
+   and parent.scope_kind = 'array_table'
+   and parent.line_no < line.line_no
+  group by line.source_id, line.assignment_id, line.line_no, line.text, line.raw_text
+)
 select line.source_id,
-       row_number() over (partition by line.source_id order by line.line_no) as assignment_id,
+       line.assignment_id,
        line.line_no,
-       (select scope.scope_path
-        from sql_toml_scope_event scope
-        where scope.source_id = line.source_id and scope.line_no < line.line_no
-        order by scope.line_no desc
-        limit 1) as scope_path,
-       (select scope.scope_kind
-        from sql_toml_scope_event scope
-        where scope.source_id = line.source_id and scope.line_no < line.line_no
-        order by scope.line_no desc
-        limit 1) as scope_kind,
-       (select scope.scope_instance
-        from sql_toml_scope_event scope
-        where scope.source_id = line.source_id and scope.line_no < line.line_no
-        order by scope.line_no desc
-        limit 1) as scope_instance,
-       coalesce((select parent.scope_path
-                 from sql_toml_scope_event parent
-                 where parent.source_id = line.source_id
-                   and parent.scope_kind = 'array_table'
-                   and parent.line_no < line.line_no
-                 order by parent.line_no desc
-                 limit 1), '') as parent_array_path,
-       coalesce((select parent.scope_instance
-                 from sql_toml_scope_event parent
-                 where parent.source_id = line.source_id
-                   and parent.scope_kind = 'array_table'
-                   and parent.line_no < line.line_no
-                 order by parent.line_no desc
-                 limit 1), 0) as parent_array_instance,
+       scope.scope_path,
+       scope.scope_kind,
+       scope.scope_instance,
+       coalesce(parent.scope_path, '') as parent_array_path,
+       coalesce(parent.scope_instance, 0) as parent_array_instance,
        trim(substr(line.text, 1, instr(line.text, '=') - 1)) as key,
        trim(substr(line.text, instr(line.text, '=') + 1)) as raw_value,
        line.raw_text
-from sql_toml_line line
-where line.line_kind = 'assignment';
+from scoped_line line
+join sql_toml_scope_event_resident scope
+  on scope.source_id = line.source_id
+ and scope.line_no = line.scope_line_no
+left join sql_toml_scope_event_resident parent
+  on parent.source_id = line.source_id
+ and parent.line_no = line.parent_line_no;
 
 create view sql_toml_value as
 select source_id,
@@ -3864,7 +4143,7 @@ select assignment.source_id,
          instr(substr(trim(item.text), instr(trim(item.text), ',') + 1), '"') + 1,
          instr(substr(substr(trim(item.text), instr(trim(item.text), ',') + 1), instr(substr(trim(item.text), instr(trim(item.text), ',') + 1), '"') + 1), '"') - 1
        ) as second_value
-from sql_toml_assignment assignment
+from sql_toml_assignment_resident assignment
 join sql_toml_line item
   on item.source_id = assignment.source_id
  and item.line_no > assignment.line_no
@@ -3881,7 +4160,7 @@ select source_id,
        assignment_id,
        key as inline_table_key,
        substr(raw_value, 2, length(raw_value) - 2) as inline_table_body
-from sql_toml_value
+from sql_toml_value_resident
 where value_kind = 'inline_table';
 
 create view sql_toml_parse_gap as
@@ -3897,9 +4176,13 @@ select source.namespace,
        value.line_no,
        'unknown_value',
        value.raw_value
-from sql_toml_value value
+from sql_toml_value_resident value
 join edgerun_standards_source source using (source_id)
 where value.value_kind = 'unknown';
+
+create view sql_toml_assignment_resident as select * from sql_toml_assignment;
+create view sql_toml_value_resident as select * from sql_toml_value;
+create view sql_toml_pair_resident as select * from sql_toml_multiline_array_pair_item;
 
 create view toml_derived_definition_fact as
 select source.source_id,
@@ -3908,7 +4191,7 @@ select source.source_id,
        max(case when value.scope_path = '' and value.key = 'standard' then value.string_value end) as standard,
        max(case when value.scope_path = '' and value.key = 'section' then value.string_value end) as section
 from edgerun_standards_source source
-join sql_toml_value value using (source_id)
+join sql_toml_value_resident value using (source_id)
 where source.path like '%/standards/definitions/%.toml'
 group by source.source_id;
 
@@ -3919,7 +4202,7 @@ select definition.id as definition_id,
        max(case when value.key = 'type' then value.string_value end) as field_type,
        coalesce(max(case when value.key = 'length' then value.string_value end), '') as length_expr,
        coalesce(max(case when value.key = 'constraint' then value.string_value end), '') as constraint_expr
-from sql_toml_value value
+from sql_toml_value_resident value
 join toml_derived_definition_fact definition using (source_id)
 where value.scope_path = 'field'
 group by definition.id, value.scope_instance;
@@ -3929,7 +4212,7 @@ select definition.id as definition_id,
        max(case when value.key = 'name' then value.string_value end) as variant_name,
        max(case when value.key = 'tag_field' then value.string_value end) as tag_field,
        max(case when value.key = 'tag' then value.int_value end) as tag_value
-from sql_toml_value value
+from sql_toml_value_resident value
 join toml_derived_definition_fact definition using (source_id)
 where value.scope_path = 'variant'
 group by definition.id, value.scope_instance;
@@ -3946,7 +4229,7 @@ select source.source_id,
        max(case when clause.scope_path = 'clause.on_violation' and clause.key = 'code' then clause.string_value end) as violation_code,
        max(case when clause.scope_path = 'clause.on_violation' and clause.key = 'message' then clause.string_value end) as violation_message
 from edgerun_standards_source source
-join sql_toml_value clause on clause.source_id = source.source_id
+join sql_toml_value_resident clause on clause.source_id = source.source_id
 where source.path like '%/standards/clauses/%.toml'
   and (clause.scope_path = 'clause' or clause.parent_array_path = 'clause')
 group by source.source_id, case when clause.scope_path = 'clause' then clause.scope_instance else clause.parent_array_instance end;
@@ -3960,25 +4243,25 @@ select source.source_id,
        max(case when value.key = 'description' then value.string_value end) as description,
        max(case when value.key = 'expect_exit' then value.int_value end) as expect_exit
 from edgerun_standards_source source
-join sql_toml_value value using (source_id)
+join sql_toml_value_resident value using (source_id)
 where source.path like '%/standards/corpus/%/cases.toml'
   and value.scope_path = 'case'
 group by source.source_id, value.scope_instance;
 
-create table standards_fact_rule (
-  rule_id integer primary key,
-  rule_name text not null unique,
-  input_fact_kind text not null,
-  output_fact_kind text not null,
-  description text not null
-);
-
-insert into standards_fact_rule(rule_id, rule_name, input_fact_kind, output_fact_kind, description) values
-  (1, 'observe_toml_line', 'source_bytes', 'source_line_observation', 'Split imported source bytes into deterministic line observations.'),
-  (2, 'classify_toml_line_shape', 'source_line_observation', 'line_shape_classification', 'Classify observed source lines by explicit byte/character facts.'),
-  (3, 'classify_toml_scalar_value', 'assignment_observation', 'typed_value_fact', 'Classify observed assignment values by explicit value-shape facts.'),
-  (4, 'derive_corpus_case_fact', 'typed_value_fact', 'corpus_case_fact', 'Derive corpus case facts from classified case-scope values.'),
-  (5, 'derive_corpus_expectation_fact', 'array_pair_observation', 'corpus_expectation_fact', 'Derive corpus expectation facts from classified expectation pair observations.');
+create view standards_fact_rule as
+select 1 as rule_id,
+       'observe_toml_line' as rule_name,
+       'source_bytes' as input_fact_kind,
+       'source_line_observation' as output_fact_kind,
+       'Split imported source bytes into deterministic line observations.' as description
+union all
+select 2, 'classify_toml_line_shape', 'source_line_observation', 'line_shape_classification', 'Classify observed source lines by explicit byte/character facts.'
+union all
+select 3, 'classify_toml_scalar_value', 'assignment_observation', 'typed_value_fact', 'Classify observed assignment values by explicit value-shape facts.'
+union all
+select 4, 'derive_corpus_case_fact', 'typed_value_fact', 'corpus_case_fact', 'Derive corpus case facts from classified case-scope values.'
+union all
+select 5, 'derive_corpus_expectation_fact', 'array_pair_observation', 'corpus_expectation_fact', 'Derive corpus expectation facts from classified expectation pair observations.';
 
 create view standards_observed_fact as
 select 'source:' || source_id as fact_id,
@@ -4021,7 +4304,7 @@ select 'assignment:' || source.namespace || ':' || value.assignment_id,
        source.namespace,
        value.line_no,
        value.raw_value
-from sql_toml_value value
+from sql_toml_value_resident value
 join edgerun_standards_source source using (source_id)
 union all
 select 'array_pair:' || source.namespace || ':' || pair.assignment_id || ':' || pair.item_index,
@@ -4032,8 +4315,10 @@ select 'array_pair:' || source.namespace || ':' || pair.assignment_id || ':' || 
        source.namespace,
        pair.line_no,
        pair.first_value || '=' || pair.second_value
-from sql_toml_multiline_array_pair_item pair
+from sql_toml_pair_resident pair
 join edgerun_standards_source source using (source_id);
+
+create view standards_observed_resident as select * from standards_observed_fact;
 
 create view standards_fact_rule_application as
 select 'apply:observe_line:' || source.namespace || ':' || line.line_no as application_id,
@@ -4068,7 +4353,7 @@ select 'apply:classify_value:' || source.namespace || ':' || value.assignment_id
        source.namespace,
        value.line_no,
        case when value.value_kind = 'unknown' then 'gap' else 'derived' end
-from sql_toml_value value
+from sql_toml_value_resident value
 join edgerun_standards_source source using (source_id)
 join standards_fact_rule rule on rule.rule_name = 'classify_toml_scalar_value'
 union all
@@ -4094,13 +4379,15 @@ select 'apply:derive_expectation:' || case_fact.corpus_name || ':' || case_fact.
        pair.line_no,
        'derived'
 from toml_derived_corpus_case_fact case_fact
-join sql_toml_multiline_array_pair_item pair
+join sql_toml_pair_resident pair
   on pair.source_id = case_fact.source_id
  and pair.scope_path = 'case'
  and pair.scope_instance = case_fact.case_instance
  and pair.key = 'expect'
 join edgerun_standards_source source on source.source_id = case_fact.source_id
 join standards_fact_rule rule on rule.rule_name = 'derive_corpus_expectation_fact';
+
+create view standards_fact_rule_application_resident as select * from standards_fact_rule_application;
 
 create view standards_derived_fact as
 select 'corpus_case:' || case_fact.corpus_name || ':' || case_fact.case_name as fact_id,
@@ -4127,7 +4414,7 @@ select 'corpus_expectation:' || case_fact.corpus_name || ':' || case_fact.case_n
        source.namespace,
        pair.line_no
 from toml_derived_corpus_case_fact case_fact
-join sql_toml_multiline_array_pair_item pair
+join sql_toml_pair_resident pair
   on pair.source_id = case_fact.source_id
  and pair.scope_path = 'case'
  and pair.scope_instance = case_fact.case_instance
@@ -4135,13 +4422,15 @@ join sql_toml_multiline_array_pair_item pair
 join edgerun_standards_source source on source.source_id = case_fact.source_id
 join standards_fact_rule rule on rule.rule_name = 'derive_corpus_expectation_fact';
 
+create view standards_derived_resident as select * from standards_derived_fact;
+
 create view standards_fact_gap as
 select application.rule_name as gap_kind,
        application.namespace,
        application.line_no,
        observed.evidence
-from standards_fact_rule_application application
-left join standards_observed_fact observed on observed.fact_id = application.input_fact_id
+from standards_fact_rule_application_resident application
+left join standards_observed_resident observed on observed.fact_id = application.input_fact_id
 where application.status = 'gap';
 
 create view toml_derived_corpus_expectation_fact as
@@ -4149,57 +4438,22 @@ select subject as corpus_name,
        substr(predicate, 1, instr(predicate, ':') - 1) as case_name,
        substr(predicate, instr(predicate, ':') + 1) as clause_name,
        object as expected_result
-from standards_derived_fact
+from standards_derived_resident
 where fact_kind = 'corpus_expectation_fact';
 
-create view toml_derived_standards_comparison as
-select 'definition' as fact_kind,
-       curated.id as subject,
-       case when derived.id is not null
-             and curated.kind = derived.kind
-             and curated.standard = derived.standard
-             and curated.section = derived.section then 1 else 0 end as matches_curated
-from edgerun_definition_fact curated
-left join toml_derived_definition_fact derived on derived.id = curated.id
-union all
-select 'definition_field', curated.id || ':' || curated_field.name,
-       case when derived.name is not null
-             and curated_field.field_type = derived.field_type
-             and curated_field.length_expr = derived.length_expr
-             and curated_field.constraint_expr = derived.constraint_expr then 1 else 0 end
-from edgerun_definition_field_fact curated_field
-join edgerun_definition_fact curated using (definition_id)
-left join toml_derived_definition_field_fact derived
-  on derived.definition_id = curated.id
- and derived.field_order = curated_field.field_order
-union all
-select 'definition_variant', curated.id || ':' || curated_variant.variant_name,
-       case when derived.variant_name is not null
-             and curated_variant.tag_field = derived.tag_field
-             and curated_variant.tag_value = derived.tag_value then 1 else 0 end
-from edgerun_definition_variant_fact curated_variant
-join edgerun_definition_fact curated using (definition_id)
-left join toml_derived_definition_variant_fact derived
-  on derived.definition_id = curated.id
- and derived.variant_name = curated_variant.variant_name
-union all
-select 'clause', curated.id,
-       case when derived.id is not null
-             and curated.predicate_expr = derived.predicate_expr
-             and curated.violation_code = derived.violation_code then 1 else 0 end
-from edgerun_clause_fact curated
-left join toml_derived_clause_fact derived on derived.id = curated.id
-where curated.id != 'tftp-message-definition'
-union all
-select 'corpus_expectation', corpus_case.case_name || ':' || clause.id,
-       case when derived.expected_result = expected.expected_result then 1 else 0 end
-from edgerun_corpus_expectation_fact expected
-join edgerun_corpus_case_fact corpus_case using (case_id)
-join edgerun_clause_fact clause using (clause_id)
-left join toml_derived_corpus_expectation_fact derived
-  on derived.corpus_name = corpus_case.corpus_name
- and derived.case_name = corpus_case.case_name
- and derived.clause_name = clause.id;
+create view engine_corpus_expectation_fact as select * from toml_derived_corpus_expectation_fact;
+
+create view engine_case_value_resident as select * from engine_case_value_fact;
+
+create index edgerun_clause_id_idx on edgerun_clause_fact(id);
+create index edgerun_clause_subject_idx on edgerun_clause_fact(subject);
+create index edgerun_standards_source_format_idx on edgerun_standards_source(format);
+create index edgerun_standards_source_path_idx on edgerun_standards_source(path);
+create index sql_toml_line_kind_idx on sql_toml_line(source_id, line_kind, line_no);
+create index sql_toml_line_no_idx on sql_toml_line(source_id, line_no);
+
+create view engine_entity_resident as select * from engine_entity_fact;
+create view engine_relation_resident as select * from engine_relation_fact;
 
 -- Canonical fact engine view layer. Domain importers only emit observations;
 -- rules classify, derive, validate, and materialize facts with explicit
@@ -4238,16 +4492,6 @@ select rule_key,
        output_fact_kind
 from engine_rule;
 
-create view engine_tftp_corpus_proof as
-select corpus_name,
-       case_name,
-       clause_name,
-       expected_result,
-       actual_result,
-       matches_expectation
-from engine_corpus_proof
-where corpus_name = 'tftp';
-
 create view engine_fact as
 select fact_id,
        fact_kind,
@@ -4260,7 +4504,7 @@ select fact_id,
        line_no,
        evidence,
        'observed:' || fact_id || ':' || length(coalesce(object, '')) as stable_key
-from standards_observed_fact
+from standards_observed_resident
 union all
 select fact_id,
        fact_kind,
@@ -4273,7 +4517,189 @@ select fact_id,
        line_no,
        input_fact_id,
        'derived:' || fact_id || ':' || rule_name || ':' || length(coalesce(object, ''))
-from standards_derived_fact
+from standards_derived_resident
+union all
+select 'entity:' || entity_name,
+       'entity_fact',
+       entity_name,
+       'category',
+       category_name,
+       'text',
+       'derived',
+       'engine.entity',
+       0,
+       provenance,
+       'entity:' || entity_name || ':' || category_name
+from engine_entity_resident
+union all
+select 'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(object_entity, object_value, ''),
+       'relation_fact',
+       subject_entity,
+       relation_name,
+       coalesce(object_entity, object_value || case when unit_name <> '' then ' ' || unit_name else '' end),
+       'text',
+       'derived',
+       'engine.relation',
+       0,
+       provenance,
+       'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(object_entity, object_value, '') || ':' || unit_name
+from engine_relation_resident
+union all
+select 'tor.control.command:' || command_name,
+       'tor_control_command_fact',
+       'tor.control',
+       command_name,
+       command_kind || ':' || host_surface_status,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.command:' || command_name || ':' || command_kind || ':' || host_surface_status
+from tor_control_command_fact
+union all
+select 'tor.control.event:' || event_name,
+       'tor_control_event_fact',
+       'tor.control',
+       event_name,
+       event_area || ':' || host_surface_status,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.event:' || event_name || ':' || event_area || ':' || host_surface_status
+from tor_control_event_fact
+union all
+select 'tor.control.reply:' || reply_code,
+       'tor_control_reply_code_fact',
+       'tor.control',
+       cast(reply_code as text),
+       reply_class || ':' || meaning,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.reply:' || reply_code || ':' || reply_class
+from tor_control_reply_code_fact
+union all
+select 'tor.control.signal:' || signal_name,
+       'tor_control_signal_fact',
+       'tor.control',
+       signal_name,
+       effect_summary || case when posix_alias <> '' then ':posix=' || posix_alias else '' end,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.signal:' || signal_name || ':' || host_surface_status
+from tor_control_signal_fact
+union all
+select 'tor.control.getinfo:' || key_pattern,
+       'tor_control_getinfo_key_fact',
+       'tor.control',
+       key_pattern,
+       key_group || ':' || value_kind || ':' || host_surface_status,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.getinfo:' || key_pattern || ':' || key_group
+from tor_control_getinfo_key_fact
+union all
+select 'tor.control.bootstrap:' || tag,
+       'tor_control_bootstrap_phase_fact',
+       'tor.control',
+       tag,
+       cast(progress as text) || ':stage=' || cast(stage as text) || ':' || summary,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.bootstrap:' || cast(progress as text) || ':' || tag
+from tor_control_bootstrap_phase_fact
+union all
+select 'tor.control.status_action:' || status_type || ':' || action_name,
+       'tor_control_status_action_fact',
+       status_type,
+       action_name,
+       severity_set || ':' || argument_set,
+       'text',
+       'observed',
+       'tor.control',
+       source_line,
+       source_name,
+       'tor.control.status_action:' || status_type || ':' || action_name
+from tor_control_status_action_fact
+union all
+select 'tor.bandwidth.version:' || format_version,
+       'tor_bandwidth_file_version_fact',
+       'tor.bandwidth_file',
+       format_version,
+       status || ':' || semantic_delta,
+       'text',
+       'observed',
+       'tor.bandwidth_file',
+       source_line,
+       source_name,
+       'tor.bandwidth.version:' || format_version || ':' || status
+from tor_bandwidth_file_version_fact
+union all
+select 'tor.bandwidth.grammar:' || grammar_name,
+       'tor_bandwidth_file_grammar_fact',
+       'tor.bandwidth_file',
+       grammar_name,
+       expression,
+       'text',
+       'observed',
+       'tor.bandwidth_file',
+       source_line,
+       source_name,
+       'tor.bandwidth.grammar:' || grammar_name || ':' || expression
+from tor_bandwidth_file_grammar_fact
+union all
+select 'tor.bandwidth.key:' || section_name || ':' || key_name,
+       'tor_bandwidth_file_key_fact',
+       'tor.bandwidth_file.' || section_name,
+       key_name,
+       value_type || ':' || cardinality || ':' || introduced_version || ':' || removed_version || ':' || semantic_role,
+       'text',
+       'observed',
+       'tor.bandwidth_file',
+       source_line,
+       source_name,
+       'tor.bandwidth.key:' || section_name || ':' || key_name || ':' || introduced_version || ':' || removed_version
+from tor_bandwidth_file_key_fact
+union all
+select 'tor.bandwidth.rule:' || rule_name,
+       'tor_bandwidth_file_rule_fact',
+       'tor.bandwidth_file',
+       rule_name,
+       rule_kind || ':' || rule_text,
+       'text',
+       'observed',
+       'tor.bandwidth_file',
+       source_line,
+       source_name,
+       'tor.bandwidth.rule:' || rule_name || ':' || rule_kind
+from tor_bandwidth_file_rule_fact
+union all
+select 'media.constant:' || codec_name || ':' || symbol_name,
+       'media_codec_constant_fact',
+       'media.codec.' || codec_name,
+       symbol_name,
+       cast(value_integer as text),
+       'integer',
+       'observed',
+       'media.codec.' || codec_name,
+       source_line,
+       source_name,
+       'media.constant:' || codec_name || ':' || symbol_name || ':' || value_text
+from media_codec_constant_fact
 union all
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'corpus_proof_fact',
@@ -4288,6 +4714,8 @@ select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'proof:' || corpus_name || ':' || case_name || ':' || clause_name || ':' || expected_result || ':' || actual_result
 from engine_corpus_proof;
 
+create view engine_fact_resident as select * from engine_fact;
+
 create view engine_derivation as
 select application.application_id as derivation_id,
        'standards:' || application.rule_name as rule_key,
@@ -4297,7 +4725,7 @@ select application.application_id as derivation_id,
        application.namespace,
        application.line_no,
        application.rule_name || ':' || application.input_fact_id || '->' || application.output_fact_id as stable_key
-from standards_fact_rule_application application
+from standards_fact_rule_application_resident application
 union all
 select 'apply:validate_corpus:' || corpus_name || ':' || case_name || ':' || clause_name,
        'standards:validate_corpus_expectation',
@@ -4308,6 +4736,8 @@ select 'apply:validate_corpus:' || corpus_name || ':' || case_name || ':' || cla
        0,
        'validate_corpus_expectation:' || corpus_name || ':' || case_name || ':' || clause_name || ':' || expected_result || ':' || actual_result
 from engine_corpus_proof;
+
+create view engine_derivation_resident as select * from engine_derivation;
 
 create view engine_gap as
 select 'standards:' || gap_kind as gap_kind,
@@ -4323,7 +4753,23 @@ select 'standards:proof_mismatch',
        corpus_name || ':' || case_name || ':' || clause_name || ':expected=' || expected_result || ':actual=' || actual_result,
        'validation_gap'
 from engine_corpus_proof
-where matches_expectation = 0;
+where matches_expectation = 0
+union all
+select 'standards:' || gap_kind,
+       'standards.clause.' || clause_name,
+       0,
+       atom_text,
+       'predicate_parse_gap'
+from engine_clause_predicate_parse_gap
+union all
+select 'engine:' || gap_kind,
+       coalesce(subject_entity, ''),
+       0,
+       relation_name || ':' || coalesce(object_entity, object_value, '') || ':' || provenance,
+       'relation_import_gap'
+from engine_relation_import_gap;
+
+create view engine_gap_resident as select * from engine_gap;
 
 create view engine_conflict as
 select fact_kind,
@@ -4331,44 +4777,55 @@ select fact_kind,
        predicate,
        count(distinct object) as distinct_value_count,
        group_concat(distinct object) as values_seen
-from engine_fact
+from engine_fact_resident
 where fact_kind in ('corpus_case_fact', 'corpus_expectation_fact', 'corpus_proof_fact')
 group by fact_kind, subject, predicate
-having count(distinct object) > 1;
+having count(distinct object) > 1
+union all
+select 'relation_fact',
+       subject_entity,
+       relation_name,
+       distinct_value_count,
+       values_seen
+from engine_relation_conflict;
+
+create view engine_conflict_resident as select * from engine_conflict;
 
 create view engine_closure_step_0 as
-select * from engine_fact where fact_status = 'observed';
+select * from engine_fact_resident where fact_status = 'observed';
 
 create view engine_closure_step_1 as
-select * from engine_fact where fact_status = 'derived';
+select * from engine_fact_resident where fact_status = 'derived';
 
 create view engine_closure_step_2 as
-select * from engine_fact where fact_status in ('validated', 'conflict');
+select * from engine_fact_resident where fact_status in ('validated', 'conflict');
 
 create view engine_closure_final as
-select * from engine_fact
+select * from engine_fact_resident
 where fact_status in ('observed', 'derived', 'validated');
 
 create view engine_summary as
 select 'fact:' || fact_kind as item_kind,
        fact_status as status,
        count(*) as item_count
-from engine_fact
+from engine_fact_resident
 group by fact_kind, fact_status
 union all
 select 'derivation', status, count(*)
-from engine_derivation
+from engine_derivation_resident
 group by status
 union all
 select 'gap:' || gap_kind, gap_class, count(*)
-from engine_gap
+from engine_gap_resident
 group by gap_kind, gap_class
 union all
 select 'conflict', fact_kind, count(*)
-from engine_conflict
+from engine_conflict_resident
 group by fact_kind;
 
-create view engine_tftp_proof_summary as
-select min(matches_expectation) as all_expectations_match,
+create view engine_corpus_proof_summary as
+select corpus_name,
+       min(matches_expectation) as all_expectations_match,
        count(*) as expectation_count
-from engine_tftp_corpus_proof;
+from engine_corpus_proof
+group by corpus_name;

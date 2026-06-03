@@ -180,11 +180,11 @@ Workflow rules:
 - Use `kernel/x86_64/object/catalog.sql` as the compact SQL authoring/index view for finite code-object vocabularies. Do not treat SQL as runtime authority or an external dependency; materialized `.erobj` files are still the graph objects that validators and materializers consume.
 - Keep the operand vocabulary as materialized objects too: `ERTYPE01`, `EROPK001`, `EROPSH01`, and `ERADDR01` bodies define value types, operand kinds, operand shapes, and addressing modes. Concrete CODE operands should reference these records instead of embedding ad hoc operand tags.
 - Treat functions as materialization query roots. `ERFUNC01` objects identify function graph roots; SQL may emit deterministic machine-code views from function records, but the object closure and receipts remain the authority.
-- SQL editing should target canonical program graph tables: modules, functions, blocks, instruction instances, operand bindings, control edges, symbols, and relocations. Do not model codebase import as generic source lines; text is provenance/inspection, not authority.
-- Language import is a pure extraction into abstractions: languages, syntax atoms, semantic rules, abstraction nodes/edges, pipelines, and lowering rules. If a construct has no rule, it cannot exist in the imported graph. Do not add import receipts or source-text authority to this model.
-- For SQL parsing/import, the query tool is the active authority operating over relations. Source bytes are input data; token streams, parse trees, abstraction graphs, function graphs, and materialized target bytes are query results over canonical tables.
-- The SQL rule engine should unify interpreter/compiler/assembler behavior through relations: operation kinds/signatures, type rules, effect rules, operation/value instances, data edges, lowering rules, encoding rows, and byte views. Prove changes with queries that interpret, lower, and assemble the same graph.
-- The AI operator should use SQL gap views as the work queue. For `edgerun_asm_dsl`, run `asm_dsl_agent_next_gaps`, add missing syntax/semantic/lowering/encoding rows or objects, then rerun materialization views until real repository functions import and emit target bytes.
+- The canonical pipeline is one-way: `source bytes -> one-time import -> finite base facts -> derived views`.
+- Source, token streams, parse trees, caches, summaries, and re-exported source are not authority. Delete them once finite facts can derive their content.
+- Reduction is the default. Before adding facts, tables, views, functions, or objects, remove or compress at least as much existing truth/projection surface.
+- Manual facts are acceptable only when explicit, finite, and checked by gap/conflict/proof queries.
+- Materializers consume finite base facts only. Unsupported constructs, operations, types, effects, or lowerings are fatal gaps.
 
 ## Host-Side ASM Rules
 

@@ -24,7 +24,7 @@ The target is not a better textual assembler. A traditional assembler parses tex
 
 Everything in the repo is a way to pipeline or view canonical records:
 
-- Source text is an inspection/editing view over object records.
+- Source text is one import/input view. It is parsed only to extract durable facts, relations, and abstractions; once those facts are complete, the source is disposable provenance.
 - Drivers materialize records into hardware effects and device-facing cells.
 - Runtimes materialize records into WASM execution, host execution, traces, or receipts.
 - Build tools validate graph closure and materialize only the requested depth.
@@ -48,6 +48,16 @@ Use one path only:
 8. Move UI work to graph/pipeline views over records.
 
 Do not create alternate assemblers, linkers, compiler IRs, package graphs, permission systems, or UI source models. The current target is first-class ISA/CODE object graphs: instruction-set objects define the finite vocabulary, code objects form relationships between those definitions, and materializers emit requested executable views with receipts.
+
+## Finite Fact Authority
+
+Canonical pipeline: `source bytes -> one-time import -> finite base facts -> derived views`.
+
+- Source is temporary evidence. Facts are authority.
+- Keep only irreducible facts; delete source, generated rows, caches, summaries, and projections once derivable.
+- Manual facts are valid only when checked by gap/conflict/proof queries.
+- Materializers consume base facts only. Re-exported source, bytes, graphs, docs, tests, and receipts are derived views.
+- Unsupported constructs are fatal gaps.
 
 ## Repository Map
 
@@ -127,24 +137,12 @@ Current gaps:
 
 ## Current Facts
 
-- The x86 source registry is an owned object consumed by `er_build`.
-- `kernel/x86_64/object/x86_64_isa.erobj` is the first committed canonical ISA object table; grow instruction-set objects instead of ad hoc materializer opcode branches.
-- `kernel/x86_64/object/catalog.sql` is the SQL authoring/index view for canonical ISA, instruction, form, register, and register-set objects. Use it to define finite vocabularies compactly; `.erobj` files remain the materialized authority.
-- The operand vocabulary layer is materialized as `ERTYPE01`, `EROPK001`, `EROPSH01`, and `ERADDR01` objects under `kernel/x86_64/object/type/`, `operand_kind/`, `operand_shape/`, and `addressing/`. These are the finite type, operand-kind, operand-shape, and addressing-mode records that concrete CODE operands will reference.
-- Functions are the SQL/query root for materialization. `kernel/x86_64/object/function/return_42_x86_64.erobj` is the first `ERFUNC01` function root; `catalog.sql` records its forms, operands, encodings, edges, and a deterministic SQL byte view that emits `b82a000000c3`.
-- SQL code editing is over canonical graph rows, not generic source text. `catalog.sql` now has module, basic-block, instruction-instance, operand-binding, control-edge, symbol, and relocation tables; text source should attach as provenance later rather than become the editing authority.
-- Language import is pure. `catalog.sql` defines languages, syntax atoms, semantic rules, abstraction kinds, abstraction nodes/edges, pipeline nodes/edges, import units, and lowering rules. Unsupported constructs have no rule and therefore cannot enter the graph; source text is not saved as authority.
-- The active authority in this model is the query tool operating over relations. `catalog.sql` now includes source units, token kinds, lex rules, grammar rules, parse nodes, and parse edges so source bytes can be queried into tokens, parse trees, abstractions, functions, and target bytes without treating source as the stored program.
-- `catalog.sql` now proves the rule-engine shape: operation kinds/signatures, type rules, effect rules, operation/value instances, data edges, and abstract lowering rules let SQL interpret `return_42_x86_64` as `42`, lower it to x86_64 instruction/form/encoding rows, and assemble `b82a000000c3` from the same graph.
-- The first repo importer workbench is `edgerun_asm_dsl`. It stages `kernel/test/test_flat_runtime.asm.erobj` as ASM DSL function rows, imports `er_bss_zero`, exposes currently materializable bytes, and provides gap views such as `asm_dsl_agent_next_gaps`. The AI operator loop is: query gaps, add the missing rules/objects, rerun import/materialization queries.
-- `er_build x86-objects` builds the registry-owned x86 object set.
-- `er_build host-tools` remains a one-time bootstrap escape hatch for `.build/host/` tools, not a normal workflow step.
-- `er_asm --interpret` consumes committed EROBJ001 `.asm.erobj` source objects directly. Flat byte output remains a smoke/debug path, not the system target.
-- The system target is canonical `.erobj` code records whose hash-linked graph can be validated and materialized without reparsing free-form assembly text.
-- `er_build view`, `replace-range`, `file-to-object`, and `body-to-file` provide the current source-object editing bridge.
-- Local identity routing, object serialization, crypto slices, media parsers, UI/render IR, and WASM paths have self-hosted ASM test coverage in the owned registry.
-- App-side Zig remains a temporary bootstrap surface being ported out.
+- `kernel/x86_64/object/catalog.sql` indexes finite fact vocabularies, ISA records, program graphs, media facts, and materialization queries; it is not a runtime database.
+- `ERISA001`, `ERTYPE01`, `EROPK001`, `EROPSH01`, `ERADDR01`, and `ERFUNC01` objects are the current materialized vocabulary/function roots.
+- Code editing targets finite facts and canonical graph rows. Token/parse/source rows are importer intermediates to delete once facts have closure.
+- App-side Zig is porting evidence only; reduce it to finite facts and delete derivable source, caches, and projections.
+- Existing owned runner/object commands remain the workflow bridge until graph materialization replaces them.
 
 ## Rule
 
-Implementation is truth. Remove stale parallel paths instead of documenting around them. Do not add fallbacks, compatibility shims, hidden authority, new shell orchestration, or new Zig app behavior.
+Finite facts are truth. Implementation is a materialized view over those facts. Remove stale parallel paths instead of documenting around them. Do not add fallbacks, compatibility shims, hidden authority, new shell orchestration, or new Zig app behavior.

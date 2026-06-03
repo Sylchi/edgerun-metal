@@ -1,6 +1,6 @@
 # Tor Spec Compliance
 
-Source specs live in this directory. The implementation must be audited against these files, not against memory or comments.
+Finite spec facts live in `kernel/x86_64/object/catalog.sql`; remaining raw spec mirrors in this directory are import evidence only until their useful facts are extracted and the mirrors are deleted.
 
 ## Current implementation state
 
@@ -14,7 +14,7 @@ Source specs live in this directory. The implementation must be audited against 
 | Path and guard selection | `04-path-spec.md`, `05-guard-spec.md` | Minimal. Explicit guard material can be configured and bootstrapping fails closed without it. | Full sampled guard set, primary/confirmed guard state, persistence, retry logic, path constraints, family/exclusion rules. |
 | Onion services v3 | `13-onion-services.md` | Partial. Address encoding, descriptor crypto helpers, intro/rendezvous message builders/parsers, and local self-connect paths exist. | Complete descriptor validation, HSDir selection, upload/fetch policy, PoW/extensions, client auth, replay caches, revision counters. |
 | Padding and DoS behavior | `07-padding-spec.md`, `08-dos-prevention.md` | Minimal. Link handshake VPADDING is accepted. | Padding negotiation, circuit padding machines, DoS defenses, overload behavior. |
-| Control/SOCKS/ext OR/proxy surfaces | `09-socks-extensions.md`, `15-ext-orport.md`, `17-control-protocol.md` | Not implemented as host Tor control surfaces. | Decide whether these are in scope for kernel Tor support or explicitly out of scope for EdgeRun identity routing. |
+| Control/SOCKS/ext OR/proxy surfaces | `09-socks-extensions.md`, `15-ext-orport.md`; control-protocol facts in `catalog.sql` | Not implemented as host Tor control surfaces. | Decide whether SOCKS/ext OR/proxy surfaces are in scope or explicitly out of scope for EdgeRun identity routing; Tor control vocabulary has been extracted to finite facts. |
 | Role model and app SDK authority | `02-tor-protocol.md`, `04-path-spec.md`, `05-guard-spec.md`, `13-onion-services.md` | Partial. `TOR_ROLE_*` and `TOR_CAP_*` cover Tor-compatible client, guard, relay, exit, directory, bridge, and onion-service roles. Bootstrap preserves an explicitly configured role instead of forcing client-only. Local identity routing sends unknown valid identities through the kernel public relay path by default. | Kernel public relay and domain authority operation, app-owned onion-service/guard/relay/exit roles, and SDK role grants must be backed by process-owned identity, route authority, TPM-backed key material where available, and deterministic relay-side tests. |
 
 ## EdgeRun Tor Role Model
