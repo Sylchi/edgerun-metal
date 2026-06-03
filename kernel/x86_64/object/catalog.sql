@@ -676,6 +676,29 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1382, 'x86_64_mov_esi_16', 1, 1, 'be10000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_16.erobj'),
   (1383, 'x86_64_mov_rsi_r9', 1, 1, '4c89ce', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_r9.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1384, 'x86_64_cmp_rdx_error_recursion', 1, 1, '4883fa1f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_rdx_error_recursion.erobj'),
+  (1385, 'x86_64_mov_eax_sys_write', 1, 1, 'b801000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_sys_write.erobj'),
+  (1386, 'x86_64_mov_eax_sys_close', 1, 1, 'b803000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_sys_close.erobj'),
+  (1387, 'x86_64_mov_rsi_rdx', 1, 1, '4889d6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_rdx.erobj'),
+  (1388, 'x86_64_mov_esi_32', 1, 1, 'be20000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_32.erobj'),
+  (1389, 'x86_64_mov_r12_rsp_ptr', 1, 1, '4c8b2424', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r12_rsp_ptr.erobj'),
+  (1390, 'x86_64_shr_eax_24', 1, 1, 'c1e818', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_eax_24.erobj'),
+  (1391, 'x86_64_add_r15_rax', 1, 1, '4901c7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_r15_rax.erobj'),
+  (1392, 'x86_64_test_r13d_r13d', 1, 1, '4585ed', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_r13d_r13d.erobj'),
+  (1393, 'x86_64_sub_ecx_eax', 1, 1, '29c1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sub_ecx_eax.erobj'),
+  (1394, 'x86_64_mov_rsp_ptr_eax', 1, 1, '890424', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsp_ptr_eax.erobj'),
+  (1395, 'x86_64_test_ebx_ebx', 1, 1, '85db', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_ebx_ebx.erobj'),
+  (1396, 'x86_64_shr_eax_4', 1, 1, 'c1e804', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_eax_4.erobj'),
+  (1397, 'x86_64_push_r11', 1, 1, '4153', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_r11.erobj'),
+  (1398, 'x86_64_shr_eax_1', 1, 1, 'd1e8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_eax_1.erobj'),
+  (1399, 'x86_64_mov_eax_2', 1, 1, 'b802000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_2.erobj'),
+  (1400, 'x86_64_test_r9d_r9d', 1, 1, '4585c9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_r9d_r9d.erobj'),
+  (1401, 'x86_64_mov_esi_128', 1, 1, 'be80000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_128.erobj'),
+  (1402, 'x86_64_mov_edx_r12d', 1, 1, '4489e2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_r12d.erobj'),
+  (1403, 'x86_64_mov_r8d_2', 1, 1, '41b802000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r8d_2.erobj'),
+  (1404, 'x86_64_mov_edx_8', 1, 1, 'ba08000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_8.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -1937,6 +1960,29 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'dec', null, 'kernel/x86_64/object/instruction/x86_64/dec.erobj', null, 1381, 'asm_x86_dec_rbx_exact', 'rbx', 0),
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1382, 'asm_x86_mov_esi_16_exact', 'esi, 16', 0),
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1383, 'asm_x86_mov_rsi_r9_exact', 'rsi, r9', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1384, 'asm_x86_cmp_rdx_error_recursion_exact', 'rdx, ERROR_RECURSION', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1385, 'asm_x86_mov_eax_sys_write_exact', 'eax, SYS_write', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1386, 'asm_x86_mov_eax_sys_close_exact', 'eax, SYS_close', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1387, 'asm_x86_mov_rsi_rdx_exact', 'rsi, rdx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1388, 'asm_x86_mov_esi_32_exact', 'esi, 32', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1389, 'asm_x86_mov_r12_rsp_ptr_exact', 'r12, [rsp]', 0),
+  (3, 'shr', null, 'kernel/x86_64/object/instruction/x86_64/shr.erobj', null, 1390, 'asm_x86_shr_eax_24_exact', 'eax, 24', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1391, 'asm_x86_add_r15_rax_exact', 'r15, rax', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1392, 'asm_x86_test_r13d_r13d_exact', 'r13d, r13d', 0),
+  (3, 'sub', null, 'kernel/x86_64/object/instruction/x86_64/sub.erobj', null, 1393, 'asm_x86_sub_ecx_eax_exact', 'ecx, eax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1394, 'asm_x86_mov_rsp_ptr_eax_exact', '[rsp], eax', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1395, 'asm_x86_test_ebx_ebx_exact', 'ebx, ebx', 0),
+  (3, 'shr', null, 'kernel/x86_64/object/instruction/x86_64/shr.erobj', null, 1396, 'asm_x86_shr_eax_4_exact', 'eax, 4', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1397, 'asm_x86_push_r11_exact', 'r11', 0),
+  (3, 'shr', null, 'kernel/x86_64/object/instruction/x86_64/shr.erobj', null, 1398, 'asm_x86_shr_eax_1_exact', 'eax, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1399, 'asm_x86_mov_eax_2_exact', 'eax, 2', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1400, 'asm_x86_test_r9d_r9d_exact', 'r9d, r9d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1401, 'asm_x86_mov_esi_128_exact', 'esi, 128', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1402, 'asm_x86_mov_edx_r12d_exact', 'edx, r12d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1403, 'asm_x86_mov_r8d_2_exact', 'r8d, 2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1404, 'asm_x86_mov_edx_8_exact', 'edx, 8', 0);
 
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
   (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);

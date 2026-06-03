@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added 21 verified high-impact x86 encoding facts for symbolic syscall constants, recursion-error comparison, common register moves/tests/shifts, stack memory forms, and immediate loads. Location-dependent branches and stack-root symbols remain explicit blockers for relation/materializer work.
 - Documented that the target is not a replacement textual assembler.
 - Converted the render IR and flat runtime test sources to committed source objects and expanded `catalog.sql` so repo ASM source objects lower into indexed facts for parsed operations, rule matches, operation status, relocations, data references, macro lowerings, and deletion-readiness.
 - Added operator queue views for remaining ASM fact gaps and next fixed-encoding candidates; `dec ecx` and `dec eax` now lower through finite encoding facts, moving 154 inventory operations to fixed encodings.
