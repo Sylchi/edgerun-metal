@@ -6918,6 +6918,51 @@ with recursive rhs_decimal as (
   select repo_file_id,
          function_name,
          line_no,
+         'param_x86_' || op_name || '_reg_numeric_imm32' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when (reg_code & 7) = 0 and reg_code < 8 then case op_name
+                                                              when 'add' then '05'
+                                                              when 'or' then '0d'
+                                                              when 'and' then '25'
+                                                              when 'sub' then '2d'
+                                                              when 'xor' then '35'
+                                                              when 'cmp' then '3d'
+                                                              when 'test' then 'a9'
+                                                            end
+                else
+                  case when op_name = 'test' then 'f7' else '81' end
+                  || printf('%02x', 192 + ((case op_name
+                                             when 'add' then 0
+                                             when 'or' then 1
+                                             when 'and' then 4
+                                             when 'sub' then 5
+                                             when 'xor' then 6
+                                             when 'cmp' then 7
+                                             when 'test' then 0
+                                           end) << 3) + (reg_code & 7))
+              end
+           || printf('%02x%02x%02x%02x',
+                     immediate_value & 255,
+                     (immediate_value >> 8) & 255,
+                     (immediate_value >> 16) & 255,
+                     (immediate_value >> 24) & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name in ('add','sub','cmp','and','or','xor','test')
+    and width_bits in (32,64)
+    and (op_name = 'test' or immediate_value not between -128 and 127)
+    and ((width_bits = 32 and immediate_value between -2147483648 and 4294967295)
+         or (width_bits = 64 and immediate_value between -2147483648 and 2147483647))
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
          'param_x86_' || op_name || '_reg8_numeric_imm8' as parametric_rule_name,
          (
            case
