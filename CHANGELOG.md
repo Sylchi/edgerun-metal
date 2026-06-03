@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added 50 verified high-impact x86 exact encoding facts for AV1 bitreader, VP8, Tor AES, framebuffer, SHA, driver, and stack-memory blocker forms.
 - Added 60 verified high-impact x86 exact encoding facts for the next Blake3, AV1, VP8, driver, Tor, and stack-slot blocker forms.
 - Added 50 more verified high-byte x86 exact encoding facts for the next image-format, host-build, framebuffer, AV1, Tor, TLS, and kernel-main blocker forms.
 - Added 39 verified high-byte x86 exact encoding facts for register, stack-slot, arithmetic, compare, and image-format blocker forms from the operator queue.
