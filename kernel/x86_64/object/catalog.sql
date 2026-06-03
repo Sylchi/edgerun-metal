@@ -4533,6 +4533,148 @@ having count(distinct definition.expression_text) = 1;
 
 create unique index repo_asm_unique_constant_fact_symbol_idx on repo_asm_unique_constant_fact(symbol_name);
 
+create table repo_asm_all_unique_constant_fact as
+select definition.symbol_name,
+       min(definition.expression_text) as expression_text,
+       count(*) as definition_count
+from repo_asm_constant_definition_fact definition
+where definition.symbol_name <> ''
+group by definition.symbol_name
+having count(distinct definition.expression_text) = 1;
+
+create unique index repo_asm_all_unique_constant_fact_symbol_idx on repo_asm_all_unique_constant_fact(symbol_name);
+
+create table repo_asm_numeric_constant_value as
+with recursive decimal_constant as (
+  select symbol_name,
+         cast(expression_text as integer) as immediate_value
+  from repo_asm_all_unique_constant_fact
+  where (expression_text glob '[0-9]*'
+         or expression_text glob '-[0-9]*')
+    and replace(expression_text, '-', '') not glob '*[^0-9]*'
+), hex_constant_seed as (
+  select symbol_name,
+         substr(lower(expression_text), 3) as hex_text
+  from repo_asm_all_unique_constant_fact
+  where lower(expression_text) glob '0x[0-9a-f]*'
+    and substr(lower(expression_text), 3) <> ''
+    and substr(lower(expression_text), 3) not glob '*[^0-9a-f]*'
+), hex_constant_parse(symbol_name, hex_text, digit_index, immediate_value) as (
+  select symbol_name,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from hex_constant_seed
+  union all
+  select symbol_name,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from hex_constant_parse
+  where digit_index <= length(hex_text)
+), hex_constant as (
+  select symbol_name,
+         immediate_value
+  from hex_constant_parse
+  where digit_index = length(hex_text) + 1
+), octal_constant_seed as (
+  select symbol_name,
+         substr(lower(expression_text), 1, length(expression_text) - 1) as octal_text
+  from repo_asm_all_unique_constant_fact
+  where lower(expression_text) glob '[0-7]*o'
+    and substr(lower(expression_text), 1, length(expression_text) - 1) <> ''
+    and substr(lower(expression_text), 1, length(expression_text) - 1) not glob '*[^0-7]*'
+), octal_constant_parse(symbol_name, octal_text, digit_index, immediate_value) as (
+  select symbol_name,
+         octal_text,
+         1 as digit_index,
+         0 as immediate_value
+  from octal_constant_seed
+  union all
+  select symbol_name,
+         octal_text,
+         digit_index + 1,
+         (immediate_value * 8) + instr('01234567', substr(octal_text, digit_index, 1)) - 1
+  from octal_constant_parse
+  where digit_index <= length(octal_text)
+), octal_constant as (
+  select symbol_name,
+         immediate_value
+  from octal_constant_parse
+  where digit_index = length(octal_text) + 1
+), value_0 as (
+  select * from decimal_constant
+  union all
+  select * from hex_constant
+  union all
+  select * from octal_constant
+), value_recursive(symbol_name, immediate_value) as (
+  select symbol_name,
+         immediate_value
+  from value_0
+  union
+  select definition.symbol_name,
+         lhs.immediate_value * rhs.immediate_value as immediate_value
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' * ') - 1))
+  join value_0 rhs on rhs.symbol_name = trim(substr(definition.expression_text, instr(definition.expression_text, ' * ') + 3))
+  where instr(definition.expression_text, ' * ') > 0
+  union
+  select definition.symbol_name,
+         lhs.immediate_value * cast(trim(substr(definition.expression_text, instr(definition.expression_text, ' * ') + 3)) as integer)
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' * ') - 1))
+  where instr(definition.expression_text, ' * ') > 0
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' * ') + 3)) glob '[0-9]*'
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' * ') + 3)) not glob '*[^0-9]*'
+  union
+  select definition.symbol_name,
+         lhs.immediate_value + rhs.immediate_value
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' + ') - 1))
+  join value_0 rhs on rhs.symbol_name = trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3))
+  where instr(definition.expression_text, ' + ') > 0
+  union
+  select definition.symbol_name,
+         lhs.immediate_value + cast(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)) as integer)
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' + ') - 1))
+  where instr(definition.expression_text, ' + ') > 0
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)) glob '[0-9]*'
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)) not glob '*[^0-9]*'
+  union
+  select definition.symbol_name,
+         lhs.immediate_value - rhs.immediate_value
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' - ') - 1))
+  join value_0 rhs on rhs.symbol_name = trim(substr(definition.expression_text, instr(definition.expression_text, ' - ') + 3))
+  where instr(definition.expression_text, ' - ') > 0
+  union
+  select definition.symbol_name,
+         lhs.immediate_value - cast(trim(substr(definition.expression_text, instr(definition.expression_text, ' - ') + 3)) as integer)
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' - ') - 1))
+  where instr(definition.expression_text, ' - ') > 0
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' - ') + 3)) glob '[0-9]*'
+    and trim(substr(definition.expression_text, instr(definition.expression_text, ' - ') + 3)) not glob '*[^0-9]*'
+  union
+  select definition.symbol_name,
+         lhs.immediate_value + (rhs_lhs.immediate_value * rhs_rhs.immediate_value)
+  from repo_asm_all_unique_constant_fact definition
+  join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' + ') - 1))
+  join value_0 rhs_lhs on rhs_lhs.symbol_name = trim(substr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), 1, instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') - 1))
+  join value_0 rhs_rhs on rhs_rhs.symbol_name = trim(substr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') + 3))
+  where instr(definition.expression_text, ' + ') > 0
+    and instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') > 0
+)
+select symbol_name,
+       min(immediate_value) as immediate_value
+from value_recursive
+group by symbol_name
+having min(immediate_value) = max(immediate_value);
+
+create unique index repo_asm_numeric_constant_value_symbol_idx on repo_asm_numeric_constant_value(symbol_name);
+
 create table repo_asm_constant_candidate_operation as
 select *
 from repo_asm_operation
@@ -4673,7 +4815,7 @@ with recursive binary_operand as (
     and match.rule_name is not null
     and constant_expr.symbol_count = 1
     and instr(coalesce(match.operand_text, ''), ',') > 0
-), decimal_constant as (
+), decimal_line_constant as (
   select repo_file_id,
          function_name,
          line_no,
@@ -4682,7 +4824,7 @@ with recursive binary_operand as (
   where (expression_text glob '[0-9]*'
          or expression_text glob '-[0-9]*')
     and replace(expression_text, '-', '') not glob '*[^0-9]*'
-), hex_constant_seed as (
+), hex_line_constant_seed as (
   select repo_file_id,
          function_name,
          line_no,
@@ -4691,14 +4833,14 @@ with recursive binary_operand as (
   where lower(expression_text) glob '0x[0-9a-f]*'
     and substr(lower(expression_text), 3) <> ''
     and substr(lower(expression_text), 3) not glob '*[^0-9a-f]*'
-), hex_constant_parse(repo_file_id, function_name, line_no, hex_text, digit_index, immediate_value) as (
+), hex_line_constant_parse(repo_file_id, function_name, line_no, hex_text, digit_index, immediate_value) as (
   select repo_file_id,
          function_name,
          line_no,
          hex_text,
          1 as digit_index,
          0 as immediate_value
-  from hex_constant_seed
+  from hex_line_constant_seed
   union all
   select repo_file_id,
          function_name,
@@ -4706,19 +4848,72 @@ with recursive binary_operand as (
          hex_text,
          digit_index + 1,
          (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
-  from hex_constant_parse
+  from hex_line_constant_parse
   where digit_index <= length(hex_text)
-), hex_constant as (
+), hex_line_constant as (
   select repo_file_id,
          function_name,
          line_no,
          immediate_value
-  from hex_constant_parse
+  from hex_line_constant_parse
   where digit_index = length(hex_text) + 1
-), constant_value as (
-  select * from decimal_constant
+), octal_line_constant_seed as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         substr(lower(expression_text), 1, length(expression_text) - 1) as octal_text
+  from binary_operand
+  where lower(expression_text) glob '[0-7]*o'
+    and substr(lower(expression_text), 1, length(expression_text) - 1) <> ''
+    and substr(lower(expression_text), 1, length(expression_text) - 1) not glob '*[^0-7]*'
+), octal_line_constant_parse(repo_file_id, function_name, line_no, octal_text, digit_index, immediate_value) as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         octal_text,
+         1 as digit_index,
+         0 as immediate_value
+  from octal_line_constant_seed
   union all
-  select * from hex_constant
+  select repo_file_id,
+         function_name,
+         line_no,
+         octal_text,
+         digit_index + 1,
+         (immediate_value * 8) + instr('01234567', substr(octal_text, digit_index, 1)) - 1
+  from octal_line_constant_parse
+  where digit_index <= length(octal_text)
+), octal_line_constant as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         immediate_value
+  from octal_line_constant_parse
+  where digit_index = length(octal_text) + 1
+), symbol_constant as (
+  select binary_operand.repo_file_id,
+         binary_operand.function_name,
+         binary_operand.line_no,
+         constant_value.immediate_value
+  from binary_operand
+  join repo_asm_numeric_constant_value constant_value
+    on constant_value.symbol_name = binary_operand.symbol_name
+), line_constant as (
+  select * from decimal_line_constant
+  union all
+  select * from hex_line_constant
+  union all
+  select * from octal_line_constant
+  union all
+  select * from symbol_constant
+), constant_value as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         min(immediate_value) as immediate_value
+  from line_constant
+  group by repo_file_id, function_name, line_no
+  having min(immediate_value) = max(immediate_value)
 ), numeric_constant as (
   select binary_operand.*,
          constant_value.immediate_value

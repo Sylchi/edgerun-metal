@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added reusable numeric constant-value facts for unique decimal, hex, octal, and simple arithmetic definitions, moving 36 more symbolic constant operations into fixed encodings.
 - Extended symbolic x86 parametric lowering to base-register memory displacements and numeric memory immediates, moving 98 more constant-expression operations into fixed encodings without per-line exact facts.
 - Added symbolic x86 parametric lowering for resolved decimal and hex constant immediates, moving 533 constant-expression operations into fixed encodings without exact per-line instruction facts.
 - Materialized constant operand-symbol matches as a finite indexed relation so scoped/global constant-expression facts and unresolved-constant reports reuse one normalized fact surface instead of repeating broad operand string scans.
