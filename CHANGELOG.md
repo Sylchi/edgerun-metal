@@ -3,6 +3,10 @@
 ## 2026-06-02 - Canonical Program Model Clarification
 
 - Documented that the target is not a replacement textual assembler.
+- Converted the render IR and flat runtime test sources to committed source objects and expanded `catalog.sql` so repo ASM source objects lower into indexed facts for parsed operations, rule matches, operation status, relocations, data references, macro lowerings, and deletion-readiness.
+- Added operator queue views for remaining ASM fact gaps and next fixed-encoding candidates; `dec ecx` and `dec eax` now lower through finite encoding facts, moving 154 inventory operations to fixed encodings.
+- Materialized and indexed the repo ASM operation, rule-match, and operation-status relations so each new lowering round can query the next gaps quickly instead of recomputing nested source-import views.
+- Added tradeoff decision, option, metric, assessment, and selected-option facts so source deletion and operator-loop choices can be ranked from queryable cost, benefit, risk, and canonical-alignment data.
 - Defined programs as `.erobj` graphs of hash-addressed code, data, requirements, receipts, and dependencies.
 - Clarified that code should move toward canonical instruction records, labels, control edges, data records, and imports that can be validated and materialized directly.
 - Documented source, drivers, runtimes, build tools, UI, tests, and text views as pipeline/view layers over canonical object records.

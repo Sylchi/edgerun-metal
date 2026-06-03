@@ -280,6 +280,171 @@ create table encoding_pattern (
 insert into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
   (1, 'x86_64_mov_eax_imm32', 1, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_imm32.erobj'), (2, 'x86_64_ret', 1, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ret.erobj'), (3, 'x86_64_nop', 1, 1, '90', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/nop.erobj'), (82, 'x86_64_mov_rcx_rsi', 1, 1, '4889f1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rcx_rsi.erobj'), (83, 'x86_64_sub_rcx_rdi', 1, 1, '4829f9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sub_rcx_rdi.erobj'), (84, 'x86_64_jle_rel8_10', 1, 1, '7e0a', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/jle_rel8_10.erobj'), (85, 'x86_64_xor_eax_eax', 1, 1, '31c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_eax_eax.erobj'), (86, 'x86_64_cld', 1, 1, 'fc', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cld.erobj'), (87, 'x86_64_shr_rcx_3', 1, 1, '48c1e903', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shr_rcx_3.erobj'), (88, 'x86_64_rep_stosq', 1, 1, 'f348ab', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_stosq.erobj'), (20, 'x86_32_mov_eax_imm32', 2, 1, 'b8', 5, 1, 0, 'kernel/x86_64/object/encoding/x86_32/mov_eax_imm32.erobj'), (21, 'x86_32_ret', 2, 1, 'c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_32/ret.erobj'), (40, 'aarch64_ret', 3, 2, 'c0035fd6', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/ret.erobj'), (41, 'aarch64_nop', 3, 2, '1f2003d5', null, -1, 0, 'kernel/x86_64/object/encoding/aarch64/nop.erobj'), (60, 'arm32_bx_lr', 4, 2, '1eff2fe1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/bx_lr.erobj'), (61, 'arm32_nop', 4, 2, '00f020e3', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/nop.erobj'), (80, 'wasm_end', 5, 3, '0b', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/end.erobj'), (81, 'wasm_nop', 5, 3, '01', null, -1, 0, 'kernel/x86_64/object/encoding/wasm/nop.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1000, 'x86_64_syscall', 1, 1, '0f05', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/syscall.erobj'),
+  (1001, 'x86_64_test_eax_eax', 1, 1, '85c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_eax_eax.erobj'),
+  (1002, 'x86_64_test_edx_edx', 1, 1, '85d2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_edx_edx.erobj'),
+  (1003, 'x86_64_test_rdx_rdx', 1, 1, '4885d2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_rdx_rdx.erobj'),
+  (1004, 'x86_64_test_rdi_rdi', 1, 1, '4885ff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_rdi_rdi.erobj'),
+  (1005, 'x86_64_test_rax_rax', 1, 1, '4885c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_rax_rax.erobj'),
+  (1006, 'x86_64_test_rsi_rsi', 1, 1, '4885f6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_rsi_rsi.erobj'),
+  (1007, 'x86_64_xor_edx_edx', 1, 1, '31d2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_edx_edx.erobj'),
+  (1008, 'x86_64_xor_ecx_ecx', 1, 1, '31c9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_ecx_ecx.erobj'),
+  (1009, 'x86_64_xor_esi_esi', 1, 1, '31f6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_esi_esi.erobj'),
+  (1010, 'x86_64_xor_ebx_ebx', 1, 1, '31db', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_ebx_ebx.erobj'),
+  (1011, 'x86_64_xor_edi_edi', 1, 1, '31ff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_edi_edi.erobj'),
+  (1012, 'x86_64_xor_r8d_r8d', 1, 1, '4531c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_r8d_r8d.erobj'),
+  (1013, 'x86_64_xor_r9d_r9d', 1, 1, '4531c9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xor_r9d_r9d.erobj'),
+  (1014, 'x86_64_push_rax', 1, 1, '50', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_rax.erobj'),
+  (1015, 'x86_64_push_rcx', 1, 1, '51', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_rcx.erobj'),
+  (1016, 'x86_64_push_rbx', 1, 1, '53', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_rbx.erobj'),
+  (1017, 'x86_64_push_rbp', 1, 1, '55', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_rbp.erobj'),
+  (1018, 'x86_64_push_r12', 1, 1, '4154', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_r12.erobj'),
+  (1019, 'x86_64_push_r13', 1, 1, '4155', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_r13.erobj'),
+  (1020, 'x86_64_push_r14', 1, 1, '4156', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_r14.erobj'),
+  (1021, 'x86_64_push_r15', 1, 1, '4157', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_r15.erobj'),
+  (1022, 'x86_64_pop_rax', 1, 1, '58', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_rax.erobj'),
+  (1023, 'x86_64_pop_rcx', 1, 1, '59', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_rcx.erobj'),
+  (1024, 'x86_64_pop_rbx', 1, 1, '5b', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_rbx.erobj'),
+  (1025, 'x86_64_pop_rbp', 1, 1, '5d', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_rbp.erobj'),
+  (1026, 'x86_64_pop_r12', 1, 1, '415c', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_r12.erobj'),
+  (1027, 'x86_64_pop_r13', 1, 1, '415d', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_r13.erobj'),
+  (1028, 'x86_64_pop_r14', 1, 1, '415e', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_r14.erobj'),
+  (1029, 'x86_64_pop_r15', 1, 1, '415f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pop_r15.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1030, 'x86_64_mov_rdi_r12', 1, 1, '4c89e7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r12.erobj'),
+  (1031, 'x86_64_mov_eax_minus_one', 1, 1, 'b8ffffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_minus_one.erobj'),
+  (1032, 'x86_64_mov_r12_rdi', 1, 1, '4989fc', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r12_rdi.erobj'),
+  (1033, 'x86_64_mov_rdi_rbx', 1, 1, '4889df', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_rbx.erobj'),
+  (1034, 'x86_64_mov_eax_1', 1, 1, 'b801000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_1.erobj'),
+  (1035, 'x86_64_mov_rsi_r13', 1, 1, '4c89ee', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_r13.erobj'),
+  (1036, 'x86_64_mov_esi_r13d', 1, 1, '4489ee', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_r13d.erobj'),
+  (1037, 'x86_64_mov_eax_ebx', 1, 1, '89d8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_ebx.erobj'),
+  (1038, 'x86_64_mov_rdi_rsp', 1, 1, '4889e7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_rsp.erobj'),
+  (1039, 'x86_64_mov_rdi_r14', 1, 1, '4c89f7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r14.erobj'),
+  (1040, 'x86_64_mov_rsi_r12', 1, 1, '4c89e6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_r12.erobj'),
+  (1041, 'x86_64_mov_rdi_r13', 1, 1, '4c89ef', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r13.erobj'),
+  (1042, 'x86_64_mov_edi_r12d', 1, 1, '4489e7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_r12d.erobj'),
+  (1043, 'x86_64_mov_r13d_esi', 1, 1, '4189f5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r13d_esi.erobj'),
+  (1044, 'x86_64_mov_rbx_rax', 1, 1, '4889c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rbx_rax.erobj'),
+  (1045, 'x86_64_mov_esi_eax', 1, 1, '89c6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_eax.erobj'),
+  (1046, 'x86_64_mov_r13_rsi', 1, 1, '4989f5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r13_rsi.erobj'),
+  (1047, 'x86_64_mov_rdx_r14', 1, 1, '4c89f2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_r14.erobj'),
+  (1048, 'x86_64_mov_rbx_rdi', 1, 1, '4889fb', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rbx_rdi.erobj'),
+  (1049, 'x86_64_mov_eax_r14d', 1, 1, '4489f0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_r14d.erobj'),
+  (1050, 'x86_64_mov_rdi_r15', 1, 1, '4c89ff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r15.erobj'),
+  (1051, 'x86_64_mov_r14_rdx', 1, 1, '4989d6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r14_rdx.erobj'),
+  (1052, 'x86_64_mov_ecx_eax', 1, 1, '89c1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_eax.erobj'),
+  (1053, 'x86_64_mov_ebx_eax', 1, 1, '89c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ebx_eax.erobj'),
+  (1054, 'x86_64_mov_eax_ecx', 1, 1, '89c8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_ecx.erobj'),
+  (1055, 'x86_64_mov_rsi_r15', 1, 1, '4c89fe', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_r15.erobj'),
+  (1056, 'x86_64_mov_edi_ebx', 1, 1, '89df', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_ebx.erobj'),
+  (1057, 'x86_64_mov_edx_ebx', 1, 1, '89da', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_ebx.erobj'),
+  (1058, 'x86_64_mov_eax_edi', 1, 1, '89f8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_edi.erobj'),
+  (1059, 'x86_64_mov_r13_rdx', 1, 1, '4989d5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r13_rdx.erobj'),
+  (1060, 'x86_64_mov_rsi_r14', 1, 1, '4c89f6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_r14.erobj'),
+  (1061, 'x86_64_mov_esi_r12d', 1, 1, '4489e6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_r12d.erobj'),
+  (1062, 'x86_64_mov_eax_esi', 1, 1, '89f0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_esi.erobj'),
+  (1063, 'x86_64_mov_eax_r13d', 1, 1, '4489e8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_r13d.erobj'),
+  (1064, 'x86_64_mov_r14d_edx', 1, 1, '4189d6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r14d_edx.erobj'),
+  (1065, 'x86_64_mov_eax_r15d', 1, 1, '4489f8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_r15d.erobj'),
+  (1066, 'x86_64_mov_edi_r14d', 1, 1, '4489f7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_r14d.erobj'),
+  (1067, 'x86_64_mov_edx_eax', 1, 1, '89c2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_eax.erobj'),
+  (1068, 'x86_64_mov_rdi_rax', 1, 1, '4889c7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_rax.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1069, 'x86_64_inc_ecx', 1, 1, 'ffc1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_ecx.erobj'),
+  (1070, 'x86_64_inc_ebx', 1, 1, 'ffc3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_ebx.erobj'),
+  (1071, 'x86_64_inc_rbx', 1, 1, '48ffc3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_rbx.erobj'),
+  (1072, 'x86_64_inc_eax', 1, 1, 'ffc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_eax.erobj'),
+  (1073, 'x86_64_inc_rdi', 1, 1, '48ffc7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_rdi.erobj'),
+  (1074, 'x86_64_inc_rax', 1, 1, '48ffc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_rax.erobj'),
+  (1075, 'x86_64_inc_r15d', 1, 1, '41ffc7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r15d.erobj'),
+  (1076, 'x86_64_inc_r12', 1, 1, '49ffc4', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r12.erobj'),
+  (1077, 'x86_64_inc_r14d', 1, 1, '41ffc6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r14d.erobj'),
+  (1078, 'x86_64_inc_r8d', 1, 1, '41ffc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r8d.erobj'),
+  (1079, 'x86_64_inc_r9d', 1, 1, '41ffc1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r9d.erobj'),
+  (1080, 'x86_64_inc_r10', 1, 1, '49ffc2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r10.erobj'),
+  (1081, 'x86_64_inc_rcx', 1, 1, '48ffc1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_rcx.erobj'),
+  (1082, 'x86_64_inc_r10d', 1, 1, '41ffc2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r10d.erobj'),
+  (1083, 'x86_64_inc_r13', 1, 1, '49ffc5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r13.erobj'),
+  (1084, 'x86_64_inc_r11d', 1, 1, '41ffc3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r11d.erobj'),
+  (1085, 'x86_64_inc_edx', 1, 1, 'ffc2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_edx.erobj'),
+  (1086, 'x86_64_inc_r8', 1, 1, '49ffc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r8.erobj'),
+  (1087, 'x86_64_inc_rsi', 1, 1, '48ffc6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_rsi.erobj'),
+  (1088, 'x86_64_inc_ebp', 1, 1, 'ffc5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_ebp.erobj'),
+  (1089, 'x86_64_inc_r13d', 1, 1, '41ffc5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/inc_r13d.erobj'),
+  (1090, 'x86_64_add_rsp_16', 1, 1, '4883c410', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rsp_16.erobj'),
+  (1091, 'x86_64_add_rsp_8', 1, 1, '4883c408', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rsp_8.erobj'),
+  (1092, 'x86_64_add_eax_ecx', 1, 1, '01c8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_eax_ecx.erobj'),
+  (1093, 'x86_64_add_eax_edx', 1, 1, '01d0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_eax_edx.erobj'),
+  (1094, 'x86_64_add_ebx_eax', 1, 1, '01c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_ebx_eax.erobj'),
+  (1095, 'x86_64_add_rsp_24', 1, 1, '4883c418', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rsp_24.erobj'),
+  (1096, 'x86_64_add_rsp_32', 1, 1, '4883c420', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rsp_32.erobj'),
+  (1097, 'x86_64_add_edi_eax', 1, 1, '01c7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_edi_eax.erobj'),
+  (1098, 'x86_64_add_eax_ebx', 1, 1, '01d8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_eax_ebx.erobj'),
+  (1099, 'x86_64_add_r15d_eax', 1, 1, '4101c7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_r15d_eax.erobj'),
+  (1100, 'x86_64_add_rax_rcx', 1, 1, '4801c8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rax_rcx.erobj'),
+  (1101, 'x86_64_add_eax_r8d', 1, 1, '4401c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_eax_r8d.erobj'),
+  (1102, 'x86_64_add_rdi_rax', 1, 1, '4801c7', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rdi_rax.erobj'),
+  (1103, 'x86_64_add_rbx_rax', 1, 1, '4801c3', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_rbx_rax.erobj'),
+  (1104, 'x86_64_add_edx_eax', 1, 1, '01c2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_edx_eax.erobj'),
+  (1105, 'x86_64_add_edx_ecx', 1, 1, '01ca', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_edx_ecx.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1106, 'x86_64_mov_rdi_com1_port', 1, 1, '48c7c7f8030000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_com1_port.erobj'),
+  (1107, 'x86_64_mov_edi_com1_port', 1, 1, 'bff8030000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_com1_port.erobj'),
+  (1108, 'x86_64_mov_r12_com1_port', 1, 1, '49c7c4f8030000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r12_com1_port.erobj'),
+  (1109, 'x86_64_mov_r14_com1_port', 1, 1, '49c7c6f8030000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r14_com1_port.erobj'),
+  (1110, 'x86_64_mov_rsi_com1_port', 1, 1, '48c7c6f8030000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsi_com1_port.erobj'),
+  (1111, 'x86_64_mov_rax_rbx_runtime_memory_ptr', 1, 1, '488b03', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rax_rbx_runtime_memory_ptr.erobj'),
+  (1112, 'x86_64_cmp_rbx_runtime_ticks_ptr_zero', 1, 1, '48837b1000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_rbx_runtime_ticks_ptr_zero.erobj'),
+  (1113, 'x86_64_cmp_rbx_runtime_memory_len_da_app_memory', 1, 1, '48817b0800000100', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_rbx_runtime_memory_len_da_app_memory.erobj'),
+  (1114, 'x86_64_mov_rdx_60', 1, 1, '48c7c23c000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_60.erobj'),
+  (1115, 'x86_64_mov_ecx_32', 1, 1, 'b920000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_32.erobj'),
+  (1116, 'x86_64_mov_rdx_48', 1, 1, '48c7c230000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_48.erobj'),
+  (1117, 'x86_64_mov_ecx_60', 1, 1, 'b93c000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_60.erobj'),
+  (1118, 'x86_64_movd_xmm2_eax', 1, 1, '660f6ed0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movd_xmm2_eax.erobj'),
+  (1119, 'x86_64_movd_xmm3_eax', 1, 1, '660f6ed8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movd_xmm3_eax.erobj'),
+  (1120, 'x86_64_pxor_xmm0_xmm0', 1, 1, '660fefc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pxor_xmm0_xmm0.erobj'),
+  (1121, 'x86_64_mov_eax_0x3f800000', 1, 1, 'b80000803f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x3f800000.erobj'),
+  (1122, 'x86_64_mov_r9d_minus_one', 1, 1, '41b9ffffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r9d_minus_one.erobj'),
+  (1123, 'x86_64_pxor_xmm1_xmm1', 1, 1, '660fefc9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pxor_xmm1_xmm1.erobj'),
+  (1124, 'x86_64_mov_ecx_4', 1, 1, 'b904000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_4.erobj'),
+  (1125, 'x86_64_mov_ecx_36', 1, 1, 'b924000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_36.erobj'),
+  (1126, 'x86_64_mov_edx_minus_one', 1, 1, 'baffffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_minus_one.erobj'),
+  (1127, 'x86_64_mov_esi_1', 1, 1, 'be01000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_1.erobj'),
+  (1128, 'x86_64_mov_r8d_minus_one', 1, 1, '41b8ffffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r8d_minus_one.erobj'),
+  (1129, 'x86_64_mov_rdx_1', 1, 1, '48c7c201000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_1.erobj'),
+  (1130, 'x86_64_mov_rdx_9', 1, 1, '48c7c209000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_9.erobj'),
+  (1131, 'x86_64_mov_rdx_36', 1, 1, '48c7c224000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_36.erobj'),
+  (1132, 'x86_64_mov_rdx_15', 1, 1, '48c7c20f000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_15.erobj'),
+  (1133, 'x86_64_mov_rdx_8', 1, 1, '48c7c208000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_8.erobj'),
+  (1134, 'x86_64_mov_rdx_32', 1, 1, '48c7c220000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_32.erobj'),
+  (1135, 'x86_64_movd_eax_xmm0', 1, 1, '660f7ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movd_eax_xmm0.erobj'),
+  (1136, 'x86_64_mov_eax_0x3e800000', 1, 1, 'b80000803e', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x3e800000.erobj'),
+  (1137, 'x86_64_mov_eax_0x3f400000', 1, 1, 'b80000403f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x3f400000.erobj'),
+  (1138, 'x86_64_mov_eax_0x41800000', 1, 1, 'b800008041', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x41800000.erobj'),
+  (1139, 'x86_64_mov_eax_0x42000000', 1, 1, 'b800000042', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0x42000000.erobj'),
+  (1140, 'x86_64_mov_ecx_minus_one', 1, 1, 'b9ffffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_minus_one.erobj'),
+  (1141, 'x86_64_mov_edi_0', 1, 1, 'bf00000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_0.erobj'),
+  (1142, 'x86_64_mov_edi_255', 1, 1, 'bfff000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_255.erobj'),
+  (1143, 'x86_64_mov_edi_7', 1, 1, 'bf07000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_7.erobj'),
+  (1144, 'x86_64_mov_edx_minus_two', 1, 1, 'bafeffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_minus_two.erobj'),
+  (1145, 'x86_64_mov_edx_255', 1, 1, 'baff000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_255.erobj'),
+  (1146, 'x86_64_mov_esi_2', 1, 1, 'be02000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_2.erobj'),
+  (1147, 'x86_64_mov_esi_5', 1, 1, 'be05000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_5.erobj'),
+  (1148, 'x86_64_mov_r9d_42', 1, 1, '41b92a000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r9d_42.erobj'),
+  (1149, 'x86_64_mov_rdx_minus_two', 1, 1, '48c7c2feffffff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_minus_two.erobj'),
+  (1150, 'x86_64_mov_rdx_4', 1, 1, '48c7c204000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdx_4.erobj'),
+  (1151, 'x86_64_movd_xmm0_eax', 1, 1, '660f6ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movd_xmm0_eax.erobj'),
+  (1152, 'x86_64_movd_xmm1_eax', 1, 1, '660f6ec8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movd_xmm1_eax.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1153, 'x86_64_dec_ecx', 1, 1, 'ffc9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/dec_ecx.erobj'),
+  (1154, 'x86_64_dec_eax', 1, 1, 'ffc8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/dec_eax.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -719,219 +884,6 @@ join function_object using (function_id)
 join canonical_function_flat_hex on canonical_function_flat_hex.function_name = function_object.name
 where abstraction_node.abstraction_kind_id = 2;
 
--- SQL parser/import tool model.
---
--- The active authority is the query tool operating over these relations. Source
--- bytes are input data. Token, parse, abstraction, and lowering rows are the
--- program state the tool derives and edits. Unsupported syntax has no grammar
--- or semantic rule and therefore cannot be imported.
-
-create table source_unit (
-  source_unit_id integer primary key,
-  language_id integer not null references language(language_id),
-  name text not null unique,
-  source_text text not null,
-  root_parse_node_id integer,
-  root_abstraction_id integer
-);
-
-create table token_kind (
-  token_kind_id integer primary key,
-  language_id integer not null references language(language_id),
-  name text not null,
-  token_class integer not null,
-  flags integer not null default 0,
-  unique (language_id, name)
-);
-
-insert into token_kind(token_kind_id, language_id, name, token_class, flags) values
-  (1, 4, 'kw_int', 1, 0),
-  (2, 4, 'kw_void', 1, 0),
-  (3, 4, 'kw_return', 1, 0),
-  (4, 4, 'identifier', 2, 0),
-  (5, 4, 'integer_literal', 3, 0),
-  (6, 4, 'lparen', 4, 0),
-  (7, 4, 'rparen', 4, 0),
-  (8, 4, 'lbrace', 4, 0),
-  (9, 4, 'rbrace', 4, 0),
-  (10, 4, 'semicolon', 4, 0);
-
-create table lex_rule (
-  lex_rule_id integer primary key,
-  language_id integer not null references language(language_id),
-  token_kind_id integer not null references token_kind(token_kind_id),
-  rule_name text not null,
-  priority integer not null,
-  literal_text text,
-  char_class text,
-  skip_flag integer not null default 0,
-  unique (language_id, rule_name)
-);
-
-insert into lex_rule(lex_rule_id, language_id, token_kind_id, rule_name, priority, literal_text, char_class, skip_flag) values
-  (1, 4, 1, 'literal_int', 1, 'int', null, 0),
-  (2, 4, 2, 'literal_void', 1, 'void', null, 0),
-  (3, 4, 3, 'literal_return', 1, 'return', null, 0),
-  (4, 4, 6, 'literal_lparen', 1, '(', null, 0),
-  (5, 4, 7, 'literal_rparen', 1, ')', null, 0),
-  (6, 4, 8, 'literal_lbrace', 1, '{', null, 0),
-  (7, 4, 9, 'literal_rbrace', 1, '}', null, 0),
-  (8, 4, 10, 'literal_semicolon', 1, ';', null, 0),
-  (9, 4, 5, 'decimal_integer', 2, null, '0-9+', 0),
-  (10, 4, 4, 'identifier', 3, null, 'A-Za-z_ A-Za-z0-9_*', 0);
-
-create table token (
-  source_unit_id integer not null references source_unit(source_unit_id),
-  token_id integer not null,
-  token_kind_id integer not null references token_kind(token_kind_id),
-  start_offset integer not null,
-  end_offset integer not null,
-  text_value text not null,
-  int_value integer,
-  primary key (source_unit_id, token_id),
-  unique (source_unit_id, start_offset)
-);
-
-create table grammar_rule (
-  grammar_rule_id integer primary key,
-  language_id integer not null references language(language_id),
-  nonterminal text not null,
-  production_name text not null,
-  syntax_atom_id integer references syntax_atom(syntax_atom_id),
-  arity integer not null,
-  unique (language_id, nonterminal, production_name)
-);
-
-create table grammar_rule_part (
-  grammar_rule_id integer not null references grammar_rule(grammar_rule_id),
-  position integer not null,
-  expected_token_kind_id integer references token_kind(token_kind_id),
-  expected_nonterminal text,
-  min_count integer not null default 1,
-  max_count integer not null default 1,
-  primary key (grammar_rule_id, position)
-);
-
-insert into grammar_rule(grammar_rule_id, language_id, nonterminal, production_name, syntax_atom_id, arity) values
-  (1, 4, 'translation_unit', 'single_function', 20, 1),
-  (2, 4, 'function_definition', 'int_fn_void_body', 21, 6),
-  (3, 4, 'compound_statement', 'single_return', 22, 3),
-  (4, 4, 'return_statement', 'return_integer', 23, 3),
-  (5, 4, 'integer_expression', 'integer_literal', 24, 1);
-
-insert into grammar_rule_part(grammar_rule_id, position, expected_token_kind_id, expected_nonterminal, min_count, max_count) values
-  (1, 1, null, 'function_definition', 1, 1),
-  (2, 1, 1, null, 1, 1),
-  (2, 2, 4, null, 1, 1),
-  (2, 3, 6, null, 1, 1),
-  (2, 4, 2, null, 1, 1),
-  (2, 5, 7, null, 1, 1),
-  (2, 6, null, 'compound_statement', 1, 1),
-  (3, 1, 8, null, 1, 1),
-  (3, 2, null, 'return_statement', 1, 1),
-  (3, 3, 9, null, 1, 1),
-  (4, 1, 3, null, 1, 1),
-  (4, 2, null, 'integer_expression', 1, 1),
-  (4, 3, 10, null, 1, 1),
-  (5, 1, 5, null, 1, 1);
-
-create table parse_node (
-  source_unit_id integer not null references source_unit(source_unit_id),
-  parse_node_id integer not null,
-  grammar_rule_id integer not null references grammar_rule(grammar_rule_id),
-  syntax_atom_id integer references syntax_atom(syntax_atom_id),
-  start_token_id integer not null,
-  end_token_id integer not null,
-  primary key (source_unit_id, parse_node_id)
-);
-
-create table parse_edge (
-  source_unit_id integer not null,
-  parent_parse_node_id integer not null,
-  child_parse_node_id integer not null,
-  ordinal integer not null,
-  primary key (source_unit_id, parent_parse_node_id, ordinal),
-  foreign key (source_unit_id, parent_parse_node_id) references parse_node(source_unit_id, parse_node_id),
-  foreign key (source_unit_id, child_parse_node_id) references parse_node(source_unit_id, parse_node_id)
-);
-
-insert into source_unit(source_unit_id, language_id, name, source_text, root_parse_node_id, root_abstraction_id) values
-  (1, 4, 'return_42.c', 'int return_42(void) { return 42; }', 1, 2);
-
-insert into token(source_unit_id, token_id, token_kind_id, start_offset, end_offset, text_value, int_value) values
-  (1, 1, 1, 0, 3, 'int', null),
-  (1, 2, 4, 4, 13, 'return_42', null),
-  (1, 3, 6, 13, 14, '(', null),
-  (1, 4, 2, 14, 18, 'void', null),
-  (1, 5, 7, 18, 19, ')', null),
-  (1, 6, 8, 20, 21, '{', null),
-  (1, 7, 3, 22, 28, 'return', null),
-  (1, 8, 5, 29, 31, '42', 42),
-  (1, 9, 10, 31, 32, ';', null),
-  (1, 10, 9, 33, 34, '}', null);
-
-insert into parse_node(source_unit_id, parse_node_id, grammar_rule_id, syntax_atom_id, start_token_id, end_token_id) values
-  (1, 1, 1, 20, 1, 10),
-  (1, 2, 2, 21, 1, 10),
-  (1, 3, 3, 22, 6, 10),
-  (1, 4, 4, 23, 7, 9),
-  (1, 5, 5, 24, 8, 8);
-
-insert into parse_edge(source_unit_id, parent_parse_node_id, child_parse_node_id, ordinal) values
-  (1, 1, 2, 1),
-  (1, 2, 3, 1),
-  (1, 3, 4, 1),
-  (1, 4, 5, 1);
-
-create view source_token_stream as
-select source_unit.name as source_name,
-       token.token_id,
-       token_kind.name as token_kind,
-       token.text_value,
-       token.int_value
-from token
-join source_unit using (source_unit_id)
-join token_kind using (token_kind_id)
-order by source_unit.source_unit_id, token.token_id;
-
-create view source_parse_tree as
-select source_unit.name as source_name,
-       parse_node.parse_node_id,
-       grammar_rule.nonterminal,
-       grammar_rule.production_name,
-       syntax_atom.name as syntax_atom,
-       parse_node.start_token_id,
-       parse_node.end_token_id
-from parse_node
-join source_unit using (source_unit_id)
-join grammar_rule using (grammar_rule_id)
-left join syntax_atom using (syntax_atom_id)
-order by source_unit.source_unit_id, parse_node.parse_node_id;
-
-create view parsed_source_abstractions as
-select source_unit.name as source_name,
-       abstraction_node.name as abstraction_name,
-       abstraction_kind.name as abstraction_kind,
-       abstraction_node.literal_integer,
-       abstraction_node.object_path
-from source_unit
-join abstraction_node on abstraction_node.import_unit_id = source_unit.source_unit_id
-join abstraction_kind using (abstraction_kind_id)
-order by abstraction_node.abstraction_id;
-
-create view source_to_target_hex as
-select source_unit.name as source_name,
-       language.name as language_name,
-       isa.name as target_isa,
-       abstraction_function_projection.function_name,
-       abstraction_function_projection.hex_bytes
-from source_unit
-join language using (language_id)
-join abstraction_node on abstraction_node.abstraction_id = source_unit.root_abstraction_id
-join abstraction_function_projection on abstraction_function_projection.abstraction_name = abstraction_node.name
-join function_object on function_object.name = abstraction_function_projection.function_name
-join isa on isa.isa_id = function_object.isa_id;
-
 -- Relational rule engine proof model.
 --
 -- The same abstract operation graph can be interpreted, lowered, and assembled
@@ -1217,7 +1169,6 @@ insert into semantic_rule(semantic_rule_id, language_id, syntax_atom_id, abstrac
 
 create table asm_dsl_source (
   asm_source_id integer primary key,
-  source_unit_id integer references source_unit(source_unit_id),
   source_object_path text not null unique,
   module_name text not null,
   language_id integer not null references language(language_id)
@@ -1282,7 +1233,8 @@ insert into asm_dsl_rule(asm_rule_id, line_kind, op_name, operation_kind_id, ins
   (21, 3, 'er_ok', null, null, null, null, 'asm_dsl_macro_er_ok', null, 2),
   (22, 3, 'er_check_nonzero', null, null, null, null, 'asm_dsl_macro_er_check_nonzero', null, 2),
   (23, 3, 'er_pop', null, null, null, null, 'asm_dsl_macro_er_pop', null, 2),
-  (24, 3, 'er_push', null, null, null, null, 'asm_dsl_macro_er_push', null, 2);
+  (24, 3, 'er_push', null, null, null, null, 'asm_dsl_macro_er_push', null, 2),
+  (25, 4, 'global', null, null, null, null, 'global_to_export_symbol', null, 1);
 
 insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags)
 select 3,
@@ -1314,11 +1266,215 @@ select 3, 'jnz', null, instruction.object_path, null, null, 'asm_x86_jnz_alias_g
 from instruction join isa using (isa_id)
 where isa.name = 'x86_64' and instruction.mnemonic = 'jne';
 
-insert into source_unit(source_unit_id, language_id, name, source_text, root_parse_node_id, root_abstraction_id) values
-  (2, 7, 'kernel/test/test_flat_runtime.asm.erobj', 'er_fn er_bss_zero\n    mov rcx, rsi\n    sub rcx, rdi\n    jle .done\n    xor eax, eax\n    cld\n    shr rcx, 3\n    rep stosq\n.done:\n    ret\n', null, null);
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags)
+select 3,
+       instruction.mnemonic,
+       null,
+       instruction.object_path,
+       null,
+       null,
+       'asm_x86_' || instruction.mnemonic || '_known_gap',
+       null,
+       2
+from instruction
+join isa using (isa_id)
+where isa.name = 'x86_64'
+  and instruction.mnemonic in ('syscall','js','jc','movsx','out','in');
 
-insert into asm_dsl_source(asm_source_id, source_unit_id, source_object_path, module_name, language_id) values
-  (1, 2, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'ASSERT_EQ', null, null, null, null, 'test_macro_assert_eq', null, 2),
+  (3, 'ASSERT_RDX', null, null, null, null, 'test_macro_assert_rdx', null, 2),
+  (3, 'ASSERT_RAX', null, null, null, null, 'test_macro_assert_rax', null, 2),
+  (3, 'ASSERT_MEM_EQ', null, null, null, null, 'test_macro_assert_mem_eq', null, 2),
+  (3, 'ASSERT_DWORD', null, null, null, null, 'test_macro_assert_dword', null, 2),
+  (3, 'ASSERT_BYTE', null, null, null, null, 'test_macro_assert_byte', null, 2),
+  (3, 'ASSERT_QWORD', null, null, null, null, 'test_macro_assert_qword', null, 2),
+  (3, 'TEST_CALL_EAX', null, null, null, null, 'test_macro_call_eax', null, 2),
+  (3, 'er_stack_alloc', null, null, null, null, 'asm_dsl_macro_er_stack_alloc', null, 2),
+  (3, 'er_stack_free', null, null, null, null, 'asm_dsl_macro_er_stack_free', null, 2),
+  (3, 'er_pop_ret', null, null, null, null, 'asm_dsl_macro_er_pop_ret', null, 2),
+  (3, 'er_call', null, null, null, null, 'asm_dsl_macro_er_call', null, 2),
+  (3, 'er_frame_pop', null, null, null, null, 'asm_dsl_macro_er_frame_pop', null, 2),
+  (3, 'er_frame_push_regs', null, null, null, null, 'asm_dsl_macro_er_frame_push_regs', null, 2),
+  (3, 'db', null, null, null, null, 'data_decl_db', null, 1),
+  (3, 'dw', null, null, null, null, 'data_decl_dw', null, 1),
+  (3, 'dd', null, null, null, null, 'data_decl_dd', null, 1),
+  (3, 'SECTION', null, null, null, null, 'section_directive_upper', null, 1),
+  (4, '%macro', null, null, null, null, 'macro_definition_start', null, 1),
+  (4, '%endm', null, null, null, null, 'macro_definition_end', null, 1),
+  (4, '%endif', null, null, null, null, 'conditional_definition_end', null, 1);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'syscall', null, 'kernel/x86_64/object/instruction/x86_64/syscall.erobj', null, 1000, 'asm_x86_syscall_exact', '', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1001, 'asm_x86_test_eax_eax_exact', 'eax, eax', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1002, 'asm_x86_test_edx_edx_exact', 'edx, edx', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1003, 'asm_x86_test_rdx_rdx_exact', 'rdx, rdx', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1004, 'asm_x86_test_rdi_rdi_exact', 'rdi, rdi', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1005, 'asm_x86_test_rax_rax_exact', 'rax, rax', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1006, 'asm_x86_test_rsi_rsi_exact', 'rsi, rsi', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1007, 'asm_x86_xor_edx_edx_exact', 'edx, edx', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1008, 'asm_x86_xor_ecx_ecx_exact', 'ecx, ecx', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1009, 'asm_x86_xor_esi_esi_exact', 'esi, esi', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1010, 'asm_x86_xor_ebx_ebx_exact', 'ebx, ebx', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1011, 'asm_x86_xor_edi_edi_exact', 'edi, edi', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1012, 'asm_x86_xor_r8d_r8d_exact', 'r8d, r8d', 0),
+  (3, 'xor', null, 'kernel/x86_64/object/instruction/x86_64/xor.erobj', null, 1013, 'asm_x86_xor_r9d_r9d_exact', 'r9d, r9d', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1014, 'asm_x86_push_rax_exact', 'rax', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1015, 'asm_x86_push_rcx_exact', 'rcx', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1016, 'asm_x86_push_rbx_exact', 'rbx', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1017, 'asm_x86_push_rbp_exact', 'rbp', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1018, 'asm_x86_push_r12_exact', 'r12', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1019, 'asm_x86_push_r13_exact', 'r13', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1020, 'asm_x86_push_r14_exact', 'r14', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1021, 'asm_x86_push_r15_exact', 'r15', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1022, 'asm_x86_pop_rax_exact', 'rax', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1023, 'asm_x86_pop_rcx_exact', 'rcx', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1024, 'asm_x86_pop_rbx_exact', 'rbx', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1025, 'asm_x86_pop_rbp_exact', 'rbp', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1026, 'asm_x86_pop_r12_exact', 'r12', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1027, 'asm_x86_pop_r13_exact', 'r13', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1028, 'asm_x86_pop_r14_exact', 'r14', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/x86_64/pop.erobj', null, 1029, 'asm_x86_pop_r15_exact', 'r15', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1030, 'asm_x86_mov_rdi_r12_exact', 'rdi, r12', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1031, 'asm_x86_mov_eax_minus_one_exact', 'eax, -1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1032, 'asm_x86_mov_r12_rdi_exact', 'r12, rdi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1033, 'asm_x86_mov_rdi_rbx_exact', 'rdi, rbx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1034, 'asm_x86_mov_eax_1_exact', 'eax, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1035, 'asm_x86_mov_rsi_r13_exact', 'rsi, r13', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1036, 'asm_x86_mov_esi_r13d_exact', 'esi, r13d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1037, 'asm_x86_mov_eax_ebx_exact', 'eax, ebx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1038, 'asm_x86_mov_rdi_rsp_exact', 'rdi, rsp', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1039, 'asm_x86_mov_rdi_r14_exact', 'rdi, r14', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1040, 'asm_x86_mov_rsi_r12_exact', 'rsi, r12', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1041, 'asm_x86_mov_rdi_r13_exact', 'rdi, r13', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1042, 'asm_x86_mov_edi_r12d_exact', 'edi, r12d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1043, 'asm_x86_mov_r13d_esi_exact', 'r13d, esi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1044, 'asm_x86_mov_rbx_rax_exact', 'rbx, rax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1045, 'asm_x86_mov_esi_eax_exact', 'esi, eax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1046, 'asm_x86_mov_r13_rsi_exact', 'r13, rsi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1047, 'asm_x86_mov_rdx_r14_exact', 'rdx, r14', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1048, 'asm_x86_mov_rbx_rdi_exact', 'rbx, rdi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1049, 'asm_x86_mov_eax_r14d_exact', 'eax, r14d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1050, 'asm_x86_mov_rdi_r15_exact', 'rdi, r15', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1051, 'asm_x86_mov_r14_rdx_exact', 'r14, rdx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1052, 'asm_x86_mov_ecx_eax_exact', 'ecx, eax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1053, 'asm_x86_mov_ebx_eax_exact', 'ebx, eax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1054, 'asm_x86_mov_eax_ecx_exact', 'eax, ecx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1055, 'asm_x86_mov_rsi_r15_exact', 'rsi, r15', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1056, 'asm_x86_mov_edi_ebx_exact', 'edi, ebx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1057, 'asm_x86_mov_edx_ebx_exact', 'edx, ebx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1058, 'asm_x86_mov_eax_edi_exact', 'eax, edi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1059, 'asm_x86_mov_r13_rdx_exact', 'r13, rdx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1060, 'asm_x86_mov_rsi_r14_exact', 'rsi, r14', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1061, 'asm_x86_mov_esi_r12d_exact', 'esi, r12d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1062, 'asm_x86_mov_eax_esi_exact', 'eax, esi', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1063, 'asm_x86_mov_eax_r13d_exact', 'eax, r13d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1064, 'asm_x86_mov_r14d_edx_exact', 'r14d, edx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1065, 'asm_x86_mov_eax_r15d_exact', 'eax, r15d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1066, 'asm_x86_mov_edi_r14d_exact', 'edi, r14d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1067, 'asm_x86_mov_edx_eax_exact', 'edx, eax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1068, 'asm_x86_mov_rdi_rax_exact', 'rdi, rax', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1069, 'asm_x86_inc_ecx_exact', 'ecx', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1070, 'asm_x86_inc_ebx_exact', 'ebx', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1071, 'asm_x86_inc_rbx_exact', 'rbx', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1072, 'asm_x86_inc_eax_exact', 'eax', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1073, 'asm_x86_inc_rdi_exact', 'rdi', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1074, 'asm_x86_inc_rax_exact', 'rax', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1075, 'asm_x86_inc_r15d_exact', 'r15d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1076, 'asm_x86_inc_r12_exact', 'r12', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1077, 'asm_x86_inc_r14d_exact', 'r14d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1078, 'asm_x86_inc_r8d_exact', 'r8d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1079, 'asm_x86_inc_r9d_exact', 'r9d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1080, 'asm_x86_inc_r10_exact', 'r10', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1081, 'asm_x86_inc_rcx_exact', 'rcx', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1082, 'asm_x86_inc_r10d_exact', 'r10d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1083, 'asm_x86_inc_r13_exact', 'r13', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1084, 'asm_x86_inc_r11d_exact', 'r11d', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1085, 'asm_x86_inc_edx_exact', 'edx', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1086, 'asm_x86_inc_r8_exact', 'r8', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1087, 'asm_x86_inc_rsi_exact', 'rsi', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1088, 'asm_x86_inc_ebp_exact', 'ebp', 0),
+  (3, 'inc', null, 'kernel/x86_64/object/instruction/x86_64/inc.erobj', null, 1089, 'asm_x86_inc_r13d_exact', 'r13d', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1090, 'asm_x86_add_rsp_16_exact', 'rsp, 16', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1091, 'asm_x86_add_rsp_8_exact', 'rsp, 8', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1092, 'asm_x86_add_eax_ecx_exact', 'eax, ecx', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1093, 'asm_x86_add_eax_edx_exact', 'eax, edx', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1094, 'asm_x86_add_ebx_eax_exact', 'ebx, eax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1095, 'asm_x86_add_rsp_24_exact', 'rsp, 24', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1096, 'asm_x86_add_rsp_32_exact', 'rsp, 32', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1097, 'asm_x86_add_edi_eax_exact', 'edi, eax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1098, 'asm_x86_add_eax_ebx_exact', 'eax, ebx', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1099, 'asm_x86_add_r15d_eax_exact', 'r15d, eax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1100, 'asm_x86_add_rax_rcx_exact', 'rax, rcx', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1101, 'asm_x86_add_eax_r8d_exact', 'eax, r8d', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1102, 'asm_x86_add_rdi_rax_exact', 'rdi, rax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1103, 'asm_x86_add_rbx_rax_exact', 'rbx, rax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1104, 'asm_x86_add_edx_eax_exact', 'edx, eax', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1105, 'asm_x86_add_edx_ecx_exact', 'edx, ecx', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1106, 'asm_x86_mov_rdi_com1_port_exact', 'rdi, COM1_PORT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1107, 'asm_x86_mov_edi_com1_port_exact', 'edi, COM1_PORT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1108, 'asm_x86_mov_r12_com1_port_exact', 'r12, COM1_PORT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1109, 'asm_x86_mov_r14_com1_port_exact', 'r14, COM1_PORT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1110, 'asm_x86_mov_rsi_com1_port_exact', 'rsi, COM1_PORT', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1111, 'asm_x86_mov_rax_rbx_runtime_memory_ptr_exact', 'rax, [rbx + RUNTIME_MEMORY_PTR_OFF]', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1112, 'asm_x86_cmp_rbx_runtime_ticks_ptr_zero_exact', 'qword [rbx + RUNTIME_TICKS_PTR_OFF], 0', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1113, 'asm_x86_cmp_rbx_runtime_memory_len_da_app_memory_exact', 'qword [rbx + RUNTIME_MEMORY_LEN_OFF], DA_APP_MEMORY_BYTES', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1114, 'asm_x86_mov_rdx_rs4_exact', 'rdx, RS*4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1115, 'asm_x86_mov_ecx_vs4_exact', 'ecx, VS*4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1116, 'asm_x86_mov_rdx_48_exact', 'rdx, 48', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1117, 'asm_x86_mov_ecx_rs4_exact', 'ecx, RS*4', 0),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, 1118, 'asm_x86_movd_xmm2_eax_exact', 'xmm2, eax', 0),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, 1119, 'asm_x86_movd_xmm3_eax_exact', 'xmm3, eax', 0),
+  (3, 'pxor', null, 'kernel/x86_64/object/instruction/x86_64/pxor.erobj', null, 1120, 'asm_x86_pxor_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1121, 'asm_x86_mov_eax_0x3f800000_exact', 'eax, 0x3F800000', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1122, 'asm_x86_mov_r9d_minus_one_exact', 'r9d, 0xFFFFFFFF', 0),
+  (3, 'pxor', null, 'kernel/x86_64/object/instruction/x86_64/pxor.erobj', null, 1123, 'asm_x86_pxor_xmm1_xmm1_exact', 'xmm1, xmm1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1124, 'asm_x86_mov_ecx_da_export_name_len_exact', 'ecx, DA_EXPORT_NAME_LEN', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1125, 'asm_x86_mov_ecx_is4_exact', 'ecx, IS*4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1126, 'asm_x86_mov_edx_minus_one_exact', 'edx, -1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1127, 'asm_x86_mov_esi_1_exact', 'esi, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1128, 'asm_x86_mov_r8d_minus_one_exact', 'r8d, 0xFFFFFFFF', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1129, 'asm_x86_mov_rdx_1_exact', 'rdx, 1', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1130, 'asm_x86_mov_rdx_is_exact', 'rdx, IS', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1131, 'asm_x86_mov_rdx_is4_exact', 'rdx, IS*4', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1132, 'asm_x86_mov_rdx_rs_exact', 'rdx, RS', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1133, 'asm_x86_mov_rdx_vs_exact', 'rdx, VS', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1134, 'asm_x86_mov_rdx_vs4_exact', 'rdx, VS*4', 0),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, 1135, 'asm_x86_movd_eax_xmm0_exact', 'eax, xmm0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1136, 'asm_x86_mov_eax_0x3e800000_exact', 'eax, 0x3E800000', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1137, 'asm_x86_mov_eax_0x3f400000_exact', 'eax, 0x3F400000', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1138, 'asm_x86_mov_eax_0x41800000_exact', 'eax, 0x41800000', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1139, 'asm_x86_mov_eax_0x42000000_exact', 'eax, 0x42000000', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1140, 'asm_x86_mov_ecx_minus_one_exact', 'ecx, 0xFFFFFFFF', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1141, 'asm_x86_mov_edi_0_exact', 'edi, 0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1142, 'asm_x86_mov_edi_255_exact', 'edi, 255', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1143, 'asm_x86_mov_edi_7_exact', 'edi, 7', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1144, 'asm_x86_mov_edx_minus_two_exact', 'edx, -2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1145, 'asm_x86_mov_edx_255_exact', 'edx, 255', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1146, 'asm_x86_mov_esi_2_exact', 'esi, 2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1147, 'asm_x86_mov_esi_5_exact', 'esi, 5', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1147, 'asm_x86_mov_esi_da_wasm_a_len_exact', 'esi, DA_WASM_A_LEN', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1147, 'asm_x86_mov_esi_da_wasm_b_len_exact', 'esi, DA_WASM_B_LEN', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1148, 'asm_x86_mov_r9d_42_exact', 'r9d, 42', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1149, 'asm_x86_mov_rdx_minus_two_exact', 'rdx, -2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1150, 'asm_x86_mov_rdx_4_exact', 'rdx, 4', 0),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, 1151, 'asm_x86_movd_xmm0_eax_exact', 'xmm0, eax', 0),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, 1152, 'asm_x86_movd_xmm1_eax_exact', 'xmm1, eax', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'dec', null, 'kernel/x86_64/object/instruction/x86_64/dec.erobj', null, 1153, 'asm_x86_dec_ecx_exact', 'ecx', 0),
+  (3, 'dec', null, 'kernel/x86_64/object/instruction/x86_64/dec.erobj', null, 1154, 'asm_x86_dec_eax_exact', 'eax', 0);
+
+insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
+  (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
 
 insert into asm_dsl_line(asm_source_id, line_id, line_kind, label_name, op_name, operand_text, raw_text) values
   (1, 1, 1, null, 'er_fn', 'er_bss_zero', 'er_fn er_bss_zero'),
@@ -1520,9 +1676,15 @@ create table repo_asm_function_decl (
 );
 
 with recursive lines(repo_file_id, line_no, rest, line) as (
-  select repo_file_id, 1, replace(cast(content as text), char(13), '') || char(10), ''
+  select repo_file_id,
+         1,
+         replace(cast(case
+           when file_kind = 'source_object_asm' then substr(content, 149)
+           else content
+         end as text), char(13), '') || char(10),
+         ''
   from repo_file
-  where file_kind = 'asm'
+  where file_kind in ('asm', 'source_object_asm')
   union all
   select repo_file_id,
          line_no + 1,
@@ -1536,14 +1698,26 @@ select repo_file_id, line_no - 1, line
 from lines
 where line_no > 1;
 
-insert into repo_asm_function_decl(repo_file_id, line_no, function_name, declaration_text)
+insert or ignore into repo_asm_function_decl(repo_file_id, line_no, function_name, declaration_text)
 select repo_file_id,
        line_no,
        trim(substr(trim(text), 7)),
        text
 from repo_asm_line
 where trim(text) glob 'er_fn *'
-  and trim(substr(trim(text), 7)) <> '';
+  and trim(substr(trim(text), 7)) <> ''
+union all
+select repo_file_id,
+       line_no,
+       trim(substr(trim(text), 8)),
+       text
+from repo_asm_line
+join repo_file using (repo_file_id)
+where trim(text) glob 'global *'
+  and repo_file.file_kind = 'source_object_asm'
+  and trim(substr(trim(text), 8)) <> ''
+  and instr(trim(substr(trim(text), 8)), '%') = 0
+  and instr(trim(substr(trim(text), 8)), ',') = 0;
 
 create view repo_asm_function_inventory as
 select repo_file.path,
@@ -1578,9 +1752,9 @@ join repo_asm_line
  and repo_asm_line.line_no between repo_asm_function_span.start_line_no and repo_asm_function_span.end_line_no
 join repo_file on repo_file.repo_file_id = repo_asm_function_span.repo_file_id;
 
-create view repo_asm_operation as
+create table repo_asm_operation as
 with trimmed as (
-  select path, repo_file_id, function_name, line_no, text, trim(text) as t
+  select path, repo_file_id, function_name, line_no, text, trim(replace(text, char(9), ' ')) as t
   from repo_asm_function_lines
 ), parsed as (
   select path,
@@ -1592,28 +1766,35 @@ with trimmed as (
          case
            when t = '' then 0
            when substr(t,1,1) = ';' then 0
-           when t glob '.*:' then 2
-           when t glob '%include*' then 4
-           when t glob '* equ *' then 5
-           when t glob 'er_fn *' then 1
-           when substr(t,1,1) = '%' then 4
-           else 3
-         end as line_kind,
+            when t glob '*:' then 2
+            when t glob '%include*' then 4
+            when t glob '* equ *' then 5
+            when t glob 'er_fn *' then 1
+            when t glob 'global *' then 4
+            when substr(t,1,1) = '%' then 4
+            else 3
+          end as line_kind,
          case
            when t = '' or substr(t,1,1) = ';' then null
            when t glob '.*:' then null
            when instr(t, ' ') = 0 then t
            else substr(t, 1, instr(t, ' ') - 1)
          end as op_name,
-         case
-           when instr(t, ' ') = 0 then null
-           else trim(substr(t, instr(t, ' ') + 1))
-         end as operand_text
+          case
+            when instr(t, ' ') = 0 then null
+            when instr(substr(t, instr(t, ' ') + 1), ';') > 0 then
+              trim(substr(substr(t, instr(t, ' ') + 1), 1, instr(substr(t, instr(t, ' ') + 1), ';') - 1))
+            else trim(substr(t, instr(t, ' ') + 1))
+          end as operand_text
   from trimmed
 )
 select path, repo_file_id, function_name, line_no, line_kind, op_name, operand_text, text as raw_text
 from parsed
 where line_kind <> 0;
+
+create index repo_asm_operation_line_idx on repo_asm_operation(repo_file_id, function_name, line_no);
+create index repo_asm_operation_op_idx on repo_asm_operation(line_kind, op_name, operand_text);
+create index repo_asm_operation_path_idx on repo_asm_operation(path);
 
 create view repo_asm_rule_gaps as
 select repo_asm_operation.path,
@@ -1656,6 +1837,325 @@ select gap_kind,
 from repo_asm_rule_gaps
 group by gap_kind, op_name
 order by occurrence_count desc, op_name;
+
+create view exact_asm_encoding_fact as
+select asm_dsl_rule.op_name,
+       asm_dsl_rule.exact_operand_text as operand_text,
+       asm_dsl_rule.rule_name,
+       asm_dsl_rule.instruction_path,
+       asm_dsl_rule.form_path,
+       asm_dsl_rule.encoding_id,
+       encoding_pattern.fixed_hex,
+       encoding_pattern.object_path as encoding_object_path
+from asm_dsl_rule
+join encoding_pattern using (encoding_id)
+where asm_dsl_rule.encoding_id is not null
+  and asm_dsl_rule.exact_operand_text is not null;
+
+create table repo_asm_rule_match as
+select repo_asm_operation.path,
+       repo_asm_operation.repo_file_id,
+       repo_asm_operation.function_name,
+       repo_asm_operation.line_no,
+       repo_asm_operation.line_kind,
+       repo_asm_operation.op_name,
+       repo_asm_operation.operand_text,
+       repo_asm_operation.raw_text,
+       asm_dsl_rule.asm_rule_id,
+       asm_dsl_rule.rule_name,
+       asm_dsl_rule.instruction_path,
+       asm_dsl_rule.form_path,
+       asm_dsl_rule.encoding_id,
+       encoding_pattern.fixed_hex
+from repo_asm_operation
+left join asm_dsl_rule
+  on asm_dsl_rule.asm_rule_id = (
+    select candidate_rule.asm_rule_id
+    from asm_dsl_rule candidate_rule
+    where candidate_rule.line_kind = repo_asm_operation.line_kind
+      and candidate_rule.op_name = coalesce(repo_asm_operation.op_name, '')
+      and (candidate_rule.exact_operand_text is null
+           or candidate_rule.exact_operand_text = coalesce(repo_asm_operation.operand_text, ''))
+    order by case when candidate_rule.exact_operand_text is null then 1 else 0 end,
+             candidate_rule.asm_rule_id
+    limit 1
+  )
+left join encoding_pattern using (encoding_id);
+
+create index repo_asm_rule_match_line_idx on repo_asm_rule_match(repo_file_id, function_name, line_no);
+create index repo_asm_rule_match_encoding_idx on repo_asm_rule_match(encoding_id);
+create index repo_asm_rule_match_rule_idx on repo_asm_rule_match(op_name, operand_text, rule_name);
+
+create view repo_asm_materializable_operation as
+select *
+from repo_asm_rule_match
+where encoding_id is not null;
+
+create view repo_asm_file_materialization_progress as
+select path,
+       count(*) as operation_count,
+       sum(case when encoding_id is not null then 1 else 0 end) as materializable_count,
+       count(*) - sum(case when encoding_id is not null then 1 else 0 end) as remaining_count,
+       (100 * sum(case when encoding_id is not null then 1 else 0 end)) / count(*) as materializable_percent
+from repo_asm_rule_match
+where line_kind = 3
+group by path
+order by materializable_percent desc, remaining_count asc, path;
+
+create view repo_asm_next_encoding_candidates as
+select fact_status.op_name,
+       fact_status.operand_text,
+       count(*) as occurrence_count,
+       count(distinct fact_status.path) as file_count,
+       count(distinct fact_status.function_name) as function_count
+from repo_asm_operation_fact_status fact_status
+where fact_status.fact_status = 'known_gap'
+group by fact_status.op_name, fact_status.operand_text
+order by occurrence_count desc, op_name, operand_text;
+
+create view repo_asm_label_decl_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       substr(trim(raw_text), 1, length(trim(raw_text)) - 1) as label_name,
+       case when substr(trim(raw_text), 1, 1) = '.' then 'local' else 'global' end as label_scope
+from repo_asm_operation
+where line_kind = 2;
+
+create view repo_asm_control_target_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text as target_name,
+       case
+         when op_name = 'call' or op_name = 'er_call' then 'call'
+         when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns') then 'branch'
+         else 'unknown'
+       end as target_kind
+from repo_asm_operation
+where line_kind = 3
+  and operand_text is not null
+  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns');
+
+create view repo_asm_control_edge_fact as
+select target.path,
+       target.function_name,
+       target.line_no as from_line_no,
+       label.line_no as to_line_no,
+       target.op_name,
+       target.target_name,
+       target.target_kind
+from repo_asm_control_target_fact target
+join repo_asm_label_decl_fact label
+  on label.repo_file_id = target.repo_file_id
+ and label.function_name = target.function_name
+ and label.label_name = target.target_name;
+
+create view repo_asm_unresolved_control_target as
+select target.*
+from repo_asm_control_target_fact target
+left join repo_asm_control_edge_fact edge
+  on edge.path = target.path
+ and edge.function_name = target.function_name
+ and edge.from_line_no = target.line_no
+where edge.from_line_no is null;
+
+create view repo_asm_external_control_target_fact as
+select *
+from repo_asm_unresolved_control_target
+where target_name not like '.%';
+
+create view repo_asm_unresolved_local_control_target as
+select *
+from repo_asm_unresolved_control_target
+where target_name like '.%';
+
+create table asm_macro_lowering_rule (
+  macro_name text primary key,
+  lowered_operation_pattern text not null,
+  result_kind text not null
+);
+
+insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, result_kind) values
+  ('er_ok', 'xor edx, edx', 'fixed_instruction'),
+  ('er_err', 'mov edx, $arg0', 'fixed_instruction_with_immediate'),
+  ('er_ret', 'ret', 'fixed_instruction'),
+  ('er_check_zero', 'test $arg0, $arg0; jz $arg1', 'control_sequence'),
+  ('er_check_nonzero', 'test $arg0, $arg0; jnz $arg1', 'control_sequence'),
+  ('er_push', 'push each argument left-to-right', 'stack_sequence'),
+  ('er_pop', 'pop each argument right-to-left', 'stack_sequence'),
+  ('er_pop_ret', 'pop each argument right-to-left; ret', 'stack_sequence'),
+  ('er_stack_alloc', 'sub rsp, $arg0', 'stack_adjust'),
+  ('er_stack_free', 'add rsp, $arg0', 'stack_adjust'),
+  ('er_call', 'call $arg0; test edx, edx; jnz $arg1', 'control_sequence'),
+  ('er_frame_push', 'push rbp; mov rbp, rsp', 'stack_sequence'),
+  ('er_frame_pop', 'pop rbp', 'stack_sequence'),
+  ('er_frame_push_regs', 'push frame then listed registers', 'stack_sequence'),
+  ('TEST', 'compare eax and edx; branch to failure on mismatch', 'test_assertion'),
+  ('TESTQ', 'compare rax and rdx; branch to failure on mismatch', 'test_assertion'),
+  ('TEST_MEM', 'compare memory ranges; branch to failure on mismatch', 'test_assertion'),
+  ('TEST_EXIT_PASSED_TOTAL', 'exit with accumulated test result', 'test_exit');
+
+create view repo_asm_macro_lowering_fact as
+select repo_asm_operation.path,
+       repo_asm_operation.repo_file_id,
+       repo_asm_operation.function_name,
+       repo_asm_operation.line_no,
+       repo_asm_operation.op_name as macro_name,
+       repo_asm_operation.operand_text,
+       asm_macro_lowering_rule.lowered_operation_pattern,
+       asm_macro_lowering_rule.result_kind
+from repo_asm_operation
+join asm_macro_lowering_rule on asm_macro_lowering_rule.macro_name = repo_asm_operation.op_name;
+
+create view repo_asm_macro_lowering_gap as
+select repo_asm_rule_gaps.path,
+       repo_asm_rule_gaps.function_name,
+       repo_asm_rule_gaps.line_no,
+       repo_asm_rule_gaps.op_name,
+       repo_asm_rule_gaps.operand_text,
+       repo_asm_rule_gaps.raw_text
+from repo_asm_rule_gaps
+left join asm_macro_lowering_rule on asm_macro_lowering_rule.macro_name = repo_asm_rule_gaps.op_name
+where repo_asm_rule_gaps.gap_kind = 'macro_without_lowering'
+  and asm_macro_lowering_rule.macro_name is null;
+
+create view repo_asm_relocation_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       target_name,
+       target_kind,
+       case
+         when target_kind = 'call' then 'rel32_call'
+         when target_kind = 'branch' and target_name like '.%' then 'local_branch'
+         when target_kind = 'branch' then 'rel32_branch_or_tailcall'
+         else 'unknown'
+       end as relocation_kind
+from repo_asm_control_target_fact;
+
+create view repo_asm_data_reference_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       trim(substr(operand_text,
+                   instr(operand_text, '[rel ') + 5,
+                   instr(substr(operand_text, instr(operand_text, '[rel ') + 5), ']') - 1)) as target_name,
+       'rip_rel32_data' as relocation_kind
+from repo_asm_operation
+where operand_text like '%[rel %]%';
+
+create view repo_asm_data_definition_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name as label_name,
+       operand_text,
+       case
+         when operand_text like 'resb %' then 'reserved_bytes'
+         when operand_text like 'resd %' then 'reserved_dwords'
+         when operand_text like 'resq %' then 'reserved_qwords'
+         when operand_text like 'dq %' then 'quadword_data'
+         else 'unknown_data_definition'
+       end as data_definition_kind
+from repo_asm_operation
+where op_name like '%:'
+  and (operand_text like 'resb %'
+       or operand_text like 'resd %'
+       or operand_text like 'resq %'
+       or operand_text like 'dq %');
+
+create table repo_asm_operation_fact_status as
+select match.path,
+       match.repo_file_id,
+       match.function_name,
+       match.line_no,
+       match.line_kind,
+       match.op_name,
+       match.operand_text,
+       match.raw_text,
+       case
+          when match.encoding_id is not null then 'fixed_encoding'
+          when relocation.relocation_kind is not null then 'relocation'
+          when data_ref.relocation_kind is not null then 'data_relocation'
+          when macro.macro_name is not null then 'macro_lowered'
+          when data_def.data_definition_kind is not null then 'data_definition'
+          when match.op_name = 'SECTION' then 'metadata'
+          when match.line_kind in (1,2,4,5) then 'metadata'
+          when match.rule_name is not null then 'known_gap'
+         else 'syntax_gap'
+       end as fact_status,
+       match.encoding_id,
+       coalesce(relocation.relocation_kind, data_ref.relocation_kind) as relocation_kind,
+       macro.result_kind as macro_result_kind
+from repo_asm_rule_match match
+left join repo_asm_relocation_fact relocation
+  on relocation.repo_file_id = match.repo_file_id
+  and relocation.function_name = match.function_name
+  and relocation.line_no = match.line_no
+left join repo_asm_data_reference_fact data_ref
+  on data_ref.repo_file_id = match.repo_file_id
+ and data_ref.function_name = match.function_name
+ and data_ref.line_no = match.line_no
+left join repo_asm_macro_lowering_fact macro
+  on macro.repo_file_id = match.repo_file_id
+  and macro.function_name = match.function_name
+  and macro.line_no = match.line_no
+left join repo_asm_data_definition_fact data_def
+  on data_def.repo_file_id = match.repo_file_id
+ and data_def.function_name = match.function_name
+ and data_def.line_no = match.line_no;
+
+create index repo_asm_operation_fact_status_status_idx on repo_asm_operation_fact_status(fact_status);
+create index repo_asm_operation_fact_status_next_idx on repo_asm_operation_fact_status(fact_status, op_name, operand_text);
+create index repo_asm_operation_fact_status_file_idx on repo_asm_operation_fact_status(path, fact_status);
+
+create view repo_asm_deletion_readiness as
+select path,
+       count(*) as operation_count,
+       sum(case when fact_status = 'fixed_encoding' then 1 else 0 end) as fixed_encoding_count,
+       sum(case when fact_status = 'relocation' then 1 else 0 end) as relocation_count,
+       sum(case when fact_status = 'data_relocation' then 1 else 0 end) as data_relocation_count,
+       sum(case when fact_status = 'macro_lowered' then 1 else 0 end) as macro_lowered_count,
+       sum(case when fact_status = 'data_definition' then 1 else 0 end) as data_definition_count,
+       sum(case when fact_status = 'metadata' then 1 else 0 end) as metadata_count,
+       sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end) as fact_backed_count,
+       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end) as remaining_count,
+       (100 * sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end)) / count(*) as fact_backed_percent
+from repo_asm_operation_fact_status
+group by path
+order by fact_backed_percent desc, remaining_count asc, path;
+
+create view repo_asm_remaining_gap as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       raw_text,
+       fact_status as gap_kind
+from repo_asm_operation_fact_status
+where fact_status in ('known_gap', 'syntax_gap');
+
+create view repo_asm_remaining_gap_summary as
+select gap_kind,
+       op_name,
+       operand_text,
+       count(*) as occurrence_count,
+       count(distinct path) as file_count,
+       count(distinct function_name) as function_count
+from repo_asm_remaining_gap
+group by gap_kind, op_name, operand_text
+order by occurrence_count desc, gap_kind, op_name, operand_text;
 
 -- Universal transformer substrate. Domain tables above remain compact authoring
 -- views; these relations prove that unrelated domains can lower through the
@@ -3143,6 +3643,10 @@ insert into engine_category_fact(category_name, description) values
   ('unit', 'Measurement unit.'),
   ('constant', 'Imported immutable symbolic value.'),
   ('relation', 'Typed relation between entities or values.'),
+  ('decision', 'A choice point that can be evaluated by explicit tradeoff facts.'),
+  ('option', 'A candidate implementation or workflow choice for a decision.'),
+  ('metric', 'A measured or estimated cost, benefit, risk, or constraint used in a tradeoff.'),
+  ('tradeoff', 'An assessment that relates an option to a metric with a scored effect.'),
   ('standard', 'External or internal specification source.'),
   ('clause', 'Executable requirement or validation predicate.');
 
@@ -3167,6 +3671,9 @@ insert into engine_category_relation_fact(child_category, relation_name, parent_
   ('media_format', 'supports_codec', 'codec'),
   ('encoder', 'emits', 'message'),
   ('clause', 'constrains', 'message'),
+  ('decision', 'has_option', 'option'),
+  ('option', 'has_tradeoff', 'tradeoff'),
+  ('tradeoff', 'uses_metric', 'metric'),
   ('clause', 'defined_by', 'standard');
 
 create table engine_unit_fact (
@@ -3216,7 +3723,101 @@ insert into engine_relation_kind_fact(relation_name, relation_kind, cardinality)
   ('decodes', 'transform', 'many'),
   ('drives', 'authority', 'many'),
   ('depends_on', 'dependency', 'many'),
-  ('compatible_with', 'compatibility', 'many');
+  ('compatible_with', 'compatibility', 'many'),
+  ('has_option', 'decision', 'many'),
+  ('has_tradeoff', 'decision', 'many'),
+  ('uses_metric', 'decision', 'single'),
+  ('tradeoff_score', 'measurement', 'single'),
+  ('tradeoff_weight', 'measurement', 'single');
+
+create table engine_tradeoff_decision_fact (
+  decision_id text primary key,
+  decision_name text not null,
+  decision_goal text not null,
+  source_name text not null
+);
+
+create table engine_tradeoff_option_fact (
+  option_id text primary key,
+  decision_id text not null references engine_tradeoff_decision_fact(decision_id),
+  option_name text not null,
+  option_summary text not null,
+  option_status text not null
+);
+
+create table engine_tradeoff_metric_fact (
+  metric_id text primary key,
+  metric_name text not null,
+  metric_kind text not null,
+  polarity integer not null,
+  description text not null
+);
+
+create table engine_tradeoff_assessment_fact (
+  assessment_id text primary key,
+  option_id text not null references engine_tradeoff_option_fact(option_id),
+  metric_id text not null references engine_tradeoff_metric_fact(metric_id),
+  score integer not null,
+  weight integer not null,
+  evidence text not null
+);
+
+insert into engine_tradeoff_decision_fact(decision_id, decision_name, decision_goal, source_name) values
+  ('asm_source_object_conversion', 'Convert tracked ASM test source to source objects', 'Delete textual source only when equivalent source-object and fact-readiness data exist.', 'catalog.sql'),
+  ('repo_asm_operator_loop', 'Materialize repo ASM operator-loop relations', 'Reduce repeated work needed to choose the next source-to-fact lowering step.', 'catalog.sql'),
+  ('exact_encoding_increment', 'Add exact fixed encodings one finite fact at a time', 'Increase materializable ASM coverage without growing a competing assembler.', 'catalog.sql');
+
+insert into engine_tradeoff_option_fact(option_id, decision_id, option_name, option_summary, option_status) values
+  ('asm_source_object_conversion.source_object', 'asm_source_object_conversion', 'Use committed source objects', 'Keep .asm.erobj as authority and delete matching tracked text once deletion-readiness is complete.', 'selected'),
+  ('asm_source_object_conversion.keep_text', 'asm_source_object_conversion', 'Keep tracked text source', 'Preserve existing .asm files as source authority while building facts beside them.', 'rejected'),
+  ('repo_asm_operator_loop.materialize_indexed', 'repo_asm_operator_loop', 'Materialize indexed operation status', 'Build indexed operation, match, and status tables during catalog load for fast next-gap queries.', 'selected'),
+  ('repo_asm_operator_loop.nested_views', 'repo_asm_operator_loop', 'Recompute nested views', 'Leave all operator-loop queries as derived views over file import and source parsing.', 'rejected'),
+  ('exact_encoding_increment.exact_facts', 'exact_encoding_increment', 'Add exact encoding facts', 'Add checked exact instruction encodings that remove high-count known gaps.', 'selected'),
+  ('exact_encoding_increment.generic_encoder', 'exact_encoding_increment', 'Add a generic encoder', 'Grow generalized textual assembler logic before finite fact coverage proves the need.', 'rejected');
+
+insert into engine_tradeoff_metric_fact(metric_id, metric_name, metric_kind, polarity, description) values
+  ('round_query_cost', 'Per-round query cost', 'cost', 1, 'Desirability score for time spent recomputing the next work queue after catalog load; higher means lower cost.'),
+  ('catalog_load_cost', 'Catalog load cost', 'cost', 1, 'Desirability score for upfront time to import and materialize the relation database; higher means lower cost.'),
+  ('source_deletion_progress', 'Source deletion progress', 'benefit', 1, 'Amount of tracked textual source that can be replaced by facts and source objects.'),
+  ('canonical_alignment', 'Canonical model alignment', 'benefit', 1, 'How strongly the option moves authority from source text to finite facts and relations.'),
+  ('scope_risk', 'Scope risk', 'risk', -1, 'Risk of expanding into a parallel assembler, hidden workflow, or broad unsupported behavior.');
+
+insert into engine_tradeoff_assessment_fact(assessment_id, option_id, metric_id, score, weight, evidence) values
+  ('asm_source_object_conversion.source_object.source_deletion_progress', 'asm_source_object_conversion.source_object', 'source_deletion_progress', 5, 5, 'test_flat_runtime and test_render_ir_self report 100 percent deletion readiness.'),
+  ('asm_source_object_conversion.source_object.canonical_alignment', 'asm_source_object_conversion.source_object', 'canonical_alignment', 5, 5, 'Source object is committed authority and catalog facts classify operations.'),
+  ('asm_source_object_conversion.source_object.scope_risk', 'asm_source_object_conversion.source_object', 'scope_risk', 1, 4, 'No new parser or fallback source path is added.'),
+  ('asm_source_object_conversion.keep_text.source_deletion_progress', 'asm_source_object_conversion.keep_text', 'source_deletion_progress', 0, 5, 'Tracked text remains source authority.'),
+  ('asm_source_object_conversion.keep_text.canonical_alignment', 'asm_source_object_conversion.keep_text', 'canonical_alignment', 1, 5, 'Facts remain beside source text instead of replacing it.'),
+  ('repo_asm_operator_loop.materialize_indexed.round_query_cost', 'repo_asm_operator_loop.materialize_indexed', 'round_query_cost', 5, 5, 'Next encoding candidates query runs in about 0.04 seconds after load.'),
+  ('repo_asm_operator_loop.materialize_indexed.catalog_load_cost', 'repo_asm_operator_loop.materialize_indexed', 'catalog_load_cost', 2, 3, 'Catalog load is about 13 seconds after indexing parsed operations.'),
+  ('repo_asm_operator_loop.materialize_indexed.canonical_alignment', 'repo_asm_operator_loop.materialize_indexed', 'canonical_alignment', 4, 5, 'Operator queue reads resident relations instead of re-parsing source views.'),
+  ('repo_asm_operator_loop.nested_views.round_query_cost', 'repo_asm_operator_loop.nested_views', 'round_query_cost', 1, 5, 'Repeated next-gap queries took tens of seconds.'),
+  ('repo_asm_operator_loop.nested_views.catalog_load_cost', 'repo_asm_operator_loop.nested_views', 'catalog_load_cost', 4, 3, 'Initial catalog load was lower, but each round paid the query cost again.'),
+  ('exact_encoding_increment.exact_facts.source_deletion_progress', 'exact_encoding_increment.exact_facts', 'source_deletion_progress', 4, 4, 'dec ecx and dec eax moved 154 inventory operations to fixed encodings.'),
+  ('exact_encoding_increment.exact_facts.scope_risk', 'exact_encoding_increment.exact_facts', 'scope_risk', 1, 5, 'Finite exact facts do not grow a textual assembler.'),
+  ('exact_encoding_increment.generic_encoder.source_deletion_progress', 'exact_encoding_increment.generic_encoder', 'source_deletion_progress', 3, 4, 'Could cover more syntax quickly, but would move toward broad assembler behavior.'),
+  ('exact_encoding_increment.generic_encoder.scope_risk', 'exact_encoding_increment.generic_encoder', 'scope_risk', 5, 5, 'High risk of growing a competing yasm-like path.');
+
+create view engine_tradeoff_option_score as
+select option.decision_id,
+       option.option_id,
+       option.option_name,
+       option.option_status,
+       sum(metric.polarity * assessment.score * assessment.weight) as weighted_score,
+       group_concat(metric.metric_id || '=' || cast(assessment.score as text), ',') as score_evidence
+from engine_tradeoff_option_fact option
+join engine_tradeoff_assessment_fact assessment using (option_id)
+join engine_tradeoff_metric_fact metric using (metric_id)
+group by option.decision_id, option.option_id, option.option_name, option.option_status;
+
+create view engine_tradeoff_selected_option as
+select *
+from (
+  select score.*,
+         row_number() over (partition by decision_id order by weighted_score desc, option_id) as rank
+  from engine_tradeoff_option_score score
+)
+where rank = 1;
 
 create table tor_control_command_fact (
   command_name text primary key,
@@ -3463,6 +4064,34 @@ select 'relation.' || relation_name,
        'engine.relation_kind'
 from engine_relation_kind_fact
 union all
+select 'decision.' || decision_id,
+       'decision',
+       'decision',
+       decision_name,
+       source_name
+from engine_tradeoff_decision_fact
+union all
+select 'option.' || option_id,
+       'option',
+       'option',
+       option_name,
+       'engine_tradeoff_option_fact'
+from engine_tradeoff_option_fact
+union all
+select 'metric.' || metric_id,
+       'metric',
+       'metric',
+       metric_name,
+       'engine_tradeoff_metric_fact'
+from engine_tradeoff_metric_fact
+union all
+select 'tradeoff.' || assessment_id,
+       'tradeoff',
+       'tradeoff',
+       metric_id || ':' || cast(score as text),
+       evidence
+from engine_tradeoff_assessment_fact
+union all
 select 'tor.control',
        'control_surface',
        'control_surface',
@@ -3580,6 +4209,52 @@ select 'unit.' || unit_name,
        'unit_conversion',
        'engine.unit'
 from engine_unit_fact
+union all
+select 'decision.' || decision.decision_id,
+       'has_option',
+       'option.' || option.option_id,
+       option.option_status,
+       '',
+       'tradeoff_option',
+       'engine_tradeoff_option_fact'
+from engine_tradeoff_decision_fact decision
+join engine_tradeoff_option_fact option using (decision_id)
+union all
+select 'option.' || option_id,
+       'has_tradeoff',
+       'tradeoff.' || assessment_id,
+       evidence,
+       '',
+       'tradeoff_assessment',
+       'engine_tradeoff_assessment_fact'
+from engine_tradeoff_assessment_fact
+union all
+select 'tradeoff.' || assessment_id,
+       'uses_metric',
+       'metric.' || metric_id,
+       null,
+       '',
+       'tradeoff_metric',
+       'engine_tradeoff_assessment_fact'
+from engine_tradeoff_assessment_fact
+union all
+select 'tradeoff.' || assessment_id,
+       'tradeoff_score',
+       null,
+       cast(score as text),
+       '',
+       'tradeoff_score',
+       'engine_tradeoff_assessment_fact'
+from engine_tradeoff_assessment_fact
+union all
+select 'tradeoff.' || assessment_id,
+       'tradeoff_weight',
+       null,
+       cast(weight as text),
+       '',
+       'tradeoff_weight',
+       'engine_tradeoff_assessment_fact'
+from engine_tradeoff_assessment_fact
 union all
 select 'tor.control',
        'has_command',
@@ -4544,6 +5219,45 @@ select 'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(
        provenance,
        'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(object_entity, object_value, '') || ':' || unit_name
 from engine_relation_resident
+union all
+select 'tradeoff.decision:' || decision_id,
+       'tradeoff_decision_fact',
+       decision_id,
+       decision_name,
+       decision_goal,
+       'text',
+       'observed',
+       'engine.tradeoff',
+       0,
+       source_name,
+       'tradeoff.decision:' || decision_id || ':' || decision_goal
+from engine_tradeoff_decision_fact
+union all
+select 'tradeoff.option:' || option_id,
+       'tradeoff_option_fact',
+       decision_id,
+       option_id,
+       option_status || ':' || option_summary,
+       'text',
+       'observed',
+       'engine.tradeoff',
+       0,
+       'engine_tradeoff_option_fact',
+       'tradeoff.option:' || option_id || ':' || option_status
+from engine_tradeoff_option_fact
+union all
+select 'tradeoff.assessment:' || assessment_id,
+       'tradeoff_assessment_fact',
+       option_id,
+       metric_id,
+       cast(score as text) || ':' || cast(weight as text) || ':' || evidence,
+       'text',
+       'observed',
+       'engine.tradeoff',
+       0,
+       'engine_tradeoff_assessment_fact',
+       'tradeoff.assessment:' || assessment_id || ':' || cast(score as text) || ':' || cast(weight as text)
+from engine_tradeoff_assessment_fact
 union all
 select 'tor.control.command:' || command_name,
        'tor_control_command_fact',
