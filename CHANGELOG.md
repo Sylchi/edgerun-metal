@@ -9,6 +9,8 @@
 - Added tradeoff decision, option, metric, assessment, and selected-option facts so source deletion and operator-loop choices can be ranked from queryable cost, benefit, risk, and canonical-alignment data.
 - Added full-line ASM parse coverage, source-deletion planning, and gap-impact rankings so unparsed significant lines are fatal blockers and next deletion work is ranked by bytes and file unlocks.
 - Converted `kernel/test/stubs_xhci.asm`, `kernel/x86_64/rt/std.asm`, and `kernel/x86_64/rt/runtime.asm` into source objects; updated the x86 source registry to use `runtime.asm.erobj` and fixed runtime source-object includes to resolve through repo-root paths.
+- Added source-deletion include blockers so fact-backed text is not deleted while live text includes still reference it; `wasm_interpreter.asm` is now fact-backed but correctly blocked by six inbound test includes.
+- Added finite facts for `default rel` metadata and `mov edx, UNEXPECTED_NTOR_STUB_EXIT`, then converted `kernel/test/stubs_tor_ntor.asm` into a source object and deleted the text source.
 - Defined programs as `.erobj` graphs of hash-addressed code, data, requirements, receipts, and dependencies.
 - Clarified that code should move toward canonical instruction records, labels, control edges, data records, and imports that can be validated and materialized directly.
 - Documented source, drivers, runtimes, build tools, UI, tests, and text views as pipeline/view layers over canonical object records.

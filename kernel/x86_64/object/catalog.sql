@@ -445,6 +445,9 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1153, 'x86_64_dec_ecx', 1, 1, 'ffc9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/dec_ecx.erobj'),
   (1154, 'x86_64_dec_eax', 1, 1, 'ffc8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/dec_eax.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1155, 'x86_64_mov_edx_unexpected_ntor_stub_exit', 1, 1, 'ba58000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_unexpected_ntor_stub_exit.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -1473,6 +1476,10 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'dec', null, 'kernel/x86_64/object/instruction/x86_64/dec.erobj', null, 1153, 'asm_x86_dec_ecx_exact', 'ecx', 0),
   (3, 'dec', null, 'kernel/x86_64/object/instruction/x86_64/dec.erobj', null, 1154, 'asm_x86_dec_eax_exact', 'eax', 0);
 
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'default', null, null, null, null, 'default_rel_metadata', 'rel', 1),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1155, 'asm_x86_mov_edx_unexpected_ntor_stub_exit_exact', 'edx, UNEXPECTED_NTOR_STUB_EXIT', 0);
+
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
   (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
 
@@ -2124,6 +2131,19 @@ where op_name like '%:'
        or operand_text like 'resq %'
        or operand_text like 'dq %');
 
+create view repo_asm_include_edge_fact as
+select path as source_path,
+       repo_file_id as source_repo_file_id,
+       line_no,
+       trim(operand_text, '"') as include_path,
+       case
+         when trim(operand_text, '"') like 'kernel/%' then trim(operand_text, '"')
+         else 'kernel/' || trim(operand_text, '"')
+       end as target_path
+from repo_asm_operation
+where op_name = '%include'
+  and operand_text is not null;
+
 create table repo_asm_operation_fact_status as
 select match.path,
        match.repo_file_id,
@@ -2139,6 +2159,7 @@ select match.path,
           when data_ref.relocation_kind is not null then 'data_relocation'
           when macro.macro_name is not null then 'macro_lowered'
           when data_def.data_definition_kind is not null then 'data_definition'
+          when match.op_name = 'default' then 'metadata'
           when match.op_name = 'SECTION' then 'metadata'
           when match.line_kind in (1,2,4,5) then 'metadata'
           when match.rule_name is not null then 'known_gap'
@@ -2252,8 +2273,20 @@ select repo_file.path,
        readiness.fact_backed_percent,
        readiness.unparsed_line_count,
        readiness.remaining_count,
+       coalesce((select count(*)
+                 from repo_asm_include_edge_fact include_edge
+                 join repo_file source_file on source_file.path = include_edge.source_path
+                 where include_edge.target_path = repo_file.path
+                   and source_file.file_kind = 'asm'), 0) as inbound_text_include_count,
        case
          when repo_file.file_kind = 'source_object_asm' and readiness.remaining_count = 0 then 'text_deleted_fact_backed'
+         when repo_file.file_kind = 'asm'
+          and readiness.remaining_count = 0
+          and coalesce((select count(*)
+                        from repo_asm_include_edge_fact include_edge
+                        join repo_file source_file on source_file.path = include_edge.source_path
+                        where include_edge.target_path = repo_file.path
+                          and source_file.file_kind = 'asm'), 0) > 0 then 'blocked_by_inbound_text_include'
          when repo_file.file_kind = 'asm' and readiness.remaining_count = 0 then 'ready_to_wrap_and_delete_text'
          when readiness.unparsed_line_count > 0 then 'blocked_by_parse_coverage'
          else 'blocked_by_fact_gaps'
