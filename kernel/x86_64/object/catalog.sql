@@ -2688,6 +2688,9 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('TESTQ', 'compare rax and rdx; branch to failure on mismatch', 'test_assertion'),
   ('TEST_MEM', 'compare memory ranges; branch to failure on mismatch', 'test_assertion'),
   ('TEST_BSS_PASSED_FAILED', 'check BSS zeroing and branch to pass/fail result', 'test_assertion'),
+  ('TEST_BSS_TOTAL_PASSED', 'check accumulated BSS/test totals and branch to pass result', 'test_assertion'),
+  ('TEST_DATA_PASSED_FAILED', 'define pass/fail test data and labels', 'test_data'),
+  ('ASSERT_TRUE', 'assert nonzero value; fail test on mismatch', 'test_assertion'),
   ('TEST_EXIT', 'exit with explicit test status', 'test_exit'),
   ('TEST_EXIT_FAILED', 'exit with failed test status', 'test_exit'),
   ('TEST_EXIT_PASSED_TOTAL', 'exit with accumulated test result', 'test_exit');
@@ -2769,18 +2772,30 @@ select path,
        operand_text,
        case
          when operand_text like 'resb %' then 'reserved_bytes'
+         when operand_text like 'resw %' then 'reserved_words'
          when operand_text like 'resd %' then 'reserved_dwords'
          when operand_text like 'resq %' then 'reserved_qwords'
          when operand_text like 'dq %' then 'quadword_data'
+         when operand_text like 'dd %' then 'dword_data'
+         when operand_text like 'dw %' then 'word_data'
+         when operand_text like 'db %' then 'byte_data'
+         when operand_text like '.asciz %' then 'zero_terminated_string_data'
+         when operand_text like '.space %' then 'reserved_bytes'
+         when operand_text like 'times % db %' then 'repeated_byte_data'
          else 'unknown_data_definition'
        end as data_definition_kind
 from repo_asm_operation
 where op_name like '%:'
   and (operand_text like 'resb %'
+       or operand_text like 'resw %'
        or operand_text like 'resd %'
        or operand_text like 'resq %'
        or operand_text like 'dq %'
+       or operand_text like 'dd %'
+       or operand_text like 'dw %'
        or operand_text like 'db %'
+       or operand_text like '.asciz %'
+       or operand_text like '.space %'
        or operand_text like 'times % db %'
        or operand_text like 'incbin %')
 union all
@@ -2806,13 +2821,17 @@ select path,
          when op_name = 'dw' then 'word_data'
          when op_name = 'dd' then 'dword_data'
          when op_name = 'dq' then 'quadword_data'
+         when op_name = 'times' and operand_text like '% db %' then 'repeated_byte_data'
+         when op_name = '.asciz' then 'zero_terminated_string_data'
+         when op_name = '.space' then 'reserved_bytes'
          when op_name = 'resb' then 'reserved_bytes'
+         when op_name = 'resw' then 'reserved_words'
          when op_name = 'resd' then 'reserved_dwords'
          when op_name = 'resq' then 'reserved_qwords'
          else 'unknown_data_definition'
        end as data_definition_kind
 from repo_asm_operation
-where op_name in ('db','dw','dd','dq','resb','resd','resq')
+where op_name in ('db','dw','dd','dq','times','.asciz','.space','resb','resw','resd','resq')
   and operand_text is not null;
 
 create view repo_asm_include_edge_fact as

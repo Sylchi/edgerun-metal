@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Lowered missing test macros and broader data directives into facts, then converted SHA3, SHA512, and the ESP32 firmware image text sources into source objects.
 - Classified unlabelled inline data directives as data-definition facts and added a verified x86/ARM encoding batch for the largest known-gap buckets, unlocking the AV1 frame self-test source for object-backed deletion.
 - Added near-ready source deletion facts for Cros EC, TCP, HTTP, and SPI-flash test stubs, plus symbol-to-data-definition relocation facts for direct data-label loads.
 - Added 21 verified high-impact x86 encoding facts for symbolic syscall constants, recursion-error comparison, common register moves/tests/shifts, stack memory forms, and immediate loads. Location-dependent branches and stack-root symbols remain explicit blockers for relation/materializer work.
