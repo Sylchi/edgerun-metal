@@ -4777,7 +4777,8 @@ select operand_rows.*,
          when reg.register_name is not null then 'register'
          when (operand_value glob '[0-9]*' or operand_value glob '-[0-9]*')
           and replace(operand_value, '-', '') not glob '*[^0-9]*' then 'integer'
-         when lower(operand_value) glob '0x[0-9a-f]*' then 'integer'
+         when lower(operand_value) glob '0x[0-9a-f]*'
+          and substr(lower(operand_value), 3) not glob '*[^0-9a-f]*' then 'integer'
          when operand_value glob '[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
           and operand_value not glob '*[^ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789]*' then 'symbol'
          else 'other'
@@ -4826,7 +4827,7 @@ with recursive memory_terms as (
          memory_text,
          is_rel_memory,
          0 as term_index,
-         trim(replace(inner_text, ' - ', ' + -')) || ' + ' as remaining_text,
+         trim(replace(replace(replace(inner_text, '+', ' + '), '-', ' - '), ' - ', ' + -')) || ' + ' as remaining_text,
          '' as term_text
   from repo_asm_memory_operand_fact
   union all
@@ -4861,33 +4862,35 @@ select memory_terms.path,
        memory_terms.is_rel_memory,
        memory_terms.term_index,
        case when memory_terms.term_text like '-%' then -1 else 1 end as term_sign,
-       case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end as term_text,
+       trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) as term_text,
        case
          when memory_terms.term_text = 'rel' then 'rel_marker'
          when reg.register_name is not null then 'register'
          when scale_reg.register_name is not null then 'scaled_register'
-         when (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[0-9]*'
-          and (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^0-9]*' then 'integer'
-         when (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
-          and (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789]*' then 'symbol'
+         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[0-9]*'
+          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^0-9]*' then 'integer'
+         when lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)) glob '0x[0-9a-f]*'
+          and substr(lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)), 3) not glob '*[^0-9a-f]*' then 'integer'
+         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[A-Za-z_.%]*'
+          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^A-Za-z_.%0123456789]*' then 'symbol'
          else 'other'
        end as term_kind,
        scale_reg.register_name as scale_register_name,
        case
          when scale_reg.register_name is not null
-          and trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
-                          instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) in ('1','2','4','8')
-           then cast(trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
-                                  instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) as integer)
+          and trim(substr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+                          instr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) in ('1','2','4','8')
+           then cast(trim(substr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+                                  instr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) as integer)
        end as scale_value
 from memory_terms
 left join x86_register_encoding_fact reg
-  on reg.register_name = (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)
+  on reg.register_name = trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)
 left join x86_register_encoding_fact scale_reg
-  on scale_reg.register_name = trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+  on scale_reg.register_name = trim(substr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
                                            1,
-                                           instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') - 1))
- and instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') > 0
+                                           instr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') - 1))
+ and instr(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') > 0
 where memory_terms.term_text <> '';
 
 create index repo_asm_memory_operand_term_fact_line_idx
@@ -4896,6 +4899,68 @@ create index repo_asm_memory_operand_term_fact_kind_idx
   on repo_asm_memory_operand_term_fact(term_kind, target_isa_id, op_name);
 create index repo_asm_memory_operand_term_fact_symbol_idx
   on repo_asm_memory_operand_term_fact(term_kind, term_text, repo_file_id, function_name, line_no, operand_index);
+
+create table repo_asm_memory_integer_term_value as
+with decimal_term as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         operand_index,
+         term_index,
+         cast(term_text as integer) as integer_value
+  from repo_asm_memory_operand_term_fact
+  where term_kind = 'integer'
+    and term_text glob '[0-9]*'
+    and term_text not glob '*[^0-9]*'
+), hex_term_seed as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         operand_index,
+         term_index,
+         substr(lower(term_text), 3) as hex_text
+  from repo_asm_memory_operand_term_fact
+  where term_kind = 'integer'
+    and lower(term_text) glob '0x[0-9a-f]*'
+    and substr(lower(term_text), 3) <> ''
+    and substr(lower(term_text), 3) not glob '*[^0-9a-f]*'
+), hex_term_parse(repo_file_id, function_name, line_no, operand_index, term_index, hex_text, digit_index, integer_value) as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         operand_index,
+         term_index,
+         hex_text,
+         1 as digit_index,
+         0 as integer_value
+  from hex_term_seed
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         operand_index,
+         term_index,
+         hex_text,
+         digit_index + 1,
+         (integer_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from hex_term_parse
+  where digit_index <= length(hex_text)
+), hex_term as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         operand_index,
+         term_index,
+         integer_value
+  from hex_term_parse
+  where digit_index = length(hex_text) + 1
+)
+select * from decimal_term
+union all
+select * from hex_term;
+
+create unique index repo_asm_memory_integer_term_value_term_idx
+  on repo_asm_memory_integer_term_value(repo_file_id, function_name, line_no, operand_index, term_index);
 
 create table repo_asm_memory_addressing_fact as
 select memory.path,
@@ -4914,13 +4979,15 @@ select memory.path,
        sum(case when term.term_kind = 'symbol' then 1 else 0 end) as symbol_term_count,
        sum(case when term.term_kind = 'integer' then 1 else 0 end) as integer_term_count,
        sum(case when term.term_kind = 'rel_marker' then 1 else 0 end) as rel_marker_count,
+       sum(case when term.term_kind = 'other' then 1 else 0 end) as other_term_count,
        min(case when term.term_kind = 'register' then term.term_text end) as first_register_term,
        min(case when term.term_kind = 'scaled_register' then term.scale_register_name end) as first_scaled_register_term,
        min(case when term.term_kind = 'scaled_register' then term.scale_value end) as first_scale_value,
        min(case when term.term_kind = 'symbol' then term.term_text end) as first_symbol_term,
-       sum(case when term.term_kind = 'integer' then term.term_sign * cast(term.term_text as integer) else 0 end) as integer_displacement,
+       sum(case when term.term_kind = 'integer' then term.term_sign * value.integer_value else 0 end) as integer_displacement,
        case
          when memory.is_rel_memory = 1 then 'rel_memory'
+         when sum(case when term.term_kind = 'other' then 1 else 0 end) > 0 then 'other_memory'
          when sum(case when term.term_kind = 'scaled_register' then 1 else 0 end) > 0 then 'indexed_memory'
          when sum(case when term.term_kind = 'register' then 1 else 0 end) >= 2 then 'indexed_memory'
          when sum(case when term.term_kind = 'symbol' then 1 else 0 end) > 0 then 'symbolic_base_memory'
@@ -4933,6 +5000,12 @@ left join repo_asm_memory_operand_term_fact term
  and term.function_name = memory.function_name
  and term.line_no = memory.line_no
  and term.operand_index = memory.operand_index
+left join repo_asm_memory_integer_term_value value
+  on value.repo_file_id = term.repo_file_id
+ and value.function_name = term.function_name
+ and value.line_no = term.line_no
+ and value.operand_index = term.operand_index
+ and value.term_index = term.term_index
 group by memory.path,
          memory.repo_file_id,
          memory.function_name,
@@ -6828,14 +6901,23 @@ with register_memory as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','lea')
+    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','lea','movzx','movsx','movsxd')
     and memory.addressing_kind = 'base_memory'
     and memory.register_term_count = 1
     and memory.scaled_register_term_count = 0
     and memory.symbol_term_count = 0
     and memory.rel_marker_count = 0
     and ((match.op_name = 'lea' and memory.operand_index = 1 and reg_encoding.width_bits in (32,64))
-         or (match.op_name <> 'lea'
+         or (match.op_name in ('movzx','movsx')
+             and memory.operand_index = 1
+             and reg_encoding.width_bits in (32,64)
+             and ((match.op_name = 'movzx' and memory.size_name in ('byte','word'))
+                  or (match.op_name = 'movsx' and memory.size_name in ('byte','word'))))
+         or (match.op_name = 'movsxd'
+             and memory.operand_index = 1
+             and reg_encoding.width_bits = 64
+             and memory.size_name = 'dword')
+         or (match.op_name not in ('lea','movzx','movsx','movsxd')
              and reg_encoding.width_bits in (8,16,32,64)
              and (memory.size_name is null
                   or (memory.size_name = 'byte' and reg_encoding.width_bits = 8)
@@ -6926,6 +7008,11 @@ with register_memory as (
                 when op_name = 'xor' and width_bits = 8 then '32'
                 when op_name = 'xor' then '33'
                 when op_name = 'lea' then '8d'
+                when op_name = 'movzx' and size_name = 'byte' then '0fb6'
+                when op_name = 'movzx' and size_name = 'word' then '0fb7'
+                when op_name = 'movsx' and size_name = 'byte' then '0fbe'
+                when op_name = 'movsx' and size_name = 'word' then '0fbf'
+                when op_name = 'movsxd' then '63'
               end
            || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
            || sib_hex
@@ -6933,7 +7020,7 @@ with register_memory as (
          ) as fixed_hex
   from memory_bytes
   where memory_operand_index = 1
-    and op_name in ('mov','add','sub','cmp','and','or','xor','lea')
+    and op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
 )
 select repo_file_id,
        function_name,
