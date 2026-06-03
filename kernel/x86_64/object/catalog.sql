@@ -718,6 +718,48 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1420, 'x86_64_mov_edi_unexpected_http_stub_exit', 1, 1, 'bf56000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_unexpected_http_stub_exit.erobj'),
   (1421, 'x86_64_mov_eax_sys_exit', 1, 1, 'b83c000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_sys_exit.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1422, 'x86_64_lea_rdi_r12_rbx', 1, 1, '498d3c1c', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/lea_rdi_r12_rbx.erobj'),
+  (1423, 'x86_64_mov_rdi_r13_plus_8_ptr', 1, 1, '498b7d08', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r13_plus_8_ptr.erobj'),
+  (1424, 'x86_64_mov_al_0x0f', 1, 1, 'b00f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_al_0x0f.erobj'),
+  (1425, 'x86_64_mov_al_0x48', 1, 1, 'b048', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_al_0x48.erobj'),
+  (1426, 'x86_64_cmp_edx_error_invalid_param', 1, 1, '83fa18', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_edx_error_invalid_param.erobj'),
+  (1427, 'x86_64_mov_ecx_rsp_plus_40_ptr', 1, 1, '8b4c2428', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_rsp_plus_40_ptr.erobj'),
+  (1428, 'x86_64_test_rcx_rcx', 1, 1, '4885c9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_rcx_rcx.erobj'),
+  (1429, 'x86_64_mov_rsp_plus_8_ptr_rax', 1, 1, '4889442408', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsp_plus_8_ptr_rax.erobj'),
+  (1430, 'x86_64_mov_edi_10', 1, 1, 'bf0a000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edi_10.erobj'),
+  (1431, 'x86_64_or_rax_rdx', 1, 1, '4809d0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/or_rax_rdx.erobj'),
+  (1432, 'x86_64_cmp_eax_minus_1', 1, 1, '83f8ff', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_eax_minus_1.erobj'),
+  (1433, 'x86_64_test_esi_esi', 1, 1, '85f6', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_esi_esi.erobj'),
+  (1434, 'x86_64_sub_esi_ebx', 1, 1, '29de', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sub_esi_ebx.erobj'),
+  (1435, 'x86_64_mov_edx_error_parse', 1, 1, 'ba07000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_error_parse.erobj'),
+  (1436, 'x86_64_mov_rsp_ptr_rax', 1, 1, '48890424', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rsp_ptr_rax.erobj'),
+  (1437, 'x86_64_and_edi_0xff', 1, 1, '81e7ff000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/and_edi_0xff.erobj'),
+  (1438, 'x86_64_push_2', 1, 1, '6a02', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/push_2.erobj'),
+  (1439, 'x86_64_cmp_ecx_r12d', 1, 1, '4439e1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_ecx_r12d.erobj'),
+  (1440, 'x86_64_mov_dx_di', 1, 1, '6689fa', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_dx_di.erobj'),
+  (1441, 'x86_64_cmp_rax_42', 1, 1, '4883f82a', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_rax_42.erobj'),
+  (1442, 'x86_64_mov_cl_2', 1, 1, 'b102', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_cl_2.erobj'),
+  (1443, 'x86_64_mov_rdi_r13_rbx8_ptr', 1, 1, '498b7cdd00', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_rdi_r13_rbx8_ptr.erobj'),
+  (1444, 'x86_64_shl_rdx_32', 1, 1, '48c1e220', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/shl_rdx_32.erobj'),
+  (1445, 'x86_64_test_r8_r8', 1, 1, '4d85c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/test_r8_r8.erobj'),
+  (1446, 'x86_64_mov_sil_space', 1, 1, '40b620', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_sil_space.erobj'),
+  (1447, 'x86_64_mov_al_0xc0', 1, 1, 'b0c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_al_0xc0.erobj'),
+  (1448, 'x86_64_mov_eax_0', 1, 1, 'b800000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_0.erobj'),
+  (1449, 'x86_64_mov_r8d_32', 1, 1, '41b820000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_r8d_32.erobj'),
+  (1450, 'x86_64_mov_esi_256', 1, 1, 'be00010000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_256.erobj'),
+  (1451, 'x86_64_mov_eax_sys_exit_group', 1, 1, 'b8e7000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_eax_sys_exit_group.erobj'),
+  (1452, 'x86_64_add_r8_decoded_op_size', 1, 1, '4983c020', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_r8_decoded_op_size.erobj'),
+  (1453, 'arm32_cmp_r0_r1', 4, 2, '010050e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/cmp_r0_r1.erobj'),
+  (1454, 'arm32_cmp_r0_1', 4, 2, '010050e3', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/cmp_r0_1.erobj'),
+  (1455, 'arm32_cmp_r0_r2', 4, 2, '020050e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/cmp_r0_r2.erobj'),
+  (1456, 'arm32_cmp_r0_r3', 4, 2, '030050e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/cmp_r0_r3.erobj'),
+  (1457, 'arm32_pop_r4_r5_pc', 4, 2, '3080bde8', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/pop_r4_r5_pc.erobj'),
+  (1458, 'arm32_push_r4', 4, 2, '04402de5', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/push_r4.erobj'),
+  (1459, 'arm32_mov_r4_r0', 4, 2, '0040a0e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/mov_r4_r0.erobj'),
+  (1460, 'arm32_mov_r1_r0', 4, 2, '0010a0e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/mov_r1_r0.erobj'),
+  (1461, 'arm32_mul_r0_r2_r3', 4, 2, '920300e0', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/mul_r0_r2_r3.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -2022,6 +2064,51 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1420, 'asm_x86_mov_edi_unexpected_http_stub_exit_exact', 'edi, UNEXPECTED_HTTP_STUB_EXIT', 0),
   (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1421, 'asm_x86_mov_eax_sys_exit_exact', 'eax, SYS_EXIT', 0);
 
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'lea', null, 'kernel/x86_64/object/instruction/x86_64/lea.erobj', null, 1422, 'asm_x86_lea_rdi_r12_rbx_exact', 'rdi, [r12 + rbx]', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1423, 'asm_x86_mov_rdi_r13_plus_8_ptr_exact', 'rdi, [r13 + 8]', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1424, 'asm_x86_mov_al_0x0f_exact', 'al, 0x0F', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1425, 'asm_x86_mov_al_0x48_exact', 'al, 0x48', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1426, 'asm_x86_cmp_edx_error_invalid_param_exact', 'edx, ERROR_INVALID_PARAM', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1427, 'asm_x86_mov_ecx_rsp_plus_40_ptr_exact', 'ecx, [rsp + 40]', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1428, 'asm_x86_test_rcx_rcx_exact', 'rcx, rcx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1399, 'asm_x86_mov_eax_sys_open_exact', 'eax, SYS_open', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1429, 'asm_x86_mov_rsp_plus_8_ptr_rax_exact', '[rsp + 8], rax', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1430, 'asm_x86_mov_edi_10_exact', 'edi, 10', 0),
+  (3, 'or', null, 'kernel/x86_64/object/instruction/x86_64/or.erobj', null, 1431, 'asm_x86_or_rax_rdx_exact', 'rax, rdx', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1432, 'asm_x86_cmp_eax_minus_1_exact', 'eax, -1', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1433, 'asm_x86_test_esi_esi_exact', 'esi, esi', 0),
+  (3, 'sub', null, 'kernel/x86_64/object/instruction/x86_64/sub.erobj', null, 1434, 'asm_x86_sub_esi_ebx_exact', 'esi, ebx', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1435, 'asm_x86_mov_edx_error_parse_exact', 'edx, ERROR_PARSE', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1115, 'asm_x86_mov_ecx_32_exact', 'ecx, 32', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1436, 'asm_x86_mov_rsp_ptr_rax_exact', '[rsp], rax', 0),
+  (3, 'and', null, 'kernel/x86_64/object/instruction/x86_64/and.erobj', null, 1437, 'asm_x86_and_edi_0xff_exact', 'edi, 0xFF', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/x86_64/push.erobj', null, 1438, 'asm_x86_push_2_exact', '2', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1439, 'asm_x86_cmp_ecx_r12d_exact', 'ecx, r12d', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1440, 'asm_x86_mov_dx_di_exact', 'dx, di', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1441, 'asm_x86_cmp_rax_42_exact', 'rax, 42', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1442, 'asm_x86_mov_cl_2_exact', 'cl, 2', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1443, 'asm_x86_mov_rdi_r13_rbx8_ptr_exact', 'rdi, [r13 + rbx * 8]', 0),
+  (3, 'shl', null, 'kernel/x86_64/object/instruction/x86_64/shl.erobj', null, 1444, 'asm_x86_shl_rdx_32_exact', 'rdx, 32', 0),
+  (3, 'test', null, 'kernel/x86_64/object/instruction/x86_64/test.erobj', null, 1445, 'asm_x86_test_r8_r8_exact', 'r8, r8', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1446, 'asm_x86_mov_sil_space_exact', 'sil, '' ''', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1447, 'asm_x86_mov_al_0xc0_exact', 'al, 0xC0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1448, 'asm_x86_mov_eax_sys_read_exact', 'eax, SYS_read', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1449, 'asm_x86_mov_r8d_32_exact', 'r8d, 32', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1450, 'asm_x86_mov_esi_256_exact', 'esi, 256', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1451, 'asm_x86_mov_eax_sys_exit_group_exact', 'eax, SYS_exit_group', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1146, 'asm_x86_mov_esi_vp8_bool_initial_bytes_exact', 'esi, VP8_BOOL_INITIAL_BYTES', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1452, 'asm_x86_add_r8_decoded_op_size_exact', 'r8, DECODED_OP_SIZE', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/arm32/cmp.erobj', null, 1453, 'asm_arm32_cmp_r0_r1_exact', 'r0, r1', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/arm32/cmp.erobj', null, 1454, 'asm_arm32_cmp_r0_1_exact', 'r0, #1', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/arm32/cmp.erobj', null, 1455, 'asm_arm32_cmp_r0_r2_exact', 'r0, r2', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/arm32/cmp.erobj', null, 1456, 'asm_arm32_cmp_r0_r3_exact', 'r0, r3', 0),
+  (3, 'pop', null, 'kernel/x86_64/object/instruction/arm32/pop.erobj', null, 1457, 'asm_arm32_pop_r4_r5_pc_exact', '{r4, r5, pc}', 0),
+  (3, 'push', null, 'kernel/x86_64/object/instruction/arm32/push.erobj', null, 1458, 'asm_arm32_push_r4_exact', '{r4}', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/arm32/mov.erobj', null, 1459, 'asm_arm32_mov_r4_r0_exact', 'r4, r0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/arm32/mov.erobj', null, 1460, 'asm_arm32_mov_r1_r0_exact', 'r1, r0', 0),
+  (3, 'mul', null, 'kernel/x86_64/object/instruction/arm32/mul.erobj', null, 1461, 'asm_arm32_mul_r0_r2_r3_exact', 'r0, r2, r3', 0);
+
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
   (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
 
@@ -2706,6 +2793,26 @@ select path,
        'included_binary_data' as data_definition_kind
 from repo_asm_operation
 where op_name = 'incbin'
+  and operand_text is not null
+union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       '' as label_name,
+       operand_text,
+       case
+         when op_name = 'db' then 'byte_data'
+         when op_name = 'dw' then 'word_data'
+         when op_name = 'dd' then 'dword_data'
+         when op_name = 'dq' then 'quadword_data'
+         when op_name = 'resb' then 'reserved_bytes'
+         when op_name = 'resd' then 'reserved_dwords'
+         when op_name = 'resq' then 'reserved_qwords'
+         else 'unknown_data_definition'
+       end as data_definition_kind
+from repo_asm_operation
+where op_name in ('db','dw','dd','dq','resb','resd','resq')
   and operand_text is not null;
 
 create view repo_asm_include_edge_fact as
