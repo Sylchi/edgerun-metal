@@ -2466,7 +2466,7 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'setb', null, 'kernel/x86_64/object/instruction/x86_64/setb.erobj', null, null, 'asm_x86_setb_known_gap', null, 2),
   (3, 'setbe', null, 'kernel/x86_64/object/instruction/x86_64/setbe.erobj', null, null, 'asm_x86_setbe_known_gap', null, 2);
 
-create table asm_symbolic_fixed_encoding (
+create table asm_exact_fixed_encoding_fact (
   encoding_id integer primary key,
   name text not null unique,
   rule_name text not null unique,
@@ -2475,7 +2475,7 @@ create table asm_symbolic_fixed_encoding (
   fixed_hex text not null
 );
 
-insert into asm_symbolic_fixed_encoding(encoding_id, name, rule_name, op_name, operand_text, fixed_hex) values
+insert into asm_exact_fixed_encoding_fact(encoding_id, name, rule_name, op_name, operand_text, fixed_hex) values
   (1604, 'x86_64_vp8_cmp_ecx_vp8_block_size', 'asm_x86_vp8_cmp_ecx_vp8_block_size_exact', 'cmp', 'ecx, VP8_BLOCK_SIZE', '83f904'),
   (1605, 'x86_64_vp8_mov_edx_vp8_chroma_block_size', 'asm_x86_vp8_mov_edx_vp8_chroma_block_size_exact', 'mov', 'edx, VP8_CHROMA_BLOCK_SIZE', 'ba08000000'),
   (1606, 'x86_64_vp8_mov_edx_vp8_macroblock_size', 'asm_x86_vp8_mov_edx_vp8_macroblock_size_exact', 'mov', 'edx, VP8_MACROBLOCK_SIZE', 'ba10000000'),
@@ -2555,7 +2555,37 @@ insert into asm_symbolic_fixed_encoding(encoding_id, name, rule_name, op_name, o
   (1680, 'x86_64_vp8_mov_esi_vp8_idct_cospi8sqrt2minus1', 'asm_x86_vp8_mov_esi_vp8_idct_cospi8sqrt2minus1_exact', 'mov', 'esi, VP8_IDCT_COSPI8SQRT2MINUS1', 'be7b4e0000'),
   (1681, 'x86_64_vp8_movzx_edx_byte_ptr_rsp_plus_vp8_decode_stack_mb_header_plus_vp8_macroblock_header_luma_mode', 'asm_x86_vp8_movzx_edx_byte_ptr_rsp_plus_vp8_decode_stack_mb_header_plus_vp8_macroblock_header_luma_mode_exact', 'movzx', 'edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]', '0fb6942409060000'),
   (1682, 'x86_64_vp8_movzx_edx_byte_ptr_rsp_plus_vp8_decode_stack_mb_header_plus_vp8_macroblock_header_segment_id', 'asm_x86_vp8_movzx_edx_byte_ptr_rsp_plus_vp8_decode_stack_mb_header_plus_vp8_macroblock_header_segment_id_exact', 'movzx', 'edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SEGMENT_ID]', '0fb6942407060000'),
-  (1683, 'x86_64_vp8_sar_eax_vp8_idct_shift', 'asm_x86_vp8_sar_eax_vp8_idct_shift_exact', 'sar', 'eax, VP8_IDCT_SHIFT', 'c1f803');
+  (1683, 'x86_64_vp8_sar_eax_vp8_idct_shift', 'asm_x86_vp8_sar_eax_vp8_idct_shift_exact', 'sar', 'eax, VP8_IDCT_SHIFT', 'c1f803'),
+  (1684, 'x86_64_exact_lea_r13_ptr_rsp_plus_8', 'asm_x86_exact_lea_r13_ptr_rsp_plus_8_exact', 'lea', 'r13, [rsp + 8]', '4c8d6c2408'),
+  (1685, 'x86_64_exact_cmp_r12_2', 'asm_x86_exact_cmp_r12_2_exact', 'cmp', 'r12, 2', '4983fc02'),
+  (1686, 'x86_64_exact_mov_edi_stdout_fd', 'asm_x86_exact_mov_edi_stdout_fd_exact', 'mov', 'edi, STDOUT_FD', 'bf01000000'),
+  (1687, 'x86_64_exact_mov_edi_stderr_fd', 'asm_x86_exact_mov_edi_stderr_fd_exact', 'mov', 'edi, STDERR_FD', 'bf02000000'),
+  (1688, 'x86_64_exact_cmp_byte_ptr_rdi_plus_rax_0', 'asm_x86_exact_cmp_byte_ptr_rdi_plus_rax_0_exact', 'cmp', 'byte [rdi + rax], 0', '803c0700'),
+  (1689, 'x86_64_exact_inc_rdx', 'asm_x86_exact_inc_rdx_exact', 'inc', 'rdx', '48ffc2'),
+  (1690, 'x86_64_exact_dec_r8d', 'asm_x86_exact_dec_r8d_exact', 'dec', 'r8d', '41ffc8'),
+  (1691, 'x86_64_exact_movzx_eax_byte_ptr_rdi_plus_rcx', 'asm_x86_exact_movzx_eax_byte_ptr_rdi_plus_rcx_exact', 'movzx', 'eax, byte [rdi + rcx]', '0fb6040f'),
+  (1692, 'x86_64_exact_inc_dword_ptr_rsp_plus_4', 'asm_x86_exact_inc_dword_ptr_rsp_plus_4_exact', 'inc', 'dword [rsp + 4]', 'ff442404'),
+  (1693, 'x86_64_exact_sub_esi_edx', 'asm_x86_exact_sub_esi_edx_exact', 'sub', 'esi, edx', '29d6'),
+  (1694, 'x86_64_exact_push_1', 'asm_x86_exact_push_1_exact', 'push', '1', '6a01'),
+  (1695, 'x86_64_exact_cmp_eax_127', 'asm_x86_exact_cmp_eax_127_exact', 'cmp', 'eax, 127', '83f87f'),
+  (1696, 'x86_64_exact_add_eax_5', 'asm_x86_exact_add_eax_5_exact', 'add', 'eax, 5', '83c005'),
+  (1697, 'x86_64_exact_add_eax_r9d', 'asm_x86_exact_add_eax_r9d_exact', 'add', 'eax, r9d', '4401c8'),
+  (1698, 'x86_64_exact_mov_ptr_r15_eax', 'asm_x86_exact_mov_ptr_r15_eax_exact', 'mov', '[r15], eax', '418907'),
+  (1699, 'x86_64_exact_mov_eax_255', 'asm_x86_exact_mov_eax_255_exact', 'mov', 'eax, 255', 'b8ff000000'),
+  (1700, 'x86_64_exact_or_eax_r10d', 'asm_x86_exact_or_eax_r10d_exact', 'or', 'eax, r10d', '4409d0'),
+  (1701, 'x86_64_exact_mov_r15d_r14d', 'asm_x86_exact_mov_r15d_r14d_exact', 'mov', 'r15d, r14d', '4589f7'),
+  (1702, 'x86_64_exact_mov_r8d_ptr_rsp_plus_4', 'asm_x86_exact_mov_r8d_ptr_rsp_plus_4_exact', 'mov', 'r8d, [rsp + 4]', '448b442404'),
+  (1703, 'x86_64_exact_movzx_ecx_byte_ptr_rdi_plus_1', 'asm_x86_exact_movzx_ecx_byte_ptr_rdi_plus_1_exact', 'movzx', 'ecx, byte [rdi + 1]', '0fb64f01'),
+  (1704, 'x86_64_exact_mov_r9d_r14d', 'asm_x86_exact_mov_r9d_r14d_exact', 'mov', 'r9d, r14d', '4589f1'),
+  (1705, 'x86_64_exact_add_ecx_r15d', 'asm_x86_exact_add_ecx_r15d_exact', 'add', 'ecx, r15d', '4401f9'),
+  (1706, 'x86_64_exact_add_ebx_ecx', 'asm_x86_exact_add_ebx_ecx_exact', 'add', 'ebx, ecx', '01cb'),
+  (1707, 'x86_64_exact_cmp_r15d_r14d', 'asm_x86_exact_cmp_r15d_r14d_exact', 'cmp', 'r15d, r14d', '4539f7'),
+  (1708, 'x86_64_exact_imul_eax_r12d', 'asm_x86_exact_imul_eax_r12d_exact', 'imul', 'eax, r12d', '410fafc4'),
+  (1709, 'x86_64_exact_mov_ptr_rsp_plus_28_eax', 'asm_x86_exact_mov_ptr_rsp_plus_28_eax_exact', 'mov', '[rsp + 28], eax', '8944241c'),
+  (1710, 'x86_64_exact_mov_eax_ptr_rsp_plus_8', 'asm_x86_exact_mov_eax_ptr_rsp_plus_8_exact', 'mov', 'eax, [rsp + 8]', '8b442408'),
+  (1711, 'x86_64_exact_mov_ptr_rsp_plus_24_ecx', 'asm_x86_exact_mov_ptr_rsp_plus_24_ecx_exact', 'mov', '[rsp + 24], ecx', '894c2418'),
+  (1712, 'x86_64_exact_mov_ecx_ptr_rsp_plus_4', 'asm_x86_exact_mov_ecx_ptr_rsp_plus_4_exact', 'mov', 'ecx, [rsp + 4]', '8b4c2404'),
+  (1713, 'x86_64_exact_movzx_eax_dil', 'asm_x86_exact_movzx_eax_dil_exact', 'movzx', 'eax, dil', '400fb6c7');
 
 insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path)
 select encoding_id,
@@ -2567,7 +2597,7 @@ select encoding_id,
        -1,
        0,
        'kernel/x86_64/object/encoding/x86_64/' || name || '.erobj'
-from asm_symbolic_fixed_encoding;
+from asm_exact_fixed_encoding_fact;
 
 insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags)
 select 3,
@@ -2579,7 +2609,7 @@ select 3,
        rule_name,
        operand_text,
        0
-from asm_symbolic_fixed_encoding;
+from asm_exact_fixed_encoding_fact;
 
 
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
@@ -3306,6 +3336,16 @@ select path,
        end as relocation_kind
 from repo_asm_control_target_fact;
 
+create table asm_zero_size_data_symbol_fact (
+  path text not null,
+  label_name text not null,
+  symbol_kind text not null,
+  primary key (path, label_name)
+);
+
+insert into asm_zero_size_data_symbol_fact(path, label_name, symbol_kind) values
+  ('kernel/host/er_obj_body.asm.erobj', 'stack_top', 'reserved_stack_end_anchor');
+
 create view repo_asm_data_reference_fact as
 select path,
        repo_file_id,
@@ -3380,6 +3420,20 @@ select path,
 from repo_asm_operation
 where op_name = 'incbin'
   and operand_text is not null
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name as label_name,
+       operation.operand_text,
+       symbol.symbol_kind as data_definition_kind
+from repo_asm_operation operation
+join asm_zero_size_data_symbol_fact symbol
+  on symbol.path = operation.path
+ and symbol.label_name = replace(operation.op_name, ':', '')
+where operation.op_name like '%:'
+  and operation.operand_text is null
 union all
 select path,
        repo_file_id,
