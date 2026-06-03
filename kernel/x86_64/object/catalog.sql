@@ -6041,6 +6041,212 @@ where fixed_hex is not null;
 create unique index repo_asm_indexed_parametric_encoding_fact_line_idx
   on repo_asm_indexed_parametric_encoding_fact(repo_file_id, function_name, line_no);
 
+create table repo_asm_struct_numeric_value as
+with source_line as (
+  select file.path,
+         line.repo_file_id,
+         line.line_no,
+         line.text
+  from repo_asm_line line
+  join repo_file file on file.repo_file_id = line.repo_file_id
+  union all
+  select file.path,
+         line.repo_file_id,
+         line.line_no,
+         line.text
+  from repo_asm_include_line line
+  join repo_file file on file.repo_file_id = line.repo_file_id
+), clean_line as (
+  select path,
+         repo_file_id,
+         line_no,
+         case
+           when instr(trim(replace(text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(text, char(9), ' ')), 1, instr(trim(replace(text, char(9), ' ')), ';') - 1))
+           else trim(replace(text, char(9), ' '))
+         end as text
+  from source_line
+), struc_start as (
+  select path,
+         repo_file_id,
+         line_no as start_line_no,
+         trim(substr(text, 7)) as struct_name
+  from clean_line
+  where text like 'struc %'
+), struc_span as (
+  select start.path,
+         start.repo_file_id,
+         start.start_line_no,
+         min(end_line.line_no) as end_line_no,
+         start.struct_name
+  from struc_start start
+  join clean_line end_line
+    on end_line.repo_file_id = start.repo_file_id
+   and end_line.line_no > start.start_line_no
+   and end_line.text = 'endstruc'
+  group by start.path,
+           start.repo_file_id,
+           start.start_line_no,
+           start.struct_name
+), struc_body as (
+  select span.path,
+         span.repo_file_id,
+         span.struct_name,
+         line.line_no,
+         line.text,
+         line.line_no - span.start_line_no as body_order
+  from struc_span span
+  join clean_line line
+    on line.repo_file_id = span.repo_file_id
+   and line.line_no > span.start_line_no
+   and line.line_no < span.end_line_no
+  where line.text <> ''
+), alloc_source as (
+  select path,
+         repo_file_id,
+         struct_name,
+         line_no,
+         body_order,
+         case
+           when text like '.%:%' then substr(text, 1, instr(text, ':') - 1)
+         end as field_name,
+         case
+           when text like '.%:%' then trim(substr(text, instr(text, ':') + 1))
+           else text
+         end as alloc_text
+  from struc_body
+), alloc_line as (
+  select path,
+         repo_file_id,
+         struct_name,
+         line_no,
+         body_order,
+         field_name,
+         trim(substr(alloc_text, 1, instr(alloc_text || ' ', ' ') - 1)) as alloc_op,
+         trim(substr(alloc_text || ' ', instr(alloc_text || ' ', ' ') + 1)) as count_expr
+  from alloc_source
+), raw_alloc as (
+  select *,
+         case alloc_op
+           when 'resb' then 1
+           when 'resw' then 2
+           when 'resd' then 4
+           when 'resq' then 8
+         end as unit_byte_len
+  from alloc_line
+  where alloc_op in ('resb','resw','resd','resq')
+), direct_constant_value as (
+  select symbol_name,
+         immediate_value
+  from repo_asm_numeric_constant_value
+), simple_alloc_size as (
+  select alloc.*,
+         alloc.unit_byte_len * value.immediate_value as byte_len
+  from raw_alloc alloc
+  join direct_constant_value value
+    on value.symbol_name = alloc.count_expr
+  union all
+  select alloc.*,
+         alloc.unit_byte_len * cast(alloc.count_expr as integer) as byte_len
+  from raw_alloc alloc
+  where alloc.count_expr glob '[0-9]*'
+    and alloc.count_expr not glob '*[^0-9]*'
+  union all
+  select alloc.*,
+         alloc.unit_byte_len * lhs.immediate_value * rhs.immediate_value as byte_len
+  from raw_alloc alloc
+  join direct_constant_value lhs
+    on lhs.symbol_name = trim(substr(alloc.count_expr, 1, instr(alloc.count_expr, ' * ') - 1))
+  join direct_constant_value rhs
+    on rhs.symbol_name = trim(substr(alloc.count_expr, instr(alloc.count_expr, ' * ') + 3))
+  where alloc.count_expr like '% * %'
+), simple_struct_size as (
+  select struct_name || '_size' as symbol_name,
+         sum(byte_len) as immediate_value
+  from simple_alloc_size
+  group by struct_name
+), all_value as (
+  select symbol_name,
+         immediate_value
+  from direct_constant_value
+  union all
+  select symbol_name,
+         immediate_value
+  from simple_struct_size
+), alloc_size as (
+  select alloc.*,
+         alloc.unit_byte_len * value.immediate_value as byte_len
+  from raw_alloc alloc
+  join all_value value
+    on value.symbol_name = alloc.count_expr
+  union all
+  select alloc.*,
+         alloc.unit_byte_len * cast(alloc.count_expr as integer) as byte_len
+  from raw_alloc alloc
+  where alloc.count_expr glob '[0-9]*'
+    and alloc.count_expr not glob '*[^0-9]*'
+  union all
+  select alloc.*,
+         alloc.unit_byte_len * lhs.immediate_value * rhs.immediate_value as byte_len
+  from raw_alloc alloc
+  join all_value lhs
+    on lhs.symbol_name = trim(substr(alloc.count_expr, 1, instr(alloc.count_expr, ' * ') - 1))
+  join all_value rhs
+    on rhs.symbol_name = trim(substr(alloc.count_expr, instr(alloc.count_expr, ' * ') + 3))
+  where alloc.count_expr like '% * %'
+), field_offset as (
+  select path,
+         repo_file_id,
+         struct_name,
+         line_no,
+         body_order,
+         field_name,
+         byte_len,
+         coalesce(sum(byte_len) over (
+           partition by repo_file_id, struct_name
+           order by body_order
+           rows between unbounded preceding and 1 preceding
+         ), 0) as byte_offset
+  from alloc_size
+), struct_value as (
+  select struct_name || '.' || substr(field_name, 2) as symbol_name,
+         byte_offset as immediate_value
+  from field_offset
+  where field_name is not null
+  union all
+  select struct_name || '_size' as symbol_name,
+         sum(byte_len) as immediate_value
+  from alloc_size
+  group by struct_name
+)
+select symbol_name,
+       min(immediate_value) as immediate_value
+from struct_value
+group by symbol_name
+having min(immediate_value) = max(immediate_value);
+
+create unique index repo_asm_struct_numeric_value_symbol_idx
+  on repo_asm_struct_numeric_value(symbol_name);
+
+create table repo_asm_numeric_symbol_value as
+select symbol_name,
+       immediate_value,
+       'constant' as value_kind
+from repo_asm_numeric_constant_value
+union all
+select symbol_name,
+       immediate_value,
+       'struct_offset' as value_kind
+from repo_asm_struct_numeric_value
+where not exists (
+  select 1
+  from repo_asm_numeric_constant_value constant
+  where constant.symbol_name = repo_asm_struct_numeric_value.symbol_name
+);
+
+create unique index repo_asm_numeric_symbol_value_symbol_idx
+  on repo_asm_numeric_symbol_value(symbol_name);
+
 create table repo_asm_numeric_symbol_memory_parametric_encoding_fact as
 with symbolic_memory as (
   select mem.*,
@@ -6061,7 +6267,7 @@ with symbolic_memory as (
    and symbol_term.line_no = mem.line_no
    and symbol_term.operand_index = mem.operand_index
    and symbol_term.term_kind = 'symbol'
-  join repo_asm_numeric_constant_value value
+  join repo_asm_numeric_symbol_value value
     on value.symbol_name = symbol_term.term_text
   where mem.target_isa_id = 1
     and mem.is_rel_memory = 0
@@ -6110,9 +6316,10 @@ with symbolic_memory as (
     on reg_encoding.register_name = reg.operand_value
   where mem.operand_index = 0
     and mem.op_name in ('mov','add','sub','cmp','and','or','xor')
-    and reg_encoding.width_bits in (8,32,64)
+    and reg_encoding.width_bits in (8,16,32,64)
     and (mem.size_name is null
          or (mem.size_name = 'byte' and reg_encoding.width_bits = 8)
+         or (mem.size_name = 'word' and reg_encoding.width_bits = 16)
          or (mem.size_name = 'dword' and reg_encoding.width_bits = 32)
          or (mem.size_name = 'qword' and reg_encoding.width_bits = 64))
 ), symbol_memory_to_reg as (
@@ -6132,10 +6339,11 @@ with symbolic_memory as (
     on reg_encoding.register_name = reg.operand_value
   where mem.operand_index = 1
     and mem.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
-    and reg_encoding.width_bits in (32,64)
+    and reg_encoding.width_bits in (16,32,64)
     and (mem.size_name is null
          or (mem.size_name = 'byte' and mem.op_name = 'movzx')
-         or (mem.size_name = 'word' and mem.op_name in ('movzx','movsx'))
+         or (mem.size_name = 'word' and mem.op_name = 'mov' and reg_encoding.width_bits = 16)
+         or (mem.size_name = 'word' and mem.op_name in ('movzx','movsx') and reg_encoding.width_bits in (32,64))
          or (mem.size_name = 'dword' and reg_encoding.width_bits in (32,64))
          or (mem.size_name = 'qword' and reg_encoding.width_bits = 64))
 ), rhs_integer as (
@@ -6154,7 +6362,7 @@ with symbolic_memory as (
          operand.line_no,
          value.immediate_value
   from repo_asm_binary_operand_fact operand
-  join repo_asm_numeric_constant_value value
+  join repo_asm_numeric_symbol_value value
     on value.symbol_name = operand.operand_value
   where operand.operand_index = 1
 ), symbol_memory_imm as (
@@ -6167,14 +6375,15 @@ with symbolic_memory as (
    and rhs_integer.line_no = mem.line_no
   where mem.operand_index = 0
     and mem.op_name in ('mov','add','sub','cmp')
-    and mem.size_name in ('byte','dword','qword')
+    and mem.size_name in ('byte','word','dword','qword')
 ), generated as (
   select repo_file_id,
          function_name,
          line_no,
          'param_x86_' || op_name || '_reg_numeric_symbol_memory' as parametric_rule_name,
          (
-           case
+           case when width_bits = 16 and op_name not in ('movzx','movsx','movsxd') then '66' else '' end
+           || case
              when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
@@ -6205,7 +6414,8 @@ with symbolic_memory as (
          line_no,
          'param_x86_' || op_name || '_' || size_name || '_numeric_symbol_memory_imm8' as parametric_rule_name,
          (
-           case
+           case when size_name = 'word' then '66' else '' end
+           || case
              when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
              when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
@@ -6232,7 +6442,8 @@ with symbolic_memory as (
          line_no,
          'param_x86_mov_' || size_name || '_numeric_symbol_memory_imm' as parametric_rule_name,
          (
-           case
+           case when size_name = 'word' then '66' else '' end
+           || case
              when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
              when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
@@ -6246,6 +6457,9 @@ with symbolic_memory as (
            || displacement_hex
            || case
                 when size_name = 'byte' then printf('%02x', rhs_immediate_value & 255)
+                when size_name = 'word' then printf('%02x%02x',
+                                                     rhs_immediate_value & 255,
+                                                     (rhs_immediate_value >> 8) & 255)
                 else printf('%02x%02x%02x%02x',
                             rhs_immediate_value & 255,
                             (rhs_immediate_value >> 8) & 255,
@@ -6256,6 +6470,7 @@ with symbolic_memory as (
   from symbol_memory_imm
   where op_name = 'mov'
     and ((size_name = 'byte' and rhs_immediate_value between -128 and 255)
+         or (size_name = 'word' and rhs_immediate_value between -32768 and 65535)
          or (size_name in ('dword','qword') and rhs_immediate_value between -2147483648 and 4294967295))
   union all
   select repo_file_id,
@@ -6263,7 +6478,8 @@ with symbolic_memory as (
          line_no,
          'param_x86_' || op_name || '_numeric_symbol_memory_reg' as parametric_rule_name,
          (
-           case
+           case when width_bits = 16 then '66' else '' end
+           || case
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
