@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added include-file constant definition facts and constant-expression operation facts so symbolic immediates lower as finite meaning facts before byte materialization.
 - Added 49 verified exact ASM encoding facts for quoted byte immediates, common x86 stack/register forms, and the next ARM register/load/push forms from the post-symbol known-gap queue.
 - Lowered same-file absolute symbol memory operands and labelled fixture data-block anchors into data-reference facts, covering host buffers, file descriptors, framebuffer state, Tor IDs, and AV1 fixture tables without treating symbols as fixed instruction bytes.
 - Added 47 more verified exact ASM encoding facts from the current post-relocation known-gap queue, covering common x86 register/stack forms and the next ARM register/immediate forms.

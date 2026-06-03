@@ -3098,6 +3098,33 @@ select repo_file_id, line_no - 1, line
 from lines
 where line_no > 1;
 
+create table repo_asm_include_line (
+  repo_file_id integer not null references repo_file(repo_file_id),
+  line_no integer not null,
+  text text not null,
+  primary key (repo_file_id, line_no)
+);
+
+with recursive lines(repo_file_id, line_no, rest, line) as (
+  select repo_file_id,
+         1,
+         replace(cast(content as text), char(13), '') || char(10),
+         ''
+  from repo_file
+  where file_kind = 'asm_include'
+  union all
+  select repo_file_id,
+         line_no + 1,
+         substr(rest, instr(rest, char(10)) + 1),
+         substr(rest, 1, instr(rest, char(10)) - 1)
+  from lines
+  where rest <> '' and instr(rest, char(10)) > 0
+)
+insert into repo_asm_include_line(repo_file_id, line_no, text)
+select repo_file_id, line_no - 1, line
+from lines
+where line_no > 1;
+
 insert or ignore into repo_asm_function_decl(repo_file_id, line_no, function_name, declaration_text)
 select repo_file_id,
        line_no,
@@ -3354,6 +3381,147 @@ left join encoding_pattern using (encoding_id);
 create index repo_asm_rule_match_line_idx on repo_asm_rule_match(repo_file_id, function_name, line_no);
 create index repo_asm_rule_match_encoding_idx on repo_asm_rule_match(encoding_id);
 create index repo_asm_rule_match_rule_idx on repo_asm_rule_match(op_name, operand_text, rule_name);
+
+create view repo_asm_constant_definition_fact as
+select repo_file.path,
+       operation.repo_file_id,
+       operation.line_no,
+       operation.op_name as symbol_name,
+       trim(substr(operation.operand_text, 5)) as expression_text,
+       'equ' as definition_kind
+from repo_asm_operation operation
+join repo_file using (repo_file_id)
+where operation.line_kind = 5
+  and operation.operand_text like 'equ %'
+union all
+select repo_file.path,
+       operation.repo_file_id,
+       operation.line_no,
+       substr(operation.operand_text, 1, instr(operation.operand_text, ' ') - 1) as symbol_name,
+       trim(substr(operation.operand_text, instr(operation.operand_text, ' ') + 1)) as expression_text,
+       'define' as definition_kind
+from repo_asm_operation operation
+join repo_file using (repo_file_id)
+where operation.op_name = '%define'
+  and operation.operand_text like '% %'
+union all
+select repo_file.path,
+       include_line.repo_file_id,
+       include_line.line_no,
+       substr(t, 1, instr(t, ' equ ') - 1) as symbol_name,
+       trim(substr(t, instr(t, ' equ ') + 5)) as expression_text,
+       'include_equ' as definition_kind
+from (
+  select repo_file_id,
+         line_no,
+         case
+           when instr(trim(replace(text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(text, char(9), ' ')), 1, instr(trim(replace(text, char(9), ' ')), ';') - 1))
+           else trim(replace(text, char(9), ' '))
+         end as t
+  from repo_asm_include_line
+) include_line
+join repo_file using (repo_file_id)
+where t like '% equ %'
+union all
+select repo_file.path,
+       include_line.repo_file_id,
+       include_line.line_no,
+       substr(substr(t, 9), 1, instr(substr(t, 9), ' ') - 1) as symbol_name,
+       trim(substr(substr(t, 9), instr(substr(t, 9), ' ') + 1)) as expression_text,
+       'include_define' as definition_kind
+from (
+  select repo_file_id,
+         line_no,
+         case
+           when instr(trim(replace(text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(text, char(9), ' ')), 1, instr(trim(replace(text, char(9), ' ')), ';') - 1))
+           else trim(replace(text, char(9), ' '))
+         end as t
+  from repo_asm_include_line
+) include_line
+join repo_file using (repo_file_id)
+where t like '%define % %';
+
+create table asm_constant_expression_symbol_fact (
+  symbol_name text primary key,
+  reason text not null
+);
+
+insert into asm_constant_expression_symbol_fact(symbol_name, reason) values
+  ('ERROR_NO_SPACE', 'top known-gap error immediate'),
+  ('ERROR_PARSE', 'top known-gap error immediate'),
+  ('ERROR_BAD_ARGUMENT', 'top known-gap error immediate'),
+  ('OBJECT_ERR_BAD_ARGUMENT', 'top known-gap object error immediate'),
+  ('AV1_BLOCK_PIXELS_8X8', 'top known-gap AV1 size constant'),
+  ('AV1_BLOCK_DIM_8', 'top known-gap AV1 size constant'),
+  ('AV1_SEQ_MONO_CHROME', 'top known-gap AV1 structure offset'),
+  ('TLS_GCM_BLOCK_LEN', 'top known-gap TLS size constant'),
+  ('LOCAL_CELL_SIZE', 'top known-gap local transport size constant'),
+  ('TOR_CELL_LEN', 'top known-gap Tor size constant'),
+  ('TOR_RELAY_DATA', 'top known-gap Tor command constant'),
+  ('HASH_SIZE', 'top known-gap hash size constant'),
+  ('SYS_ioctl', 'top known-gap syscall constant'),
+  ('SYS_mkdir', 'top known-gap syscall constant'),
+  ('DIR_MODE_0755', 'top known-gap mode constant'),
+  ('PCI_COMMAND', 'top known-gap PCI register constant'),
+  ('SDHCI_INT_STATUS', 'top known-gap SDHCI register constant'),
+  ('BL_SLOT_SIZE', 'top known-gap bootloader size constant'),
+  ('TPM_ST_NO_SESSIONS', 'top known-gap TPM tag constant'),
+  ('VP8_TEST_FRAME_WIDTH', 'top known-gap VP8 fixture constant'),
+  ('VP8_FRAME_TAG_SIZE', 'top known-gap VP8 frame constant'),
+  ('MP4_BOX_DESC_PAYLOAD_OFFSET', 'top known-gap MP4 structure offset'),
+  ('MP4_BOX_DESC_PAYLOAD_LEN', 'top known-gap MP4 structure offset'),
+  ('ST_STRUCT_SIZE', 'top known-gap Curve25519 structure size');
+
+create table repo_asm_unique_constant_fact as
+select definition.symbol_name,
+       min(definition.expression_text) as expression_text,
+       count(*) as definition_count
+from repo_asm_constant_definition_fact definition
+join asm_constant_expression_symbol_fact symbol using (symbol_name)
+where definition.symbol_name <> ''
+group by definition.symbol_name
+having count(distinct definition.expression_text) = 1;
+
+create unique index repo_asm_unique_constant_fact_symbol_idx on repo_asm_unique_constant_fact(symbol_name);
+
+create table repo_asm_constant_candidate_operation as
+select *
+from repo_asm_operation
+where line_kind = 3
+  and operand_text is not null
+  and operand_text glob '*[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*';
+
+create index repo_asm_constant_candidate_operation_operand_idx
+  on repo_asm_constant_candidate_operation(operand_text);
+
+create table repo_asm_constant_expression_fact as
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       operation.operand_text,
+       min(constant.symbol_name) as symbol_name,
+       min(constant.expression_text) as expression_text,
+       count(distinct constant.symbol_name) as symbol_count
+from repo_asm_constant_candidate_operation operation
+join asm_constant_expression_symbol_fact symbol
+join repo_asm_unique_constant_fact constant
+  on constant.symbol_name = symbol.symbol_name
+ and ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operation.operand_text,
+       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
+     like '% ' || constant.symbol_name || ' %'
+where operation.operand_text is not null
+group by operation.path,
+         operation.repo_file_id,
+         operation.function_name,
+         operation.line_no,
+         operation.op_name,
+         operation.operand_text;
+
+create index repo_asm_constant_expression_fact_line_idx on repo_asm_constant_expression_fact(repo_file_id, function_name, line_no);
 
 create view repo_asm_materializable_operation as
 select *
@@ -3779,6 +3947,15 @@ from repo_asm_operation
 where op_name in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','resw','resd','resq')
   and operand_text is not null;
 
+create table asm_metadata_op_fact (
+  op_name text primary key
+);
+
+insert into asm_metadata_op_fact(op_name) values
+  ('default'), ('SECTION'), ('section'), ('align'), ('.syntax'), ('.cpu'), ('.arm'), ('.align'),
+  ('.section'), ('.word'), ('.include'), ('.globl'), ('.equ'), ('.extern'), ('.weak'),
+  ('[BITS'), ('struc'), ('@'), ('endstruc'), ('extern');
+
 create view repo_asm_include_edge_fact as
 select path as source_path,
        repo_file_id as source_repo_file_id,
@@ -3829,26 +4006,8 @@ select match.path,
           when data_ref.relocation_kind is not null then 'data_relocation'
           when macro.macro_name is not null then 'macro_lowered'
           when data_def.data_definition_kind is not null then 'data_definition'
-          when match.op_name = 'default' then 'metadata'
-          when match.op_name = 'SECTION' then 'metadata'
-          when match.op_name = 'section' then 'metadata'
-          when match.op_name = 'align' then 'metadata'
-          when match.op_name = '.syntax' then 'metadata'
-          when match.op_name = '.cpu' then 'metadata'
-          when match.op_name = '.arm' then 'metadata'
-          when match.op_name = '.align' then 'metadata'
-          when match.op_name = '.section' then 'metadata'
-          when match.op_name = '.word' then 'metadata'
-          when match.op_name = '.include' then 'metadata'
-          when match.op_name = '.globl' then 'metadata'
-          when match.op_name = '.equ' then 'metadata'
-          when match.op_name = '.extern' then 'metadata'
-          when match.op_name = '.weak' then 'metadata'
-          when match.op_name = '[BITS' then 'metadata'
-          when match.op_name = 'struc' then 'metadata'
-          when match.op_name = '@' then 'metadata'
-          when match.op_name = 'endstruc' then 'metadata'
-          when match.op_name = 'extern' then 'metadata'
+          when constant_expr.symbol_name is not null then 'constant_expression'
+          when metadata.op_name is not null then 'metadata'
           when match.line_kind in (1,2,4,5) then 'metadata'
           when match.rule_name is not null then 'known_gap'
          else 'syntax_gap'
@@ -3861,10 +4020,21 @@ left join repo_asm_relocation_fact relocation
   on relocation.repo_file_id = match.repo_file_id
   and relocation.function_name = match.function_name
   and relocation.line_no = match.line_no
-left join repo_asm_data_reference_fact data_ref
+left join (
+  select repo_file_id,
+         function_name,
+         line_no,
+         min(relocation_kind) as relocation_kind
+  from repo_asm_data_reference_fact
+  group by repo_file_id, function_name, line_no
+) data_ref
   on data_ref.repo_file_id = match.repo_file_id
  and data_ref.function_name = match.function_name
  and data_ref.line_no = match.line_no
+left join repo_asm_constant_expression_fact constant_expr
+  on constant_expr.repo_file_id = match.repo_file_id
+ and constant_expr.function_name = match.function_name
+ and constant_expr.line_no = match.line_no
 left join repo_asm_macro_lowering_fact macro
   on macro.repo_file_id = match.repo_file_id
   and macro.function_name = match.function_name
@@ -3872,7 +4042,9 @@ left join repo_asm_macro_lowering_fact macro
 left join repo_asm_data_definition_fact data_def
   on data_def.repo_file_id = match.repo_file_id
  and data_def.function_name = match.function_name
- and data_def.line_no = match.line_no;
+ and data_def.line_no = match.line_no
+left join asm_metadata_op_fact metadata
+  on metadata.op_name = match.op_name;
 
 create index repo_asm_operation_fact_status_status_idx on repo_asm_operation_fact_status(fact_status);
 create index repo_asm_operation_fact_status_next_idx on repo_asm_operation_fact_status(fact_status, op_name, operand_text);
@@ -3886,13 +4058,14 @@ select path,
        sum(case when fact_status = 'data_relocation' then 1 else 0 end) as data_relocation_count,
        sum(case when fact_status = 'macro_lowered' then 1 else 0 end) as macro_lowered_count,
        sum(case when fact_status = 'data_definition' then 1 else 0 end) as data_definition_count,
+       sum(case when fact_status = 'constant_expression' then 1 else 0 end) as constant_expression_count,
        sum(case when fact_status = 'metadata' then 1 else 0 end) as metadata_count,
-       sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end) as fact_backed_count,
-       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end)
+       sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end) as fact_backed_count,
+       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end)
          + coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as remaining_count,
        coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as unparsed_line_count,
        coalesce((select parsed_percent from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as parsed_percent,
-       (100 * sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','metadata') then 1 else 0 end)) / count(*) as fact_backed_percent
+       (100 * sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end)) / count(*) as fact_backed_percent
 from repo_asm_operation_fact_status
 group by path
 order by fact_backed_percent desc, remaining_count asc, path;
