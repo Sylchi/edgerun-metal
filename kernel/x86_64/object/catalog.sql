@@ -3239,6 +3239,70 @@ create index repo_asm_operation_line_idx on repo_asm_operation(repo_file_id, fun
 create index repo_asm_operation_op_idx on repo_asm_operation(line_kind, op_name, operand_text);
 create index repo_asm_operation_path_idx on repo_asm_operation(path);
 
+create table repo_asm_include_edge_fact as
+select path as source_path,
+       repo_file_id as source_repo_file_id,
+       line_no,
+       trim(operand_text, '"') as include_path,
+       case
+         when trim(operand_text, '"') like 'kernel/%' then trim(operand_text, '"')
+         when path like 'kernel/x86_64/wasm/%'
+          and instr(trim(operand_text, '"'), '/') = 0 then 'kernel/x86_64/wasm/' || trim(operand_text, '"')
+         else 'kernel/' || trim(operand_text, '"')
+       end as target_path
+from repo_asm_operation
+where op_name = '%include'
+  and operand_text is not null
+union all
+select repo_file.path as source_path,
+       include_line.repo_file_id as source_repo_file_id,
+       include_line.line_no,
+       trim(trim(substr(t, 10)), '"') as include_path,
+       case
+         when trim(trim(substr(t, 10)), '"') like 'kernel/%' then trim(trim(substr(t, 10)), '"')
+         when trim(trim(substr(t, 10)), '"') like 'x86_64/%' then 'kernel/' || trim(trim(substr(t, 10)), '"')
+         when repo_file.path like 'kernel/x86_64/wasm/%'
+          and instr(trim(trim(substr(t, 10)), '"'), '/') = 0 then 'kernel/x86_64/wasm/' || trim(trim(substr(t, 10)), '"')
+         else 'kernel/' || trim(trim(substr(t, 10)), '"')
+       end as target_path
+from (
+  select repo_file_id,
+         line_no,
+         case
+           when instr(trim(replace(text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(text, char(9), ' ')), 1, instr(trim(replace(text, char(9), ' ')), ';') - 1))
+           else trim(replace(text, char(9), ' '))
+         end as t
+  from repo_asm_include_line
+) include_line
+join repo_file using (repo_file_id)
+where t like '%include %';
+
+create index repo_asm_include_edge_fact_source_idx on repo_asm_include_edge_fact(source_path, target_path);
+create index repo_asm_include_edge_fact_target_idx on repo_asm_include_edge_fact(target_path, source_path);
+
+create table repo_asm_include_closure_fact as
+with recursive include_closure(source_path, target_path, depth) as (
+  select source_path, target_path, 1
+  from repo_asm_include_edge_fact
+  union
+  select include_closure.source_path,
+         include_edge.target_path,
+         include_closure.depth + 1
+  from include_closure
+  join repo_asm_include_edge_fact include_edge
+    on include_edge.source_path = include_closure.target_path
+  where include_closure.depth < 8
+)
+select source_path,
+       target_path,
+       min(depth) as depth
+from include_closure
+group by source_path, target_path;
+
+create index repo_asm_include_closure_fact_source_idx on repo_asm_include_closure_fact(source_path, target_path);
+create index repo_asm_include_closure_fact_target_idx on repo_asm_include_closure_fact(target_path, source_path);
+
 create view repo_asm_significant_line as
 select repo_file.path,
        repo_asm_line.repo_file_id,
@@ -3386,7 +3450,7 @@ create view repo_asm_constant_definition_fact as
 select repo_file.path,
        operation.repo_file_id,
        operation.line_no,
-       operation.op_name as symbol_name,
+       trim(operation.op_name) as symbol_name,
        trim(substr(operation.operand_text, 5)) as expression_text,
        'equ' as definition_kind
 from repo_asm_operation operation
@@ -3397,7 +3461,7 @@ union all
 select repo_file.path,
        operation.repo_file_id,
        operation.line_no,
-       substr(operation.operand_text, 1, instr(operation.operand_text, ' ') - 1) as symbol_name,
+       trim(substr(operation.operand_text, 1, instr(operation.operand_text, ' ') - 1)) as symbol_name,
        trim(substr(operation.operand_text, instr(operation.operand_text, ' ') + 1)) as expression_text,
        'define' as definition_kind
 from repo_asm_operation operation
@@ -3408,7 +3472,7 @@ union all
 select repo_file.path,
        include_line.repo_file_id,
        include_line.line_no,
-       substr(t, 1, instr(t, ' equ ') - 1) as symbol_name,
+       trim(substr(t, 1, instr(t, ' equ ') - 1)) as symbol_name,
        trim(substr(t, instr(t, ' equ ') + 5)) as expression_text,
        'include_equ' as definition_kind
 from (
@@ -3427,7 +3491,7 @@ union all
 select repo_file.path,
        include_line.repo_file_id,
        include_line.line_no,
-       substr(substr(t, 9), 1, instr(substr(t, 9), ' ') - 1) as symbol_name,
+       trim(substr(substr(t, 9), 1, instr(substr(t, 9), ' ') - 1)) as symbol_name,
        trim(substr(substr(t, 9), instr(substr(t, 9), ' ') + 1)) as expression_text,
        'include_define' as definition_kind
 from (
@@ -3496,30 +3560,86 @@ where line_kind = 3
 create index repo_asm_constant_candidate_operation_operand_idx
   on repo_asm_constant_candidate_operation(operand_text);
 
-create table repo_asm_constant_expression_fact as
+create table repo_asm_scoped_constant_expression_match as
 select operation.path,
        operation.repo_file_id,
        operation.function_name,
        operation.line_no,
        operation.op_name,
        operation.operand_text,
-       min(constant.symbol_name) as symbol_name,
-       min(constant.expression_text) as expression_text,
-       count(distinct constant.symbol_name) as symbol_count
+       symbol.symbol_name,
+       min(definition.expression_text) as expression_text
 from repo_asm_constant_candidate_operation operation
 join asm_constant_expression_symbol_fact symbol
-join repo_asm_unique_constant_fact constant
-  on constant.symbol_name = symbol.symbol_name
+join repo_asm_constant_definition_fact definition
+  on definition.symbol_name = symbol.symbol_name
+ and (definition.path = operation.path
+      or exists (select 1
+                 from repo_asm_include_closure_fact include_closure
+                 where include_closure.source_path = operation.path
+                   and include_closure.target_path = definition.path))
  and ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operation.operand_text,
        ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
-     like '% ' || constant.symbol_name || ' %'
+     like '% ' || symbol.symbol_name || ' %'
 where operation.operand_text is not null
 group by operation.path,
          operation.repo_file_id,
          operation.function_name,
          operation.line_no,
          operation.op_name,
-         operation.operand_text;
+         operation.operand_text,
+         symbol.symbol_name
+having count(distinct definition.expression_text) = 1;
+
+create index repo_asm_scoped_constant_expression_match_line_idx
+  on repo_asm_scoped_constant_expression_match(repo_file_id, function_name, line_no, symbol_name);
+
+create table repo_asm_global_constant_expression_match as
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       operation.operand_text,
+       constant.symbol_name,
+       constant.expression_text
+from repo_asm_constant_candidate_operation operation
+join repo_asm_unique_constant_fact constant
+  on ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operation.operand_text,
+       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
+     like '% ' || constant.symbol_name || ' %'
+where operation.operand_text is not null
+  and not exists (select 1
+                  from repo_asm_scoped_constant_expression_match scoped
+                  where scoped.repo_file_id = operation.repo_file_id
+                    and scoped.function_name = operation.function_name
+                    and scoped.line_no = operation.line_no
+                    and scoped.symbol_name = constant.symbol_name);
+
+create index repo_asm_global_constant_expression_match_line_idx
+  on repo_asm_global_constant_expression_match(repo_file_id, function_name, line_no, symbol_name);
+
+create table repo_asm_constant_expression_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       min(symbol_name) as symbol_name,
+       min(expression_text) as expression_text,
+       count(distinct symbol_name) as symbol_count
+from (
+  select * from repo_asm_scoped_constant_expression_match
+  union all
+  select * from repo_asm_global_constant_expression_match
+)
+group by path,
+         repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         operand_text;
 
 create index repo_asm_constant_expression_fact_line_idx on repo_asm_constant_expression_fact(repo_file_id, function_name, line_no);
 
@@ -3955,19 +4075,6 @@ insert into asm_metadata_op_fact(op_name) values
   ('default'), ('SECTION'), ('section'), ('align'), ('.syntax'), ('.cpu'), ('.arm'), ('.align'),
   ('.section'), ('.word'), ('.include'), ('.globl'), ('.equ'), ('.extern'), ('.weak'),
   ('[BITS'), ('struc'), ('@'), ('endstruc'), ('extern');
-
-create view repo_asm_include_edge_fact as
-select path as source_path,
-       repo_file_id as source_repo_file_id,
-       line_no,
-       trim(operand_text, '"') as include_path,
-       case
-         when trim(operand_text, '"') like 'kernel/%' then trim(operand_text, '"')
-         else 'kernel/' || trim(operand_text, '"')
-       end as target_path
-from repo_asm_operation
-where op_name = '%include'
-  and operand_text is not null;
 
 create view repo_asm_binary_include_dependency_fact as
 select path,

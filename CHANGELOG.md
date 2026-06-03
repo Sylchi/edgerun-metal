@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Resolved high-impact constant blockers by trimming imported constant names, adding scoped constant resolution through transitive include facts, and importing include-file include edges.
 - Added an operator dashboard and unresolved-constant action tier so each lowering round can choose between constant definition gaps, near-ready source deletion, and high-byte blockers from one ranked queue.
 - Added include-file constant definition facts and constant-expression operation facts so symbolic immediates lower as finite meaning facts before byte materialization.
 - Added 49 verified exact ASM encoding facts for quoted byte immediates, common x86 stack/register forms, and the next ARM register/load/push forms from the post-symbol known-gap queue.
