@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added 50 more verified high-byte x86 exact encoding facts for the next image-format, host-build, framebuffer, AV1, Tor, TLS, and kernel-main blocker forms.
 - Added 39 verified high-byte x86 exact encoding facts for register, stack-slot, arithmetic, compare, and image-format blocker forms from the operator queue.
 - Added verified `push 255` and `push 128` fixed-encoding facts, converted the software-framebuffer self-test to a source object, and deleted the text source.
 - Resolved high-impact constant blockers by trimming imported constant names, adding scoped constant resolution through transitive include facts, and importing include-file include edges.
