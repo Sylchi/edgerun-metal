@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added verified `push 255` and `push 128` fixed-encoding facts, converted the software-framebuffer self-test to a source object, and deleted the text source.
 - Resolved high-impact constant blockers by trimming imported constant names, adding scoped constant resolution through transitive include facts, and importing include-file include edges.
 - Added an operator dashboard and unresolved-constant action tier so each lowering round can choose between constant definition gaps, near-ready source deletion, and high-byte blockers from one ranked queue.
 - Added include-file constant definition facts and constant-expression operation facts so symbolic immediates lower as finite meaning facts before byte materialization.

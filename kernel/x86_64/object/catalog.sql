@@ -2833,7 +2833,9 @@ insert into asm_exact_fixed_encoding_fact(encoding_id, name, rule_name, op_name,
   (1949, 'x86_64_exact_mov_ptr_r14_eax', 'asm_x86_exact_mov_ptr_r14_eax_exact', 'mov', '[r14], eax', '418906'),
   (1950, 'x86_64_exact_mov_ptr_rbp_72_rax', 'asm_x86_exact_mov_ptr_rbp_72_rax_exact', 'mov', '[rbp - 72], rax', '488945b8'),
   (1951, 'x86_64_exact_mov_eax_0', 'asm_x86_exact_mov_eax_0_exact', 'mov', 'eax, 0', 'b800000000'),
-  (1952, 'x86_64_exact_mov_eax_8', 'asm_x86_exact_mov_eax_8_exact', 'mov', 'eax, 8', 'b808000000');
+  (1952, 'x86_64_exact_mov_eax_8', 'asm_x86_exact_mov_eax_8_exact', 'mov', 'eax, 8', 'b808000000'),
+  (1962, 'x86_64_exact_push_255', 'asm_x86_exact_push_255_exact', 'push', '255', '68ff000000'),
+  (1963, 'x86_64_exact_push_128', 'asm_x86_exact_push_128_exact', 'push', '128', '6880000000');
 
 insert into asm_exact_fixed_encoding_fact(encoding_id, isa_id, name, rule_name, op_name, operand_text, fixed_hex) values
   (1953, 4, 'arm32_exact_add_r3_r3_imm_1', 'asm_arm32_exact_add_r3_r3_imm_1_exact', 'add', 'r3, r3, #1', '013083e2'),
