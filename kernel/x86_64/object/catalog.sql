@@ -2299,6 +2299,8 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('TEST', 'compare eax and edx; branch to failure on mismatch', 'test_assertion'),
   ('TESTQ', 'compare rax and rdx; branch to failure on mismatch', 'test_assertion'),
   ('TEST_MEM', 'compare memory ranges; branch to failure on mismatch', 'test_assertion'),
+  ('TEST_EXIT', 'exit with explicit test status', 'test_exit'),
+  ('TEST_EXIT_FAILED', 'exit with failed test status', 'test_exit'),
   ('TEST_EXIT_PASSED_TOTAL', 'exit with accumulated test result', 'test_exit');
 
 create view repo_asm_macro_lowering_fact as
@@ -2373,7 +2375,21 @@ where op_name like '%:'
   and (operand_text like 'resb %'
        or operand_text like 'resd %'
        or operand_text like 'resq %'
-       or operand_text like 'dq %');
+       or operand_text like 'dq %'
+       or operand_text like 'db %'
+       or operand_text like 'times % db %'
+       or operand_text like 'incbin %')
+union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       '' as label_name,
+       operand_text,
+       'included_binary_data' as data_definition_kind
+from repo_asm_operation
+where op_name = 'incbin'
+  and operand_text is not null;
 
 create view repo_asm_include_edge_fact as
 select path as source_path,
@@ -2387,6 +2403,27 @@ select path as source_path,
 from repo_asm_operation
 where op_name = '%include'
   and operand_text is not null;
+
+create view repo_asm_binary_include_dependency_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       operand_text as binary_include_path,
+       'incbin_dependency' as dependency_kind
+from repo_asm_operation
+where op_name = 'incbin'
+  and operand_text is not null
+union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       substr(operand_text, 8) as binary_include_path,
+       'labelled_incbin_dependency' as dependency_kind
+from repo_asm_operation
+where op_name like '%:'
+  and operand_text like 'incbin %';
 
 create table repo_asm_operation_fact_status as
 select match.path,
@@ -2405,6 +2442,7 @@ select match.path,
           when data_def.data_definition_kind is not null then 'data_definition'
           when match.op_name = 'default' then 'metadata'
           when match.op_name = 'SECTION' then 'metadata'
+          when match.op_name = 'extern' then 'metadata'
           when match.line_kind in (1,2,4,5) then 'metadata'
           when match.rule_name is not null then 'known_gap'
          else 'syntax_gap'
@@ -2522,6 +2560,9 @@ select repo_file.path,
                  join repo_file source_file on source_file.path = include_edge.source_path
                  where include_edge.target_path = repo_file.path
                    and source_file.file_kind = 'asm'), 0) as inbound_text_include_count,
+       coalesce((select count(*)
+                 from repo_asm_binary_include_dependency_fact binary_include
+                 where binary_include.path = repo_file.path), 0) as binary_include_dependency_count,
        case
          when repo_file.file_kind = 'source_object_asm' and readiness.remaining_count = 0 then 'text_deleted_fact_backed'
          when repo_file.file_kind = 'asm'
@@ -2531,6 +2572,11 @@ select repo_file.path,
                         join repo_file source_file on source_file.path = include_edge.source_path
                         where include_edge.target_path = repo_file.path
                           and source_file.file_kind = 'asm'), 0) > 0 then 'blocked_by_inbound_text_include'
+         when repo_file.file_kind = 'asm'
+          and readiness.remaining_count = 0
+          and coalesce((select count(*)
+                        from repo_asm_binary_include_dependency_fact binary_include
+                        where binary_include.path = repo_file.path), 0) > 0 then 'blocked_by_object_materialization_dependency'
          when repo_file.file_kind = 'asm' and readiness.remaining_count = 0 then 'ready_to_wrap_and_delete_text'
          when readiness.unparsed_line_count > 0 then 'blocked_by_parse_coverage'
          else 'blocked_by_fact_gaps'
