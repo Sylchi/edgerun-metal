@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added finite operand, memory operand-term, and memory-addressing facts so base, symbolic, indexed, and rel memory shapes are queryable once instead of reparsed inside each materializer.
 - Added reusable numeric constant-value facts for unique decimal, hex, octal, and simple arithmetic definitions, moving 36 more symbolic constant operations into fixed encodings.
 - Extended symbolic x86 parametric lowering to base-register memory displacements and numeric memory immediates, moving 98 more constant-expression operations into fixed encodings without per-line exact facts.
 - Added symbolic x86 parametric lowering for resolved decimal and hex constant immediates, moving 533 constant-expression operations into fixed encodings without exact per-line instruction facts.

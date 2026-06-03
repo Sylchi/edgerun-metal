@@ -4675,6 +4675,245 @@ having min(immediate_value) = max(immediate_value);
 
 create unique index repo_asm_numeric_constant_value_symbol_idx on repo_asm_numeric_constant_value(symbol_name);
 
+create table repo_asm_binary_operand_fact as
+with binary_operand as (
+  select match.path,
+         match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.target_isa_id,
+         match.op_name,
+         match.operand_text,
+         trim(substr(match.operand_text, 1, instr(match.operand_text, ',') - 1)) as lhs,
+         trim(substr(match.operand_text, instr(match.operand_text, ',') + 1)) as rhs
+  from repo_asm_rule_match match
+  where match.line_kind = 3
+    and instr(coalesce(match.operand_text, ''), ',') > 0
+), normalized as (
+  select *,
+         case when lhs like 'byte %' then 'byte'
+              when lhs like 'word %' then 'word'
+              when lhs like 'dword %' then 'dword'
+              when lhs like 'qword %' then 'qword'
+              else null end as lhs_size,
+         case when lhs like 'byte %' then trim(substr(lhs, 6))
+              when lhs like 'word %' then trim(substr(lhs, 6))
+              when lhs like 'dword %' then trim(substr(lhs, 7))
+              when lhs like 'qword %' then trim(substr(lhs, 7))
+              else lhs end as lhs_value,
+         case when rhs like 'byte %' then 'byte'
+              when rhs like 'word %' then 'word'
+              when rhs like 'dword %' then 'dword'
+              when rhs like 'qword %' then 'qword'
+              else null end as rhs_size,
+         case when rhs like 'byte %' then trim(substr(rhs, 6))
+              when rhs like 'word %' then trim(substr(rhs, 6))
+              when rhs like 'dword %' then trim(substr(rhs, 7))
+              when rhs like 'qword %' then trim(substr(rhs, 7))
+              else rhs end as rhs_value
+  from binary_operand
+), operand_rows as (
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         target_isa_id,
+         op_name,
+         operand_text,
+         0 as operand_index,
+         lhs_size as size_name,
+         lhs_value as operand_value
+  from normalized
+  union all
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         target_isa_id,
+         op_name,
+         operand_text,
+         1 as operand_index,
+         rhs_size as size_name,
+         rhs_value as operand_value
+  from normalized
+)
+select operand_rows.*,
+       case
+         when operand_value like '[%]' then 'memory'
+         when reg.register_name is not null then 'register'
+         when (operand_value glob '[0-9]*' or operand_value glob '-[0-9]*')
+          and replace(operand_value, '-', '') not glob '*[^0-9]*' then 'integer'
+         when lower(operand_value) glob '0x[0-9a-f]*' then 'integer'
+         when operand_value glob '[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
+          and operand_value not glob '*[^ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789]*' then 'symbol'
+         else 'other'
+       end as operand_kind
+from operand_rows
+left join x86_register_encoding_fact reg
+  on reg.register_name = operand_rows.operand_value;
+
+create index repo_asm_binary_operand_fact_line_idx
+  on repo_asm_binary_operand_fact(repo_file_id, function_name, line_no, operand_index);
+create index repo_asm_binary_operand_fact_kind_idx
+  on repo_asm_binary_operand_fact(operand_kind, target_isa_id, op_name);
+
+create table repo_asm_memory_operand_fact as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       target_isa_id,
+       op_name,
+       operand_text,
+       operand_index,
+       size_name,
+       operand_value as memory_text,
+       substr(operand_value, 2, length(operand_value) - 2) as inner_text,
+       case when operand_value like '[rel %]' then 1 else 0 end as is_rel_memory
+from repo_asm_binary_operand_fact
+where operand_kind = 'memory';
+
+create index repo_asm_memory_operand_fact_line_idx
+  on repo_asm_memory_operand_fact(repo_file_id, function_name, line_no, operand_index);
+create index repo_asm_memory_operand_fact_rel_idx
+  on repo_asm_memory_operand_fact(is_rel_memory, target_isa_id, op_name);
+
+create table repo_asm_memory_operand_term_fact as
+with recursive memory_terms as (
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         target_isa_id,
+         op_name,
+         operand_text,
+         operand_index,
+         size_name,
+         memory_text,
+         is_rel_memory,
+         0 as term_index,
+         trim(replace(inner_text, ' - ', ' + -')) || ' + ' as remaining_text,
+         '' as term_text
+  from repo_asm_memory_operand_fact
+  union all
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         target_isa_id,
+         op_name,
+         operand_text,
+         operand_index,
+         size_name,
+         memory_text,
+         is_rel_memory,
+         term_index + 1,
+         ltrim(substr(remaining_text, instr(remaining_text, ' + ') + 3)) as remaining_text,
+         trim(substr(remaining_text, 1, instr(remaining_text, ' + ') - 1)) as term_text
+  from memory_terms
+  where remaining_text <> ''
+    and instr(remaining_text, ' + ') > 0
+)
+select memory_terms.path,
+       memory_terms.repo_file_id,
+       memory_terms.function_name,
+       memory_terms.line_no,
+       memory_terms.target_isa_id,
+       memory_terms.op_name,
+       memory_terms.operand_text,
+       memory_terms.operand_index,
+       memory_terms.size_name,
+       memory_terms.memory_text,
+       memory_terms.is_rel_memory,
+       memory_terms.term_index,
+       case when memory_terms.term_text like '-%' then -1 else 1 end as term_sign,
+       case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end as term_text,
+       case
+         when memory_terms.term_text = 'rel' then 'rel_marker'
+         when reg.register_name is not null then 'register'
+         when scale_reg.register_name is not null then 'scaled_register'
+         when (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[0-9]*'
+          and (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^0-9]*' then 'integer'
+         when (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
+          and (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789]*' then 'symbol'
+         else 'other'
+       end as term_kind,
+       scale_reg.register_name as scale_register_name,
+       case
+         when scale_reg.register_name is not null
+          and trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+                          instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) in ('1','2','4','8')
+           then cast(trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+                                  instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') + 1)) as integer)
+       end as scale_value
+from memory_terms
+left join x86_register_encoding_fact reg
+  on reg.register_name = (case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)
+left join x86_register_encoding_fact scale_reg
+  on scale_reg.register_name = trim(substr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end),
+                                           1,
+                                           instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') - 1))
+ and instr((case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), '*') > 0
+where memory_terms.term_text <> '';
+
+create index repo_asm_memory_operand_term_fact_line_idx
+  on repo_asm_memory_operand_term_fact(repo_file_id, function_name, line_no, operand_index, term_index);
+create index repo_asm_memory_operand_term_fact_kind_idx
+  on repo_asm_memory_operand_term_fact(term_kind, target_isa_id, op_name);
+
+create table repo_asm_memory_addressing_fact as
+select memory.path,
+       memory.repo_file_id,
+       memory.function_name,
+       memory.line_no,
+       memory.target_isa_id,
+       memory.op_name,
+       memory.operand_text,
+       memory.operand_index,
+       memory.size_name,
+       memory.memory_text,
+       memory.is_rel_memory,
+       sum(case when term.term_kind = 'register' then 1 else 0 end) as register_term_count,
+       sum(case when term.term_kind = 'scaled_register' then 1 else 0 end) as scaled_register_term_count,
+       sum(case when term.term_kind = 'symbol' then 1 else 0 end) as symbol_term_count,
+       sum(case when term.term_kind = 'integer' then 1 else 0 end) as integer_term_count,
+       sum(case when term.term_kind = 'rel_marker' then 1 else 0 end) as rel_marker_count,
+       min(case when term.term_kind = 'register' then term.term_text end) as first_register_term,
+       min(case when term.term_kind = 'scaled_register' then term.scale_register_name end) as first_scaled_register_term,
+       min(case when term.term_kind = 'scaled_register' then term.scale_value end) as first_scale_value,
+       min(case when term.term_kind = 'symbol' then term.term_text end) as first_symbol_term,
+       sum(case when term.term_kind = 'integer' then term.term_sign * cast(term.term_text as integer) else 0 end) as integer_displacement,
+       case
+         when memory.is_rel_memory = 1 then 'rel_memory'
+         when sum(case when term.term_kind = 'scaled_register' then 1 else 0 end) > 0 then 'indexed_memory'
+         when sum(case when term.term_kind = 'register' then 1 else 0 end) >= 2 then 'indexed_memory'
+         when sum(case when term.term_kind = 'symbol' then 1 else 0 end) > 0 then 'symbolic_base_memory'
+         when sum(case when term.term_kind = 'register' then 1 else 0 end) = 1 then 'base_memory'
+         else 'other_memory'
+       end as addressing_kind
+from repo_asm_memory_operand_fact memory
+left join repo_asm_memory_operand_term_fact term
+  on term.repo_file_id = memory.repo_file_id
+ and term.function_name = memory.function_name
+ and term.line_no = memory.line_no
+ and term.operand_index = memory.operand_index
+group by memory.path,
+         memory.repo_file_id,
+         memory.function_name,
+         memory.line_no,
+         memory.target_isa_id,
+         memory.op_name,
+         memory.operand_text,
+         memory.operand_index,
+         memory.size_name,
+         memory.memory_text,
+         memory.is_rel_memory;
+
+create index repo_asm_memory_addressing_fact_line_idx
+  on repo_asm_memory_addressing_fact(repo_file_id, function_name, line_no, operand_index);
+create index repo_asm_memory_addressing_fact_kind_idx
+  on repo_asm_memory_addressing_fact(addressing_kind, target_isa_id, op_name);
+
 create table repo_asm_constant_candidate_operation as
 select *
 from repo_asm_operation
