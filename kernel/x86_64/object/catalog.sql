@@ -3969,9 +3969,10 @@ with binary_operand as (
    and mem.line_no = normalized.line_no
    and mem.side = 'lhs'
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor')
-    and reg.width_bits in (8,32,64)
+    and reg.width_bits in (8,16,32,64)
     and (mem.size_name is null
          or (mem.size_name = 'byte' and reg.width_bits = 8)
+         or (mem.size_name = 'word' and reg.width_bits = 16)
          or (mem.size_name = 'dword' and reg.width_bits = 32)
          or (mem.size_name = 'qword' and reg.width_bits = 64))
 ), stack_to_reg as (
@@ -4016,9 +4017,10 @@ with binary_operand as (
    and mem.line_no = normalized.line_no
    and mem.side = 'lhs'
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor')
-    and reg.width_bits in (8,32,64)
+    and reg.width_bits in (8,16,32,64)
     and (mem.size_name is null
          or (mem.size_name = 'byte' and reg.width_bits = 8)
+         or (mem.size_name = 'word' and reg.width_bits = 16)
          or (mem.size_name = 'dword' and reg.width_bits = 32)
          or (mem.size_name = 'qword' and reg.width_bits = 64))
 ), base_to_reg as (
@@ -4042,10 +4044,12 @@ with binary_operand as (
    and mem.line_no = normalized.line_no
    and mem.side = 'rhs'
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
-    and reg.width_bits in (32,64)
-    and (mem.size_name is null
-         or (mem.size_name = 'byte' and normalized.op_name = 'movzx')
-         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx'))
+    and reg.width_bits in (8,16,32,64)
+    and ((mem.size_name is null and normalized.op_name not in ('movzx','movsx','movsxd','lea'))
+         or (mem.size_name is null and normalized.op_name = 'lea' and reg.width_bits in (32,64))
+         or (mem.size_name = 'byte' and normalized.op_name = 'movzx' and reg.width_bits in (32,64))
+         or (mem.size_name = 'word' and normalized.op_name = 'mov' and reg.width_bits = 16)
+         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx') and reg.width_bits in (32,64))
          or (mem.size_name = 'dword' and reg.width_bits in (32,64))
          or (mem.size_name = 'qword' and reg.width_bits = 64))
 ), stack_imm as (
@@ -5497,10 +5501,12 @@ with recursive binary_operand as (
    and mem.line_no = normalized.line_no
    and mem.side = 'rhs'
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
-    and reg.width_bits in (32,64)
-    and (mem.size_name is null
-         or (mem.size_name = 'byte' and normalized.op_name = 'movzx')
-         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx'))
+    and reg.width_bits in (8,16,32,64)
+    and ((mem.size_name is null and normalized.op_name not in ('movzx','movsx','movsxd','lea'))
+         or (mem.size_name is null and normalized.op_name = 'lea' and reg.width_bits in (32,64))
+         or (mem.size_name = 'byte' and normalized.op_name = 'movzx' and reg.width_bits in (32,64))
+         or (mem.size_name = 'word' and normalized.op_name = 'mov' and reg.width_bits = 16)
+         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx') and reg.width_bits in (32,64))
          or (mem.size_name = 'dword' and reg.width_bits in (32,64))
          or (mem.size_name = 'qword' and reg.width_bits = 64))
 ), base_symbol_imm as (
@@ -5939,9 +5945,10 @@ with clean_indexed_memory as (
    and mem.line_no = normalized.line_no
    and mem.operand_index = 0
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor')
-    and reg.width_bits in (8,32,64)
+    and reg.width_bits in (8,16,32,64)
     and (mem.size_name is null
          or (mem.size_name = 'byte' and reg.width_bits = 8)
+         or (mem.size_name = 'word' and reg.width_bits = 16)
          or (mem.size_name = 'dword' and reg.width_bits = 32)
          or (mem.size_name = 'qword' and reg.width_bits = 64))
 ), index_to_reg as (
@@ -5966,19 +5973,106 @@ with clean_indexed_memory as (
    and mem.line_no = normalized.line_no
    and mem.operand_index = 1
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
-    and reg.width_bits in (32,64)
-    and (mem.size_name is null
-         or (mem.size_name = 'byte' and normalized.op_name = 'movzx')
-         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx'))
+    and reg.width_bits in (8,16,32,64)
+    and ((mem.size_name is null and normalized.op_name not in ('movzx','movsx','movsxd','lea'))
+         or (mem.size_name is null and normalized.op_name = 'lea' and reg.width_bits in (32,64))
+         or (mem.size_name = 'byte' and normalized.op_name = 'movzx' and reg.width_bits in (32,64))
+         or (mem.size_name = 'word' and normalized.op_name = 'mov' and reg.width_bits = 16)
+         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx') and reg.width_bits in (32,64))
          or (mem.size_name = 'dword' and reg.width_bits in (32,64))
          or (mem.size_name = 'qword' and reg.width_bits = 64))
+), rhs_decimal as (
+  select operand.repo_file_id,
+         operand.function_name,
+         operand.line_no,
+         cast(operand.operand_value as integer) as immediate_value
+  from repo_asm_binary_operand_fact operand
+  where operand.target_isa_id = 1
+    and operand.operand_index = 1
+    and (operand.operand_value glob '[0-9]*'
+         or operand.operand_value glob '-[0-9]*')
+    and replace(operand.operand_value, '-', '') not glob '*[^0-9]*'
+), rhs_hex_seed as (
+  select operand.repo_file_id,
+         operand.function_name,
+         operand.line_no,
+         substr(lower(operand.operand_value), 3) as hex_text
+  from repo_asm_binary_operand_fact operand
+  where operand.target_isa_id = 1
+    and operand.operand_index = 1
+    and lower(operand.operand_value) glob '0x[0-9a-f]*'
+    and substr(lower(operand.operand_value), 3) <> ''
+    and substr(lower(operand.operand_value), 3) not glob '*[^0-9a-f]*'
+    and length(substr(lower(operand.operand_value), 3)) <= 15
+), rhs_hex_parse(repo_file_id, function_name, line_no, hex_text, digit_index, immediate_value) as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from rhs_hex_seed
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from rhs_hex_parse
+  where digit_index <= length(hex_text)
+), rhs_hex as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         immediate_value
+  from rhs_hex_parse
+  where digit_index = length(hex_text) + 1
+), rhs_char as (
+  select operand.repo_file_id,
+         operand.function_name,
+         operand.line_no,
+         unicode(substr(operand.operand_value, 2, 1)) as immediate_value
+  from repo_asm_binary_operand_fact operand
+  where operand.target_isa_id = 1
+    and operand.operand_index = 1
+    and length(operand.operand_value) = 3
+    and operand.operand_value like '''_'''
+), rhs_unique_value as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         min(immediate_value) as immediate_value
+  from (
+    select * from rhs_decimal
+    union all
+    select * from rhs_hex
+    union all
+    select * from rhs_char
+  )
+  group by repo_file_id,
+           function_name,
+           line_no
+  having min(immediate_value) = max(immediate_value)
+), index_memory_imm as (
+  select mem.*,
+         rhs_unique_value.immediate_value as rhs_immediate_value
+  from indexed_memory_bytes mem
+  join rhs_unique_value
+    on rhs_unique_value.repo_file_id = mem.repo_file_id
+   and rhs_unique_value.function_name is mem.function_name
+   and rhs_unique_value.line_no = mem.line_no
+  where mem.operand_index = 0
+    and mem.op_name in ('mov','add','sub','cmp','and','or','xor')
+    and mem.size_name in ('byte','word','dword','qword')
 ), generated as (
   select repo_file_id,
          function_name,
          line_no,
          'param_x86_' || op_name || '_reg_index_memory' as parametric_rule_name,
          (
-           case
+           case when width_bits = 16 and op_name not in ('movzx','movsx','movsxd') then '66' else '' end
+           || case
              when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
@@ -5989,12 +6083,19 @@ with clean_indexed_memory as (
                 when op_name = 'movzx' and size_name = 'word' then '0fb7'
                 when op_name = 'movsx' and size_name = 'word' then '0fbf'
                 when op_name = 'movsxd' then '63'
+                when op_name = 'mov' and width_bits = 8 then '8a'
                 when op_name = 'mov' then '8b'
+                when op_name = 'add' and width_bits = 8 then '02'
                 when op_name = 'add' then '03'
+                when op_name = 'sub' and width_bits = 8 then '2a'
                 when op_name = 'sub' then '2b'
+                when op_name = 'cmp' and width_bits = 8 then '3a'
                 when op_name = 'cmp' then '3b'
+                when op_name = 'and' and width_bits = 8 then '22'
                 when op_name = 'and' then '23'
+                when op_name = 'or' and width_bits = 8 then '0a'
                 when op_name = 'or' then '0b'
+                when op_name = 'xor' and width_bits = 8 then '32'
                 when op_name = 'xor' then '33'
                 when op_name = 'lea' then '8d'
               end
@@ -6009,7 +6110,8 @@ with clean_indexed_memory as (
          line_no,
          'param_x86_' || op_name || '_index_memory_reg' as parametric_rule_name,
          (
-           case
+           case when width_bits = 16 then '66' else '' end
+           || case
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
@@ -6029,6 +6131,73 @@ with clean_indexed_memory as (
            || displacement_hex
          ) as fixed_hex
   from reg_to_index
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_' || size_name || '_index_memory_imm8' as parametric_rule_name,
+         (
+           case when size_name = 'word' then '66' else '' end
+           || case
+             when size_name = 'qword' then printf('%02x', 72 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when size_name = 'byte' then '80'
+                else '83'
+              end
+           || printf('%02x', (mod_bits << 6) + ((case op_name
+                                                  when 'add' then 0
+                                                  when 'or' then 1
+                                                  when 'and' then 4
+                                                  when 'sub' then 5
+                                                  when 'xor' then 6
+                                                  when 'cmp' then 7
+                                                end) << 3) + 4)
+           || sib_hex
+           || displacement_hex
+           || printf('%02x', rhs_immediate_value & 255)
+         ) as fixed_hex
+  from index_memory_imm
+  where op_name in ('add','sub','cmp','and','or','xor')
+    and rhs_immediate_value between -128 and 127
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_' || size_name || '_index_memory_imm' as parametric_rule_name,
+         (
+           case when size_name = 'word' then '66' else '' end
+           || case
+             when size_name = 'qword' then printf('%02x', 72 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when size_name = 'byte' then 'c6'
+                else 'c7'
+              end
+           || printf('%02x', (mod_bits << 6) + 4)
+           || sib_hex
+           || displacement_hex
+           || case
+                when size_name = 'byte' then printf('%02x', rhs_immediate_value & 255)
+                when size_name = 'word' then printf('%02x%02x',
+                                                     rhs_immediate_value & 255,
+                                                     (rhs_immediate_value >> 8) & 255)
+                else printf('%02x%02x%02x%02x',
+                            rhs_immediate_value & 255,
+                            (rhs_immediate_value >> 8) & 255,
+                            (rhs_immediate_value >> 16) & 255,
+                            (rhs_immediate_value >> 24) & 255)
+              end
+         ) as fixed_hex
+  from index_memory_imm
+  where op_name = 'mov'
+    and ((size_name = 'byte' and rhs_immediate_value between -128 and 255)
+         or (size_name = 'word' and rhs_immediate_value between -32768 and 65535)
+         or (size_name in ('dword','qword') and rhs_immediate_value between -2147483648 and 4294967295))
 )
 select repo_file_id,
        function_name,
