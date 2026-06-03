@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added symbolic x86 parametric lowering for resolved decimal and hex constant immediates, moving 533 constant-expression operations into fixed encodings without exact per-line instruction facts.
 - Materialized constant operand-symbol matches as a finite indexed relation so scoped/global constant-expression facts and unresolved-constant reports reuse one normalized fact surface instead of repeating broad operand string scans.
 - Added checked exact facts for the WASM float self-test's final scaled-index store, arithmetic-trap compare, and byte-scan compare blockers, converted it into a committed source object, and deleted its text `.asm` source.
 - Added the checked `mov edx, AV1_CDF_PROB_TOP` exact fact, converted the AV1 sequence self-test into a committed source object, and deleted its text `.asm` source.

@@ -4649,6 +4649,308 @@ group by path,
 
 create index repo_asm_constant_expression_fact_line_idx on repo_asm_constant_expression_fact(repo_file_id, function_name, line_no);
 
+create table repo_asm_symbolic_parametric_encoding_fact as
+with recursive binary_operand as (
+  select match.path,
+         match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.target_isa_id,
+         match.op_name,
+         match.operand_text,
+         trim(substr(match.operand_text, 1, instr(match.operand_text, ',') - 1)) as lhs,
+         trim(substr(match.operand_text, instr(match.operand_text, ',') + 1)) as rhs,
+         constant_expr.symbol_name,
+         trim(constant_expr.expression_text) as expression_text
+  from repo_asm_rule_match match
+  join repo_asm_constant_expression_fact constant_expr
+    on constant_expr.repo_file_id = match.repo_file_id
+   and constant_expr.function_name = match.function_name
+   and constant_expr.line_no = match.line_no
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and constant_expr.symbol_count = 1
+    and instr(coalesce(match.operand_text, ''), ',') > 0
+), decimal_constant as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         cast(expression_text as integer) as immediate_value
+  from binary_operand
+  where (expression_text glob '[0-9]*'
+         or expression_text glob '-[0-9]*')
+    and replace(expression_text, '-', '') not glob '*[^0-9]*'
+), hex_constant_seed as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         substr(lower(expression_text), 3) as hex_text
+  from binary_operand
+  where lower(expression_text) glob '0x[0-9a-f]*'
+    and substr(lower(expression_text), 3) <> ''
+    and substr(lower(expression_text), 3) not glob '*[^0-9a-f]*'
+), hex_constant_parse(repo_file_id, function_name, line_no, hex_text, digit_index, immediate_value) as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from hex_constant_seed
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from hex_constant_parse
+  where digit_index <= length(hex_text)
+), hex_constant as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         immediate_value
+  from hex_constant_parse
+  where digit_index = length(hex_text) + 1
+), constant_value as (
+  select * from decimal_constant
+  union all
+  select * from hex_constant
+), numeric_constant as (
+  select binary_operand.*,
+         constant_value.immediate_value
+  from binary_operand
+  join constant_value
+    on constant_value.repo_file_id = binary_operand.repo_file_id
+   and constant_value.function_name = binary_operand.function_name
+   and constant_value.line_no = binary_operand.line_no
+), normalized as (
+  select *,
+         case when lhs like 'byte %' then 'byte'
+              when lhs like 'word %' then 'word'
+              when lhs like 'dword %' then 'dword'
+              when lhs like 'qword %' then 'qword'
+              else null end as lhs_size,
+         case when lhs like 'byte %' then trim(substr(lhs, 6))
+              when lhs like 'word %' then trim(substr(lhs, 6))
+              when lhs like 'dword %' then trim(substr(lhs, 7))
+              when lhs like 'qword %' then trim(substr(lhs, 7))
+              else lhs end as lhs_value,
+         case when rhs like 'byte %' then 'byte'
+              when rhs like 'word %' then 'word'
+              when rhs like 'dword %' then 'dword'
+              when rhs like 'qword %' then 'qword'
+              else null end as rhs_size,
+         case when rhs like 'byte %' then trim(substr(rhs, 6))
+              when rhs like 'word %' then trim(substr(rhs, 6))
+              when rhs like 'dword %' then trim(substr(rhs, 7))
+              when rhs like 'qword %' then trim(substr(rhs, 7))
+              else rhs end as rhs_value
+  from numeric_constant
+), stack_memory as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         side,
+         size_name,
+         memory_text,
+         case
+           when memory_text = '[rsp]' then 0
+           when memory_text glob '[[]rsp + [0-9]*[]]'
+             and substr(memory_text, 8, length(memory_text) - 8) not glob '*[^0-9]*'
+             then cast(substr(memory_text, 8, length(memory_text) - 8) as integer)
+         end as displacement
+  from (
+    select repo_file_id, function_name, line_no, 'lhs' as side, lhs_size as size_name, lhs_value as memory_text
+    from normalized
+  )
+  where memory_text = '[rsp]'
+     or memory_text glob '[[]rsp + [0-9]*[]]'
+), stack_memory_bytes as (
+  select *,
+         case
+           when displacement = 0 then 0
+           when displacement between -128 and 127 then 1
+           else 2
+         end as mod_bits,
+         case
+           when displacement = 0 then ''
+           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+           else printf('%02x%02x%02x%02x',
+                       displacement & 255,
+                       (displacement >> 8) & 255,
+                       (displacement >> 16) & 255,
+                       (displacement >> 24) & 255)
+         end as displacement_hex
+  from stack_memory
+  where displacement is not null
+), reg_imm as (
+  select normalized.*,
+         dst.register_name as dst_register_name,
+         dst.width_bits,
+         dst.reg_code as dst_reg_code,
+         dst.requires_rex as dst_requires_rex
+  from normalized
+  join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
+  where normalized.rhs_value = normalized.symbol_name
+    and normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror')
+    and dst.width_bits in (32,64)
+), stack_imm as (
+  select normalized.*,
+         mem.size_name,
+         mem.mod_bits,
+         mem.displacement_hex
+  from normalized
+  join stack_memory_bytes mem
+    on mem.repo_file_id = normalized.repo_file_id
+   and mem.function_name = normalized.function_name
+   and mem.line_no = normalized.line_no
+   and mem.side = 'lhs'
+  where normalized.rhs_value = normalized.symbol_name
+), generated as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_reg_symbol_imm32' as parametric_rule_name,
+         (
+           case
+             when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || printf('%02x', 184 + (dst_reg_code & 7))
+           || printf('%02x%02x%02x%02x',
+                     immediate_value & 255,
+                     (immediate_value >> 8) & 255,
+                     (immediate_value >> 16) & 255,
+                     (immediate_value >> 24) & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name = 'mov'
+    and width_bits = 32
+    and immediate_value between -2147483648 and 4294967295
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg_symbol_imm8' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 1 else 0 end)
+             when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || '83'
+           || printf('%02x', 192 + ((case op_name
+                                      when 'add' then 0
+                                      when 'or' then 1
+                                      when 'and' then 4
+                                      when 'sub' then 5
+                                      when 'xor' then 6
+                                      when 'cmp' then 7
+                                    end) << 3) + (dst_reg_code & 7))
+           || printf('%02x', immediate_value & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name in ('add','sub','cmp','and','or','xor')
+    and immediate_value between -128 and 127
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg_symbol_imm8' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 1 else 0 end)
+             when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || 'c1'
+           || printf('%02x', 192 + ((case op_name
+                                      when 'ror' then 1
+                                      when 'shl' then 4
+                                      when 'shr' then 5
+                                      when 'sar' then 7
+                                    end) << 3) + (dst_reg_code & 7))
+           || printf('%02x', immediate_value & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name in ('shl','shr','sar','ror')
+    and immediate_value between 0 and 255
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_dword_stack_symbol_imm8' as parametric_rule_name,
+         (
+           case op_name
+             when 'cmp' then '83' || printf('%02x', (mod_bits << 6) + (7 << 3) + 4) || '24' || displacement_hex || printf('%02x', immediate_value & 255)
+             when 'add' then '83' || printf('%02x', (mod_bits << 6) + (0 << 3) + 4) || '24' || displacement_hex || printf('%02x', immediate_value & 255)
+             when 'sub' then '83' || printf('%02x', (mod_bits << 6) + (5 << 3) + 4) || '24' || displacement_hex || printf('%02x', immediate_value & 255)
+           end
+         ) as fixed_hex
+  from stack_imm
+  where size_name = 'dword'
+    and op_name in ('add','sub','cmp')
+    and immediate_value between -128 and 127
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_dword_stack_symbol_imm32' as parametric_rule_name,
+         (
+           'c7' || printf('%02x', (mod_bits << 6) + 4) || '24' || displacement_hex
+           || printf('%02x%02x%02x%02x',
+                     immediate_value & 255,
+                     (immediate_value >> 8) & 255,
+                     (immediate_value >> 16) & 255,
+                     (immediate_value >> 24) & 255)
+         ) as fixed_hex
+  from stack_imm
+  where size_name = 'dword'
+    and op_name = 'mov'
+    and immediate_value between 0 and 4294967295
+)
+select repo_file_id,
+       function_name,
+       line_no,
+       parametric_rule_name,
+       fixed_hex
+from generated
+where fixed_hex is not null;
+
+create unique index repo_asm_symbolic_parametric_encoding_fact_line_idx
+  on repo_asm_symbolic_parametric_encoding_fact(repo_file_id, function_name, line_no);
+
+create table repo_asm_all_parametric_encoding_fact as
+select *
+from repo_asm_parametric_encoding_fact
+union all
+select *
+from repo_asm_symbolic_parametric_encoding_fact;
+
+create unique index repo_asm_all_parametric_encoding_fact_line_idx
+  on repo_asm_all_parametric_encoding_fact(repo_file_id, function_name, line_no);
+
+create view repo_asm_all_parametric_encoding_conflict as
+select match.path,
+       match.function_name,
+       match.line_no,
+       match.op_name,
+       match.operand_text,
+       match.fixed_hex as exact_hex,
+       parametric.fixed_hex as parametric_hex,
+       parametric.parametric_rule_name
+from repo_asm_rule_match match
+join repo_asm_all_parametric_encoding_fact parametric
+  on parametric.repo_file_id = match.repo_file_id
+ and parametric.function_name = match.function_name
+ and parametric.line_no = match.line_no
+where match.fixed_hex is not null
+  and lower(match.fixed_hex) <> lower(parametric.fixed_hex);
+
 create view repo_asm_materializable_operation as
 select *
 from repo_asm_rule_match
@@ -5130,7 +5432,7 @@ select match.path,
 	       coalesce(relocation.relocation_kind, data_ref.relocation_kind) as relocation_kind,
 	       macro.result_kind as macro_result_kind
 	from repo_asm_rule_match match
-	left join repo_asm_parametric_encoding_fact parametric
+	left join repo_asm_all_parametric_encoding_fact parametric
 	  on parametric.repo_file_id = match.repo_file_id
 	 and parametric.function_name = match.function_name
 	 and parametric.line_no = match.line_no
