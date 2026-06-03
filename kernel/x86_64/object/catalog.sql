@@ -760,6 +760,58 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1460, 'arm32_mov_r1_r0', 4, 2, '0010a0e1', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/mov_r1_r0.erobj'),
   (1461, 'arm32_mul_r0_r2_r3', 4, 2, '920300e0', null, -1, 0, 'kernel/x86_64/object/encoding/arm32/mul_r0_r2_r3.erobj');
 
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1462, 'x86_64_clc', 1, 1, 'f8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/clc.erobj'),
+  (1463, 'x86_64_stc', 1, 1, 'f9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/stc.erobj'),
+  (1464, 'x86_64_cdq', 1, 1, '99', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cdq.erobj'),
+  (1465, 'x86_64_rep_movsq', 1, 1, 'f348a5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_movsq.erobj'),
+  (1466, 'x86_64_rep_stosd', 1, 1, 'f3ab', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_stosd.erobj'),
+  (1467, 'x86_64_setnz_al', 1, 1, '0f95d0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/setnz_al.erobj'),
+  (1468, 'x86_64_setnp_cl', 1, 1, '0f9bd1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/setnp_cl.erobj'),
+  (1469, 'x86_64_ucomiss_xmm0_xmm1', 1, 1, '0f2ec1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ucomiss_xmm0_xmm1.erobj'),
+  (1470, 'x86_64_ucomiss_xmm0_xmm0', 1, 1, '0f2ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ucomiss_xmm0_xmm0.erobj'),
+  (1471, 'x86_64_ucomisd_xmm0_xmm1', 1, 1, '660f2ec1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ucomisd_xmm0_xmm1.erobj'),
+  (1472, 'x86_64_ucomisd_xmm0_xmm0', 1, 1, '660f2ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ucomisd_xmm0_xmm0.erobj'),
+  (1473, 'x86_64_movq_xmm0_rax', 1, 1, '660f6ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movq_xmm0_rax.erobj'),
+  (1474, 'x86_64_movq_rax_xmm0', 1, 1, '660f7ec0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movq_rax_xmm0.erobj'),
+  (1475, 'x86_64_movq_xmm1_rax', 1, 1, '660f6ec8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movq_xmm1_rax.erobj'),
+  (1476, 'x86_64_xorps_xmm1_xmm1', 1, 1, '0f57c9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xorps_xmm1_xmm1.erobj'),
+  (1477, 'x86_64_cvttss2si_eax_xmm0', 1, 1, 'f30f2cc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvttss2si_eax_xmm0.erobj'),
+  (1478, 'x86_64_cvttss2si_rax_xmm0', 1, 1, 'f3480f2cc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvttss2si_rax_xmm0.erobj'),
+  (1479, 'x86_64_cvttsd2si_eax_xmm0', 1, 1, 'f20f2cc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvttsd2si_eax_xmm0.erobj'),
+  (1480, 'x86_64_cvttsd2si_rax_xmm0', 1, 1, 'f2480f2cc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvttsd2si_rax_xmm0.erobj'),
+  (1481, 'x86_64_cvtsi2ss_xmm0_eax', 1, 1, 'f30f2ac0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtsi2ss_xmm0_eax.erobj'),
+  (1482, 'x86_64_minss_xmm0_xmm1', 1, 1, 'f30f5dc1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/minss_xmm0_xmm1.erobj'),
+  (1483, 'x86_64_maxss_xmm0_xmm1', 1, 1, 'f30f5fc1', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/maxss_xmm0_xmm1.erobj'),
+  (1484, 'x86_64_movss_xmm0_rsp_ptr', 1, 1, 'f30f100424', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/movss_xmm0_rsp_ptr.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1485, 'x86_64_rep_movsd', 1, 1, 'f3a5', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rep_movsd.erobj'),
+  (1486, 'x86_64_repne_scasb', 1, 1, 'f2ae', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/repne_scasb.erobj'),
+  (1487, 'x86_64_setz_al', 1, 1, '0f94d0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/setz_al.erobj'),
+  (1488, 'x86_64_rdtscp', 1, 1, '0f01f9', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rdtscp.erobj'),
+  (1489, 'x86_64_rol_ax_8', 1, 1, '66c1c008', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rol_ax_8.erobj'),
+  (1490, 'x86_64_cmovl_eax_edx', 1, 1, '0f4cc2', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmovl_eax_edx.erobj');
+
+insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path) values
+  (1491, 'x86_64_lodsb', 1, 1, 'ac', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/lodsb.erobj'),
+  (1492, 'x86_64_cqo', 1, 1, '4899', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cqo.erobj'),
+  (1493, 'x86_64_rol_cx_8', 1, 1, '66c1c108', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rol_cx_8.erobj'),
+  (1494, 'x86_64_lfence', 1, 1, '0faee8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/lfence.erobj'),
+  (1495, 'x86_64_rdmsr', 1, 1, '0f32', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rdmsr.erobj'),
+  (1496, 'x86_64_wrmsr', 1, 1, '0f30', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/wrmsr.erobj'),
+  (1497, 'x86_64_rol_eax_cl', 1, 1, 'd3c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rol_eax_cl.erobj'),
+  (1498, 'x86_64_rol_rax_cl', 1, 1, '48d3c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/rol_rax_cl.erobj'),
+  (1499, 'x86_64_ror_eax_cl', 1, 1, 'd3c8', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/ror_eax_cl.erobj'),
+  (1500, 'x86_64_adc_ax_0', 1, 1, '6683d000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/adc_ax_0.erobj'),
+  (1501, 'x86_64_cvtsi2sd_xmm0_eax', 1, 1, 'f20f2ac0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtsi2sd_xmm0_eax.erobj'),
+  (1502, 'x86_64_cvtsi2sd_xmm0_rax', 1, 1, 'f2480f2ac0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtsi2sd_xmm0_rax.erobj'),
+  (1503, 'x86_64_cvtsi2ss_xmm0_rax', 1, 1, 'f3480f2ac0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtsi2ss_xmm0_rax.erobj'),
+  (1504, 'x86_64_cvtss2si_eax_xmm0', 1, 1, 'f30f2dc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtss2si_eax_xmm0.erobj'),
+  (1505, 'x86_64_pxor_xmm4_xmm4', 1, 1, '660fefe4', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pxor_xmm4_xmm4.erobj'),
+  (1506, 'x86_64_sqrtss_xmm0_xmm0', 1, 1, 'f30f51c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sqrtss_xmm0_xmm0.erobj'),
+  (1507, 'x86_64_xorps_xmm0_xmm0', 1, 1, '0f57c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xorps_xmm0_xmm0.erobj');
+
 create table function_object (
   function_id integer primary key,
   name text not null unique,
@@ -2109,6 +2161,120 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'mov', null, 'kernel/x86_64/object/instruction/arm32/mov.erobj', null, 1460, 'asm_arm32_mov_r1_r0_exact', 'r1, r0', 0),
   (3, 'mul', null, 'kernel/x86_64/object/instruction/arm32/mul.erobj', null, 1461, 'asm_arm32_mul_r0_r2_r3_exact', 'r0, r2, r3', 0);
 
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'ldr', null, 'kernel/x86_64/object/instruction/arm32/ldr.erobj', null, null, 'asm_arm32_ldr_known_gap', null, 2),
+  (3, 'str', null, 'kernel/x86_64/object/instruction/arm32/str.erobj', null, null, 'asm_arm32_str_known_gap', null, 2),
+  (3, 'bne', null, 'kernel/x86_64/object/instruction/arm32/bne.erobj', null, null, 'asm_arm32_bne_known_gap', null, 2),
+  (3, 'beq', null, 'kernel/x86_64/object/instruction/arm32/beq.erobj', null, null, 'asm_arm32_beq_known_gap', null, 2),
+  (3, 'bl', null, 'kernel/x86_64/object/instruction/arm32/bl.erobj', null, null, 'asm_arm32_bl_known_gap', null, 2),
+  (3, 'movne', null, 'kernel/x86_64/object/instruction/arm32/movne.erobj', null, null, 'asm_arm32_movne_known_gap', null, 2),
+  (3, 'moveq', null, 'kernel/x86_64/object/instruction/arm32/moveq.erobj', null, null, 'asm_arm32_moveq_known_gap', null, 2),
+  (3, 'popne', null, 'kernel/x86_64/object/instruction/arm32/popne.erobj', null, null, 'asm_arm32_popne_known_gap', null, 2),
+  (3, 'subs', null, 'kernel/x86_64/object/instruction/arm32/subs.erobj', null, null, 'asm_arm32_subs_known_gap', null, 2),
+  (3, 'bxeq', null, 'kernel/x86_64/object/instruction/arm32/bxeq.erobj', null, null, 'asm_arm32_bxeq_known_gap', null, 2),
+  (3, 'svc', null, 'kernel/x86_64/object/instruction/arm32/svc.erobj', null, null, 'asm_arm32_svc_known_gap', null, 2),
+  (3, 'streq', null, 'kernel/x86_64/object/instruction/arm32/streq.erobj', null, null, 'asm_arm32_streq_known_gap', null, 2),
+  (3, 'strne', null, 'kernel/x86_64/object/instruction/arm32/strne.erobj', null, null, 'asm_arm32_strne_known_gap', null, 2);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'clc', null, 'kernel/x86_64/object/instruction/x86_64/clc.erobj', null, 1462, 'asm_x86_clc_exact', '', 0),
+  (3, 'stc', null, 'kernel/x86_64/object/instruction/x86_64/stc.erobj', null, 1463, 'asm_x86_stc_exact', '', 0),
+  (3, 'cdq', null, 'kernel/x86_64/object/instruction/x86_64/cdq.erobj', null, 1464, 'asm_x86_cdq_exact', '', 0),
+  (3, 'rep', null, 'kernel/x86_64/object/instruction/x86_64/rep.erobj', null, 1465, 'asm_x86_rep_movsq_exact', 'movsq', 0),
+  (3, 'rep', null, 'kernel/x86_64/object/instruction/x86_64/rep.erobj', null, 1466, 'asm_x86_rep_stosd_exact', 'stosd', 0),
+  (3, 'setnz', null, 'kernel/x86_64/object/instruction/x86_64/setnz.erobj', null, 1467, 'asm_x86_setnz_al_exact', 'al', 0),
+  (3, 'setnp', null, 'kernel/x86_64/object/instruction/x86_64/setnp.erobj', null, 1468, 'asm_x86_setnp_cl_exact', 'cl', 0),
+  (3, 'ucomiss', null, 'kernel/x86_64/object/instruction/x86_64/ucomiss.erobj', null, 1469, 'asm_x86_ucomiss_xmm0_xmm1_exact', 'xmm0, xmm1', 0),
+  (3, 'ucomiss', null, 'kernel/x86_64/object/instruction/x86_64/ucomiss.erobj', null, 1470, 'asm_x86_ucomiss_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
+  (3, 'ucomisd', null, 'kernel/x86_64/object/instruction/x86_64/ucomisd.erobj', null, 1471, 'asm_x86_ucomisd_xmm0_xmm1_exact', 'xmm0, xmm1', 0),
+  (3, 'ucomisd', null, 'kernel/x86_64/object/instruction/x86_64/ucomisd.erobj', null, 1472, 'asm_x86_ucomisd_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
+  (3, 'movq', null, 'kernel/x86_64/object/instruction/x86_64/movq.erobj', null, 1473, 'asm_x86_movq_xmm0_rax_exact', 'xmm0, rax', 0),
+  (3, 'movq', null, 'kernel/x86_64/object/instruction/x86_64/movq.erobj', null, 1474, 'asm_x86_movq_rax_xmm0_exact', 'rax, xmm0', 0),
+  (3, 'movq', null, 'kernel/x86_64/object/instruction/x86_64/movq.erobj', null, 1475, 'asm_x86_movq_xmm1_rax_exact', 'xmm1, rax', 0),
+  (3, 'xorps', null, 'kernel/x86_64/object/instruction/x86_64/xorps.erobj', null, 1476, 'asm_x86_xorps_xmm1_xmm1_exact', 'xmm1, xmm1', 0),
+  (3, 'cvttss2si', null, 'kernel/x86_64/object/instruction/x86_64/cvttss2si.erobj', null, 1477, 'asm_x86_cvttss2si_eax_xmm0_exact', 'eax, xmm0', 0),
+  (3, 'cvttss2si', null, 'kernel/x86_64/object/instruction/x86_64/cvttss2si.erobj', null, 1478, 'asm_x86_cvttss2si_rax_xmm0_exact', 'rax, xmm0', 0),
+  (3, 'cvttsd2si', null, 'kernel/x86_64/object/instruction/x86_64/cvttsd2si.erobj', null, 1479, 'asm_x86_cvttsd2si_eax_xmm0_exact', 'eax, xmm0', 0),
+  (3, 'cvttsd2si', null, 'kernel/x86_64/object/instruction/x86_64/cvttsd2si.erobj', null, 1480, 'asm_x86_cvttsd2si_rax_xmm0_exact', 'rax, xmm0', 0),
+  (3, 'cvtsi2ss', null, 'kernel/x86_64/object/instruction/x86_64/cvtsi2ss.erobj', null, 1481, 'asm_x86_cvtsi2ss_xmm0_eax_exact', 'xmm0, eax', 0),
+  (3, 'minss', null, 'kernel/x86_64/object/instruction/x86_64/minss.erobj', null, 1482, 'asm_x86_minss_xmm0_xmm1_exact', 'xmm0, xmm1', 0),
+  (3, 'maxss', null, 'kernel/x86_64/object/instruction/x86_64/maxss.erobj', null, 1483, 'asm_x86_maxss_xmm0_xmm1_exact', 'xmm0, xmm1', 0),
+  (3, 'movss', null, 'kernel/x86_64/object/instruction/x86_64/movss.erobj', null, 1484, 'asm_x86_movss_xmm0_rsp_ptr_exact', 'xmm0, [rsp]', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'rep', null, 'kernel/x86_64/object/instruction/x86_64/rep.erobj', null, 1485, 'asm_x86_rep_movsd_exact', 'movsd', 0),
+  (3, 'repne', null, 'kernel/x86_64/object/instruction/x86_64/repne.erobj', null, 1486, 'asm_x86_repne_scasb_exact', 'scasb', 0),
+  (3, 'setz', null, 'kernel/x86_64/object/instruction/x86_64/setz.erobj', null, 1487, 'asm_x86_setz_al_exact', 'al', 0),
+  (3, 'rdtscp', null, 'kernel/x86_64/object/instruction/x86_64/rdtscp.erobj', null, 1488, 'asm_x86_rdtscp_exact', '', 0),
+  (3, 'rol', null, 'kernel/x86_64/object/instruction/x86_64/rol.erobj', null, 1489, 'asm_x86_rol_ax_8_exact', 'ax, 8', 0),
+  (3, 'cmovl', null, 'kernel/x86_64/object/instruction/x86_64/cmovl.erobj', null, 1490, 'asm_x86_cmovl_eax_edx_exact', 'eax, edx', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'lodsb', null, 'kernel/x86_64/object/instruction/x86_64/lodsb.erobj', null, 1491, 'asm_x86_lodsb_exact', '', 0),
+  (3, 'cqo', null, 'kernel/x86_64/object/instruction/x86_64/cqo.erobj', null, 1492, 'asm_x86_cqo_exact', '', 0),
+  (3, 'rol', null, 'kernel/x86_64/object/instruction/x86_64/rol.erobj', null, 1493, 'asm_x86_rol_cx_8_exact', 'cx, 8', 0),
+  (3, 'lfence', null, 'kernel/x86_64/object/instruction/x86_64/lfence.erobj', null, 1494, 'asm_x86_lfence_exact', '', 0),
+  (3, 'rdmsr', null, 'kernel/x86_64/object/instruction/x86_64/rdmsr.erobj', null, 1495, 'asm_x86_rdmsr_exact', '', 0),
+  (3, 'wrmsr', null, 'kernel/x86_64/object/instruction/x86_64/wrmsr.erobj', null, 1496, 'asm_x86_wrmsr_exact', '', 0),
+  (3, 'rol', null, 'kernel/x86_64/object/instruction/x86_64/rol.erobj', null, 1497, 'asm_x86_rol_eax_cl_exact', 'eax, cl', 0),
+  (3, 'rol', null, 'kernel/x86_64/object/instruction/x86_64/rol.erobj', null, 1498, 'asm_x86_rol_rax_cl_exact', 'rax, cl', 0),
+  (3, 'ror', null, 'kernel/x86_64/object/instruction/x86_64/ror.erobj', null, 1499, 'asm_x86_ror_eax_cl_exact', 'eax, cl', 0),
+  (3, 'adc', null, 'kernel/x86_64/object/instruction/x86_64/adc.erobj', null, 1500, 'asm_x86_adc_ax_0_exact', 'ax, 0', 0),
+  (3, 'cvtsi2sd', null, 'kernel/x86_64/object/instruction/x86_64/cvtsi2sd.erobj', null, 1501, 'asm_x86_cvtsi2sd_xmm0_eax_exact', 'xmm0, eax', 0),
+  (3, 'cvtsi2sd', null, 'kernel/x86_64/object/instruction/x86_64/cvtsi2sd.erobj', null, 1502, 'asm_x86_cvtsi2sd_xmm0_rax_exact', 'xmm0, rax', 0),
+  (3, 'cvtsi2ss', null, 'kernel/x86_64/object/instruction/x86_64/cvtsi2ss.erobj', null, 1503, 'asm_x86_cvtsi2ss_xmm0_rax_exact', 'xmm0, rax', 0),
+  (3, 'cvtss2si', null, 'kernel/x86_64/object/instruction/x86_64/cvtss2si.erobj', null, 1504, 'asm_x86_cvtss2si_eax_xmm0_exact', 'eax, xmm0', 0),
+  (3, 'pxor', null, 'kernel/x86_64/object/instruction/x86_64/pxor.erobj', null, 1505, 'asm_x86_pxor_xmm4_xmm4_exact', 'xmm4, xmm4', 0),
+  (3, 'sqrtss', null, 'kernel/x86_64/object/instruction/x86_64/sqrtss.erobj', null, 1506, 'asm_x86_sqrtss_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
+  (3, 'xorps', null, 'kernel/x86_64/object/instruction/x86_64/xorps.erobj', null, 1507, 'asm_x86_xorps_xmm0_xmm0_exact', 'xmm0, xmm0', 0);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'b', null, 'kernel/x86_64/object/instruction/arm32/b.erobj', null, null, 'asm_arm32_b_known_gap', null, 2),
+  (3, 'blo', null, 'kernel/x86_64/object/instruction/arm32/blo.erobj', null, null, 'asm_arm32_blo_known_gap', null, 2),
+  (3, 'bhi', null, 'kernel/x86_64/object/instruction/arm32/bhi.erobj', null, null, 'asm_arm32_bhi_known_gap', null, 2),
+  (3, 'orr', null, 'kernel/x86_64/object/instruction/arm32/orr.erobj', null, null, 'asm_arm32_orr_known_gap', null, 2),
+  (3, 'ldrb', null, 'kernel/x86_64/object/instruction/arm32/ldrb.erobj', null, null, 'asm_arm32_ldrb_known_gap', null, 2),
+  (3, 'lsl', null, 'kernel/x86_64/object/instruction/arm32/lsl.erobj', null, null, 'asm_arm32_lsl_known_gap', null, 2),
+  (3, 'lsr', null, 'kernel/x86_64/object/instruction/arm32/lsr.erobj', null, null, 'asm_arm32_lsr_known_gap', null, 2),
+  (3, 'strb', null, 'kernel/x86_64/object/instruction/arm32/strb.erobj', null, null, 'asm_arm32_strb_known_gap', null, 2),
+  (3, 'strh', null, 'kernel/x86_64/object/instruction/arm32/strh.erobj', null, null, 'asm_arm32_strh_known_gap', null, 2),
+  (3, 'tst', null, 'kernel/x86_64/object/instruction/arm32/tst.erobj', null, null, 'asm_arm32_tst_known_gap', null, 2),
+  (3, 'popeq', null, 'kernel/x86_64/object/instruction/arm32/popeq.erobj', null, null, 'asm_arm32_popeq_known_gap', null, 2),
+  (3, 'bic', null, 'kernel/x86_64/object/instruction/arm32/bic.erobj', null, null, 'asm_arm32_bic_known_gap', null, 2),
+  (3, 'bxne', null, 'kernel/x86_64/object/instruction/arm32/bxne.erobj', null, null, 'asm_arm32_bxne_known_gap', null, 2),
+  (3, 'mvn', null, 'kernel/x86_64/object/instruction/arm32/mvn.erobj', null, null, 'asm_arm32_mvn_known_gap', null, 2),
+  (3, 'ldreq', null, 'kernel/x86_64/object/instruction/arm32/ldreq.erobj', null, null, 'asm_arm32_ldreq_known_gap', null, 2),
+  (3, 'bhs', null, 'kernel/x86_64/object/instruction/arm32/bhs.erobj', null, null, 'asm_arm32_bhs_known_gap', null, 2),
+  (3, 'ldrh', null, 'kernel/x86_64/object/instruction/arm32/ldrh.erobj', null, null, 'asm_arm32_ldrh_known_gap', null, 2),
+  (3, 'jp', null, 'kernel/x86_64/object/instruction/x86_64/jp.erobj', null, null, 'asm_x86_jp_known_gap', null, 2),
+  (3, 'loop', null, 'kernel/x86_64/object/instruction/x86_64/loop.erobj', null, null, 'asm_x86_loop_known_gap', null, 2),
+  (3, 'lgdt', null, 'kernel/x86_64/object/instruction/x86_64/lgdt.erobj', null, null, 'asm_x86_lgdt_known_gap', null, 2),
+  (3, 'ror', null, 'kernel/x86_64/object/instruction/x86_64/ror.erobj', null, null, 'asm_x86_ror_known_gap', null, 2),
+  (3, 'rol', null, 'kernel/x86_64/object/instruction/x86_64/rol.erobj', null, null, 'asm_x86_rol_known_gap', null, 2),
+  (3, 'adc', null, 'kernel/x86_64/object/instruction/x86_64/adc.erobj', null, null, 'asm_x86_adc_known_gap', null, 2),
+  (3, 'cmova', null, 'kernel/x86_64/object/instruction/x86_64/cmova.erobj', null, null, 'asm_x86_cmova_known_gap', null, 2),
+  (3, 'cmovl', null, 'kernel/x86_64/object/instruction/x86_64/cmovl.erobj', null, null, 'asm_x86_cmovl_known_gap', null, 2),
+  (3, 'cmovz', null, 'kernel/x86_64/object/instruction/x86_64/cmovz.erobj', null, null, 'asm_x86_cmovz_known_gap', null, 2),
+  (3, 'cmovb', null, 'kernel/x86_64/object/instruction/x86_64/cmovb.erobj', null, null, 'asm_x86_cmovb_known_gap', null, 2),
+  (3, 'cmovg', null, 'kernel/x86_64/object/instruction/x86_64/cmovg.erobj', null, null, 'asm_x86_cmovg_known_gap', null, 2),
+  (3, 'crc32', null, 'kernel/x86_64/object/instruction/x86_64/crc32.erobj', null, null, 'asm_x86_crc32_known_gap', null, 2),
+  (3, 'movq', null, 'kernel/x86_64/object/instruction/x86_64/movq.erobj', null, null, 'asm_x86_movq_known_gap', null, 2),
+  (3, 'movd', null, 'kernel/x86_64/object/instruction/x86_64/movd.erobj', null, null, 'asm_x86_movd_known_gap', null, 2),
+  (3, 'subsd', null, 'kernel/x86_64/object/instruction/x86_64/subsd.erobj', null, null, 'asm_x86_subsd_known_gap', null, 2),
+  (3, 'roundsd', null, 'kernel/x86_64/object/instruction/x86_64/roundsd.erobj', null, null, 'asm_x86_roundsd_known_gap', null, 2),
+  (3, 'roundss', null, 'kernel/x86_64/object/instruction/x86_64/roundss.erobj', null, null, 'asm_x86_roundss_known_gap', null, 2),
+  (3, 'repe', null, 'kernel/x86_64/object/instruction/x86_64/repe.erobj', null, null, 'asm_x86_repe_known_gap', null, 2),
+  (3, 'movss', null, 'kernel/x86_64/object/instruction/x86_64/movss.erobj', null, null, 'asm_x86_movss_known_gap', null, 2),
+  (3, 'ucomiss', null, 'kernel/x86_64/object/instruction/x86_64/ucomiss.erobj', null, null, 'asm_x86_ucomiss_known_gap', null, 2),
+  (3, 'addss', null, 'kernel/x86_64/object/instruction/x86_64/addss.erobj', null, null, 'asm_x86_addss_known_gap', null, 2),
+  (3, 'divss', null, 'kernel/x86_64/object/instruction/x86_64/divss.erobj', null, null, 'asm_x86_divss_known_gap', null, 2),
+  (3, 'mulss', null, 'kernel/x86_64/object/instruction/x86_64/mulss.erobj', null, null, 'asm_x86_mulss_known_gap', null, 2),
+  (3, 'subss', null, 'kernel/x86_64/object/instruction/x86_64/subss.erobj', null, null, 'asm_x86_subss_known_gap', null, 2),
+  (3, 'movsxd', null, 'kernel/x86_64/object/instruction/x86_64/movsxd.erobj', null, null, 'asm_x86_movsxd_known_gap', null, 2),
+  (3, 'setb', null, 'kernel/x86_64/object/instruction/x86_64/setb.erobj', null, null, 'asm_x86_setb_known_gap', null, 2),
+  (3, 'setbe', null, 'kernel/x86_64/object/instruction/x86_64/setbe.erobj', null, null, 'asm_x86_setbe_known_gap', null, 2);
+
+
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
   (1, 'kernel/test/test_flat_runtime.asm.erobj', 'kernel_test_flat_runtime', 7);
 
@@ -2690,7 +2856,105 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('TEST_BSS_PASSED_FAILED', 'check BSS zeroing and branch to pass/fail result', 'test_assertion'),
   ('TEST_BSS_TOTAL_PASSED', 'check accumulated BSS/test totals and branch to pass result', 'test_assertion'),
   ('TEST_DATA_PASSED_FAILED', 'define pass/fail test data and labels', 'test_data'),
+  ('TEST_DATA_TOTAL_PASSED_FAILED', 'define pass/fail/total test data and labels', 'test_data'),
   ('ASSERT_TRUE', 'assert nonzero value; fail test on mismatch', 'test_assertion'),
+  ('TEST_ARM_EXIT_FAIL', 'exit ARM test with failure status', 'test_exit'),
+  ('TEST_ARM_EXIT_OK', 'exit ARM test with success status', 'test_exit'),
+  ('TEST_FAIL', 'branch to test failure result', 'test_exit'),
+  ('TEST_PASS', 'branch to test pass result', 'test_exit'),
+  ('TEST_CASE_PASS', 'record one test case pass', 'test_assertion'),
+  ('PRINT_STR', 'emit test status string', 'test_output'),
+  ('EXPECT_EAX', 'compare eax against expected value and branch on mismatch', 'test_assertion'),
+  ('CRB_SEND_CHECK', 'TPM CRB send/check helper macro', 'test_assertion'),
+  ('call_read_bit', 'read one AV1 bool bit into local state', 'macro_sequence'),
+  ('write_bits', 'write constant AV1 bit pattern', 'macro_sequence'),
+  ('write_one_from_esi', 'write one AV1 bit from esi', 'macro_sequence'),
+  ('wasm_exec_reader_ptr', 'load WASM execution reader pointer', 'macro_sequence'),
+  ('wasm_exec_save_reader_offset', 'persist WASM execution reader offset', 'macro_sequence'),
+  ('wasm_decode_finish_op', 'finish current WASM decode operation', 'macro_sequence'),
+  ('slip_encode', 'encode ESP32 serial payload with SLIP framing', 'macro_sequence'),
+  ('slip_decode', 'decode ESP32 serial SLIP payload', 'macro_sequence'),
+  ('mp4_load_be32', 'load big-endian MP4 dword into register', 'macro_sequence'),
+  ('jit_template_pop_rcx_rax', 'JIT template bytes for pop rcx and pop rax', 'jit_template'),
+  ('jit_template_push_rax_ret', 'JIT template bytes for push rax and ret', 'jit_template'),
+  ('jit_template_setcc_push_ret', 'JIT template bytes for setcc, push, ret', 'jit_template'),
+  ('jit_template_setcc_and_push', 'JIT template bytes for setcc and push', 'jit_template'),
+  ('jit_template_modrm_c0_push_rax', 'JIT template bytes with modrm c0 and push rax', 'jit_template'),
+  ('er_ret_true', 'return true from helper macro', 'macro_sequence'),
+  ('read_bits', 'read constant-width AV1 field', 'macro_sequence'),
+  ('TEST_SKIP', 'mark current test case skipped', 'test_assertion'),
+  ('_blake3_round', 'expand BLAKE3 round macro', 'macro_sequence'),
+  ('er_expect_token_operand_result', 'expect parsed token operand result', 'test_assertion'),
+  ('er_push_expect_token_operand_result', 'push and expect parsed token operand result', 'test_assertion'),
+  ('er_expect_line_end_result', 'expect parser line-end result', 'test_assertion'),
+  ('er_emit_text_bytes', 'emit expected text bytes for parser tests', 'test_data'),
+  ('zero_loop_filter_delta_state', 'clear AV1 loop-filter delta state', 'macro_sequence'),
+  ('zero_global_motion_state', 'clear AV1 global motion state', 'macro_sequence'),
+  ('jit_template_modrm82_disp_r11', 'JIT template bytes with modrm82 displacement via r11', 'jit_template'),
+  ('jit_template_emit_mov_accum_rdx', 'JIT template bytes for mov accumulator rdx', 'jit_template'),
+  ('jit_template_jmp_rel32_placeholder', 'JIT template placeholder for rel32 jmp', 'jit_template'),
+  ('jit_template_jns_rel32_placeholder', 'JIT template placeholder for rel32 jns', 'jit_template'),
+  ('jit_template_patch_rel32', 'JIT template rel32 patch helper', 'jit_template'),
+  ('jit_template_push_rax', 'JIT template push rax bytes', 'jit_template'),
+  ('jit_template_setcc_push', 'JIT template setcc push bytes', 'jit_template'),
+  ('ser_putchar_sil_imm', 'write immediate byte through serial helper', 'macro_sequence'),
+  ('FE_CARRY_PASS', 'run field element carry propagation pass', 'macro_sequence'),
+  ('_cmos_in_data', 'read CMOS data port into al', 'macro_sequence'),
+  ('_ec_in_status', 'read embedded-controller status port into al', 'macro_sequence'),
+  ('_i8042_in_status', 'read i8042 status port into al', 'macro_sequence'),
+  ('mp4_load_be16', 'load big-endian MP4 word into register', 'macro_sequence'),
+  ('write_esi_bits', 'write AV1 bit field from esi', 'macro_sequence'),
+  ('zero_delta_state', 'clear AV1 delta state', 'macro_sequence'),
+  ('zero_film_grain_state', 'clear AV1 film-grain state', 'macro_sequence'),
+  ('zero_motion_tool_state', 'clear AV1 motion-tool state', 'macro_sequence'),
+  ('zero_segmentation_state', 'clear AV1 segmentation state', 'macro_sequence'),
+  ('_init_op', 'initialize WASM execution opcode dispatch metadata', 'macro_sequence'),
+  ('_jit_init_op', 'initialize WASM JIT opcode dispatch metadata', 'macro_sequence'),
+  ('TEST_ARM_CALL', 'call ARM-side self-test case', 'test_assertion'),
+  ('jc_lcd_cmd_data_checked', 'send checked JC LCD command/data sequence', 'macro_sequence'),
+  ('er_store_struct_qword', 'store checked qword field in structure array', 'macro_sequence'),
+  ('er_store_struct_byte', 'store checked byte field in structure array', 'macro_sequence'),
+  ('write_byte_field_bits', 'write AV1 byte field with explicit bit count', 'macro_sequence'),
+  ('ADDMUL', 'expand Curve25519 add/multiply limb step', 'macro_sequence'),
+  ('GLOBAL', 'declare exported Curve25519 symbol', 'metadata_macro'),
+  ('_wasm_cmpop', 'define WASM comparison opcode constant', 'macro_sequence'),
+  ('at', 'BLAKE3 vector lane selector macro', 'macro_sequence'),
+  ('check_byte_max_rcx', 'check AV1 byte field max in rcx', 'macro_sequence'),
+  ('av1_call_check', 'call AV1 helper and branch on error', 'macro_sequence'),
+  ('write_bit_field', 'write AV1 one-bit field', 'macro_sequence'),
+  ('TEST_DEBUG_LABEL', 'emit test debug label metadata', 'test_data'),
+  ('write_byte_field_max_bits', 'write AV1 byte field constrained by max bits', 'macro_sequence'),
+  ('_wasm_binop', 'define WASM binary opcode constant', 'macro_sequence'),
+  ('_wasm_shiftop', 'define WASM shift opcode constant', 'macro_sequence'),
+  ('ser_puts', 'write string through serial helper', 'macro_sequence'),
+  ('test_status', 'define HTTP macro test status case', 'test_data'),
+  ('TEST_ARM_EXPECT_EQ_CODE', 'assert ARM test code equals expected value', 'test_assertion'),
+  ('TEST_ARM_EXPECT_ZERO_CODE', 'assert ARM test code is zero', 'test_assertion'),
+  ('_blake3_g_pair', 'expand paired BLAKE3 G rounds', 'macro_sequence'),
+  ('read_segment_feature', 'read AV1 segmentation feature field', 'macro_sequence'),
+  ('write_segment_feature', 'write AV1 segmentation feature field', 'macro_sequence'),
+  ('er_load_struct_qword', 'load checked qword field from structure array', 'macro_sequence'),
+  ('av1_read_symbol_check', 'read AV1 symbol and branch on error', 'macro_sequence'),
+  ('MUL_CONST_LIMB', 'multiply Curve25519 limb by constant', 'macro_sequence'),
+  ('REDUCE_COEFF', 'reduce Curve25519 coefficient into limb range', 'macro_sequence'),
+  ('SELECT_LIMB', 'select Curve25519 limb by index', 'macro_sequence'),
+  ('check_byte_zero_rcx', 'check AV1 byte field is zero in rcx', 'macro_sequence'),
+  ('check_dword_signed_rcx', 'check signed AV1 dword range in rcx', 'macro_sequence'),
+  ('read_delta_q_to', 'read AV1 delta-q field into destination', 'macro_sequence'),
+  ('write_delta_q_from', 'write AV1 delta-q field from source', 'macro_sequence'),
+  ('_cmos_out_index', 'write CMOS index port from source register', 'macro_sequence'),
+  ('av1_decode_residual_8x8', 'decode AV1 residual 8x8 block', 'macro_sequence'),
+  ('av1_reconstruct_current_8x8', 'reconstruct current AV1 8x8 block', 'macro_sequence'),
+  ('av1_route_first_payload', 'route first AV1 payload buffer', 'macro_sequence'),
+  ('er_render_ir_push_impl', 'push render IR command implementation', 'macro_sequence'),
+  ('jc_lcd_chunk_burst_checked', 'send checked JC LCD chunk burst', 'macro_sequence'),
+  ('jit_template_f32_round', 'JIT template for f32 rounding helper', 'jit_template'),
+  ('jit_template_f32_sse_bin_tail', 'JIT template for f32 SSE binary tail', 'jit_template'),
+  ('jit_template_f64_round', 'JIT template for f64 rounding helper', 'jit_template'),
+  ('jit_template_f64_sse_bin_tail', 'JIT template for f64 SSE binary tail', 'jit_template'),
+  ('test_cl', 'define CL register parser test', 'test_data'),
+  ('test_is_sse', 'define SSE parser test expectation', 'test_data'),
+  ('test_sse_ptr', 'define SSE pointer parser test', 'test_data'),
   ('TEST_EXIT', 'exit with explicit test status', 'test_exit'),
   ('TEST_EXIT_FAILED', 'exit with failed test status', 'test_exit'),
   ('TEST_EXIT_PASSED_TOTAL', 'exit with accumulated test result', 'test_exit');
@@ -2821,6 +3085,7 @@ select path,
          when op_name = 'dw' then 'word_data'
          when op_name = 'dd' then 'dword_data'
          when op_name = 'dq' then 'quadword_data'
+         when op_name = '.byte' then 'byte_data'
          when op_name = 'times' and operand_text like '% db %' then 'repeated_byte_data'
          when op_name = '.asciz' then 'zero_terminated_string_data'
          when op_name = '.space' then 'reserved_bytes'
@@ -2831,7 +3096,7 @@ select path,
          else 'unknown_data_definition'
        end as data_definition_kind
 from repo_asm_operation
-where op_name in ('db','dw','dd','dq','times','.asciz','.space','resb','resw','resd','resq')
+where op_name in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','resw','resd','resq')
   and operand_text is not null;
 
 create view repo_asm_include_edge_fact as
@@ -2893,6 +3158,15 @@ select match.path,
           when match.op_name = '.align' then 'metadata'
           when match.op_name = '.section' then 'metadata'
           when match.op_name = '.word' then 'metadata'
+          when match.op_name = '.include' then 'metadata'
+          when match.op_name = '.globl' then 'metadata'
+          when match.op_name = '.equ' then 'metadata'
+          when match.op_name = '.extern' then 'metadata'
+          when match.op_name = '.weak' then 'metadata'
+          when match.op_name = '[BITS' then 'metadata'
+          when match.op_name = 'struc' then 'metadata'
+          when match.op_name = '@' then 'metadata'
+          when match.op_name = 'endstruc' then 'metadata'
           when match.op_name = 'extern' then 'metadata'
           when match.line_kind in (1,2,4,5) then 'metadata'
           when match.rule_name is not null then 'known_gap'

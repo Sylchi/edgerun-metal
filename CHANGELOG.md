@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Reduced ASM `syntax_gap` inventory from 8,010 to 263 by adding verified x86 encoding facts, directive metadata, source-defined macro-lowering facts, and known-gap instruction relations for operand-dependent ARM/x86 forms; remaining syntax blockers are now mostly label-prefixed operations and small one-off helpers.
 - Lowered missing test macros and broader data directives into facts, then converted SHA3, SHA512, and the ESP32 firmware image text sources into source objects.
 - Classified unlabelled inline data directives as data-definition facts and added a verified x86/ARM encoding batch for the largest known-gap buckets, unlocking the AV1 frame self-test source for object-backed deletion.
 - Added near-ready source deletion facts for Cros EC, TCP, HTTP, and SPI-flash test stubs, plus symbol-to-data-definition relocation facts for direct data-label loads.
