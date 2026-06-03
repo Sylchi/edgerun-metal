@@ -4230,6 +4230,34 @@ from repo_asm_remaining_gap;
 
 create index repo_asm_gap_example_gap_idx on repo_asm_gap_example(gap_kind, op_name, operand_text, example_rank);
 
+create table repo_asm_unresolved_constant_symbol_gap as
+select symbol.symbol_name,
+       symbol.reason,
+       count(gap.line_no) as occurrence_count,
+       count(distinct gap.path) as file_count,
+       count(distinct gap.function_name) as function_count,
+       min(gap.path) as example_path,
+       min(gap.line_no) as example_line_no,
+       max(case when definition.symbol_name is null then 1 else 0 end) as missing_definition,
+       count(distinct definition.expression_text) as expression_count,
+       group_concat(distinct definition.expression_text) as expression_examples
+from asm_constant_expression_symbol_fact symbol
+left join repo_asm_constant_definition_fact definition
+  on definition.symbol_name = symbol.symbol_name
+left join repo_asm_remaining_gap gap
+  on gap.gap_kind = 'known_gap'
+ and gap.operand_text is not null
+ and ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(gap.operand_text,
+       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
+     like '% ' || symbol.symbol_name || ' %'
+where symbol.symbol_name not in (select symbol_name from repo_asm_unique_constant_fact)
+group by symbol.symbol_name, symbol.reason
+having occurrence_count > 0
+order by occurrence_count desc, file_count desc, symbol.symbol_name;
+
+create index repo_asm_unresolved_constant_symbol_gap_occurrence_idx
+  on repo_asm_unresolved_constant_symbol_gap(occurrence_count, file_count);
+
 create table repo_asm_next_operator_action as
 select 0 as action_rank,
        'wrap_delete_ready_source' as action_kind,
@@ -4281,6 +4309,30 @@ left join repo_asm_gap_example example
  and example.operand_text = impact.operand_text
  and example.example_rank = 1
 where impact.full_unlock_file_count > 0
+union all
+select 100 + row_number() over (
+         order by occurrence_count desc,
+                  file_count desc,
+                  symbol_name
+       ) as action_rank,
+       'resolve_constant_fact_gap' as action_kind,
+       'Resolve unresolved high-impact constant fact' as action_name,
+       example_path as path,
+       example_line_no as line_no,
+       'known_gap' as gap_kind,
+       '' as op_name,
+       symbol_name as operand_text,
+       0 as impacted_bytes,
+       file_count as impacted_file_count,
+       0 as full_unlock_file_count,
+       0 as full_unlock_bytes,
+       occurrence_count as remaining_count,
+       symbol_name || ' definitions=' || expression_count as action_hint,
+       case
+         when missing_definition = 1 then 'High-impact constant has no imported definition fact.'
+         else 'High-impact constant has conflicting imported definition facts.'
+       end as rationale
+from repo_asm_unresolved_constant_symbol_gap
 union all
 select 500 + row_number() over (
          order by plan.remaining_count asc,
@@ -4363,6 +4415,27 @@ where impact.full_unlock_file_count = 0;
 
 create index repo_asm_next_operator_action_rank_idx on repo_asm_next_operator_action(action_rank);
 create index repo_asm_next_operator_action_kind_idx on repo_asm_next_operator_action(action_kind, action_rank);
+
+create view repo_asm_operator_dashboard as
+select 'status:' || fact_status as metric,
+       count(*) as value
+from repo_asm_operation_fact_status
+group by fact_status
+union all
+select 'next_action:' || action_kind,
+       count(*)
+from repo_asm_next_operator_action
+group by action_kind
+union all
+select 'unresolved_high_impact_constants',
+       count(*)
+from repo_asm_unresolved_constant_symbol_gap
+union all
+select 'deletion_state:' || deletion_state,
+       count(*)
+from repo_asm_source_deletion_plan
+group by deletion_state
+order by metric;
 
 -- Universal transformer substrate. Domain tables above remain compact authoring
 -- views; these relations prove that unrelated domains can lower through the
