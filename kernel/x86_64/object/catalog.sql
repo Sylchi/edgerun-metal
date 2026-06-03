@@ -5032,7 +5032,7 @@ select *
 from repo_asm_operation
 where line_kind = 3
   and operand_text is not null
-  and operand_text glob '*[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*';
+  and operand_text glob '*[A-Za-z_]*';
 
 create index repo_asm_constant_candidate_operation_operand_idx
   on repo_asm_constant_candidate_operation(operand_text);
