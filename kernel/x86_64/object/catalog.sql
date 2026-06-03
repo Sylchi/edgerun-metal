@@ -7259,6 +7259,56 @@ insert into asm_zero_size_data_symbol_fact(path, label_name, symbol_kind) values
   ('kernel/test/test_curve25519_self.asm', 't1', 'labelled_data_block_anchor'),
   ('kernel/test/test_curve25519_self.asm', 't3', 'labelled_data_block_anchor');
 
+create table repo_asm_label_data_anchor_fact as
+with operation_window as (
+  select path,
+         repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         operand_text,
+         lag(op_name) over (partition by repo_file_id order by line_no) as previous_op_name,
+         lag(operand_text) over (partition by repo_file_id order by line_no) as previous_operand_text,
+         lead(op_name) over (partition by repo_file_id order by line_no) as next_op_name
+  from repo_asm_operation
+  where line_kind in (2,3,5)
+)
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name as label_name,
+       'labelled_data_block_anchor' as data_definition_kind
+from operation_window
+where op_name like '%:'
+  and operand_text is null
+  and (next_op_name in ('db','dw','dd','dq','incbin','times','.byte','.asciz','.space','resb','resw','resd','resq')
+       or previous_op_name in ('db','dw','dd','dq','incbin','times','.byte','.asciz','.space','resb','resw','resd','resq')
+       or previous_operand_text like 'db %'
+       or previous_operand_text like 'dw %'
+       or previous_operand_text like 'dd %'
+       or previous_operand_text like 'dq %'
+       or previous_operand_text like 'incbin %'
+       or previous_operand_text like 'times %'
+       or previous_operand_text like '.byte %'
+       or previous_operand_text like '.asciz %'
+       or previous_operand_text like '.space %'
+       or previous_operand_text like 'resb %'
+       or previous_operand_text like 'resw %'
+       or previous_operand_text like 'resd %'
+       or previous_operand_text like 'resq %')
+  and not exists (
+    select 1
+    from asm_zero_size_data_symbol_fact symbol
+    where symbol.path = operation_window.path
+      and symbol.label_name = replace(operation_window.op_name, ':', '')
+  );
+
+create index repo_asm_label_data_anchor_fact_line_idx
+  on repo_asm_label_data_anchor_fact(repo_file_id, function_name, line_no);
+create index repo_asm_label_data_anchor_fact_label_idx
+  on repo_asm_label_data_anchor_fact(repo_file_id, label_name);
+
 create view repo_asm_data_reference_fact as
 select path,
        repo_file_id,
@@ -7309,6 +7359,26 @@ select operation.path,
        operation.line_no,
        operation.op_name,
        replace(definition.label_name, ':', '') as target_name,
+       'absolute_symbol_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_memory_addressing_fact memory
+  on memory.repo_file_id = operation.repo_file_id
+ and memory.function_name = operation.function_name
+ and memory.line_no = operation.line_no
+join repo_asm_data_definition_fact definition
+  on definition.repo_file_id = operation.repo_file_id
+ and replace(definition.label_name, ':', '') = memory.first_symbol_term
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx')
+  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.symbol_term_count = 1
+  and memory.rel_marker_count = 0
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       replace(definition.label_name, ':', '') as target_name,
        'symbol_data_reference' as relocation_kind
 from repo_asm_operation operation
 join repo_asm_data_definition_fact definition
@@ -7316,9 +7386,26 @@ join repo_asm_data_definition_fact definition
  and replace(definition.label_name, ':', '') = trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1))
 where operation.op_name in ('mov','lea')
   and operation.operand_text like '%, %'
+  and operation.operand_text not like '%[rel %]%'
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       replace(definition.label_name, ':', '') as target_name,
+       'symbol_data_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_data_definition_fact definition
+  on definition.repo_file_id = operation.repo_file_id
+ and replace(definition.label_name, ':', '') = trim(substr(trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1)),
+                                                        1,
+                                                        instr(trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1)), ' + ') - 1))
+where operation.op_name in ('mov','lea','add','sub','cmp')
+  and operation.operand_text like '%, % + %'
   and operation.operand_text not like '%[rel %]%';
 
-create view repo_asm_data_definition_fact as
+create table repo_asm_data_definition_fact as
 select path,
        repo_file_id,
        function_name,
@@ -7383,6 +7470,15 @@ select path,
        repo_file_id,
        function_name,
        line_no,
+       label_name,
+       null as operand_text,
+       data_definition_kind
+from repo_asm_label_data_anchor_fact
+union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
        '' as label_name,
        operand_text,
        case
@@ -7403,6 +7499,11 @@ select path,
 from repo_asm_operation
 where op_name in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','resw','resd','resq')
   and operand_text is not null;
+
+create index repo_asm_data_definition_fact_line_idx
+  on repo_asm_data_definition_fact(repo_file_id, function_name, line_no);
+create index repo_asm_data_definition_fact_label_idx
+  on repo_asm_data_definition_fact(repo_file_id, label_name);
 
 create table asm_metadata_op_fact (
   op_name text primary key
