@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added an 80-row finite VP8 symbolic fixed-encoding relation that generates exact encoding and DSL rule facts for checked VP8 constants, stack offsets, and constant expressions, reducing the largest remaining big-file blockers without adding duplicate rule boilerplate.
 - Added 68 verified high-impact x86 encoding facts for common register, stack, arithmetic, compare, shift, and addressing forms across the largest source files; this moved the big-file blocker queue from generic x86 operand gaps toward symbolic VP8 constant-expression gaps.
 - Added exact host-import, agent-flag, and byte-pattern encoding facts, then converted the local-route and byte utility self-tests into source objects and deleted their text files; the planner now reports 29 text files deleted/fact-backed.
 - Added exact symbolic-size encoding facts for local route, seal, Ed25519, preimage, and BLAKE3 test blockers, then converted five ready test sources into source objects and deleted their text files; the planner now reports 27 text files deleted/fact-backed.
