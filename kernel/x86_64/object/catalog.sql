@@ -4075,7 +4075,23 @@ with binary_operand as (
   join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
   where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','test')
     and dst.width_bits = src.width_bits
+    and dst.width_bits in (8,32,64)
+), movzx_reg_reg as (
+  select normalized.*,
+         dst.register_name as dst_register_name,
+         dst.width_bits as dst_width_bits,
+         dst.reg_code as dst_reg_code,
+         dst.requires_rex as dst_requires_rex,
+         src.register_name as src_register_name,
+         src.width_bits as src_width_bits,
+         src.reg_code as src_reg_code,
+         src.requires_rex as src_requires_rex
+  from normalized
+  join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
+  join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
+  where normalized.op_name = 'movzx'
     and dst.width_bits in (32,64)
+    and src.width_bits in (8,16)
 ), reg_imm as (
   select normalized.*,
          dst.register_name as dst_register_name,
@@ -4119,18 +4135,36 @@ with binary_operand as (
              else ''
            end
            || case op_name
-                when 'mov' then '89'
-                when 'add' then '01'
-                when 'sub' then '29'
-                when 'cmp' then '39'
-                when 'and' then '21'
-                when 'or' then '09'
-                when 'xor' then '31'
-                when 'test' then '85'
+                when 'mov' then case when width_bits = 8 then '88' else '89' end
+                when 'add' then case when width_bits = 8 then '00' else '01' end
+                when 'sub' then case when width_bits = 8 then '28' else '29' end
+                when 'cmp' then case when width_bits = 8 then '38' else '39' end
+                when 'and' then case when width_bits = 8 then '20' else '21' end
+                when 'or' then case when width_bits = 8 then '08' else '09' end
+                when 'xor' then case when width_bits = 8 then '30' else '31' end
+                when 'test' then case when width_bits = 8 then '84' else '85' end
               end
            || printf('%02x', 192 + ((src_reg_code & 7) << 3) + (dst_reg_code & 7))
          ) as fixed_hex
   from reg_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_movzx_reg_reg' as parametric_rule_name,
+         (
+           case
+             when dst_width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
+             when dst_requires_rex = 1 or src_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case src_width_bits
+                when 8 then '0fb6'
+                when 16 then '0fb7'
+              end
+           || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
+         ) as fixed_hex
+  from movzx_reg_reg
   union all
   select repo_file_id,
          function_name,
@@ -6302,9 +6336,26 @@ with recursive rhs_decimal as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-    and match.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror')
-    and reg_encoding.width_bits in (32,64)
+    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','shl','shr','sar','ror')
+    and reg_encoding.width_bits in (8,32,64)
 ), generated as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_reg8_numeric_imm8' as parametric_rule_name,
+         (
+           case
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || printf('%02x', 176 + (reg_code & 7))
+           || printf('%02x', immediate_value & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name = 'mov'
+    and width_bits = 8
+    and immediate_value between -128 and 255
+  union all
   select repo_file_id,
          function_name,
          line_no,
@@ -6391,6 +6442,43 @@ with recursive rhs_decimal as (
   from reg_imm
   where op_name in ('add','sub','cmp','and','or','xor')
     and immediate_value between -128 and 127
+    and width_bits in (32,64)
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg8_numeric_imm8' as parametric_rule_name,
+         (
+           case
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name = 'test' and reg_code = 0 then 'a8'
+                when op_name = 'test' then 'f6' || printf('%02x', 192 + (reg_code & 7))
+                when reg_code = 0 then case op_name
+                                        when 'add' then '04'
+                                        when 'or' then '0c'
+                                        when 'and' then '24'
+                                        when 'sub' then '2c'
+                                        when 'xor' then '34'
+                                        when 'cmp' then '3c'
+                                      end
+                else '80' || printf('%02x', 192 + ((case op_name
+                                                     when 'add' then 0
+                                                     when 'or' then 1
+                                                     when 'and' then 4
+                                                     when 'sub' then 5
+                                                     when 'xor' then 6
+                                                     when 'cmp' then 7
+                                                   end) << 3) + (reg_code & 7))
+              end
+           || printf('%02x', immediate_value & 255)
+         ) as fixed_hex
+  from reg_imm
+  where op_name in ('add','sub','cmp','and','or','xor','test')
+    and width_bits = 8
+    and immediate_value between -128 and 255
   union all
   select repo_file_id,
          function_name,
