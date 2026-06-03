@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Lowered ARM branch/call targets and `ldr ..., =...` pseudo-literal operands into relocation/data-reference facts, and carried target ISA through operation fact status for cleaner blocker ranking.
 - Added ISA-scoped exact ASM rule matching and 32 verified ARMv6 fixed-encoding facts for high-frequency Pi loads, stores, compares, conditionals, pushes/pops, and stack adjusts, so ARM facts can reduce known gaps without matching x86 source.
 - Added 120 more verified exact x86 encoding facts from the highest-frequency `known_gap` queue, covering common compares, moves, byte loads, stack accesses, shifts, increments/decrements, port I/O, `rdtsc`, and small immediates.
 - Added a finite exact fixed-encoding relation that generates encoding and DSL rule facts for checked VP8 symbolic operands plus high-impact x86 forms such as `inc rdx`, `dec r8d`, byte `movzx`, stack-slot moves, and small immediates, reducing the largest remaining big-file blockers without duplicate rule boilerplate.

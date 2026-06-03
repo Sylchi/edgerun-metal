@@ -3297,13 +3297,16 @@ select path,
        operand_text as target_name,
        case
          when op_name = 'call' or op_name = 'er_call' then 'call'
+         when op_name = 'bl' then 'call'
          when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns') then 'branch'
+         when op_name in ('b','beq','bne','blo','bhi','bhs','bls') then 'branch'
          else 'unknown'
        end as target_kind
 from repo_asm_operation
 where line_kind = 3
   and operand_text is not null
-  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns');
+  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns',
+                  'bl','b','beq','bne','blo','bhi','bhs','bls');
 
 create view repo_asm_control_edge_fact as
 select target.path,
@@ -3534,6 +3537,19 @@ select path,
 from repo_asm_operation
 where operand_text like '%[rel %]%'
 union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       trim(substr(operand_text,
+                   instr(operand_text, '=') + 1)) as target_name,
+       'arm_literal_pool_reference' as relocation_kind
+from repo_asm_operation
+where target_isa_id = 4
+  and op_name = 'ldr'
+  and operand_text like '%, =%'
+union all
 select operation.path,
        operation.repo_file_id,
        operation.function_name,
@@ -3674,6 +3690,7 @@ select match.path,
        match.repo_file_id,
        match.function_name,
        match.line_no,
+       match.target_isa_id,
        match.line_kind,
        match.op_name,
        match.operand_text,
