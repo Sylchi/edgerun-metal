@@ -4787,6 +4787,64 @@ with recursive binary_operand as (
          end as displacement_hex
   from stack_memory
   where displacement is not null
+), base_symbol_memory as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         side,
+         size_name,
+         memory_text,
+         symbol_name,
+         immediate_value,
+         trim(substr(substr(memory_text, 2, length(memory_text) - 2), 1, instr(substr(memory_text, 2, length(memory_text) - 2), ' + ') - 1)) as base_register_name,
+         trim(substr(substr(memory_text, 2, length(memory_text) - 2), instr(substr(memory_text, 2, length(memory_text) - 2), ' + ') + 3)) as displacement_text
+  from (
+    select repo_file_id, function_name, line_no, 'lhs' as side, lhs_size as size_name, lhs_value as memory_text, symbol_name, immediate_value
+    from normalized
+    union all
+    select repo_file_id, function_name, line_no, 'rhs' as side, rhs_size as size_name, rhs_value as memory_text, symbol_name, immediate_value
+    from normalized
+  )
+  where memory_text like '[% + %]'
+    and memory_text not like '[rel %'
+    and memory_text not like '%*%'
+), base_symbol_memory_decoded as (
+  select *,
+         case
+           when displacement_text = symbol_name then immediate_value
+           when displacement_text glob symbol_name || ' + [0-9]*'
+            and trim(substr(displacement_text, length(symbol_name) + 4)) not glob '*[^0-9]*'
+             then immediate_value + cast(trim(substr(displacement_text, length(symbol_name) + 4)) as integer)
+           when displacement_text glob symbol_name || ' - [0-9]*'
+            and trim(substr(displacement_text, length(symbol_name) + 4)) not glob '*[^0-9]*'
+             then immediate_value - cast(trim(substr(displacement_text, length(symbol_name) + 4)) as integer)
+         end as displacement
+  from base_symbol_memory
+), base_symbol_memory_bytes as (
+  select base_symbol_memory_decoded.*,
+         base_reg.reg_code as base_reg_code,
+         base_reg.requires_rex as base_requires_rex,
+         case
+           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then 0
+           when displacement between -128 and 127 then 1
+           else 2
+         end as mod_bits,
+         case
+           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then ''
+           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+           else printf('%02x%02x%02x%02x',
+                       displacement & 255,
+                       (displacement >> 8) & 255,
+                       (displacement >> 16) & 255,
+                       (displacement >> 24) & 255)
+         end as displacement_hex,
+         case when (base_reg.reg_code & 7) = 4 then '24' else '' end as sib_hex,
+         case when (base_reg.reg_code & 7) = 4 then 4 else (base_reg.reg_code & 7) end as rm_field
+  from base_symbol_memory_decoded
+  join x86_register_encoding_fact base_reg
+    on base_reg.register_name = base_symbol_memory_decoded.base_register_name
+   and base_reg.width_bits = 64
+  where base_symbol_memory_decoded.displacement is not null
 ), reg_imm as (
   select normalized.*,
          dst.register_name as dst_register_name,
@@ -4798,6 +4856,80 @@ with recursive binary_operand as (
   where normalized.rhs_value = normalized.symbol_name
     and normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror')
     and dst.width_bits in (32,64)
+), reg_to_base_symbol as (
+  select normalized.*,
+         reg.register_name,
+         reg.width_bits,
+         reg.reg_code,
+         reg.requires_rex,
+         mem.size_name,
+         mem.base_reg_code,
+         mem.base_requires_rex,
+         mem.mod_bits,
+         mem.rm_field,
+         mem.sib_hex,
+         mem.displacement_hex
+  from normalized
+  join x86_register_encoding_fact reg on reg.register_name = normalized.rhs_value
+  join base_symbol_memory_bytes mem
+    on mem.repo_file_id = normalized.repo_file_id
+   and mem.function_name = normalized.function_name
+   and mem.line_no = normalized.line_no
+   and mem.side = 'lhs'
+  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor')
+    and reg.width_bits in (8,32,64)
+    and (mem.size_name is null
+         or (mem.size_name = 'byte' and reg.width_bits = 8)
+         or (mem.size_name = 'dword' and reg.width_bits = 32)
+         or (mem.size_name = 'qword' and reg.width_bits = 64))
+), base_symbol_to_reg as (
+  select normalized.*,
+         reg.register_name,
+         reg.width_bits,
+         reg.reg_code,
+         reg.requires_rex,
+         mem.size_name,
+         mem.base_reg_code,
+         mem.base_requires_rex,
+         mem.mod_bits,
+         mem.rm_field,
+         mem.sib_hex,
+         mem.displacement_hex
+  from normalized
+  join x86_register_encoding_fact reg on reg.register_name = normalized.lhs_value
+  join base_symbol_memory_bytes mem
+    on mem.repo_file_id = normalized.repo_file_id
+   and mem.function_name = normalized.function_name
+   and mem.line_no = normalized.line_no
+   and mem.side = 'rhs'
+  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
+    and reg.width_bits in (32,64)
+    and (mem.size_name is null
+         or (mem.size_name = 'byte' and normalized.op_name = 'movzx')
+         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx'))
+         or (mem.size_name = 'dword' and reg.width_bits in (32,64))
+         or (mem.size_name = 'qword' and reg.width_bits = 64))
+), base_symbol_imm as (
+  select normalized.*,
+         mem.size_name,
+         mem.base_reg_code,
+         mem.base_requires_rex,
+         mem.mod_bits,
+         mem.rm_field,
+         mem.sib_hex,
+         mem.displacement_hex,
+         cast(normalized.rhs_value as integer) as rhs_immediate_value
+  from normalized
+  join base_symbol_memory_bytes mem
+    on mem.repo_file_id = normalized.repo_file_id
+   and mem.function_name = normalized.function_name
+   and mem.line_no = normalized.line_no
+   and mem.side = 'lhs'
+  where normalized.op_name in ('mov','add','sub','cmp')
+    and (normalized.rhs_value glob '[0-9]*'
+         or normalized.rhs_value glob '-[0-9]*')
+    and replace(normalized.rhs_value, '-', '') not glob '*[^0-9]*'
+    and mem.size_name in ('byte','dword','qword')
 ), stack_imm as (
   select normalized.*,
          mem.size_name,
@@ -4879,6 +5011,121 @@ with recursive binary_operand as (
   from reg_imm
   where op_name in ('shl','shr','sar','ror')
     and immediate_value between 0 and 255
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg_symbol_base_memory' as parametric_rule_name,
+         (
+           case
+             when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name = 'movzx' and size_name = 'byte' then '0fb6'
+                when op_name = 'movzx' and size_name = 'word' then '0fb7'
+                when op_name = 'movsx' and size_name = 'word' then '0fbf'
+                when op_name = 'movsxd' then '63'
+                when op_name = 'mov' then '8b'
+                when op_name = 'add' then '03'
+                when op_name = 'sub' then '2b'
+                when op_name = 'cmp' then '3b'
+                when op_name = 'and' then '23'
+                when op_name = 'or' then '0b'
+                when op_name = 'xor' then '33'
+                when op_name = 'lea' then '8d'
+              end
+           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
+           || sib_hex
+           || displacement_hex
+         ) as fixed_hex
+  from base_symbol_to_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_symbol_base_memory_reg' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name = 'mov' and width_bits = 8 then '88'
+                when op_name = 'mov' then '89'
+                when op_name = 'add' then '01'
+                when op_name = 'sub' then '29'
+                when op_name = 'cmp' then '39'
+                when op_name = 'and' then '21'
+                when op_name = 'or' then '09'
+                when op_name = 'xor' then '31'
+              end
+           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
+           || sib_hex
+           || displacement_hex
+         ) as fixed_hex
+  from reg_to_base_symbol
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_' || size_name || '_symbol_base_memory_imm8' as parametric_rule_name,
+         (
+           case
+             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+             when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when size_name = 'byte' then '80'
+                else '83'
+              end
+           || printf('%02x', (mod_bits << 6) + ((case op_name
+                                                  when 'add' then 0
+                                                  when 'sub' then 5
+                                                  when 'cmp' then 7
+                                                end) << 3) + rm_field)
+           || sib_hex
+           || displacement_hex
+           || printf('%02x', rhs_immediate_value & 255)
+         ) as fixed_hex
+  from base_symbol_imm
+  where op_name in ('add','sub','cmp')
+    and rhs_immediate_value between -128 and 127
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_' || size_name || '_symbol_base_memory_imm' as parametric_rule_name,
+         (
+           case
+             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+             when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when size_name = 'byte' then 'c6'
+                else 'c7'
+              end
+           || printf('%02x', (mod_bits << 6) + rm_field)
+           || sib_hex
+           || displacement_hex
+           || case
+                when size_name = 'byte' then printf('%02x', rhs_immediate_value & 255)
+                else printf('%02x%02x%02x%02x',
+                            rhs_immediate_value & 255,
+                            (rhs_immediate_value >> 8) & 255,
+                            (rhs_immediate_value >> 16) & 255,
+                            (rhs_immediate_value >> 24) & 255)
+              end
+         ) as fixed_hex
+  from base_symbol_imm
+  where op_name = 'mov'
+    and ((size_name = 'byte' and rhs_immediate_value between -128 and 255)
+         or (size_name in ('dword','qword') and rhs_immediate_value between -2147483648 and 4294967295))
   union all
   select repo_file_id,
          function_name,
