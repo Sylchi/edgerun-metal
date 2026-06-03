@@ -4543,60 +4543,83 @@ where line_kind = 3
 create index repo_asm_constant_candidate_operation_operand_idx
   on repo_asm_constant_candidate_operation(operand_text);
 
-create table repo_asm_scoped_constant_expression_match as
+create table repo_asm_constant_candidate_operand_text as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operand_text,
+         ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' ' as normalized_operand_text
+from repo_asm_constant_candidate_operation;
+
+create index repo_asm_constant_candidate_operand_text_line_idx
+  on repo_asm_constant_candidate_operand_text(repo_file_id, function_name, line_no);
+
+create table repo_asm_constant_operand_symbol_match as
 select operation.path,
        operation.repo_file_id,
        operation.function_name,
        operation.line_no,
        operation.op_name,
        operation.operand_text,
-       symbol.symbol_name,
-       min(definition.expression_text) as expression_text
-from repo_asm_constant_candidate_operation operation
+       symbol.symbol_name
+from repo_asm_constant_candidate_operand_text operation
 join asm_constant_expression_symbol_fact symbol
+  on operation.normalized_operand_text like '% ' || symbol.symbol_name || ' %';
+
+create index repo_asm_constant_operand_symbol_match_symbol_idx
+  on repo_asm_constant_operand_symbol_match(symbol_name);
+create index repo_asm_constant_operand_symbol_match_line_idx
+  on repo_asm_constant_operand_symbol_match(repo_file_id, function_name, line_no, symbol_name);
+
+create table repo_asm_scoped_constant_expression_match as
+select match.path,
+       match.repo_file_id,
+       match.function_name,
+       match.line_no,
+       match.op_name,
+       match.operand_text,
+       match.symbol_name,
+       min(definition.expression_text) as expression_text
+from repo_asm_constant_operand_symbol_match match
 join repo_asm_constant_definition_fact definition
-  on definition.symbol_name = symbol.symbol_name
- and (definition.path = operation.path
+  on definition.symbol_name = match.symbol_name
+ and (definition.path = match.path
       or exists (select 1
                  from repo_asm_include_closure_fact include_closure
-                 where include_closure.source_path = operation.path
+                 where include_closure.source_path = match.path
                    and include_closure.target_path = definition.path))
- and ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operation.operand_text,
-       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
-     like '% ' || symbol.symbol_name || ' %'
-where operation.operand_text is not null
-group by operation.path,
-         operation.repo_file_id,
-         operation.function_name,
-         operation.line_no,
-         operation.op_name,
-         operation.operand_text,
-         symbol.symbol_name
+group by match.path,
+         match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.op_name,
+         match.operand_text,
+         match.symbol_name
 having count(distinct definition.expression_text) = 1;
 
 create index repo_asm_scoped_constant_expression_match_line_idx
   on repo_asm_scoped_constant_expression_match(repo_file_id, function_name, line_no, symbol_name);
 
 create table repo_asm_global_constant_expression_match as
-select operation.path,
-       operation.repo_file_id,
-       operation.function_name,
-       operation.line_no,
-       operation.op_name,
-       operation.operand_text,
+select match.path,
+       match.repo_file_id,
+       match.function_name,
+       match.line_no,
+       match.op_name,
+       match.operand_text,
        constant.symbol_name,
        constant.expression_text
-from repo_asm_constant_candidate_operation operation
+from repo_asm_constant_operand_symbol_match match
 join repo_asm_unique_constant_fact constant
-  on ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operation.operand_text,
-       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
-     like '% ' || constant.symbol_name || ' %'
-where operation.operand_text is not null
-  and not exists (select 1
+  on constant.symbol_name = match.symbol_name
+where not exists (select 1
                   from repo_asm_scoped_constant_expression_match scoped
-                  where scoped.repo_file_id = operation.repo_file_id
-                    and scoped.function_name = operation.function_name
-                    and scoped.line_no = operation.line_no
+                  where scoped.repo_file_id = match.repo_file_id
+                    and scoped.function_name = match.function_name
+                    and scoped.line_no = match.line_no
                     and scoped.symbol_name = constant.symbol_name);
 
 create index repo_asm_global_constant_expression_match_line_idx
@@ -5325,26 +5348,37 @@ from repo_asm_remaining_gap;
 
 create index repo_asm_gap_example_gap_idx on repo_asm_gap_example(gap_kind, op_name, operand_text, example_rank);
 
+create table repo_asm_gap_operand_text as
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
+       op_name,
+       operand_text,
+       ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(operand_text,
+         ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' ' as normalized_operand_text
+from repo_asm_remaining_gap
+where gap_kind = 'known_gap'
+  and operand_text is not null;
+
+create index repo_asm_gap_operand_text_line_idx on repo_asm_gap_operand_text(repo_file_id, function_name, line_no);
+
 create table repo_asm_unresolved_constant_symbol_gap as
 select symbol.symbol_name,
        symbol.reason,
-       count(gap.line_no) as occurrence_count,
-       count(distinct gap.path) as file_count,
-       count(distinct gap.function_name) as function_count,
-       min(gap.path) as example_path,
-       min(gap.line_no) as example_line_no,
+       count(token.line_no) as occurrence_count,
+       count(distinct token.path) as file_count,
+       count(distinct token.function_name) as function_count,
+       min(token.path) as example_path,
+       min(token.line_no) as example_line_no,
        max(case when definition.symbol_name is null then 1 else 0 end) as missing_definition,
        count(distinct definition.expression_text) as expression_count,
        group_concat(distinct definition.expression_text) as expression_examples
 from asm_constant_expression_symbol_fact symbol
 left join repo_asm_constant_definition_fact definition
   on definition.symbol_name = symbol.symbol_name
-left join repo_asm_remaining_gap gap
-  on gap.gap_kind = 'known_gap'
- and gap.operand_text is not null
- and ' ' || replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(gap.operand_text,
-       ',', ' '), '[', ' '), ']', ' '), '+', ' '), '-', ' '), '*', ' '), '/', ' '), '(', ' '), ')', ' '), ':', ' ') || ' '
-     like '% ' || symbol.symbol_name || ' %'
+left join repo_asm_gap_operand_text token
+  on token.normalized_operand_text like '% ' || symbol.symbol_name || ' %'
 where symbol.symbol_name not in (select symbol_name from repo_asm_unique_constant_fact)
 group by symbol.symbol_name, symbol.reason
 having occurrence_count > 0
