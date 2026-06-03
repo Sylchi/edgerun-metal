@@ -2468,6 +2468,7 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
 
 create table asm_exact_fixed_encoding_fact (
   encoding_id integer primary key,
+  isa_id integer not null default 1 references isa(isa_id),
   name text not null unique,
   rule_name text not null unique,
   op_name text not null,
@@ -2707,29 +2708,65 @@ insert into asm_exact_fixed_encoding_fact(encoding_id, name, rule_name, op_name,
   (1832, 'x86_64_exact_mov_r14d_1', 'asm_x86_exact_mov_r14d_1_exact', 'mov', 'r14d, 1', '41be01000000'),
   (1833, 'x86_64_exact_mov_r8d_8', 'asm_x86_exact_mov_r8d_8_exact', 'mov', 'r8d, 8', '41b808000000');
 
+insert into asm_exact_fixed_encoding_fact(encoding_id, isa_id, name, rule_name, op_name, operand_text, fixed_hex) values
+  (1834, 4, 'arm32_exact_popne_pc', 'asm_arm32_exact_popne_pc_exact', 'popne', '{pc}', '04f09d14'),
+  (1835, 4, 'arm32_exact_str_r0_ptr_r1', 'asm_arm32_exact_str_r0_ptr_r1_exact', 'str', 'r0, [r1]', '000081e5'),
+  (1836, 4, 'arm32_exact_ldr_r0_ptr_r1', 'asm_arm32_exact_ldr_r0_ptr_r1_exact', 'ldr', 'r0, [r1]', '000091e5'),
+  (1837, 4, 'arm32_exact_movne_r0_imm_1', 'asm_arm32_exact_movne_r0_imm_1_exact', 'movne', 'r0, #1', '0100a013'),
+  (1838, 4, 'arm32_exact_popne_r4_pc', 'asm_arm32_exact_popne_r4_pc_exact', 'popne', '{r4, pc}', '1080bd18'),
+  (1839, 4, 'arm32_exact_ldr_r0_ptr_r4_r0', 'asm_arm32_exact_ldr_r0_ptr_r4_r0_exact', 'ldr', 'r0, [r4, r0]', '000094e7'),
+  (1840, 4, 'arm32_exact_cmp_r4_r0', 'asm_arm32_exact_cmp_r4_r0_exact', 'cmp', 'r4, r0', '000054e1'),
+  (1841, 4, 'arm32_exact_pop_r4_r5_r6_pc', 'asm_arm32_exact_pop_r4_r5_r6_pc_exact', 'pop', '{r4, r5, r6, pc}', '7080bde8'),
+  (1842, 4, 'arm32_exact_popne_r4_r5_r6_r7_pc', 'asm_arm32_exact_popne_r4_r5_r6_r7_pc_exact', 'popne', '{r4, r5, r6, r7, pc}', 'f080bd18'),
+  (1843, 4, 'arm32_exact_cmp_r0_r4', 'asm_arm32_exact_cmp_r0_r4_exact', 'cmp', 'r0, r4', '040050e1'),
+  (1844, 4, 'arm32_exact_pop_r4_r5_r6_r7_pc', 'asm_arm32_exact_pop_r4_r5_r6_r7_pc_exact', 'pop', '{r4, r5, r6, r7, pc}', 'f080bde8'),
+  (1845, 4, 'arm32_exact_pop_r4_r5_r6_r7_r8_r9_r10_r11_pc', 'asm_arm32_exact_pop_r4_r5_r6_r7_r8_r9_r10_r11_pc_exact', 'pop', '{r4, r5, r6, r7, r8, r9, r10, r11, pc}', 'f08fbde8'),
+  (1846, 4, 'arm32_exact_subs_r5_r5_imm_1', 'asm_arm32_exact_subs_r5_r5_imm_1_exact', 'subs', 'r5, r5, #1', '015055e2'),
+  (1847, 4, 'arm32_exact_moveq_r0_imm_0', 'asm_arm32_exact_moveq_r0_imm_0_exact', 'moveq', 'r0, #0', '0000a003'),
+  (1848, 4, 'arm32_exact_bxeq_lr', 'asm_arm32_exact_bxeq_lr_exact', 'bxeq', 'lr', '1eff2f01'),
+  (1849, 4, 'arm32_exact_ldr_r0_ptr_r2', 'asm_arm32_exact_ldr_r0_ptr_r2_exact', 'ldr', 'r0, [r2]', '000092e5'),
+  (1850, 4, 'arm32_exact_ldr_r3_ptr_r2', 'asm_arm32_exact_ldr_r3_ptr_r2_exact', 'ldr', 'r3, [r2]', '003092e5'),
+  (1851, 4, 'arm32_exact_popne_r4_r5_pc', 'asm_arm32_exact_popne_r4_r5_pc_exact', 'popne', '{r4, r5, pc}', '3080bd18'),
+  (1852, 4, 'arm32_exact_cmp_r3_imm_0', 'asm_arm32_exact_cmp_r3_imm_0_exact', 'cmp', 'r3, #0', '000053e3'),
+  (1853, 4, 'arm32_exact_push_r4_r5_lr', 'asm_arm32_exact_push_r4_r5_lr_exact', 'push', '{r4, r5, lr}', '30402de9'),
+  (1854, 4, 'arm32_exact_add_sp_sp_imm_16', 'asm_arm32_exact_add_sp_sp_imm_16_exact', 'add', 'sp, sp, #16', '10d08de2'),
+  (1855, 4, 'arm32_exact_str_r3_ptr_r2', 'asm_arm32_exact_str_r3_ptr_r2_exact', 'str', 'r3, [r2]', '003082e5'),
+  (1856, 4, 'arm32_exact_ldr_r0_ptr_r0', 'asm_arm32_exact_ldr_r0_ptr_r0_exact', 'ldr', 'r0, [r0]', '000090e5'),
+  (1857, 4, 'arm32_exact_push_r4_r5_r6_lr', 'asm_arm32_exact_push_r4_r5_r6_lr_exact', 'push', '{r4, r5, r6, lr}', '70402de9'),
+  (1858, 4, 'arm32_exact_cmp_r5_imm_0', 'asm_arm32_exact_cmp_r5_imm_0_exact', 'cmp', 'r5, #0', '000055e3'),
+  (1859, 4, 'arm32_exact_cmp_r1_r2', 'asm_arm32_exact_cmp_r1_r2_exact', 'cmp', 'r1, r2', '020051e1'),
+  (1860, 4, 'arm32_exact_str_r1_ptr_r2_r0', 'asm_arm32_exact_str_r1_ptr_r2_r0_exact', 'str', 'r1, [r2, r0]', '001082e7'),
+  (1861, 4, 'arm32_exact_str_r0_ptr_r1_imm_4', 'asm_arm32_exact_str_r0_ptr_r1_imm_4_exact', 'str', 'r0, [r1, #4]', '040081e5'),
+  (1862, 4, 'arm32_exact_cmp_r1_imm_0', 'asm_arm32_exact_cmp_r1_imm_0_exact', 'cmp', 'r1, #0', '000051e3'),
+  (1863, 4, 'arm32_exact_add_sp_sp_imm_8', 'asm_arm32_exact_add_sp_sp_imm_8_exact', 'add', 'sp, sp, #8', '08d08de2'),
+  (1864, 4, 'arm32_exact_cmp_r7_imm_0', 'asm_arm32_exact_cmp_r7_imm_0_exact', 'cmp', 'r7, #0', '000057e3'),
+  (1865, 4, 'arm32_exact_ldr_r0_ptr_r1_imm_4', 'asm_arm32_exact_ldr_r0_ptr_r1_imm_4_exact', 'ldr', 'r0, [r1, #4]', '040091e5');
+
 insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind, fixed_hex, immediate_type_id, immediate_operand_index, flags, object_path)
-select encoding_id,
-       name,
+select asm_exact_fixed_encoding_fact.encoding_id,
+       asm_exact_fixed_encoding_fact.name,
+       asm_exact_fixed_encoding_fact.isa_id,
        1,
-       1,
-       fixed_hex,
+       asm_exact_fixed_encoding_fact.fixed_hex,
        null,
        -1,
        0,
-       'kernel/x86_64/object/encoding/x86_64/' || name || '.erobj'
-from asm_exact_fixed_encoding_fact;
+       'kernel/x86_64/object/encoding/' || isa.name || '/' || asm_exact_fixed_encoding_fact.name || '.erobj'
+from asm_exact_fixed_encoding_fact
+join isa using (isa_id);
 
 insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags)
 select 3,
        op_name,
        null,
-       'kernel/x86_64/object/instruction/x86_64/' || op_name || '.erobj',
+       'kernel/x86_64/object/instruction/' || isa.name || '/' || op_name || '.erobj',
        null,
        encoding_id,
        rule_name,
        operand_text,
        0
-from asm_exact_fixed_encoding_fact;
+from asm_exact_fixed_encoding_fact
+join isa using (isa_id);
 
 
 insert into asm_dsl_source(asm_source_id, source_object_path, module_name, language_id) values
@@ -3016,6 +3053,11 @@ with trimmed as (
   select repo_file.path,
          repo_asm_line.repo_file_id,
          coalesce(repo_asm_function_span.function_name, '') as function_name,
+         case
+           when repo_file.path like 'kernel/arm/%' then 4
+           when repo_file.path like 'kernel/test/test_pi_%' then 4
+           else 1
+         end as target_isa_id,
          repo_asm_line.line_no,
          repo_asm_line.text,
          trim(replace(repo_asm_line.text, char(9), ' ')) as t
@@ -3029,6 +3071,7 @@ with trimmed as (
   select path,
          repo_file_id,
          function_name,
+         target_isa_id,
          line_no,
          text,
          t,
@@ -3057,7 +3100,7 @@ with trimmed as (
           end as operand_text
   from trimmed
 )
-select path, repo_file_id, function_name, line_no, line_kind, op_name, operand_text, text as raw_text
+select path, repo_file_id, function_name, target_isa_id, line_no, line_kind, op_name, operand_text, text as raw_text
 from parsed
 where line_kind <> 0;
 
@@ -3110,6 +3153,7 @@ create view repo_asm_rule_gaps as
 select repo_asm_operation.path,
        repo_asm_operation.function_name,
        repo_asm_operation.line_no,
+       repo_asm_operation.target_isa_id,
        repo_asm_operation.line_kind,
        repo_asm_operation.op_name,
        repo_asm_operation.operand_text,
@@ -3132,6 +3176,11 @@ left join asm_dsl_rule
       and candidate_rule.op_name = coalesce(repo_asm_operation.op_name, '')
       and (candidate_rule.exact_operand_text is null
            or candidate_rule.exact_operand_text = coalesce(repo_asm_operation.operand_text, ''))
+      and (candidate_rule.encoding_id is null
+           or exists (select 1
+                      from encoding_pattern candidate_encoding
+                      where candidate_encoding.encoding_id = candidate_rule.encoding_id
+                        and candidate_encoding.isa_id = repo_asm_operation.target_isa_id))
     order by case when candidate_rule.exact_operand_text is null then 1 else 0 end,
              candidate_rule.asm_rule_id
     limit 1
@@ -3167,6 +3216,7 @@ select repo_asm_operation.path,
        repo_asm_operation.repo_file_id,
        repo_asm_operation.function_name,
        repo_asm_operation.line_no,
+       repo_asm_operation.target_isa_id,
        repo_asm_operation.line_kind,
        repo_asm_operation.op_name,
        repo_asm_operation.operand_text,
@@ -3186,6 +3236,11 @@ left join asm_dsl_rule
       and candidate_rule.op_name = coalesce(repo_asm_operation.op_name, '')
       and (candidate_rule.exact_operand_text is null
            or candidate_rule.exact_operand_text = coalesce(repo_asm_operation.operand_text, ''))
+      and (candidate_rule.encoding_id is null
+           or exists (select 1
+                      from encoding_pattern candidate_encoding
+                      where candidate_encoding.encoding_id = candidate_rule.encoding_id
+                        and candidate_encoding.isa_id = repo_asm_operation.target_isa_id))
     order by case when candidate_rule.exact_operand_text is null then 1 else 0 end,
              candidate_rule.asm_rule_id
     limit 1
