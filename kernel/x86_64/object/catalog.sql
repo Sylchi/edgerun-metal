@@ -810,7 +810,19 @@ insert or ignore into encoding_pattern(encoding_id, name, isa_id, encoding_kind,
   (1504, 'x86_64_cvtss2si_eax_xmm0', 1, 1, 'f30f2dc0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cvtss2si_eax_xmm0.erobj'),
   (1505, 'x86_64_pxor_xmm4_xmm4', 1, 1, '660fefe4', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/pxor_xmm4_xmm4.erobj'),
   (1506, 'x86_64_sqrtss_xmm0_xmm0', 1, 1, 'f30f51c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/sqrtss_xmm0_xmm0.erobj'),
-  (1507, 'x86_64_xorps_xmm0_xmm0', 1, 1, '0f57c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xorps_xmm0_xmm0.erobj');
+  (1507, 'x86_64_xorps_xmm0_xmm0', 1, 1, '0f57c0', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/xorps_xmm0_xmm0.erobj'),
+  (1508, 'x86_64_mov_esi_local_max_identities', 1, 1, 'be10000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_local_max_identities.erobj'),
+  (1509, 'x86_64_mov_edx_seal_encoded_size', 1, 1, 'ba74000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_seal_encoded_size.erobj'),
+  (1510, 'x86_64_mov_edx_msg_test_len', 1, 1, 'ba04000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_msg_test_len.erobj'),
+  (1511, 'x86_64_mov_ecx_msg_blind_len', 1, 1, 'b90d000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_msg_blind_len.erobj'),
+  (1512, 'x86_64_mov_edx_raw_size', 1, 1, 'ba6a000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_edx_raw_size.erobj'),
+  (1513, 'x86_64_mov_esi_stamp_size', 1, 1, 'be40000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_stamp_size.erobj'),
+  (1514, 'x86_64_mov_esi_domain_len', 1, 1, 'be13000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_domain_len.erobj'),
+  (1515, 'x86_64_mov_ecx_value_len', 1, 1, 'b908000000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_ecx_value_len.erobj'),
+  (1516, 'x86_64_imul_eax_eax_31', 1, 1, '6bc01f', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/imul_eax_eax_31.erobj'),
+  (1517, 'x86_64_add_eax_7', 1, 1, '83c007', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/add_eax_7.erobj'),
+  (1518, 'x86_64_cmp_ecx_data_size', 1, 1, '81f9dc050000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/cmp_ecx_data_size.erobj'),
+  (1519, 'x86_64_mov_esi_data_size', 1, 1, 'bedc050000', null, -1, 0, 'kernel/x86_64/object/encoding/x86_64/mov_esi_data_size.erobj');
 
 create table function_object (
   function_id integer primary key,
@@ -2226,7 +2238,19 @@ insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instru
   (3, 'cvtss2si', null, 'kernel/x86_64/object/instruction/x86_64/cvtss2si.erobj', null, 1504, 'asm_x86_cvtss2si_eax_xmm0_exact', 'eax, xmm0', 0),
   (3, 'pxor', null, 'kernel/x86_64/object/instruction/x86_64/pxor.erobj', null, 1505, 'asm_x86_pxor_xmm4_xmm4_exact', 'xmm4, xmm4', 0),
   (3, 'sqrtss', null, 'kernel/x86_64/object/instruction/x86_64/sqrtss.erobj', null, 1506, 'asm_x86_sqrtss_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
-  (3, 'xorps', null, 'kernel/x86_64/object/instruction/x86_64/xorps.erobj', null, 1507, 'asm_x86_xorps_xmm0_xmm0_exact', 'xmm0, xmm0', 0);
+  (3, 'xorps', null, 'kernel/x86_64/object/instruction/x86_64/xorps.erobj', null, 1507, 'asm_x86_xorps_xmm0_xmm0_exact', 'xmm0, xmm0', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1508, 'asm_x86_mov_esi_local_max_identities_exact', 'esi, LOCAL_MAX_IDENTITIES', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1509, 'asm_x86_mov_edx_seal_encoded_size_exact', 'edx, SEAL_ENCODED_SIZE', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1510, 'asm_x86_mov_edx_msg_test_len_exact', 'edx, msg_test_len', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1511, 'asm_x86_mov_ecx_msg_blind_len_exact', 'ecx, msg_blind_len', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1512, 'asm_x86_mov_edx_raw_size_exact', 'edx, RAW_SIZE', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1513, 'asm_x86_mov_esi_stamp_size_exact', 'esi, STAMP_SIZE', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1514, 'asm_x86_mov_esi_domain_len_exact', 'esi, DOMAIN_LEN', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1515, 'asm_x86_mov_ecx_value_len_exact', 'ecx, VALUE_LEN', 0),
+  (3, 'imul', null, 'kernel/x86_64/object/instruction/x86_64/imul.erobj', null, 1516, 'asm_x86_imul_eax_eax_31_exact', 'eax, eax, 31', 0),
+  (3, 'add', null, 'kernel/x86_64/object/instruction/x86_64/add.erobj', null, 1517, 'asm_x86_add_eax_7_exact', 'eax, 7', 0),
+  (3, 'cmp', null, 'kernel/x86_64/object/instruction/x86_64/cmp.erobj', null, 1518, 'asm_x86_cmp_ecx_data_size_exact', 'ecx, DATA_SIZE', 0),
+  (3, 'mov', null, 'kernel/x86_64/object/instruction/x86_64/mov.erobj', null, 1519, 'asm_x86_mov_esi_data_size_exact', 'esi, DATA_SIZE', 0);
 
 insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
   (3, 'b', null, 'kernel/x86_64/object/instruction/arm32/b.erobj', null, null, 'asm_arm32_b_known_gap', null, 2),
