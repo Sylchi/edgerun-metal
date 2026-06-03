@@ -6395,6 +6395,202 @@ where fixed_hex is not null
 create unique index repo_asm_numeric_immediate_parametric_encoding_fact_line_idx
   on repo_asm_numeric_immediate_parametric_encoding_fact(repo_file_id, function_name, line_no);
 
+create table repo_asm_unary_parametric_encoding_fact as
+with register_operand as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.op_name,
+         match.operand_text as register_name,
+         reg.width_bits,
+         reg.reg_code,
+         reg.requires_rex
+  from repo_asm_rule_match match
+  join x86_register_encoding_fact reg
+    on reg.register_name = match.operand_text
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and match.op_name in ('inc','dec','neg','not')
+), unary_memory_operand as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.target_isa_id,
+         match.op_name,
+         match.operand_text,
+         case when match.operand_text like 'byte %' then 'byte'
+              when match.operand_text like 'word %' then 'word'
+              when match.operand_text like 'dword %' then 'dword'
+              when match.operand_text like 'qword %' then 'qword'
+              else null end as size_name,
+         case when match.operand_text like 'byte %' then trim(substr(match.operand_text, 6))
+              when match.operand_text like 'word %' then trim(substr(match.operand_text, 6))
+              when match.operand_text like 'dword %' then trim(substr(match.operand_text, 7))
+              when match.operand_text like 'qword %' then trim(substr(match.operand_text, 7))
+              else match.operand_text end as memory_text
+  from repo_asm_rule_match match
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and match.op_name in ('inc','dec','neg','not')
+), unary_memory_terms as (
+  select unary_memory_operand.*,
+         trim(replace(substr(memory_text, 2, length(memory_text) - 2), ' - ', ' + -')) as inner_text
+  from unary_memory_operand
+  where memory_text like '[%]'
+), simple_memory as (
+  select unary_memory_terms.*,
+         case
+           when inner_text like '% + %' then trim(substr(inner_text, 1, instr(inner_text, ' + ') - 1))
+           else inner_text
+         end as base_register_name,
+         case
+           when inner_text not like '% + %' then 0
+           when trim(substr(inner_text, instr(inner_text, ' + ') + 3)) glob '[0-9]*'
+            and trim(substr(inner_text, instr(inner_text, ' + ') + 3)) not glob '*[^0-9]*'
+             then cast(trim(substr(inner_text, instr(inner_text, ' + ') + 3)) as integer)
+           when trim(substr(inner_text, instr(inner_text, ' + ') + 3)) glob '-[0-9]*'
+            and replace(trim(substr(inner_text, instr(inner_text, ' + ') + 3)), '-', '') not glob '*[^0-9]*'
+             then cast(trim(substr(inner_text, instr(inner_text, ' + ') + 3)) as integer)
+         end as displacement
+  from unary_memory_terms
+  where inner_text not like '% + % + %'
+    and inner_text not like '%*%'
+    and inner_text not glob '*[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
+), numeric_symbol_memory as (
+  select unary_memory_terms.*,
+         trim(substr(inner_text, 1, instr(inner_text, ' + ') - 1)) as base_register_name,
+         value.immediate_value as displacement
+  from unary_memory_terms
+  join repo_asm_numeric_constant_value value
+    on value.symbol_name = trim(substr(inner_text, instr(inner_text, ' + ') + 3))
+  where inner_text like '% + %'
+    and inner_text not like '% + % + %'
+    and inner_text not like '%*%'
+), memory_operand as (
+  select *
+  from simple_memory
+  union all
+  select *
+  from numeric_symbol_memory
+), memory_bytes as (
+  select memory_operand.*,
+         base_reg.reg_code as base_reg_code,
+         base_reg.requires_rex as base_requires_rex,
+         case
+           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then 0
+           when displacement between -128 and 127 then 1
+           else 2
+         end as mod_bits,
+         case
+           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then ''
+           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+           else printf('%02x%02x%02x%02x',
+                       displacement & 255,
+                       (displacement >> 8) & 255,
+                       (displacement >> 16) & 255,
+                       (displacement >> 24) & 255)
+         end as displacement_hex,
+         case when (base_reg.reg_code & 7) = 4 then '24' else '' end as sib_hex,
+         case when (base_reg.reg_code & 7) = 4 then 4 else (base_reg.reg_code & 7) end as rm_field
+  from memory_operand
+  join x86_register_encoding_fact base_reg
+    on base_reg.register_name = memory_operand.base_register_name
+   and base_reg.width_bits = 64
+), generated as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg' as parametric_rule_name,
+         (
+           case
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name in ('inc','dec') and width_bits = 8 then 'fe'
+                when op_name in ('inc','dec') then 'ff'
+                when width_bits = 8 then 'f6'
+                else 'f7'
+              end
+           || printf('%02x', 192 + ((case op_name
+                                      when 'inc' then 0
+                                      when 'dec' then 1
+                                      when 'not' then 2
+                                      when 'neg' then 3
+                                    end) << 3) + (reg_code & 7))
+         ) as fixed_hex
+  from register_operand
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_' || size_name || '_memory' as parametric_rule_name,
+         (
+           case
+             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+             when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name in ('inc','dec') and size_name = 'byte' then 'fe'
+                when op_name in ('inc','dec') then 'ff'
+                when size_name = 'byte' then 'f6'
+                else 'f7'
+              end
+           || printf('%02x', (mod_bits << 6) + ((case op_name
+                                                  when 'inc' then 0
+                                                  when 'dec' then 1
+                                                  when 'not' then 2
+                                                  when 'neg' then 3
+                                                end) << 3) + rm_field)
+           || sib_hex
+           || displacement_hex
+         ) as fixed_hex
+  from memory_bytes
+  where op_name in ('inc','dec','neg','not')
+    and size_name in ('byte','word','dword','qword')
+)
+select repo_file_id,
+       function_name,
+       line_no,
+       parametric_rule_name,
+       fixed_hex
+from generated
+where fixed_hex is not null
+  and not exists (select 1
+                  from repo_asm_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_symbolic_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_indexed_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_numeric_symbol_memory_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no)
+  and not exists (select 1
+                  from repo_asm_numeric_immediate_parametric_encoding_fact previous
+                  where previous.repo_file_id = generated.repo_file_id
+                    and previous.function_name = generated.function_name
+                    and previous.line_no = generated.line_no);
+
+create unique index repo_asm_unary_parametric_encoding_fact_line_idx
+  on repo_asm_unary_parametric_encoding_fact(repo_file_id, function_name, line_no);
+
 create table repo_asm_all_parametric_encoding_fact as
 select *
 from repo_asm_parametric_encoding_fact
@@ -6409,7 +6605,10 @@ select *
 from repo_asm_numeric_symbol_memory_parametric_encoding_fact
 union all
 select *
-from repo_asm_numeric_immediate_parametric_encoding_fact;
+from repo_asm_numeric_immediate_parametric_encoding_fact
+union all
+select *
+from repo_asm_unary_parametric_encoding_fact;
 
 create unique index repo_asm_all_parametric_encoding_fact_line_idx
   on repo_asm_all_parametric_encoding_fact(repo_file_id, function_name, line_no);

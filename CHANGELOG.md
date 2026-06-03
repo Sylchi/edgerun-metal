@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Lowered 94 x86 unary register/base-memory forms from finite facts, then converted `media/bitreader.asm` into a source object and deleted its text source.
 - Lowered 3,009 numeric x86 immediate forms from operand facts, dropping `known_gap` to 12,278, then converted the identity and AV1 OBU self-tests into source objects and deleted their text sources.
 - Lowered 3,319 numeric-symbol x86 memory forms from operand/addressing facts, including memory/register and memory/immediate operations, dropping `known_gap` to 15,286 without expanding exact facts.
 - Lowered 676 indexed x86 memory forms from finite operand/addressing facts, dropping `known_gap` to 18,543 without broad memory string scans.
