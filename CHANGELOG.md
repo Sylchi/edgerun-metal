@@ -2,6 +2,7 @@
 
 ## 2026-06-02 - Canonical Program Model Clarification
 
+- Added the checked `mov edx, AV1_CDF_PROB_TOP` exact fact, converted the AV1 sequence self-test into a committed source object, and deleted its text `.asm` source.
 - Converted the now fact-backed AV1 tile self-test into a committed source object and deleted its text `.asm` source.
 - Added conflict-checked parametric x86 encoding facts for register/register, register/immediate, stack-memory, base-register memory, shift, and unary register templates, dropping `known_gap` by 5,329 rows without enumerating exact instruction strings.
 - Added 40 verified x86 exact facts for the next VP8 arithmetic, mask, compare, and `imul` blocker batch, including symbolic reference, stack-layout, coefficient, and motion-vector constants checked through the real include.

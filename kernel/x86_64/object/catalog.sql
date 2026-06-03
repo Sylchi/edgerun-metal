@@ -3171,7 +3171,8 @@ insert into asm_exact_fixed_encoding_fact(encoding_id, name, rule_name, op_name,
   (2296, 'x86_64_exact_imul_eax_rsp_vp8_chroma_height', 'asm_x86_exact_imul_eax_rsp_vp8_chroma_height_exact', 'imul', 'eax, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]', '0faf8424750b0000'),
   (2297, 'x86_64_exact_imul_eax_rsp_vp8_height', 'asm_x86_exact_imul_eax_rsp_vp8_height_exact', 'imul', 'eax, [rsp + VP8_DECODE_STACK_HEIGHT]', '0faf84246d0b0000'),
   (2298, 'x86_64_exact_imul_ecx_vp8_motion_vector_size', 'asm_x86_exact_imul_ecx_vp8_motion_vector_size_exact', 'imul', 'ecx, VP8_MOTION_VECTOR_SIZE', '6bc904'),
-  (2299, 'x86_64_exact_imul_r11d_r12d', 'asm_x86_exact_imul_r11d_r12d_exact', 'imul', 'r11d, r12d', '450fafdc');
+  (2299, 'x86_64_exact_imul_r11d_r12d', 'asm_x86_exact_imul_r11d_r12d_exact', 'imul', 'r11d, r12d', '450fafdc'),
+  (2300, 'x86_64_exact_mov_edx_av1_cdf_prob_top', 'asm_x86_exact_mov_edx_av1_cdf_prob_top_exact', 'mov', 'edx, AV1_CDF_PROB_TOP', 'ba00800000');
 
 insert into asm_exact_fixed_encoding_fact(encoding_id, isa_id, name, rule_name, op_name, operand_text, fixed_hex) values
   (1953, 4, 'arm32_exact_add_r3_r3_imm_1', 'asm_arm32_exact_add_r3_r3_imm_1_exact', 'add', 'r3, r3, #1', '013083e2'),
