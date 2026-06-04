@@ -5849,6 +5849,47 @@ with recursive binary_operand as (
    and mem.line_no = normalized.line_no
    and mem.side = 'lhs'
   where normalized.rhs_value = normalized.symbol_name
+), mov_symbol_immediate as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         reg_encoding.reg_code
+  from repo_asm_rule_match match
+  join repo_asm_binary_operand_fact dst
+    on dst.repo_file_id = match.repo_file_id
+   and dst.function_name = match.function_name
+   and dst.line_no = match.line_no
+   and dst.operand_index = 0
+   and dst.operand_kind = 'register'
+  join repo_asm_binary_operand_fact src
+    on src.repo_file_id = match.repo_file_id
+   and src.function_name = match.function_name
+   and src.line_no = match.line_no
+   and src.operand_index = 1
+   and src.operand_kind = 'other'
+  join x86_register_encoding_fact reg_encoding
+    on reg_encoding.register_name = dst.operand_value
+   and reg_encoding.width_bits = 64
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and match.op_name = 'mov'
+    and src.operand_value glob '[A-Za-z_]*'
+    and src.operand_value not glob '*[^A-Za-z0-9_.]*'
+    and src.operand_value not in ('cr0','cr2','cr3','cr4','cr8','es','cs','ss','ds','fs','gs')
+), push_symbol_immediate as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no
+  from repo_asm_rule_match match
+  where match.target_isa_id = 1
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+    and match.op_name = 'push'
+    and match.operand_text glob '[A-Za-z_]*'
+    and match.operand_text not glob '*[^A-Za-z0-9_.]*'
 ), generated as (
   select repo_file_id,
          function_name,
@@ -6066,6 +6107,23 @@ with recursive binary_operand as (
   where size_name = 'dword'
     and op_name = 'mov'
     and immediate_value between 0 and 4294967295
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_mov_reg64_symbol_imm32_reloc' as parametric_rule_name,
+         printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+           || 'c7'
+           || printf('%02x', 192 + (reg_code & 7))
+           || '00000000' as fixed_hex
+  from mov_symbol_immediate
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_push_symbol_imm32_reloc' as parametric_rule_name,
+         '6800000000' as fixed_hex
+  from push_symbol_immediate
 )
 select repo_file_id,
        function_name,
@@ -10323,6 +10381,39 @@ from repo_asm_operation
 where target_isa_id = 4
   and op_name = 'ldr'
   and operand_text like '%, =%'
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       operand.operand_value as target_name,
+       'symbol_immediate_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_binary_operand_fact operand
+  on operand.repo_file_id = operation.repo_file_id
+ and operand.function_name = operation.function_name
+ and operand.line_no = operation.line_no
+ and operand.operand_index = 1
+ and operand.operand_kind = 'other'
+where operation.target_isa_id = 1
+  and operation.op_name = 'mov'
+  and operand.operand_value glob '[A-Za-z_]*'
+  and operand.operand_value not glob '*[^A-Za-z0-9_.]*'
+  and operand.operand_value not in ('cr0','cr2','cr3','cr4','cr8','es','cs','ss','ds','fs','gs')
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       operation.operand_text as target_name,
+       'symbol_immediate_reference' as relocation_kind
+from repo_asm_operation operation
+where operation.target_isa_id = 1
+  and operation.op_name = 'push'
+  and operation.operand_text glob '[A-Za-z_]*'
+  and operation.operand_text not glob '*[^A-Za-z0-9_.]*'
 union all
 select operation.path,
        operation.repo_file_id,
