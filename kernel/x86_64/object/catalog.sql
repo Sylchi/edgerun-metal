@@ -8515,6 +8515,391 @@ where fixed_hex is not null
 create unique index repo_asm_sse_scalar_parametric_encoding_fact_line_idx
   on repo_asm_sse_scalar_parametric_encoding_fact(repo_file_id, function_name, line_no);
 
+create table arm32_register_encoding_fact (
+  register_name text primary key,
+  reg_code integer not null
+);
+
+insert into arm32_register_encoding_fact(register_name, reg_code) values
+  ('r0', 0), ('r1', 1), ('r2', 2), ('r3', 3),
+  ('r4', 4), ('r5', 5), ('r6', 6), ('r7', 7),
+  ('r8', 8), ('r9', 9), ('r10', 10), ('r11', 11),
+  ('r12', 12), ('sp', 13), ('lr', 14), ('pc', 15),
+  ('r13', 13), ('r14', 14), ('r15', 15);
+
+create table arm32_condition_fact (
+  op_name text primary key,
+  base_op_name text not null,
+  cond_code integer not null
+);
+
+insert into arm32_condition_fact(op_name, base_op_name, cond_code) values
+  ('mov', 'mov', 14), ('movne', 'mov', 1), ('moveq', 'mov', 0),
+  ('cmp', 'cmp', 14), ('add', 'add', 14), ('sub', 'sub', 14),
+  ('subs', 'sub', 14), ('and', 'and', 14), ('orr', 'orr', 14),
+  ('bic', 'bic', 14), ('tst', 'tst', 14), ('lsl', 'lsl', 14),
+  ('lsr', 'lsr', 14), ('ldr', 'ldr', 14), ('str', 'str', 14),
+  ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('svc', 'svc', 14);
+
+create table repo_asm_arm32_parametric_encoding_fact as
+with operation as (
+  select match.repo_file_id,
+         match.function_name,
+         match.line_no,
+         match.op_name,
+         trim(case
+           when instr(match.operand_text, '@') > 0 then substr(match.operand_text, 1, instr(match.operand_text, '@') - 1)
+           else match.operand_text
+         end) as operand_text
+  from repo_asm_rule_match match
+  where match.target_isa_id = 4
+    and match.line_kind = 3
+    and match.encoding_id is null
+    and match.rule_name is not null
+), split_operand as (
+  select operation.*,
+         trim(substr(operand_text, 1, instr(operand_text, ',') - 1)) as arg0,
+         trim(substr(operand_text, instr(operand_text, ',') + 1)) as tail0
+  from operation
+  where instr(operand_text, ',') > 0
+), split_three as (
+  select split_operand.*,
+         trim(substr(tail0, 1, instr(tail0, ',') - 1)) as arg1,
+         trim(substr(tail0, instr(tail0, ',') + 1)) as arg2
+  from split_operand
+  where instr(tail0, ',') > 0
+), split_two as (
+  select split_operand.*,
+         tail0 as arg1
+  from split_operand
+), decimal_immediate as (
+  select split_operand.*,
+         trim(replace(tail0, '#', '')) as immediate_text
+  from split_operand
+  where tail0 like '#%'
+), decimal_three_immediate as (
+  select split_three.*,
+         trim(replace(arg2, '#', '')) as immediate_text
+  from split_three
+  where arg2 like '#%'
+), decimal_shift as (
+  select split_three.*,
+         trim(substr(arg2, 1, instr(arg2, ' ') - 1)) as shift_name,
+         trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) as shift_text
+  from split_three
+  where arg2 like '% #%'
+), arm_dp_imm as (
+  select split_three.repo_file_id,
+         split_three.function_name,
+         split_three.line_no,
+         split_three.op_name,
+         cond.base_op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         cast(trim(replace(split_three.arg2, '#', '')) as integer) as immediate_value
+  from split_three
+  join arm32_condition_fact cond on cond.op_name = split_three.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = split_three.arg0
+  join arm32_register_encoding_fact rn on rn.register_name = split_three.arg1
+  where split_three.op_name in ('add','sub','subs')
+    and split_three.arg2 like '#%'
+    and trim(replace(split_three.arg2, '#', '')) glob '[0-9]*'
+    and trim(replace(split_three.arg2, '#', '')) not glob '*[^0-9]*'
+), arm_dp_reg as (
+  select split_three.repo_file_id,
+         split_three.function_name,
+         split_three.line_no,
+         split_three.op_name,
+         cond.base_op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         rm.reg_code as rm_code
+  from split_three
+  join arm32_condition_fact cond on cond.op_name = split_three.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = split_three.arg0
+  join arm32_register_encoding_fact rn on rn.register_name = split_three.arg1
+  join arm32_register_encoding_fact rm on rm.register_name = split_three.arg2
+  where split_three.op_name in ('add','sub','and','orr','bic')
+), arm_dp_shift_reg as (
+  select decimal_shift.repo_file_id,
+         decimal_shift.function_name,
+         decimal_shift.line_no,
+         decimal_shift.op_name,
+         cond.base_op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         rm.reg_code as rm_code,
+         decimal_shift.shift_name,
+         cast(decimal_shift.shift_text as integer) as shift_value
+  from decimal_shift
+  join arm32_condition_fact cond on cond.op_name = decimal_shift.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = decimal_shift.arg0
+  join arm32_register_encoding_fact rn on rn.register_name = decimal_shift.arg1
+  join arm32_register_encoding_fact rm on rm.register_name = trim(substr(decimal_shift.arg2, 1, instr(decimal_shift.arg2, ' ') - 1))
+  where decimal_shift.op_name in ('add','sub','and','orr','bic')
+    and decimal_shift.shift_name in ('lsl','lsr')
+    and decimal_shift.shift_text glob '[0-9]*'
+    and decimal_shift.shift_text not glob '*[^0-9]*'
+), arm_mov_imm as (
+  select decimal_immediate.repo_file_id,
+         decimal_immediate.function_name,
+         decimal_immediate.line_no,
+         decimal_immediate.op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         cast(decimal_immediate.immediate_text as integer) as immediate_value
+  from decimal_immediate
+  join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = decimal_immediate.arg0
+  where decimal_immediate.op_name in ('mov','movne','moveq')
+    and decimal_immediate.immediate_text glob '[0-9]*'
+    and decimal_immediate.immediate_text not glob '*[^0-9]*'
+), arm_mov_reg as (
+  select split_two.repo_file_id,
+         split_two.function_name,
+         split_two.line_no,
+         split_two.op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         rm.reg_code as rm_code
+  from split_two
+  join arm32_condition_fact cond on cond.op_name = split_two.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = split_two.arg0
+  join arm32_register_encoding_fact rm on rm.register_name = split_two.arg1
+  where split_two.op_name in ('mov','movne','moveq')
+), arm_cmp_imm as (
+  select decimal_immediate.repo_file_id,
+         decimal_immediate.function_name,
+         decimal_immediate.line_no,
+         decimal_immediate.op_name,
+         cond.cond_code,
+         rn.reg_code as rn_code,
+         cast(decimal_immediate.immediate_text as integer) as immediate_value
+  from decimal_immediate
+  join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
+  join arm32_register_encoding_fact rn on rn.register_name = decimal_immediate.arg0
+  where decimal_immediate.op_name = 'cmp'
+    and decimal_immediate.immediate_text glob '[0-9]*'
+    and decimal_immediate.immediate_text not glob '*[^0-9]*'
+), arm_cmp_reg as (
+  select split_two.repo_file_id,
+         split_two.function_name,
+         split_two.line_no,
+         split_two.op_name,
+         cond.base_op_name,
+         cond.cond_code,
+         rn.reg_code as rn_code,
+         rm.reg_code as rm_code
+  from split_two
+  join arm32_condition_fact cond on cond.op_name = split_two.op_name
+  join arm32_register_encoding_fact rn on rn.register_name = split_two.arg0
+  join arm32_register_encoding_fact rm on rm.register_name = split_two.arg1
+  where split_two.op_name in ('cmp','tst')
+), arm_shift_imm as (
+  select decimal_three_immediate.repo_file_id,
+         decimal_three_immediate.function_name,
+         decimal_three_immediate.line_no,
+         decimal_three_immediate.op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         rm.reg_code as rm_code,
+         cast(decimal_three_immediate.immediate_text as integer) as immediate_value
+  from decimal_three_immediate
+  join arm32_condition_fact cond on cond.op_name = decimal_three_immediate.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = decimal_three_immediate.arg0
+  join arm32_register_encoding_fact rm on rm.register_name = decimal_three_immediate.arg1
+  where decimal_three_immediate.op_name in ('lsl','lsr')
+    and decimal_three_immediate.immediate_text glob '[0-9]*'
+    and decimal_three_immediate.immediate_text not glob '*[^0-9]*'
+), memory_operand as (
+  select split_operand.repo_file_id,
+         split_operand.function_name,
+         split_operand.line_no,
+         split_operand.op_name,
+         split_operand.arg0 as data_reg,
+         trim(split_operand.tail0) as memory_text
+  from split_operand
+  where split_operand.op_name in ('ldr','str','ldrb','strb')
+), memory_inner as (
+  select memory_operand.*,
+         trim(substr(memory_text, 2, instr(memory_text, ']') - 2)) as inner_text,
+         trim(substr(memory_text, instr(memory_text, ']') + 1)) as post_text
+  from memory_operand
+  where memory_text like '[%]%'
+    and instr(memory_text, ']') > 0
+), memory_base_offset as (
+  select memory_inner.*,
+         trim(substr(inner_text, 1, instr(inner_text, ',') - 1)) as base_reg,
+         trim(substr(inner_text, instr(inner_text, ',') + 1)) as offset_text
+  from memory_inner
+  where instr(inner_text, ',') > 0
+    and trim(substr(inner_text, instr(inner_text, ',') + 1)) like '#%'
+    and post_text = ''
+), memory_base_only as (
+  select memory_inner.*,
+         inner_text as base_reg,
+         '0' as offset_text
+  from memory_inner
+  where instr(inner_text, ',') = 0
+    and post_text = ''
+), memory_post_offset as (
+  select memory_inner.*,
+         inner_text as base_reg,
+         trim(substr(post_text, 2)) as offset_text
+  from memory_inner
+  where instr(inner_text, ',') = 0
+    and post_text like ', #%'
+), arm_memory_offset as (
+  select memory_base_offset.repo_file_id,
+         memory_base_offset.function_name,
+         memory_base_offset.line_no,
+         memory_base_offset.op_name,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         cast(trim(replace(memory_base_offset.offset_text, '#', '')) as integer) as offset_value,
+         1 as pre_index
+  from memory_base_offset
+  join arm32_register_encoding_fact rd on rd.register_name = memory_base_offset.data_reg
+  join arm32_register_encoding_fact rn on rn.register_name = memory_base_offset.base_reg
+  where trim(replace(memory_base_offset.offset_text, '#', '')) glob '[0-9]*'
+    and trim(replace(memory_base_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+  union all
+  select memory_base_only.repo_file_id,
+         memory_base_only.function_name,
+         memory_base_only.line_no,
+         memory_base_only.op_name,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         0 as offset_value,
+         1 as pre_index
+  from memory_base_only
+  join arm32_register_encoding_fact rd on rd.register_name = memory_base_only.data_reg
+  join arm32_register_encoding_fact rn on rn.register_name = memory_base_only.base_reg
+  union all
+  select memory_post_offset.repo_file_id,
+         memory_post_offset.function_name,
+         memory_post_offset.line_no,
+         memory_post_offset.op_name,
+         rd.reg_code as rd_code,
+         rn.reg_code as rn_code,
+         cast(trim(replace(memory_post_offset.offset_text, '#', '')) as integer) as offset_value,
+         0 as pre_index
+  from memory_post_offset
+  join arm32_register_encoding_fact rd on rd.register_name = memory_post_offset.data_reg
+  join arm32_register_encoding_fact rn on rn.register_name = memory_post_offset.base_reg
+  where trim(replace(memory_post_offset.offset_text, '#', '')) glob '[0-9]*'
+    and trim(replace(memory_post_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+), arm_svc as (
+  select operation.repo_file_id,
+         operation.function_name,
+         operation.line_no,
+         cast(trim(replace(operation.operand_text, '#', '')) as integer) as immediate_value
+  from operation
+  where operation.op_name = 'svc'
+    and operation.operand_text like '#%'
+    and trim(replace(operation.operand_text, '#', '')) glob '[0-9]*'
+    and trim(replace(operation.operand_text, '#', '')) not glob '*[^0-9]*'
+), generated as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_imm8' as parametric_rule_name,
+         (cond_code << 28) + (1 << 25) + (13 << 21) + (rd_code << 12) + immediate_value as fixed_word
+  from arm_mov_imm
+  where immediate_value between 0 and 255
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_reg' as parametric_rule_name,
+         (cond_code << 28) + (13 << 21) + (rd_code << 12) + rm_code as fixed_word
+  from arm_mov_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_cmp_imm8' as parametric_rule_name,
+         (cond_code << 28) + (1 << 25) + (10 << 21) + (1 << 20) + (rn_code << 16) + immediate_value as fixed_word
+  from arm_cmp_imm
+  where immediate_value between 0 and 255
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_reg' as parametric_rule_name,
+         (cond_code << 28) + ((case base_op_name when 'cmp' then 10 when 'tst' then 8 end) << 21) + (1 << 20) + (rn_code << 16) + rm_code as fixed_word
+  from arm_cmp_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_imm8' as parametric_rule_name,
+         (cond_code << 28) + (1 << 25) + ((case base_op_name when 'add' then 4 when 'sub' then 2 end) << 21)
+           + (case when op_name = 'subs' then (1 << 20) else 0 end) + (rn_code << 16) + (rd_code << 12) + immediate_value as fixed_word
+  from arm_dp_imm
+  where immediate_value between 0 and 255
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_reg' as parametric_rule_name,
+         (cond_code << 28) + ((case base_op_name when 'add' then 4 when 'sub' then 2 when 'and' then 0 when 'orr' then 12 when 'bic' then 14 end) << 21)
+           + (rn_code << 16) + (rd_code << 12) + rm_code as fixed_word
+  from arm_dp_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_reg_shift' as parametric_rule_name,
+         (cond_code << 28) + ((case base_op_name when 'add' then 4 when 'sub' then 2 when 'and' then 0 when 'orr' then 12 when 'bic' then 14 end) << 21)
+           + (rn_code << 16) + (rd_code << 12) + (shift_value << 7) + ((case shift_name when 'lsl' then 0 when 'lsr' then 1 end) << 5) + rm_code as fixed_word
+  from arm_dp_shift_reg
+  where shift_value between 0 and 31
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_imm_shift' as parametric_rule_name,
+         (cond_code << 28) + (13 << 21) + (rd_code << 12) + (immediate_value << 7) + ((case op_name when 'lsl' then 0 when 'lsr' then 1 end) << 5) + rm_code as fixed_word
+  from arm_shift_imm
+  where immediate_value between 0 and 31
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_' || op_name || '_memory_imm12' as parametric_rule_name,
+         (14 << 28) + (1 << 26) + (pre_index << 24) + (1 << 23)
+           + (case when op_name in ('ldrb','strb') then (1 << 22) else 0 end)
+           + (case when op_name in ('ldr','ldrb') then (1 << 20) else 0 end)
+           + (rn_code << 16) + (rd_code << 12) + offset_value as fixed_word
+  from arm_memory_offset
+  where offset_value between 0 and 4095
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_arm32_svc_imm24' as parametric_rule_name,
+         (14 << 28) + (15 << 24) + immediate_value as fixed_word
+  from arm_svc
+  where immediate_value between 0 and 16777215
+)
+select repo_file_id,
+       function_name,
+       line_no,
+       parametric_rule_name,
+       printf('%02x%02x%02x%02x',
+              fixed_word & 255,
+              (fixed_word >> 8) & 255,
+              (fixed_word >> 16) & 255,
+              (fixed_word >> 24) & 255) as fixed_hex
+from generated;
+
+create unique index repo_asm_arm32_parametric_encoding_fact_line_idx
+  on repo_asm_arm32_parametric_encoding_fact(repo_file_id, function_name, line_no);
+
 create table repo_asm_all_parametric_encoding_fact as
 select *
 from repo_asm_parametric_encoding_fact
@@ -8544,7 +8929,10 @@ select *
 from repo_asm_stack_alias_parametric_encoding_fact
 union all
 select *
-from repo_asm_sse_scalar_parametric_encoding_fact;
+from repo_asm_sse_scalar_parametric_encoding_fact
+union all
+select *
+from repo_asm_arm32_parametric_encoding_fact;
 
 create unique index repo_asm_all_parametric_encoding_fact_line_idx
   on repo_asm_all_parametric_encoding_fact(repo_file_id, function_name, line_no);
