@@ -6,8 +6,6 @@
 ;   er_build help
 ;   er_build x86-sources
 ;   er_build pi-sources
-;   er_build app-test-roots
-;   er_build app-build-steps
 ;   er_build host-tools
 ;   er_build x86-objects
 ;   er_build validate-object OBJECT
@@ -132,16 +130,6 @@ _start:
     call    streq
     test    eax, eax
     jnz     .pi_sources
-    mov     rdi, [r13 + 8]
-    lea     rsi, [rel arg_app_test_roots]
-    call    streq
-    test    eax, eax
-    jnz     .app_test_roots
-    mov     rdi, [r13 + 8]
-    lea     rsi, [rel arg_app_build_steps]
-    call    streq
-    test    eax, eax
-    jnz     .app_build_steps
     mov     rdi, [r13 + 8]
     lea     rsi, [rel arg_host_tools]
     call    streq
@@ -273,18 +261,6 @@ _start:
 
 .pi_sources:
     lea     rdi, [rel pi_sources_path]
-    call    cmd_write_body
-    xor     edi, edi
-    jmp     exit_now
-
-.app_test_roots:
-    lea     rdi, [rel app_test_roots_path]
-    call    cmd_write_body
-    xor     edi, edi
-    jmp     exit_now
-
-.app_build_steps:
-    lea     rdi, [rel app_build_steps_path]
     call    cmd_write_body
     xor     edi, edi
     jmp     exit_now
@@ -1614,8 +1590,6 @@ arg_test_er_asm_cli: db "test-er-asm-cli", 0
 arg_help: db "help", 0
 arg_x86_sources: db "x86-sources", 0
 arg_pi_sources: db "pi-sources", 0
-arg_app_test_roots: db "app-test-roots", 0
-arg_app_build_steps: db "app-build-steps", 0
 arg_host_tools: db "host-tools", 0
 arg_er_asm: db "er-asm", 0
 arg_x86_objects: db "x86-objects", 0
@@ -1628,8 +1602,6 @@ arg_replace_range: db "replace-range", 0
 registry_path: db "kernel/test/registry.erobj", 0
 x86_sources_path: db "kernel/x86_64/kernel_sources.erobj", 0
 pi_sources_path: db "kernel/arm/pi/kernel_sources.erobj", 0
-app_test_roots_path: db "app/test_roots.erobj", 0
-app_build_steps_path: db "app/build_steps.erobj", 0
 help_top_path: db "docs/build-help-top.erobj", 0
 help_bottom_path: db "docs/build-help-bottom.erobj", 0
 host_tools_path: db "kernel/host/host_tools.erobj", 0
@@ -1637,7 +1609,7 @@ test_list_header: db "target", 9, "category", 9, "subsystem", 9, "default", 9, "
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0
-msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|app-test-roots|app-build-steps|host-tools|er-asm|x86-objects|validate-object OBJECT|view OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj|file-to-isa-object INPUT OUTPUT.erobj|replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj", 10, 0
+msg_usage: db "usage: er_build help|test-list|test-registry|test-status [TARGET...]|x86-sources|pi-sources|host-tools|er-asm|x86-objects|validate-object OBJECT|view OBJECT|body-to-file OBJECT OUTPUT|file-to-object INPUT OUTPUT.erobj|file-to-isa-object INPUT OUTPUT.erobj|replace-range OBJECT OFFSET DELETE_LEN INSERT_FILE OUTPUT.erobj", 10, 0
 msg_bad_object: db "error: invalid build registry object", 10, 0
 msg_build_fail: db "error: host tool build failed", 10, 0
 msg_host_tools_ok: db "host-tools: .build/host/er_obj_body .build/host/er_obj_wrap .build/host/er_build.next .build/host/er_asm", 10, 0
