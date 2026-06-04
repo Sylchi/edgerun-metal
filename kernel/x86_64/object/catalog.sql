@@ -3666,7 +3666,39 @@ from app_zig_declaration_fact
 where declaration_kind in ('pub_const', 'const')
   and instr(raw_text, '=') > 0;
 
-create view app_zig_fact_line as
+create view app_zig_struct_field_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(substr(raw_text, 1, instr(raw_text, ':') - 1)) as field_name,
+       trim(rtrim(substr(raw_text, instr(raw_text, ':') + 1), ',;')) as type_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'struct_field'
+  and instr(raw_text, ':') > 1;
+
+create view app_zig_enum_variant_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(rtrim(raw_text, ',')) as variant_name,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'enum_variant'
+  and trim(rtrim(raw_text, ',')) <> '';
+
+create view app_zig_field_assignment_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(substr(raw_text, 1, instr(raw_text, '=') - 1)) as field_name,
+       trim(rtrim(substr(raw_text, instr(raw_text, '=') + 1), ',;')) as value_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'field_assignment'
+  and instr(raw_text, '=') > 1;
+
+create view app_zig_base_fact_line as
 select repo_file_id, line_no, 'import' as fact_kind
 from app_zig_import_fact
 union
@@ -3675,6 +3707,19 @@ from app_zig_declaration_fact
 union
 select repo_file_id, line_no, 'constant'
 from app_zig_constant_fact;
+
+create view app_zig_fact_line as
+select repo_file_id, line_no, fact_kind
+from app_zig_base_fact_line
+union
+select repo_file_id, line_no, 'struct_field'
+from app_zig_struct_field_fact
+union
+select repo_file_id, line_no, 'enum_variant'
+from app_zig_enum_variant_fact
+union
+select repo_file_id, line_no, 'field_assignment'
+from app_zig_field_assignment_fact;
 
 create view app_zig_file_fact_coverage as
 select repo_file.path,
@@ -3693,6 +3738,48 @@ left join app_zig_fact_line fact_line
 where repo_file.file_kind in ('zig', 'source_object_zig')
 group by repo_file.path, repo_file.repo_file_id, repo_file.file_kind, repo_file.byte_len;
 
+create view app_zig_base_remaining_gap as
+select line.path,
+       line.repo_file_id,
+       line.line_no,
+       'line_without_zig_fact' as gap_kind,
+       line.trimmed_text as raw_text
+from app_zig_significant_line line
+left join app_zig_base_fact_line fact_line
+  on fact_line.repo_file_id = line.repo_file_id
+ and fact_line.line_no = line.line_no
+where fact_line.line_no is null;
+
+create view app_zig_remaining_gap_classification as
+select path,
+       repo_file_id,
+       line_no,
+       gap_kind,
+       case
+         when raw_text in ('{', '}', '};', '},', '};', '};') then 'block_delimiter'
+         when raw_text like '%.%' and raw_text like '% = %,' then 'field_assignment'
+         when raw_text like '%.%' and raw_text like '% = %;' then 'field_assignment'
+         when raw_text like '%.%' and raw_text like '%,' then 'enum_or_union_literal'
+         when raw_text like '%: %,' then 'struct_field'
+         when raw_text like '%: %;' then 'struct_field'
+         when raw_text like '%,' and instr(raw_text, ' ') = 0 then 'enum_variant'
+         when raw_text like 'return %' or raw_text = 'return;' then 'return_statement'
+         when raw_text like 'try %' then 'try_statement'
+         when raw_text like 'if %' or raw_text like '} else%' then 'branch_statement'
+         when raw_text like 'while %' or raw_text like 'for %' then 'loop_statement'
+         when raw_text like 'var %' then 'local_var'
+         when raw_text like 'defer %' then 'defer_statement'
+         when raw_text like '% = try %' then 'assignment_try'
+         when raw_text like '% = %' then 'assignment'
+         when raw_text like '%.%(%' or raw_text like '%(%);' then 'call_statement'
+         when raw_text like 'pub const % = struct %' or raw_text like 'const % = struct %' then 'struct_type_body'
+         when raw_text like 'pub const % = enum%' or raw_text like 'const % = enum%' then 'enum_type_body'
+         when raw_text like 'pub const % = error%' or raw_text like 'const % = error%' then 'error_set_body'
+         else 'unsupported_zig_line'
+       end as gap_class,
+       raw_text
+from app_zig_base_remaining_gap;
+
 create view app_zig_remaining_gap as
 select line.path,
        line.repo_file_id,
@@ -3705,12 +3792,52 @@ left join app_zig_fact_line fact_line
  and fact_line.line_no = line.line_no
 where fact_line.line_no is null;
 
+create view app_zig_final_remaining_gap_classification as
+select path,
+       repo_file_id,
+       line_no,
+       gap_kind,
+       case
+         when raw_text in ('{', '}', '};', '},', '};', '};') then 'block_delimiter'
+         when raw_text like '%.%' and raw_text like '% = %,' then 'field_assignment'
+         when raw_text like '%.%' and raw_text like '% = %;' then 'field_assignment'
+         when raw_text like '%.%' and raw_text like '%,' then 'enum_or_union_literal'
+         when raw_text like '%: %,' then 'struct_field'
+         when raw_text like '%: %;' then 'struct_field'
+         when raw_text like '%,' and instr(raw_text, ' ') = 0 then 'enum_variant'
+         when raw_text like 'return %' or raw_text = 'return;' then 'return_statement'
+         when raw_text like 'try %' then 'try_statement'
+         when raw_text like 'if %' or raw_text like '} else%' then 'branch_statement'
+         when raw_text like 'while %' or raw_text like 'for %' then 'loop_statement'
+         when raw_text like 'var %' then 'local_var'
+         when raw_text like 'defer %' then 'defer_statement'
+         when raw_text like '% = try %' then 'assignment_try'
+         when raw_text like '% = %' then 'assignment'
+         when raw_text like '%.%(%' or raw_text like '%(%);' then 'call_statement'
+         when raw_text like 'pub const % = struct %' or raw_text like 'const % = struct %' then 'struct_type_body'
+         when raw_text like 'pub const % = enum%' or raw_text like 'const % = enum%' then 'enum_type_body'
+         when raw_text like 'pub const % = error%' or raw_text like 'const % = error%' then 'error_set_body'
+         else 'unsupported_zig_line'
+       end as gap_class,
+       raw_text
+from app_zig_remaining_gap;
+
 create view app_zig_remaining_gap_summary as
 select gap_kind,
+       'unclassified' as gap_class,
        count(*) as occurrence_count,
        count(distinct path) as file_count
 from app_zig_remaining_gap
 group by gap_kind;
+
+create view app_zig_remaining_gap_class_summary as
+select gap_kind,
+       gap_class,
+       count(*) as occurrence_count,
+       count(distinct path) as file_count
+from app_zig_final_remaining_gap_classification
+group by gap_kind, gap_class
+order by occurrence_count desc, gap_class;
 
 create view app_zig_source_deletion_plan as
 select path,
@@ -4720,11 +4847,12 @@ with binary_operand as (
          line_no,
          'param_x86_' || op_name || '_reg' as parametric_rule_name,
          (
-           case
-             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
-             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
-             else ''
-           end
+	           case
+	             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+	             when width_bits = 16 then '66'
+	             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
            || 'ff'
            || printf('%02x', 192 + ((case op_name when 'inc' then 0 when 'dec' then 1 end) << 3) + (reg_code & 7))
          ) as fixed_hex
@@ -7845,8 +7973,8 @@ with recursive rhs_decimal as (
 	    and match.line_kind = 3
 	    and match.encoding_id is null
 	    and match.rule_name is not null
-		    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','shl','shr','sar','ror','imul')
-		    and reg_encoding.width_bits in (8,32,64)
+			    and match.op_name in ('mov','add','adc','sub','cmp','and','or','xor','test','shl','shr','sar','ror','imul')
+			    and reg_encoding.width_bits in (8,16,32,64)
 	), reg_imm_hex64 as (
 	  select match.repo_file_id,
 	         match.function_name,
@@ -7886,15 +8014,26 @@ with recursive rhs_decimal as (
            || printf('%02x', 176 + (reg_code & 7))
            || printf('%02x', immediate_value & 255)
          ) as fixed_hex
-  from reg_imm
-  where op_name = 'mov'
-    and width_bits = 8
-    and immediate_value between -128 and 255
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
-         'param_x86_mov_reg_numeric_imm32' as parametric_rule_name,
+	  from reg_imm
+	  where op_name = 'mov'
+	    and width_bits = 8
+	    and immediate_value between -128 and 255
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_reg16_numeric_imm16' as parametric_rule_name,
+	         '66' || printf('%02x', 184 + (reg_code & 7))
+	           || printf('%02x%02x', immediate_value & 255, (immediate_value >> 8) & 255) as fixed_hex
+	  from reg_imm
+	  where op_name = 'mov'
+	    and width_bits = 16
+	    and immediate_value between -32768 and 65535
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_reg_numeric_imm32' as parametric_rule_name,
          (
            case
              when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
@@ -7983,36 +8122,39 @@ with recursive rhs_decimal as (
            end
            || '83'
            || printf('%02x', 192 + ((case op_name
-                                      when 'add' then 0
-                                      when 'or' then 1
-                                      when 'and' then 4
-                                      when 'sub' then 5
-                                      when 'xor' then 6
+	                                      when 'add' then 0
+	                                      when 'or' then 1
+	                                      when 'adc' then 2
+	                                      when 'and' then 4
+	                                      when 'sub' then 5
+	                                      when 'xor' then 6
                                       when 'cmp' then 7
                                     end) << 3) + (reg_code & 7))
            || printf('%02x', immediate_value & 255)
          ) as fixed_hex
-  from reg_imm
-  where op_name in ('add','sub','cmp','and','or','xor')
-    and immediate_value between -128 and 127
-    and width_bits in (32,64)
-  union all
-  select repo_file_id,
-         function_name,
+	  from reg_imm
+	  where op_name in ('add','adc','sub','cmp','and','or','xor')
+	    and immediate_value between -128 and 127
+	    and width_bits in (16,32,64)
+	  union all
+	  select repo_file_id,
+	         function_name,
          line_no,
          'param_x86_' || op_name || '_reg_numeric_imm32' as parametric_rule_name,
          (
-           case
-             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
-             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
-             else ''
-           end
-           || case
-                when (reg_code & 7) = 0 and reg_code < 8 then case op_name
-                                                              when 'add' then '05'
-                                                              when 'or' then '0d'
-                                                              when 'and' then '25'
-                                                              when 'sub' then '2d'
+	           case
+	             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+	             when width_bits = 16 then '66'
+	             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
+	           || case
+	                when (reg_code & 7) = 0 and reg_code < 8 then case op_name
+	                                                              when 'add' then '05'
+	                                                              when 'or' then '0d'
+	                                                              when 'adc' then '15'
+	                                                              when 'and' then '25'
+	                                                              when 'sub' then '2d'
                                                               when 'xor' then '35'
                                                               when 'cmp' then '3d'
                                                               when 'test' then 'a9'
@@ -8020,27 +8162,32 @@ with recursive rhs_decimal as (
                 else
                   case when op_name = 'test' then 'f7' else '81' end
                   || printf('%02x', 192 + ((case op_name
-                                             when 'add' then 0
-                                             when 'or' then 1
-                                             when 'and' then 4
+	                                             when 'add' then 0
+	                                             when 'or' then 1
+	                                             when 'adc' then 2
+	                                             when 'and' then 4
                                              when 'sub' then 5
                                              when 'xor' then 6
                                              when 'cmp' then 7
                                              when 'test' then 0
                                            end) << 3) + (reg_code & 7))
               end
-           || printf('%02x%02x%02x%02x',
-                     immediate_value & 255,
-                     (immediate_value >> 8) & 255,
-                     (immediate_value >> 16) & 255,
-                     (immediate_value >> 24) & 255)
-         ) as fixed_hex
-	  from reg_imm
-	  where op_name in ('add','sub','cmp','and','or','xor','test')
-	    and width_bits in (32,64)
-	    and (op_name = 'test' or immediate_value not between -128 and 127)
-	    and ((width_bits = 32 and immediate_value between -2147483648 and 4294967295)
-	         or (width_bits = 64 and immediate_value between -2147483648 and 2147483647))
+	           || case
+	                when width_bits = 16 then printf('%02x%02x', immediate_value & 255, (immediate_value >> 8) & 255)
+	                else printf('%02x%02x%02x%02x',
+	                            immediate_value & 255,
+	                            (immediate_value >> 8) & 255,
+	                            (immediate_value >> 16) & 255,
+	                            (immediate_value >> 24) & 255)
+	              end
+	         ) as fixed_hex
+		  from reg_imm
+		  where op_name in ('add','adc','sub','cmp','and','or','xor','test')
+		    and width_bits in (16,32,64)
+		    and (op_name = 'test' or immediate_value not between -128 and 127)
+		    and ((width_bits = 16 and immediate_value between -32768 and 65535)
+		         or (width_bits = 32 and immediate_value between -2147483648 and 4294967295)
+		         or (width_bits = 64 and immediate_value between -2147483648 and 2147483647))
 	  union all
 	  select repo_file_id,
 	         function_name,
@@ -8105,17 +8252,19 @@ with recursive rhs_decimal as (
                 when op_name = 'test' and reg_code = 0 then 'a8'
                 when op_name = 'test' then 'f6' || printf('%02x', 192 + (reg_code & 7))
                 when reg_code = 0 then case op_name
-                                        when 'add' then '04'
-                                        when 'or' then '0c'
-                                        when 'and' then '24'
+	                                        when 'add' then '04'
+	                                        when 'or' then '0c'
+	                                        when 'adc' then '14'
+	                                        when 'and' then '24'
                                         when 'sub' then '2c'
                                         when 'xor' then '34'
                                         when 'cmp' then '3c'
                                       end
                 else '80' || printf('%02x', 192 + ((case op_name
-                                                     when 'add' then 0
-                                                     when 'or' then 1
-                                                     when 'and' then 4
+	                                                     when 'add' then 0
+	                                                     when 'or' then 1
+	                                                     when 'adc' then 2
+	                                                     when 'and' then 4
                                                      when 'sub' then 5
                                                      when 'xor' then 6
                                                      when 'cmp' then 7
@@ -8123,8 +8272,8 @@ with recursive rhs_decimal as (
               end
            || printf('%02x', immediate_value & 255)
          ) as fixed_hex
-  from reg_imm
-  where op_name in ('add','sub','cmp','and','or','xor','test')
+	  from reg_imm
+	  where op_name in ('add','adc','sub','cmp','and','or','xor','test')
     and width_bits = 8
     and immediate_value between -128 and 255
   union all
@@ -15055,7 +15204,46 @@ select 'app_zig.constant:' || path || ':' || cast(line_no as text) || ':' || sym
        line_no,
        raw_text,
        'app_zig.constant:' || repo_file_id || ':' || cast(line_no as text) || ':' || symbol_name || ':' || length(value_text)
-from app_zig_constant_fact;
+from app_zig_constant_fact
+union all
+select 'app_zig.struct_field:' || path || ':' || cast(line_no as text) || ':' || field_name,
+       'app_zig_struct_field_fact',
+       path,
+       field_name,
+       type_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.struct_field:' || repo_file_id || ':' || cast(line_no as text) || ':' || field_name || ':' || type_text
+from app_zig_struct_field_fact
+union all
+select 'app_zig.enum_variant:' || path || ':' || cast(line_no as text) || ':' || variant_name,
+       'app_zig_enum_variant_fact',
+       path,
+       'enum_variant',
+       variant_name,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.enum_variant:' || repo_file_id || ':' || cast(line_no as text) || ':' || variant_name
+from app_zig_enum_variant_fact
+union all
+select 'app_zig.field_assignment:' || path || ':' || cast(line_no as text) || ':' || field_name,
+       'app_zig_field_assignment_fact',
+       path,
+       field_name,
+       value_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.field_assignment:' || repo_file_id || ':' || cast(line_no as text) || ':' || field_name || ':' || length(value_text)
+from app_zig_field_assignment_fact;
 
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
@@ -15180,9 +15368,9 @@ create view app_zig_engine_gap as
 select 'app_zig:' || gap_kind,
        path,
        line_no,
-       raw_text,
-       'zig_import_gap'
-from app_zig_remaining_gap;
+       gap_class || ':' || raw_text,
+	      'zig_import_gap'
+from app_zig_final_remaining_gap_classification;
 
 create view relation_engine_gap as
 select 'engine:' || gap_kind,
