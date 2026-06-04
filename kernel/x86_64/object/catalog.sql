@@ -3756,7 +3756,7 @@ select path,
        trim(substr(raw_text, instr(raw_text, ']') + 1)) as constraint_text,
        raw_text
 from app_zig_remaining_gap_classification
-where raw_text like ': [%'
+where (raw_text like ': [%' or raw_text like '[%] %')
   and instr(raw_text, '[') > 0
   and instr(raw_text, ']') > instr(raw_text, '[');
 
@@ -3769,16 +3769,23 @@ select path,
        raw_text
 from app_zig_remaining_gap_classification
 where gap_class = 'unsupported_zig_line'
-  and raw_text in (
-    ');',
-    '});',
-    '}));',
-    '));',
-    '.?;',
-    '.{',
-    '} };',
-    '} },',
-    ';'
+  and (
+    raw_text in (
+      ');',
+      '});',
+      '}));',
+      '));',
+      '.?;',
+      ').?;',
+      '}).?;',
+      '.{',
+      '} };',
+      '} },',
+      '} }));',
+      '} });',
+      ';'
+    )
+    or raw_text like '}, %);'
   );
 
 create view app_zig_control_flow_fact as
@@ -3855,6 +3862,44 @@ from app_zig_remaining_gap_classification
 where gap_class = 'unsupported_zig_line'
   and raw_text like ') %{';
 
+create view app_zig_expression_continuation_fact as
+select path,
+       repo_file_id,
+       line_no,
+       case
+         when raw_text like '% and' then 'boolean_and'
+         when raw_text like '% or' then 'boolean_or'
+         when raw_text like '% ||' then 'bitwise_or'
+         when raw_text like '% orelse %' then 'orelse'
+         else 'expression_continuation'
+       end as continuation_kind,
+       raw_text as expression_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and (
+    raw_text like '% and'
+    or raw_text like '% or'
+    or raw_text like '% ||'
+    or raw_text like '% orelse %'
+  );
+
+create view app_zig_expression_statement_fact as
+select path,
+       repo_file_id,
+       line_no,
+       'expression_statement' as statement_kind,
+       rtrim(raw_text, ';') as expression_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and (
+    raw_text in ('null;', 't;', 'c.a;', 's.color.a;')
+    or raw_text like '@%('
+    or raw_text like 'try% orelse %;'
+    or raw_text like 'break :% %;'
+  );
+
 create view app_zig_base_fact_line as
 select repo_file_id, line_no, 'import' as fact_kind
 from app_zig_import_fact
@@ -3903,7 +3948,13 @@ select repo_file_id, line_no, 'data_literal_line'
 from app_zig_data_literal_line_fact
 union
 select repo_file_id, line_no, 'signature_continuation'
-from app_zig_signature_continuation_fact;
+from app_zig_signature_continuation_fact
+union
+select repo_file_id, line_no, 'expression_continuation'
+from app_zig_expression_continuation_fact
+union
+select repo_file_id, line_no, 'expression_statement'
+from app_zig_expression_statement_fact;
 
 create view app_zig_file_fact_coverage as
 select repo_file.path,
@@ -11002,14 +11053,14 @@ select path,
        case
          when op_name = 'call' or op_name = 'er_call' then 'call'
          when op_name = 'bl' then 'call'
-         when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns') then 'branch'
+        when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns','loop') then 'branch'
          when op_name in ('b','beq','bne','blo','bhi','bhs','bls') then 'branch'
          else 'unknown'
        end as target_kind
 from repo_asm_operation
 where line_kind = 3
   and operand_text is not null
-  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns',
+  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns','loop',
                   'bl','b','beq','bne','blo','bhi','bhs','bls');
 
 create view repo_asm_control_edge_fact as
@@ -15830,7 +15881,33 @@ select 'app_zig.signature_continuation:' || path || ':' || cast(line_no as text)
        line_no,
        raw_text,
        'app_zig.signature_continuation:' || repo_file_id || ':' || cast(line_no as text) || ':' || continuation_text
-from app_zig_signature_continuation_fact;
+from app_zig_signature_continuation_fact
+union all
+select 'app_zig.expression_continuation:' || path || ':' || cast(line_no as text),
+       'app_zig_expression_continuation_fact',
+       path,
+       continuation_kind,
+       expression_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.expression_continuation:' || repo_file_id || ':' || cast(line_no as text) || ':' || continuation_kind || ':' || length(expression_text)
+from app_zig_expression_continuation_fact
+union all
+select 'app_zig.expression_statement:' || path || ':' || cast(line_no as text),
+       'app_zig_expression_statement_fact',
+       path,
+       statement_kind,
+       expression_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.expression_statement:' || repo_file_id || ':' || cast(line_no as text) || ':' || statement_kind || ':' || length(expression_text)
+from app_zig_expression_statement_fact;
 
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
