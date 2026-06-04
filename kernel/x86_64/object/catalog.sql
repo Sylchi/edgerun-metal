@@ -10559,7 +10559,7 @@ join repo_asm_data_definition_fact definition
   on definition.repo_file_id = operation.repo_file_id
  and replace(definition.label_name, ':', '') = memory.first_symbol_term
 where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','push')
-  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.addressing_kind in ('symbolic_base_memory','indexed_memory')
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0
 union all
@@ -10607,16 +10607,10 @@ join repo_asm_memory_addressing_fact memory
   on memory.repo_file_id = operation.repo_file_id
  and memory.function_name = operation.function_name
  and memory.line_no = operation.line_no
-join (
-  select replace(label_name, ':', '') as target_name
-  from repo_asm_data_definition_fact
-  where label_name <> ''
-  group by replace(label_name, ':', '')
-  having count(distinct path) = 1
-) unique_definition
+join repo_asm_unique_data_definition_fact unique_definition
   on unique_definition.target_name = memory.first_symbol_term
 where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx')
-  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.addressing_kind in ('symbolic_base_memory','indexed_memory')
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0
 union all
@@ -10637,7 +10631,7 @@ join repo_asm_operation extern_decl
  and extern_decl.op_name = 'extern'
  and (',' || replace(extern_decl.operand_text, ' ', '') || ',') like '%,' || memory.first_symbol_term || ',%'
 where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','inc')
-  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.addressing_kind in ('symbolic_base_memory','indexed_memory')
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0
 union all
@@ -10653,34 +10647,10 @@ join repo_asm_memory_addressing_fact memory
   on memory.repo_file_id = operation.repo_file_id
  and memory.function_name = operation.function_name
  and memory.line_no = operation.line_no
-join (
-  select dotted.target_name
-  from (
-    select replace(anchor.label_name, ':', '') || replace(child.label_name, ':', '') as target_name,
-           child.path
-    from repo_asm_data_definition_fact anchor
-    join repo_asm_data_definition_fact child
-      on child.repo_file_id = anchor.repo_file_id
-     and child.line_no > anchor.line_no
-     and child.label_name like '.%:'
-    where anchor.label_name <> ''
-      and anchor.label_name not like '.%:'
-      and not exists (
-        select 1
-        from repo_asm_data_definition_fact next_anchor
-        where next_anchor.repo_file_id = anchor.repo_file_id
-          and next_anchor.line_no > anchor.line_no
-          and next_anchor.line_no < child.line_no
-          and next_anchor.label_name <> ''
-          and next_anchor.label_name not like '.%:'
-      )
-  ) dotted
-  group by dotted.target_name
-  having count(distinct dotted.path) = 1
-) unique_dotted_definition
+join repo_asm_unique_dotted_data_definition_fact unique_dotted_definition
   on unique_dotted_definition.target_name = memory.first_symbol_term
 where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','inc')
-  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.addressing_kind in ('symbolic_base_memory','indexed_memory')
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0
 union all
@@ -10930,6 +10900,36 @@ create index repo_asm_data_definition_fact_line_idx
   on repo_asm_data_definition_fact(repo_file_id, function_name, line_no);
 create index repo_asm_data_definition_fact_label_idx
   on repo_asm_data_definition_fact(repo_file_id, label_name);
+
+create table repo_asm_unique_data_definition_fact as
+select replace(label_name, ':', '') as target_name from repo_asm_data_definition_fact where label_name <> ''
+group by replace(label_name, ':', '') having count(distinct path) = 1;
+create index repo_asm_unique_data_definition_fact_target_idx on repo_asm_unique_data_definition_fact(target_name);
+
+create table repo_asm_unique_dotted_data_definition_fact as
+select dotted.target_name from (
+  select replace(anchor.label_name, ':', '') || replace(child.label_name, ':', '') as target_name, child.path
+  from repo_asm_data_definition_fact child
+  join (
+    select repo_file_id, function_name, line_no, op_name as label_name
+    from repo_asm_operation
+    where op_name like '%:'
+      and operand_text is null
+  ) anchor
+    on anchor.repo_file_id = child.repo_file_id
+   and anchor.function_name = child.function_name
+   and anchor.line_no = (
+     select max(previous_anchor.line_no)
+     from repo_asm_operation previous_anchor
+     where previous_anchor.repo_file_id = child.repo_file_id
+       and previous_anchor.function_name = child.function_name
+       and previous_anchor.line_no < child.line_no
+       and previous_anchor.op_name like '%:'
+       and previous_anchor.operand_text is null
+   )
+  where child.label_name like '.%') dotted
+group by dotted.target_name having count(distinct dotted.path) = 1;
+create index repo_asm_unique_dotted_data_definition_fact_target_idx on repo_asm_unique_dotted_data_definition_fact(target_name);
 
 create table asm_metadata_op_fact (
   op_name text primary key
