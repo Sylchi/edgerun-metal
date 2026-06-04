@@ -3782,10 +3782,15 @@ where gap_class = 'unsupported_zig_line'
       '} };',
       '} },',
       '} }));',
-      '} });',
-      ';'
-    )
-    or raw_text like '}, %);'
+    '} });',
+    ':',
+    '){};',
+    ', .{',
+    ', .{});',
+    ';'
+  )
+  or raw_text like '}, %);'
+  or raw_text like '), %);'
   );
 
 create view app_zig_control_flow_fact as
@@ -3820,6 +3825,8 @@ select path,
          when instr(raw_text, ' -= ') > 0 then '-='
          when instr(raw_text, ' *= ') > 0 then '*='
          when instr(raw_text, ' /= ') > 0 then '/='
+         when instr(raw_text, ' >>= ') > 0 then '>>='
+         when instr(raw_text, ' <<= ') > 0 then '<<='
          else 'mutate'
        end as operator_text,
        trim(rtrim(substr(raw_text, instr(raw_text, '=') + 1), ';')) as value_text,
@@ -3831,6 +3838,8 @@ where gap_class = 'unsupported_zig_line'
     or instr(raw_text, ' -= ') > 0
     or instr(raw_text, ' *= ') > 0
     or instr(raw_text, ' /= ') > 0
+    or instr(raw_text, ' >>= ') > 0
+    or instr(raw_text, ' <<= ') > 0
   );
 
 create view app_zig_data_literal_line_fact as
@@ -3840,6 +3849,10 @@ select path,
        case
          when raw_text like '\\%' then 'escaped_text'
          when raw_text like '0x%,%' then 'hex_byte_row'
+         when raw_text like '%[0-9]%,%' then 'numeric_row'
+         when raw_text like '"%,' then 'string_row'
+         when raw_text like '[_]%' then 'array_literal_row'
+         when raw_text like '&[_]%' then 'array_pointer_row'
          else 'data_literal'
        end as literal_kind,
        raw_text as literal_text,
@@ -3849,6 +3862,10 @@ where gap_class = 'unsupported_zig_line'
   and (
     raw_text like '\\%'
     or raw_text like '0x%,%'
+    or raw_text glob '[0-9]*,*'
+    or raw_text like '"%,'
+    or raw_text like '[_]%'
+    or raw_text like '&[_]%'
   );
 
 create view app_zig_signature_continuation_fact as
@@ -3870,6 +3887,8 @@ select path,
          when raw_text like '% and' then 'boolean_and'
          when raw_text like '% or' then 'boolean_or'
          when raw_text like '% ||' then 'bitwise_or'
+         when raw_text like '% |' then 'bitwise_or'
+         when raw_text like '% +' then 'addition'
          when raw_text like '% orelse %' then 'orelse'
          else 'expression_continuation'
        end as continuation_kind,
@@ -3881,6 +3900,8 @@ where gap_class = 'unsupported_zig_line'
     raw_text like '% and'
     or raw_text like '% or'
     or raw_text like '% ||'
+    or raw_text like '% |'
+    or raw_text like '% +'
     or raw_text like '% orelse %'
   );
 
@@ -3898,6 +3919,8 @@ where gap_class = 'unsupported_zig_line'
     or raw_text like '@%('
     or raw_text like 'try% orelse %;'
     or raw_text like 'break :% %;'
+    or raw_text like 'break :% %{'
+    or raw_text like 'asm volatile %'
   );
 
 create view app_zig_base_fact_line as
@@ -5906,6 +5929,11 @@ select memory_terms.path,
 	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), 1, instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') - 1)) not glob '*[^0-9]*'
 	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) glob '[0-9]*'
 	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) not glob '*[^0-9]*' then 'integer'
+	         when replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', '') like '0x%*%'
+	          and substr(lower(trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), 1, instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') - 1))), 3) <> ''
+	          and substr(lower(trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), 1, instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') - 1))), 3) not glob '*[^0-9a-f]*'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) glob '[0-9]*'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) not glob '*[^0-9]*' then 'integer'
 	         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[A-Za-z_.%]*'
 	          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^A-Za-z_.%0123456789]*' then 'symbol'
          else 'other'
@@ -6013,12 +6041,71 @@ with decimal_term as (
 	    and trim(substr(compact_text, 1, instr(compact_text, '*') - 1)) not glob '*[^0-9]*'
 	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) glob '[0-9]*'
 	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) not glob '*[^0-9]*'
+	), hex_product_seed as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         substr(lower(trim(substr(compact_text, 1, instr(compact_text, '*') - 1))), 3) as hex_text,
+	         cast(trim(substr(compact_text, instr(compact_text, '*') + 1)) as integer) as multiplier
+	  from (
+	    select repo_file_id,
+	           function_name,
+	           line_no,
+	           operand_index,
+	           term_index,
+	           replace(term_text, ' ', '') as compact_text
+	    from repo_asm_memory_operand_term_fact
+	    where term_kind = 'integer'
+	      and term_text like '%*%'
+	  )
+	  where instr(compact_text, '*') > 1
+	    and lower(trim(substr(compact_text, 1, instr(compact_text, '*') - 1))) glob '0x[0-9a-f]*'
+	    and substr(lower(trim(substr(compact_text, 1, instr(compact_text, '*') - 1))), 3) <> ''
+	    and substr(lower(trim(substr(compact_text, 1, instr(compact_text, '*') - 1))), 3) not glob '*[^0-9a-f]*'
+	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) glob '[0-9]*'
+	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) not glob '*[^0-9]*'
+	), hex_product_parse(repo_file_id, function_name, line_no, operand_index, term_index, hex_text, multiplier, digit_index, integer_value) as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         hex_text,
+	         multiplier,
+	         1 as digit_index,
+	         0 as integer_value
+	  from hex_product_seed
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         hex_text,
+	         multiplier,
+	         digit_index + 1,
+	         (integer_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+	  from hex_product_parse
+	  where digit_index <= length(hex_text)
+	), hex_product_term as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         integer_value * multiplier as integer_value
+	  from hex_product_parse
+	  where digit_index = length(hex_text) + 1
 	)
 	select * from decimal_term
 	union all
 	select * from hex_term
 	union all
-	select * from decimal_product_term;
+	select * from decimal_product_term
+	union all
+	select * from hex_product_term;
 
 create unique index repo_asm_memory_integer_term_value_term_idx
   on repo_asm_memory_integer_term_value(repo_file_id, function_name, line_no, operand_index, term_index);
