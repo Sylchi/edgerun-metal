@@ -390,7 +390,7 @@ cmd_host_tools:
     mov     r12, rax
 
     call    build_host_source_path
-    call    materialize_source_object_if_needed
+    call    materialize_source_object
     lea     rdi, [rel yasm_path]
     lea     rsi, [rel argv_yasm_host_tool]
     call    run_process
@@ -485,7 +485,7 @@ cmd_x86_objects:
     mov     rsi, rax
     lea     rdi, [rel source_entry_buf]
     call    build_x86_paths
-    call    materialize_source_object_if_needed
+    call    materialize_source_object
     lea     rdi, [rel yasm_path]
     lea     rsi, [rel argv_yasm_x86_object]
     call    run_process
@@ -506,14 +506,6 @@ build_host_source_path:
     push    r12
     push    r14
     push    r15
-    call    source_kind_is_object
-    test    eax, eax
-    jnz     .object_source
-    lea     rdi, [rel source_path_buf]
-    lea     rsi, [rel source_object_path_buf]
-    call    copy_cstr
-    jmp     .done
-.object_source:
     lea     r12, [rel source_object_path_buf]
     mov     r14, r12
 .base_scan:
@@ -546,13 +538,10 @@ build_host_source_path:
     pop     r12
     ret
 
-; build_x86_paths(line_ptr, line_len) -> eax=1 when source object was materialized
+; build_x86_paths(line_ptr, line_len)
 build_x86_paths:
-    push    rbx
     push    r12
     push    r13
-    push    r14
-    push    r15
     mov     r12, rdi
     mov     r13, rsi
     mov     r10, r12
@@ -567,47 +556,12 @@ build_x86_paths:
     mov     byte [rax], 0
 
     lea     rdi, [rel source_path_buf]
-    lea     rsi, [rel x86_source_prefix]
-    call    copy_cstr
-    mov     rdi, rax
-    mov     rsi, r10
-    mov     rdx, r13
-    call    copy_bytes
-    mov     byte [rax], 0
-
-    mov     r14, r12
-    mov     rbx, r12
-    add     rbx, r13
-.base_scan:
-    cmp     r12, rbx
-    jae     .base_found
-    cmp     byte [r12], '/'
-    jne     .base_next
-    lea     r14, [r12 + 1]
-.base_next:
-    inc     r12
-    jmp     .base_scan
-.base_found:
-    mov     r15, rbx
-    sub     r15, r14
-    xor     r11d, r11d
-    call    source_kind_is_object
-    test    eax, eax
-    jz      .plain_source
-    mov     r11d, 1
-    lea     rdi, [rel source_path_buf]
     lea     rsi, [rel x86_source_materialized_prefix]
     call    copy_cstr
     mov     rdi, rax
     lea     rsi, [rel source_logical_buf]
     call    copy_cstr
-    jmp     .object_path
-.plain_source:
-    cmp     r15, 4
-    jb      build_fail
-    sub     r15, 4
 
-.object_path:
     lea     rdi, [rel object_stem_buf]
     call    cstr_len
     test    rax, rax
@@ -622,12 +576,8 @@ build_x86_paths:
     lea     rsi, [rel object_suffix]
     call    copy_cstr
 
-    mov     eax, r11d
-    pop     r15
-    pop     r14
     pop     r13
     pop     r12
-    pop     rbx
     ret
 
 ; copy_cstr(dst, src) -> rax=end ptr after copied bytes, NUL written
@@ -681,11 +631,8 @@ copy_field:
     pop     r12
     ret
 
-; materialize_source_object_if_needed() -> eax=1 when materialized, 0 otherwise
-materialize_source_object_if_needed:
-    call    source_kind_is_object
-    test    eax, eax
-    jz      .plain
+; materialize_source_object()
+materialize_source_object:
     lea     rdi, [rel source_path_buf]
     call    ensure_parent_dir
     lea     rdi, [rel source_object_path_buf]
@@ -693,28 +640,13 @@ materialize_source_object_if_needed:
     call    write_object_body_file
     mov     eax, 1
     ret
-.plain:
-    xor     eax, eax
-    ret
-
-source_kind_is_object:
-    lea     rdi, [rel source_kind_buf]
-    lea     rsi, [rel source_kind_object]
-    call    streq
-    ret
 
 validate_source_kind:
-    lea     rdi, [rel source_kind_buf]
-    lea     rsi, [rel source_kind_source]
-    call    streq
-    test    eax, eax
-    jnz     .ok
     lea     rdi, [rel source_kind_buf]
     lea     rsi, [rel source_kind_object]
     call    streq
     test    eax, eax
     jz      bad_object
-.ok:
     ret
 
 ; ensure_parent_dir(path)
@@ -1640,7 +1572,6 @@ arg_interpret: db "--interpret", 0
 arg_elf32: db "elf32", 0
 arg_nostdlib: db "-nostdlib", 0
 arg_static: db "-static", 0
-source_kind_source: db "source", 0
 source_kind_object: db "object", 0
 x86_source_prefix: db "kernel/x86_64/", 0
 x86_source_materialized_prefix: db ".build/kernel/source/", 0
