@@ -7043,14 +7043,25 @@ with recursive rhs_decimal as (
          (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
   from rhs_hex_parse
   where digit_index <= length(hex_text)
-), rhs_hex as (
-  select repo_file_id,
-         function_name,
-         line_no,
-         immediate_value
-  from rhs_hex_parse
-  where digit_index = length(hex_text) + 1
-	), rhs_symbol as (
+	), rhs_hex as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         immediate_value
+	  from rhs_hex_parse
+	  where digit_index = length(hex_text) + 1
+	), rhs_hex64_text as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         substr(lower(operand.operand_value), 3) as hex_text
+	  from repo_asm_binary_operand_fact operand
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	    and lower(operand.operand_value) glob '0x[0-9a-f]*'
+	    and substr(lower(operand.operand_value), 3) not glob '*[^0-9a-f]*'
+	    and length(substr(lower(operand.operand_value), 3)) = 16
+		), rhs_symbol as (
 	  select operand.repo_file_id,
 	         operand.function_name,
 	         operand.line_no,
@@ -7450,13 +7461,39 @@ with recursive rhs_decimal as (
     on rhs_unique_value.repo_file_id = match.repo_file_id
    and rhs_unique_value.function_name = match.function_name
    and rhs_unique_value.line_no = match.line_no
-  where match.target_isa_id = 1
-    and match.line_kind = 3
-    and match.encoding_id is null
-    and match.rule_name is not null
-	    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','shl','shr','sar','ror','imul')
-	    and reg_encoding.width_bits in (8,32,64)
-), generated as (
+	  where match.target_isa_id = 1
+	    and match.line_kind = 3
+	    and match.encoding_id is null
+	    and match.rule_name is not null
+		    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','shl','shr','sar','ror','imul')
+		    and reg_encoding.width_bits in (8,32,64)
+	), reg_imm_hex64 as (
+	  select match.repo_file_id,
+	         match.function_name,
+	         match.line_no,
+	         reg.operand_value as register_name,
+	         reg_encoding.reg_code,
+	         rhs_hex64_text.hex_text
+	  from repo_asm_rule_match match
+	  join repo_asm_binary_operand_fact reg
+	    on reg.repo_file_id = match.repo_file_id
+	   and reg.function_name = match.function_name
+	   and reg.line_no = match.line_no
+	   and reg.operand_index = 0
+	   and reg.operand_kind = 'register'
+	  join x86_register_encoding_fact reg_encoding
+	    on reg_encoding.register_name = reg.operand_value
+	   and reg_encoding.width_bits = 64
+	  join rhs_hex64_text
+	    on rhs_hex64_text.repo_file_id = match.repo_file_id
+	   and rhs_hex64_text.function_name = match.function_name
+	   and rhs_hex64_text.line_no = match.line_no
+	  where match.target_isa_id = 1
+	    and match.line_kind = 3
+	    and match.encoding_id is null
+	    and match.rule_name is not null
+	    and match.op_name = 'mov'
+	), generated as (
   select repo_file_id,
          function_name,
          line_no,
@@ -7531,12 +7568,30 @@ with recursive rhs_decimal as (
                      (immediate_value >> 48) & 255,
                      (immediate_value >> 56) & 255)
          ) as fixed_hex
-  from reg_imm
-  where op_name = 'mov'
-    and width_bits = 64
-    and immediate_value > 2147483647
-  union all
-  select repo_file_id,
+	  from reg_imm
+	  where op_name = 'mov'
+	    and width_bits = 64
+	    and immediate_value > 2147483647
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_reg64_hex_imm64' as parametric_rule_name,
+	         (
+		           printf('%02x', 72 + case when reg_code >= 8 then 1 else 0 end)
+	           || printf('%02x', 184 + (reg_code & 7))
+	           || substr(hex_text, 15, 2)
+	           || substr(hex_text, 13, 2)
+	           || substr(hex_text, 11, 2)
+	           || substr(hex_text, 9, 2)
+	           || substr(hex_text, 7, 2)
+	           || substr(hex_text, 5, 2)
+	           || substr(hex_text, 3, 2)
+	           || substr(hex_text, 1, 2)
+	         ) as fixed_hex
+	  from reg_imm_hex64
+	  union all
+	  select repo_file_id,
          function_name,
          line_no,
          'param_x86_' || op_name || '_reg_numeric_imm8' as parametric_rule_name,
