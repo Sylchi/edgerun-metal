@@ -3698,6 +3698,68 @@ from app_zig_remaining_gap_classification
 where gap_class = 'field_assignment'
   and instr(raw_text, '=') > 1;
 
+create view app_zig_block_delimiter_fact as
+select path,
+       repo_file_id,
+       line_no,
+       case
+         when raw_text = '{' then 'open'
+         when raw_text in ('}', '};', '},') then 'close'
+         else 'delimiter'
+       end as delimiter_kind,
+       raw_text as delimiter_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'block_delimiter';
+
+create view app_zig_statement_fact as
+select path,
+       repo_file_id,
+       line_no,
+       gap_class as statement_kind,
+       case
+         when gap_class = 'try_statement' then trim(rtrim(substr(raw_text, length('try') + 1), ';,'))
+         when gap_class = 'return_statement' and raw_text = 'return;' then ''
+         when gap_class = 'return_statement' then trim(rtrim(substr(raw_text, length('return') + 1), ';,'))
+         when gap_class = 'defer_statement' then trim(rtrim(substr(raw_text, length('defer') + 1), ';,'))
+         else raw_text
+       end as statement_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class in (
+  'try_statement',
+  'return_statement',
+  'branch_statement',
+  'loop_statement',
+  'local_var',
+  'defer_statement',
+  'assignment_try',
+  'assignment',
+  'call_statement',
+  'enum_or_union_literal'
+);
+
+create view app_zig_switch_case_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(rtrim(substr(raw_text, length('=>') + 1), ',')) as result_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where raw_text like '=> %';
+
+create view app_zig_asm_operand_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(substr(raw_text, instr(raw_text, '[') + 1, instr(raw_text, ']') - instr(raw_text, '[') - 1)) as operand_name,
+       trim(substr(raw_text, instr(raw_text, ']') + 1)) as constraint_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where raw_text like ': [%'
+  and instr(raw_text, '[') > 0
+  and instr(raw_text, ']') > instr(raw_text, '[');
+
 create view app_zig_base_fact_line as
 select repo_file_id, line_no, 'import' as fact_kind
 from app_zig_import_fact
@@ -3719,7 +3781,19 @@ select repo_file_id, line_no, 'enum_variant'
 from app_zig_enum_variant_fact
 union
 select repo_file_id, line_no, 'field_assignment'
-from app_zig_field_assignment_fact;
+from app_zig_field_assignment_fact
+union
+select repo_file_id, line_no, 'block_delimiter'
+from app_zig_block_delimiter_fact
+union
+select repo_file_id, line_no, 'statement'
+from app_zig_statement_fact
+union
+select repo_file_id, line_no, 'switch_case'
+from app_zig_switch_case_fact
+union
+select repo_file_id, line_no, 'asm_operand'
+from app_zig_asm_operand_fact;
 
 create view app_zig_file_fact_coverage as
 select repo_file.path,
@@ -5458,15 +5532,49 @@ with recursive decimal_constant as (
   from repo_asm_all_unique_constant_fact definition
   join value_recursive lhs on lhs.symbol_name = trim(substr(definition.expression_text, 1, instr(definition.expression_text, ' + ') - 1))
   join value_0 rhs_lhs on rhs_lhs.symbol_name = trim(substr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), 1, instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') - 1))
-  join value_0 rhs_rhs on rhs_rhs.symbol_name = trim(substr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') + 3))
-  where instr(definition.expression_text, ' + ') > 0
-    and instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') > 0
-)
-select symbol_name,
-       min(immediate_value) as immediate_value
-from value_recursive
-group by symbol_name
-having min(immediate_value) = max(immediate_value);
+	  join value_0 rhs_rhs on rhs_rhs.symbol_name = trim(substr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') + 3))
+	  where instr(definition.expression_text, ' + ') > 0
+	    and instr(trim(substr(definition.expression_text, instr(definition.expression_text, ' + ') + 3)), ' * ') > 0
+	), simple_or_expression_term(symbol_name, rest_text, term_text) as (
+	  select symbol_name,
+	         expression_text || ' | ' as rest_text,
+	         '' as term_text
+	  from repo_asm_all_unique_constant_fact
+	  where expression_text like '% | %'
+	    and expression_text not like '%(%'
+	    and expression_text not like '%)%'
+	  union all
+	  select symbol_name,
+	         substr(rest_text, instr(rest_text, ' | ') + 3),
+	         trim(substr(rest_text, 1, instr(rest_text, ' | ') - 1))
+	  from simple_or_expression_term
+	  where instr(rest_text, ' | ') > 0
+	), simple_or_expression_value as (
+	  select term.symbol_name,
+	         sum(value.immediate_value) as immediate_value
+	  from simple_or_expression_term term
+	  join value_recursive value
+	    on value.symbol_name = term.term_text
+	  where term.term_text <> ''
+	    and term.term_text not like '% %'
+	  group by term.symbol_name
+	  having count(*) = (
+	    select count(*)
+	    from simple_or_expression_term all_term
+	    where all_term.symbol_name = term.symbol_name
+	      and all_term.term_text <> ''
+	      and all_term.term_text not like '% %'
+	  )
+	), all_value as (
+	  select * from value_recursive
+	  union
+	  select * from simple_or_expression_value
+	)
+	select symbol_name,
+	       min(immediate_value) as immediate_value
+	from all_value
+	group by symbol_name
+	having min(immediate_value) = max(immediate_value);
 
 create unique index repo_asm_numeric_constant_value_symbol_idx on repo_asm_numeric_constant_value(symbol_name);
 
@@ -7570,16 +7678,75 @@ with recursive rhs_decimal as (
 	    and substr(lower(operand.operand_value), 3) not glob '*[^0-9a-f]*'
 	    and length(substr(lower(operand.operand_value), 3)) = 16
 		), rhs_symbol as (
-	  select operand.repo_file_id,
-	         operand.function_name,
-	         operand.line_no,
-	         value.immediate_value
-  from repo_asm_binary_operand_fact operand
+		  select operand.repo_file_id,
+		         operand.function_name,
+		         operand.line_no,
+		         value.immediate_value
+	  from repo_asm_binary_operand_fact operand
   join repo_asm_numeric_symbol_value value
 	    on value.symbol_name = operand.operand_value
-	  where operand.target_isa_id = 1
-	    and operand.operand_index = 1
-	), rhs_file_symbol_decimal as (
+		  where operand.target_isa_id = 1
+		    and operand.operand_index = 1
+		), rhs_bitwise_not_decimal as (
+		  select operand.repo_file_id,
+		         operand.function_name,
+		         operand.line_no,
+		         -1 - cast(substr(operand.operand_value, 2) as integer) as immediate_value
+		  from repo_asm_binary_operand_fact operand
+		  where operand.target_isa_id = 1
+		    and operand.operand_index = 1
+		    and (substr(operand.operand_value, 2) glob '[0-9]*'
+		         or substr(operand.operand_value, 2) glob '-[0-9]*')
+		    and replace(substr(operand.operand_value, 2), '-', '') not glob '*[^0-9]*'
+		    and substr(operand.operand_value, 1, 1) = '~'
+		), rhs_bitwise_not_hex_seed as (
+		  select operand.repo_file_id,
+		         operand.function_name,
+		         operand.line_no,
+		         substr(lower(operand.operand_value), 4) as hex_text
+		  from repo_asm_binary_operand_fact operand
+		  where operand.target_isa_id = 1
+		    and operand.operand_index = 1
+		    and lower(operand.operand_value) glob '~0x[0-9a-f]*'
+		    and substr(lower(operand.operand_value), 4) <> ''
+		    and substr(lower(operand.operand_value), 4) not glob '*[^0-9a-f]*'
+		    and length(substr(lower(operand.operand_value), 4)) <= 15
+		), rhs_bitwise_not_hex_parse(repo_file_id, function_name, line_no, hex_text, digit_index, immediate_value) as (
+		  select repo_file_id,
+		         function_name,
+		         line_no,
+		         hex_text,
+		         1 as digit_index,
+		         0 as immediate_value
+		  from rhs_bitwise_not_hex_seed
+		  union all
+		  select repo_file_id,
+		         function_name,
+		         line_no,
+		         hex_text,
+		         digit_index + 1,
+		         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+		  from rhs_bitwise_not_hex_parse
+		  where digit_index <= length(hex_text)
+		), rhs_bitwise_not_hex as (
+		  select repo_file_id,
+		         function_name,
+		         line_no,
+		         -1 - immediate_value as immediate_value
+		  from rhs_bitwise_not_hex_parse
+		  where digit_index = length(hex_text) + 1
+		), rhs_bitwise_not_symbol as (
+		  select operand.repo_file_id,
+		         operand.function_name,
+		         operand.line_no,
+		         -1 - value.immediate_value as immediate_value
+		  from repo_asm_binary_operand_fact operand
+		  join repo_asm_numeric_symbol_value value
+		    on value.symbol_name = substr(operand.operand_value, 2)
+		  where operand.target_isa_id = 1
+		    and operand.operand_index = 1
+		    and substr(operand.operand_value, 1, 1) = '~'
+		), rhs_file_symbol_decimal as (
 	  select operand.repo_file_id,
 	         operand.function_name,
 	         operand.line_no,
@@ -7816,10 +7983,16 @@ with recursive rhs_decimal as (
 	  select * from rhs_decimal
 	  union all
 	  select * from rhs_hex
-	  union all
-	  select * from rhs_symbol
-	  union all
-	  select * from rhs_file_symbol_decimal
+		  union all
+		  select * from rhs_symbol
+		  union all
+		  select * from rhs_bitwise_not_decimal
+		  union all
+		  select * from rhs_bitwise_not_hex
+		  union all
+		  select * from rhs_bitwise_not_symbol
+		  union all
+		  select * from rhs_file_symbol_decimal
 	  union all
 	  select * from rhs_file_symbol_hex
 	  union all
@@ -8458,7 +8631,7 @@ with recursive rhs_decimal as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-    and match.op_name in ('mov','cmp')
+	    and match.op_name in ('mov','cmp','add','sub','and','or','xor')
     and memory.addressing_kind = 'base_memory'
     and memory.register_term_count = 1
     and memory.scaled_register_term_count = 0
@@ -8522,25 +8695,34 @@ with recursive rhs_decimal as (
   select repo_file_id,
          function_name,
          line_no,
-         'param_x86_cmp_' || size_name || '_base_memory_numeric_imm' as parametric_rule_name,
-         (
-           case when size_name = 'word' then '66' else '' end
-           || case
-                when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
-                when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+	         'param_x86_' || op_name || '_' || size_name || '_base_memory_numeric_imm' as parametric_rule_name,
+	         (
+	           case when size_name = 'word' then '66' else '' end
+	           || case
+	                when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+	                when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
                 else ''
               end
            || case
-                when size_name = 'byte' then '80'
-                when immediate_value between -128 and 127 then '83'
-                else '81'
-              end
-           || printf('%02x', (mod_bits << 6) + (7 << 3) + rm_field)
-           || sib_hex
-           || displacement_hex
-           || case
-                when size_name = 'byte' or immediate_value between -128 and 127 then printf('%02x', immediate_value & 255)
-                when size_name = 'word' then printf('%02x%02x',
+	                when size_name = 'byte' then '80'
+	                when immediate_value between -128 and 127 then '83'
+	                else '81'
+	              end
+	           || printf('%02x', (mod_bits << 6)
+	                           + ((case op_name
+	                                 when 'add' then 0
+	                                 when 'or' then 1
+	                                 when 'and' then 4
+	                                 when 'sub' then 5
+	                                 when 'xor' then 6
+	                                 when 'cmp' then 7
+	                               end) << 3)
+	                           + rm_field)
+	           || sib_hex
+	           || displacement_hex
+	           || case
+	                when size_name = 'byte' or immediate_value between -128 and 127 then printf('%02x', immediate_value & 255)
+	                when size_name = 'word' then printf('%02x%02x',
                                                      immediate_value & 255,
                                                      (immediate_value >> 8) & 255)
                 else printf('%02x%02x%02x%02x',
@@ -8548,13 +8730,13 @@ with recursive rhs_decimal as (
                             (immediate_value >> 8) & 255,
                             (immediate_value >> 16) & 255,
                             (immediate_value >> 24) & 255)
-              end
-         ) as fixed_hex
-  from memory_bytes
-  where op_name = 'cmp'
-    and ((size_name = 'byte' and immediate_value between -128 and 255)
-         or (size_name = 'word' and immediate_value between -32768 and 65535)
-         or (size_name in ('dword','qword') and immediate_value between -2147483648 and 4294967295))
+	              end
+	         ) as fixed_hex
+	  from memory_bytes
+	  where op_name in ('cmp','add','sub','and','or','xor')
+	    and ((size_name = 'byte' and immediate_value between -128 and 255)
+	         or (size_name = 'word' and immediate_value between -32768 and 65535)
+	         or (size_name in ('dword','qword') and immediate_value between -2147483648 and 4294967295))
 )
 select repo_file_id,
        function_name,
@@ -15243,7 +15425,59 @@ select 'app_zig.field_assignment:' || path || ':' || cast(line_no as text) || ':
        line_no,
        raw_text,
        'app_zig.field_assignment:' || repo_file_id || ':' || cast(line_no as text) || ':' || field_name || ':' || length(value_text)
-from app_zig_field_assignment_fact;
+from app_zig_field_assignment_fact
+union all
+select 'app_zig.block_delimiter:' || path || ':' || cast(line_no as text) || ':' || delimiter_text,
+       'app_zig_block_delimiter_fact',
+       path,
+       delimiter_kind,
+       delimiter_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.block_delimiter:' || repo_file_id || ':' || cast(line_no as text) || ':' || delimiter_kind || ':' || delimiter_text
+from app_zig_block_delimiter_fact
+union all
+select 'app_zig.statement:' || path || ':' || cast(line_no as text) || ':' || statement_kind,
+       'app_zig_statement_fact',
+       path,
+       statement_kind,
+       statement_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.statement:' || repo_file_id || ':' || cast(line_no as text) || ':' || statement_kind || ':' || length(statement_text)
+from app_zig_statement_fact
+union all
+select 'app_zig.switch_case:' || path || ':' || cast(line_no as text),
+       'app_zig_switch_case_fact',
+       path,
+       'switch_case',
+       result_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.switch_case:' || repo_file_id || ':' || cast(line_no as text) || ':' || length(result_text)
+from app_zig_switch_case_fact
+union all
+select 'app_zig.asm_operand:' || path || ':' || cast(line_no as text) || ':' || operand_name,
+       'app_zig_asm_operand_fact',
+       path,
+       operand_name,
+       constraint_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.asm_operand:' || repo_file_id || ':' || cast(line_no as text) || ':' || operand_name || ':' || constraint_text
+from app_zig_asm_operand_fact;
 
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
