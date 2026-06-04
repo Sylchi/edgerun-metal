@@ -3551,6 +3551,13 @@ with trimmed as (
             and trim(substr(t, 1, instr(t, ':') - 1)) <> ''
             and trim(substr(t, 1, instr(t, ':') - 1)) not glob '* *'
             and trim(substr(t, instr(t, ':') + 1)) <> ''
+            and substr(trim(substr(t, instr(t, ':') + 1)), 1, 1) in (';', '@')
+            then trim(substr(t, 1, instr(t, ':')))
+           when substr(t, 1, 1) not in (';', '@')
+            and instr(t, ':') > 0
+            and trim(substr(t, 1, instr(t, ':') - 1)) <> ''
+            and trim(substr(t, 1, instr(t, ':') - 1)) not glob '* *'
+            and trim(substr(t, instr(t, ':') + 1)) <> ''
             and substr(trim(substr(t, instr(t, ':') + 1)), 1, 1) not in (';', '@')
             then trim(substr(t, instr(t, ':') + 1))
            else t
@@ -10161,6 +10168,14 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('EXPECT_EAX', 'compare eax against expected value and branch on mismatch', 'test_assertion'),
   ('ASSERT_QWORD', 'compare qword memory value against expected value; fail test on mismatch', 'test_assertion'),
   ('TEST_CALL_EAX', 'call helper with argument and compare eax against expected value', 'test_assertion'),
+  ('ASSERT_MEM_ALL', 'assert memory range equals repeated byte value', 'test_assertion'),
+  ('ASSERT_MEM_ZERO', 'assert memory range is zero-filled', 'test_assertion'),
+  ('TEST_ARM_CALL_CODE', 'call ARM-side self-test case and compare returned code', 'test_assertion'),
+  ('TEST_BSS_TOTAL_PASSED_FAILED', 'check accumulated BSS/test totals and branch to pass/fail result', 'test_assertion'),
+  ('TEST_CASE_FAIL', 'record one test case failure', 'test_assertion'),
+  ('TEST_EXIT_EAX_ZERO', 'exit test when eax is zero', 'test_exit'),
+  ('TEST_EXIT_EDI', 'exit test with edi status', 'test_exit'),
+  ('TEST_RETURN_FAILED', 'return failed test status', 'test_exit'),
   ('CRB_SEND_CHECK', 'TPM CRB send/check helper macro', 'test_assertion'),
   ('call_read_bit', 'read one AV1 bool bit into local state', 'macro_sequence'),
   ('write_bits', 'write constant AV1 bit pattern', 'macro_sequence'),
@@ -10180,9 +10195,11 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('read_bits', 'read constant-width AV1 field', 'macro_sequence'),
   ('TEST_SKIP', 'mark current test case skipped', 'test_assertion'),
   ('_blake3_round', 'expand BLAKE3 round macro', 'macro_sequence'),
+  ('_MC_COL', 'expand AES MixColumns column macro', 'macro_sequence'),
   ('er_expect_token_operand_result', 'expect parsed token operand result', 'test_assertion'),
   ('er_push_expect_token_operand_result', 'push and expect parsed token operand result', 'test_assertion'),
   ('er_expect_line_end_result', 'expect parser line-end result', 'test_assertion'),
+  ('er_expect_comma_result', 'expect parser comma result', 'test_assertion'),
   ('er_emit_text_bytes', 'emit expected text bytes for parser tests', 'test_data'),
   ('zero_loop_filter_delta_state', 'clear AV1 loop-filter delta state', 'macro_sequence'),
   ('zero_global_motion_state', 'clear AV1 global motion state', 'macro_sequence'),
@@ -10194,11 +10211,23 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('jit_template_push_rax', 'JIT template push rax bytes', 'jit_template'),
   ('jit_template_setcc_push', 'JIT template setcc push bytes', 'jit_template'),
   ('ser_putchar_sil_imm', 'write immediate byte through serial helper', 'macro_sequence'),
+  ('ser_putchar_imm', 'write immediate byte through serial helper', 'macro_sequence'),
   ('FE_CARRY_PASS', 'run field element carry propagation pass', 'macro_sequence'),
   ('_cmos_in_data', 'read CMOS data port into al', 'macro_sequence'),
+  ('_cmos_out_data', 'write CMOS data port from source register', 'macro_sequence'),
   ('_ec_in_status', 'read embedded-controller status port into al', 'macro_sequence'),
+  ('_ec_in_data', 'read embedded-controller data port into al', 'macro_sequence'),
+  ('_ec_out_cmd', 'write embedded-controller command port from source register', 'macro_sequence'),
+  ('_ec_out_data', 'write embedded-controller data port from source register', 'macro_sequence'),
   ('_i8042_in_status', 'read i8042 status port into al', 'macro_sequence'),
+  ('_i8042_in_data', 'read i8042 data port into al', 'macro_sequence'),
+  ('_i8042_out_cmd', 'write i8042 command port from source register', 'macro_sequence'),
+  ('_i8042_out_data', 'write i8042 data port from source register', 'macro_sequence'),
   ('mp4_load_be16', 'load big-endian MP4 word into register', 'macro_sequence'),
+  ('_load_be', 'load big-endian integer field', 'macro_sequence'),
+  ('_load_le', 'load little-endian integer field', 'macro_sequence'),
+  ('_store_be', 'store big-endian integer field', 'macro_sequence'),
+  ('_store_le', 'store little-endian integer field', 'macro_sequence'),
   ('write_esi_bits', 'write AV1 bit field from esi', 'macro_sequence'),
   ('zero_delta_state', 'clear AV1 delta state', 'macro_sequence'),
   ('zero_film_grain_state', 'clear AV1 film-grain state', 'macro_sequence'),
@@ -10214,9 +10243,13 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('ADDMUL', 'expand Curve25519 add/multiply limb step', 'macro_sequence'),
   ('GLOBAL', 'declare exported Curve25519 symbol', 'metadata_macro'),
   ('_wasm_cmpop', 'define WASM comparison opcode constant', 'macro_sequence'),
+  ('_wasm_eqz', 'define WASM eqz opcode handler metadata', 'macro_sequence'),
+  ('_wasm_unop', 'define WASM unary opcode handler metadata', 'macro_sequence'),
   ('at', 'BLAKE3 vector lane selector macro', 'macro_sequence'),
   ('check_byte_max_rcx', 'check AV1 byte field max in rcx', 'macro_sequence'),
+  ('av1_check_edx', 'check AV1 helper result in edx', 'macro_sequence'),
   ('av1_call_check', 'call AV1 helper and branch on error', 'macro_sequence'),
+  ('av1_zero_residual_8x8', 'zero AV1 residual 8x8 block', 'macro_sequence'),
   ('write_bit_field', 'write AV1 one-bit field', 'macro_sequence'),
   ('TEST_DEBUG_LABEL', 'emit test debug label metadata', 'test_data'),
   ('write_byte_field_max_bits', 'write AV1 byte field constrained by max bits', 'macro_sequence'),
@@ -10228,7 +10261,9 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('TEST_ARM_EXPECT_ZERO_CODE', 'assert ARM test code is zero', 'test_assertion'),
   ('_blake3_g_pair', 'expand paired BLAKE3 G rounds', 'macro_sequence'),
   ('read_segment_feature', 'read AV1 segmentation feature field', 'macro_sequence'),
+  ('read_global_motion_param', 'read AV1 global motion parameter', 'macro_sequence'),
   ('write_segment_feature', 'write AV1 segmentation feature field', 'macro_sequence'),
+  ('write_global_motion_param', 'write AV1 global motion parameter', 'macro_sequence'),
   ('er_load_struct_qword', 'load checked qword field from structure array', 'macro_sequence'),
   ('av1_read_symbol_check', 'read AV1 symbol and branch on error', 'macro_sequence'),
   ('MUL_CONST_LIMB', 'multiply Curve25519 limb by constant', 'macro_sequence'),
@@ -10238,16 +10273,24 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('check_dword_signed_rcx', 'check signed AV1 dword range in rcx', 'macro_sequence'),
   ('read_delta_q_to', 'read AV1 delta-q field into destination', 'macro_sequence'),
   ('write_delta_q_from', 'write AV1 delta-q field from source', 'macro_sequence'),
+  ('zero_transform_ref_state', 'clear AV1 transform reference state', 'macro_sequence'),
   ('_cmos_out_index', 'write CMOS index port from source register', 'macro_sequence'),
   ('av1_decode_residual_8x8', 'decode AV1 residual 8x8 block', 'macro_sequence'),
   ('av1_reconstruct_current_8x8', 'reconstruct current AV1 8x8 block', 'macro_sequence'),
   ('av1_route_first_payload', 'route first AV1 payload buffer', 'macro_sequence'),
   ('er_render_ir_push_impl', 'push render IR command implementation', 'macro_sequence'),
   ('jc_lcd_chunk_burst_checked', 'send checked JC LCD chunk burst', 'macro_sequence'),
+  ('tile_write_bits', 'write AV1 tile bit field', 'macro_sequence'),
+  ('build_mem_begin', 'begin ESP32 memory image builder sequence', 'macro_sequence'),
+  ('build_mem_end', 'end ESP32 memory image builder sequence', 'macro_sequence'),
+  ('checksum_compute', 'compute ESP32 serial payload checksum', 'macro_sequence'),
+  ('lcd_iSPI2', 'emit ESP32 LCD diagnostic text data', 'macro_sequence'),
   ('jit_template_f32_round', 'JIT template for f32 rounding helper', 'jit_template'),
   ('jit_template_f32_sse_bin_tail', 'JIT template for f32 SSE binary tail', 'jit_template'),
   ('jit_template_f64_round', 'JIT template for f64 rounding helper', 'jit_template'),
   ('jit_template_f64_sse_bin_tail', 'JIT template for f64 SSE binary tail', 'jit_template'),
+  ('jit_template_push_imm64_parts', 'JIT template for split imm64 push bytes', 'jit_template'),
+  ('jit_template_setcc_or_push', 'JIT template for setcc/or/push bytes', 'jit_template'),
   ('test_cl', 'define CL register parser test', 'test_data'),
   ('test_is_sse', 'define SSE parser test expectation', 'test_data'),
   ('test_sse_ptr', 'define SSE pointer parser test', 'test_data'),
@@ -10711,6 +10754,40 @@ select path,
        repo_file_id,
        function_name,
        line_no,
+       op_name as label_name,
+       operand_text,
+       case
+         when operand_text like 'resb %' then 'reserved_bytes'
+         when operand_text like 'resw %' then 'reserved_words'
+         when operand_text like 'resd %' then 'reserved_dwords'
+         when operand_text like 'resq %' then 'reserved_qwords'
+         when operand_text like 'dq %' then 'quadword_data'
+         when operand_text like 'dd %' then 'dword_data'
+         when operand_text like 'dw %' then 'word_data'
+         when operand_text like 'db %' then 'byte_data'
+         when operand_text like '.asciz %' then 'zero_terminated_string_data'
+         when operand_text like '.space %' then 'reserved_bytes'
+         when operand_text like 'times % db %' then 'repeated_byte_data'
+         else 'unknown_data_definition'
+       end as data_definition_kind
+from repo_asm_operation
+where op_name not in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','resw','resd','resq')
+  and (operand_text like 'resb %'
+       or operand_text like 'resw %'
+       or operand_text like 'resd %'
+       or operand_text like 'resq %'
+       or operand_text like 'dq %'
+       or operand_text like 'dd %'
+       or operand_text like 'dw %'
+       or operand_text like 'db %'
+       or operand_text like '.asciz %'
+       or operand_text like '.space %'
+       or operand_text like 'times % db %')
+union all
+select path,
+       repo_file_id,
+       function_name,
+       line_no,
        trim(substr(t, 1, instr(t, ':'))) as label_name,
        trim(substr(t, instr(t, ':') + 1)) as operand_text,
        case
@@ -10812,7 +10889,7 @@ create table asm_metadata_op_fact (
 insert into asm_metadata_op_fact(op_name) values
   ('default'), ('SECTION'), ('section'), ('align'), ('.syntax'), ('.cpu'), ('.arm'), ('.align'),
   ('.section'), ('.word'), ('.include'), ('.globl'), ('.equ'), ('.extern'), ('.weak'),
-  ('[BITS'), ('struc'), ('@'), ('endstruc'), ('extern');
+  ('.balign'), ('[BITS'), ('struc'), ('istruc'), ('iend'), ('@'), ('endstruc'), ('extern'), ('org');
 
 create table repo_asm_operation_fact_status_kind (
   fact_status text primary key,
@@ -14670,7 +14747,7 @@ select * from corpus_proof_engine_fact;
 
 create view engine_fact_resident as select * from engine_fact;
 
-create view engine_derivation as
+create view standards_engine_derivation as
 select application.application_id as derivation_id,
        'standards:' || application.rule_name as rule_key,
        application.input_fact_id,
@@ -14679,8 +14756,9 @@ select application.application_id as derivation_id,
        application.namespace,
        application.line_no,
        application.rule_name || ':' || application.input_fact_id || '->' || application.output_fact_id as stable_key
-from standards_fact_rule_application_resident application
-union all
+from standards_fact_rule_application_resident application;
+
+create view repo_asm_engine_derivation as
 select 'apply:repo_asm.classify:' || repo_file_id || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
        'repo_asm:classify_operation_status',
        'repo_asm.operation:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
@@ -14700,8 +14778,9 @@ select 'apply:repo_asm.encoding_conflict:' || path || ':' || cast(line_no as tex
        'repo.asm',
        line_no,
        'exact=' || exact_hex || ':parametric=' || parametric_hex || ':rule=' || parametric_rule_name
-from repo_asm_all_parametric_encoding_conflict
-union all
+from repo_asm_all_parametric_encoding_conflict;
+
+create view corpus_proof_engine_derivation as
 select 'apply:validate_corpus:' || corpus_name || ':' || case_name || ':' || clause_name,
        'standards:validate_corpus_expectation',
        'corpus_expectation:' || corpus_name || ':' || case_name || ':' || clause_name,
@@ -14711,6 +14790,13 @@ select 'apply:validate_corpus:' || corpus_name || ':' || case_name || ':' || cla
        0,
        'validate_corpus_expectation:' || corpus_name || ':' || case_name || ':' || clause_name || ':' || expected_result || ':' || actual_result
 from engine_corpus_proof;
+
+create view engine_derivation as
+select * from standards_engine_derivation
+union all
+select * from repo_asm_engine_derivation
+union all
+select * from corpus_proof_engine_derivation;
 
 create view engine_derivation_resident as select * from engine_derivation;
 
