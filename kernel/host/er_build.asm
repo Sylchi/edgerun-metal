@@ -852,15 +852,11 @@ cmd_test_list:
     lea     rdi, [rel test_list_header]
     call    print_cstr_stdout
     call    write_registry_test_list
-    lea     rdi, [rel test_object_asm_list_line]
-    call    print_cstr_stdout
     ret
 
 cmd_test_registry:
     lea     rdi, [rel registry_path]
     call    cmd_write_body
-    lea     rdi, [rel test_object_asm_registry_line]
-    call    print_cstr_stdout
     ret
 
 ; cmd_test_status(argv_targets, count). count=0 runs the deterministic build subset.
@@ -993,8 +989,6 @@ cmd_test_help:
     test    eax, eax
     jz      bad_object
     call    write_registry_help
-    lea     rdi, [rel test_object_asm_help_line]
-    call    print_cstr_stdout
     ret
 
 cmd_write_body:
@@ -1640,9 +1634,6 @@ help_top_path: db "docs/build-help-top.erobj", 0
 help_bottom_path: db "docs/build-help-bottom.erobj", 0
 host_tools_path: db "kernel/host/host_tools.erobj", 0
 test_list_header: db "target", 9, "category", 9, "subsystem", 9, "default", 9, "description", 10, 0
-test_object_asm_registry_line: db "test-object-asm|unit|object|yes|cmd_test_object_asm|Run object serialization ASM test", 10, 0
-test_object_asm_list_line: db "test-object-asm", 9, "unit", 9, "object", 9, "yes", 9, "Run object serialization ASM test", 10, 0
-test_object_asm_help_line: db "  test-object-asm        [unit/object] Run object serialization ASM test", 10, 0
 help_line_prefix: db "  ", 0
 help_meta_open: db " [", 0
 help_meta_close: db "] ", 0

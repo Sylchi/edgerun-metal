@@ -8170,6 +8170,147 @@ with symbolic_memory as (
   join x86_register_encoding_fact base_reg
     on base_reg.register_name = symbolic_memory.base_register_name
    and base_reg.width_bits = 64
+), indexed_symbol_memory as (
+  select memory.*,
+         first_term.term_text as first_register_name,
+         second_term.term_text as second_register_name,
+         group_concat(symbol_term.term_text, '+') as symbol_name,
+         memory.integer_displacement + sum(symbol_term.term_sign * value.immediate_value) as displacement
+  from repo_asm_memory_addressing_fact memory
+  join repo_asm_memory_operand_term_fact first_term
+    on first_term.repo_file_id = memory.repo_file_id
+   and first_term.function_name = memory.function_name
+   and first_term.line_no = memory.line_no
+   and first_term.operand_index = memory.operand_index
+   and first_term.term_kind = 'register'
+   and first_term.term_sign = 1
+  join repo_asm_memory_operand_term_fact second_term
+    on second_term.repo_file_id = memory.repo_file_id
+   and second_term.function_name = memory.function_name
+   and second_term.line_no = memory.line_no
+   and second_term.operand_index = memory.operand_index
+   and second_term.term_kind = 'register'
+   and second_term.term_sign = 1
+   and second_term.term_index > first_term.term_index
+  join repo_asm_memory_operand_term_fact symbol_term
+    on symbol_term.repo_file_id = memory.repo_file_id
+   and symbol_term.function_name = memory.function_name
+   and symbol_term.line_no = memory.line_no
+   and symbol_term.operand_index = memory.operand_index
+   and symbol_term.term_kind = 'symbol'
+  join repo_asm_numeric_symbol_value value
+    on value.symbol_name = symbol_term.term_text
+  where memory.target_isa_id = 1
+    and memory.is_rel_memory = 0
+    and memory.addressing_kind = 'indexed_memory'
+    and memory.register_term_count = 2
+    and memory.scaled_register_term_count = 0
+    and memory.symbol_term_count >= 1
+  group by memory.path,
+           memory.repo_file_id,
+           memory.function_name,
+           memory.line_no,
+           memory.target_isa_id,
+           memory.op_name,
+           memory.operand_text,
+           memory.operand_index,
+           memory.size_name,
+           memory.memory_text,
+           memory.is_rel_memory,
+           memory.register_term_count,
+           memory.scaled_register_term_count,
+           memory.symbol_term_count,
+           memory.integer_term_count,
+           memory.rel_marker_count,
+           memory.other_term_count,
+           memory.first_register_term,
+           memory.first_scaled_register_term,
+           memory.first_scale_value,
+           memory.first_symbol_term,
+           memory.integer_displacement,
+           memory.addressing_kind,
+           first_term.term_text,
+           second_term.term_text
+  having count(*) = memory.symbol_term_count
+), indexed_symbol_memory_bytes as (
+  select indexed_symbol_memory.*,
+         case
+           when first_reg.register_name = 'rsp' then first_reg.register_name
+           when second_reg.register_name = 'rsp' then second_reg.register_name
+           else first_reg.register_name
+         end as base_register_name,
+         case
+           when first_reg.register_name = 'rsp' then second_reg.register_name
+           when second_reg.register_name = 'rsp' then first_reg.register_name
+           else second_reg.register_name
+         end as index_register_name,
+         case
+           when first_reg.register_name = 'rsp' then first_reg.reg_code
+           when second_reg.register_name = 'rsp' then second_reg.reg_code
+           else first_reg.reg_code
+         end as base_reg_code,
+         case
+           when first_reg.register_name = 'rsp' then first_reg.requires_rex
+           when second_reg.register_name = 'rsp' then second_reg.requires_rex
+           else first_reg.requires_rex
+         end as base_requires_rex,
+         case
+           when first_reg.register_name = 'rsp' then second_reg.reg_code
+           when second_reg.register_name = 'rsp' then first_reg.reg_code
+           else second_reg.reg_code
+         end as index_reg_code,
+         case
+           when first_reg.register_name = 'rsp' then second_reg.requires_rex
+           when second_reg.register_name = 'rsp' then first_reg.requires_rex
+           else second_reg.requires_rex
+         end as index_requires_rex,
+         case
+           when displacement = 0
+            and ((case
+                    when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    else first_reg.reg_code
+                  end) & 7) not in (5) then 0
+           when displacement between -128 and 127 then 1
+           else 2
+         end as mod_bits,
+         case
+           when displacement = 0
+            and ((case
+                    when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    else first_reg.reg_code
+                  end) & 7) not in (5) then ''
+           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+           else printf('%02x%02x%02x%02x',
+                       displacement & 255,
+                       (displacement >> 8) & 255,
+                       (displacement >> 16) & 255,
+                       (displacement >> 24) & 255)
+         end as displacement_hex,
+         printf('%02x',
+                (((case
+                     when first_reg.register_name = 'rsp' then second_reg.reg_code
+                     when second_reg.register_name = 'rsp' then first_reg.reg_code
+                     else second_reg.reg_code
+                   end) & 7) << 3)
+                + ((case
+                      when first_reg.register_name = 'rsp' then first_reg.reg_code
+                      when second_reg.register_name = 'rsp' then second_reg.reg_code
+                      else first_reg.reg_code
+                    end) & 7)) as sib_hex
+  from indexed_symbol_memory
+  join x86_register_encoding_fact first_reg
+    on first_reg.register_name = indexed_symbol_memory.first_register_name
+   and first_reg.width_bits = 64
+  join x86_register_encoding_fact second_reg
+    on second_reg.register_name = indexed_symbol_memory.second_register_name
+   and second_reg.width_bits = 64
+  where case
+          when first_reg.register_name = 'rsp' then second_reg.register_name
+          when second_reg.register_name = 'rsp' then first_reg.register_name
+          else second_reg.register_name
+        end <> 'rsp'
 ), reg_to_symbol_memory as (
   select mem.*,
          reg.operand_value as register_name,
@@ -8200,6 +8341,30 @@ with symbolic_memory as (
          reg_encoding.reg_code,
          reg_encoding.requires_rex
   from symbolic_memory_bytes mem
+  join repo_asm_binary_operand_fact reg
+    on reg.repo_file_id = mem.repo_file_id
+   and reg.function_name = mem.function_name
+   and reg.line_no = mem.line_no
+   and reg.operand_index = 0
+   and reg.operand_kind = 'register'
+  join x86_register_encoding_fact reg_encoding
+    on reg_encoding.register_name = reg.operand_value
+  where mem.operand_index = 1
+    and mem.op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
+    and reg_encoding.width_bits in (16,32,64)
+    and (mem.size_name is null
+         or (mem.size_name = 'byte' and mem.op_name = 'movzx')
+         or (mem.size_name = 'word' and mem.op_name = 'mov' and reg_encoding.width_bits = 16)
+         or (mem.size_name = 'word' and mem.op_name in ('movzx','movsx') and reg_encoding.width_bits in (32,64))
+         or (mem.size_name = 'dword' and reg_encoding.width_bits in (32,64))
+         or (mem.size_name = 'qword' and reg_encoding.width_bits = 64))
+), indexed_symbol_memory_to_reg as (
+  select mem.*,
+         reg.operand_value as register_name,
+         reg_encoding.width_bits,
+         reg_encoding.reg_code,
+         reg_encoding.requires_rex
+  from indexed_symbol_memory_bytes mem
   join repo_asm_binary_operand_fact reg
     on reg.repo_file_id = mem.repo_file_id
    and reg.function_name = mem.function_name
@@ -8279,6 +8444,38 @@ with symbolic_memory as (
            || displacement_hex
          ) as fixed_hex
   from symbol_memory_to_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_reg_numeric_symbol_indexed_memory' as parametric_rule_name,
+         (
+           case when width_bits = 16 and op_name not in ('movzx','movsx','movsxd') then '66' else '' end
+           || case
+             when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             when requires_rex = 1 or base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+             else ''
+           end
+           || case
+                when op_name = 'movzx' and size_name = 'byte' then '0fb6'
+                when op_name = 'movzx' and size_name = 'word' then '0fb7'
+                when op_name = 'movsx' and size_name = 'word' then '0fbf'
+                when op_name = 'movsxd' then '63'
+                when op_name = 'mov' then '8b'
+                when op_name = 'add' then '03'
+                when op_name = 'sub' then '2b'
+                when op_name = 'cmp' then '3b'
+                when op_name = 'and' then '23'
+                when op_name = 'or' then '0b'
+                when op_name = 'xor' then '33'
+                when op_name = 'lea' then '8d'
+              end
+           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + 4)
+           || sib_hex
+           || displacement_hex
+         ) as fixed_hex
+  from indexed_symbol_memory_to_reg
   union all
   select repo_file_id,
          function_name,
