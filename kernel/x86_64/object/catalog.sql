@@ -3538,6 +3538,24 @@ with trimmed as (
     on repo_asm_function_span.repo_file_id = repo_asm_line.repo_file_id
    and repo_asm_line.line_no between repo_asm_function_span.start_line_no and repo_asm_function_span.end_line_no
   where repo_file.file_kind in ('asm', 'source_object_asm')
+), normalized as (
+  select path,
+         repo_file_id,
+         function_name,
+         target_isa_id,
+         line_no,
+         text,
+         case
+           when substr(t, 1, 1) not in (';', '@')
+            and instr(t, ':') > 0
+            and trim(substr(t, 1, instr(t, ':') - 1)) <> ''
+            and trim(substr(t, 1, instr(t, ':') - 1)) not glob '* *'
+            and trim(substr(t, instr(t, ':') + 1)) <> ''
+            and substr(trim(substr(t, instr(t, ':') + 1)), 1, 1) not in (';', '@')
+            then trim(substr(t, instr(t, ':') + 1))
+           else t
+         end as t
+  from trimmed
 ), parsed as (
   select path,
          repo_file_id,
@@ -3570,7 +3588,7 @@ with trimmed as (
               trim(substr(substr(t, instr(t, ' ') + 1), 1, instr(substr(t, instr(t, ' ') + 1), ';') - 1))
             else trim(substr(t, instr(t, ' ') + 1))
           end as operand_text
-  from trimmed
+  from normalized
 )
 select path, repo_file_id, function_name, target_isa_id, line_no, line_kind, op_name, operand_text, text as raw_text
 from parsed
@@ -10691,6 +10709,58 @@ where op_name in ('db','dw','dd','dq','.byte','times','.asciz','.space','resb','
 union all
 select path,
        repo_file_id,
+       function_name,
+       line_no,
+       trim(substr(t, 1, instr(t, ':'))) as label_name,
+       trim(substr(t, instr(t, ':') + 1)) as operand_text,
+       case
+         when trim(substr(t, instr(t, ':') + 1)) like 'resb %' then 'reserved_bytes'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resw %' then 'reserved_words'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resd %' then 'reserved_dwords'
+         when trim(substr(t, instr(t, ':') + 1)) like 'resq %' then 'reserved_qwords'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dq %' then 'quadword_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dd %' then 'dword_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'dw %' then 'word_data'
+         when trim(substr(t, instr(t, ':') + 1)) like 'db %' then 'byte_data'
+         when trim(substr(t, instr(t, ':') + 1)) like '.asciz %' then 'zero_terminated_string_data'
+         when trim(substr(t, instr(t, ':') + 1)) like '.space %' then 'reserved_bytes'
+         when trim(substr(t, instr(t, ':') + 1)) like 'times % db %' then 'repeated_byte_data'
+         else 'unknown_data_definition'
+       end as data_definition_kind
+from (
+  select repo_file.path,
+         repo_asm_line.repo_file_id,
+         coalesce(repo_asm_function_span.function_name, '') as function_name,
+         repo_asm_line.line_no,
+         case
+           when instr(trim(replace(repo_asm_line.text, char(9), ' ')), ';') > 0 then
+             trim(substr(trim(replace(repo_asm_line.text, char(9), ' ')), 1, instr(trim(replace(repo_asm_line.text, char(9), ' ')), ';') - 1))
+           else trim(replace(repo_asm_line.text, char(9), ' '))
+         end as t
+  from repo_asm_line
+  join repo_file using (repo_file_id)
+  left join repo_asm_function_span
+    on repo_asm_function_span.repo_file_id = repo_asm_line.repo_file_id
+   and repo_asm_line.line_no between repo_asm_function_span.start_line_no and repo_asm_function_span.end_line_no
+  where repo_file.file_kind in ('asm', 'source_object_asm')
+)
+where instr(t, ':') > 0
+  and trim(substr(t, 1, instr(t, ':') - 1)) <> ''
+  and trim(substr(t, 1, instr(t, ':') - 1)) not glob '* *'
+  and (trim(substr(t, instr(t, ':') + 1)) like 'resb %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resw %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resd %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'resq %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dq %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dd %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'dw %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'db %'
+       or trim(substr(t, instr(t, ':') + 1)) like '.asciz %'
+       or trim(substr(t, instr(t, ':') + 1)) like '.space %'
+       or trim(substr(t, instr(t, ':') + 1)) like 'times % db %')
+union all
+select path,
+       repo_file_id,
        null as function_name,
        line_no,
        trim(substr(t, 1, instr(t, ':'))) as label_name,
@@ -10743,6 +10813,24 @@ insert into asm_metadata_op_fact(op_name) values
   ('default'), ('SECTION'), ('section'), ('align'), ('.syntax'), ('.cpu'), ('.arm'), ('.align'),
   ('.section'), ('.word'), ('.include'), ('.globl'), ('.equ'), ('.extern'), ('.weak'),
   ('[BITS'), ('struc'), ('@'), ('endstruc'), ('extern');
+
+create table repo_asm_operation_fact_status_kind (
+  fact_status text primary key,
+  is_fact_backed integer not null,
+  is_gap integer not null,
+  deletion_blocks integer not null
+);
+
+insert into repo_asm_operation_fact_status_kind(fact_status, is_fact_backed, is_gap, deletion_blocks) values
+  ('fixed_encoding', 1, 0, 0),
+  ('relocation', 1, 0, 0),
+  ('data_relocation', 1, 0, 0),
+  ('macro_lowered', 1, 0, 0),
+  ('data_definition', 1, 0, 0),
+  ('constant_expression', 1, 0, 0),
+  ('metadata', 1, 0, 0),
+  ('known_gap', 0, 1, 1),
+  ('syntax_gap', 0, 1, 1);
 
 create view repo_asm_binary_include_dependency_fact as
 select path,
@@ -10819,7 +10907,14 @@ left join repo_asm_macro_lowering_fact macro
   on macro.repo_file_id = match.repo_file_id
   and macro.function_name = match.function_name
   and macro.line_no = match.line_no
-left join repo_asm_data_definition_fact data_def
+left join (
+  select repo_file_id,
+         function_name,
+         line_no,
+         min(data_definition_kind) as data_definition_kind
+  from repo_asm_data_definition_fact
+  group by repo_file_id, function_name, line_no
+) data_def
   on data_def.repo_file_id = match.repo_file_id
  and data_def.function_name = match.function_name
  and data_def.line_no = match.line_no
@@ -10831,36 +10926,40 @@ create index repo_asm_operation_fact_status_next_idx on repo_asm_operation_fact_
 create index repo_asm_operation_fact_status_file_idx on repo_asm_operation_fact_status(path, fact_status);
 
 create view repo_asm_deletion_readiness as
-select path,
+select status.path,
        count(*) as operation_count,
-       sum(case when fact_status = 'fixed_encoding' then 1 else 0 end) as fixed_encoding_count,
-       sum(case when fact_status = 'relocation' then 1 else 0 end) as relocation_count,
-       sum(case when fact_status = 'data_relocation' then 1 else 0 end) as data_relocation_count,
-       sum(case when fact_status = 'macro_lowered' then 1 else 0 end) as macro_lowered_count,
-       sum(case when fact_status = 'data_definition' then 1 else 0 end) as data_definition_count,
-       sum(case when fact_status = 'constant_expression' then 1 else 0 end) as constant_expression_count,
-       sum(case when fact_status = 'metadata' then 1 else 0 end) as metadata_count,
-       sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end) as fact_backed_count,
-       count(*) - sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end)
-         + coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as remaining_count,
-       coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as unparsed_line_count,
-       coalesce((select parsed_percent from repo_asm_parse_coverage coverage where coverage.path = repo_asm_operation_fact_status.path), 0) as parsed_percent,
-       (100 * sum(case when fact_status in ('fixed_encoding','relocation','data_relocation','macro_lowered','data_definition','constant_expression','metadata') then 1 else 0 end)) / count(*) as fact_backed_percent
-from repo_asm_operation_fact_status
-group by path
-order by fact_backed_percent desc, remaining_count asc, path;
+       sum(case when status.fact_status = 'fixed_encoding' then 1 else 0 end) as fixed_encoding_count,
+       sum(case when status.fact_status = 'relocation' then 1 else 0 end) as relocation_count,
+       sum(case when status.fact_status = 'data_relocation' then 1 else 0 end) as data_relocation_count,
+       sum(case when status.fact_status = 'macro_lowered' then 1 else 0 end) as macro_lowered_count,
+       sum(case when status.fact_status = 'data_definition' then 1 else 0 end) as data_definition_count,
+       sum(case when status.fact_status = 'constant_expression' then 1 else 0 end) as constant_expression_count,
+       sum(case when status.fact_status = 'metadata' then 1 else 0 end) as metadata_count,
+       sum(status_kind.is_fact_backed) as fact_backed_count,
+       sum(status_kind.deletion_blocks)
+         + coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = status.path), 0) as remaining_count,
+       coalesce((select unparsed_line_count from repo_asm_parse_coverage coverage where coverage.path = status.path), 0) as unparsed_line_count,
+       coalesce((select parsed_percent from repo_asm_parse_coverage coverage where coverage.path = status.path), 0) as parsed_percent,
+       (100 * sum(status_kind.is_fact_backed)) / count(*) as fact_backed_percent
+from repo_asm_operation_fact_status status
+join repo_asm_operation_fact_status_kind status_kind
+  on status_kind.fact_status = status.fact_status
+group by status.path
+order by fact_backed_percent desc, remaining_count asc, status.path;
 
 create view repo_asm_remaining_gap as
-select path,
-       repo_file_id,
-       function_name,
-       line_no,
-       op_name,
-       operand_text,
-       raw_text,
-       fact_status as gap_kind
-from repo_asm_operation_fact_status
-where fact_status in ('known_gap', 'syntax_gap');
+select status.path,
+       status.repo_file_id,
+       status.function_name,
+       status.line_no,
+       status.op_name,
+       status.operand_text,
+       status.raw_text,
+       status.fact_status as gap_kind
+from repo_asm_operation_fact_status status
+join repo_asm_operation_fact_status_kind status_kind
+  on status_kind.fact_status = status.fact_status
+where status_kind.is_gap = 1;
 
 create view repo_asm_remaining_meaning_gap as
 select path,
@@ -14274,7 +14373,7 @@ select rule_key,
        output_fact_kind
 from engine_rule;
 
-create view engine_fact as
+create view standards_engine_fact as
 select fact_id,
        fact_kind,
        subject,
@@ -14299,8 +14398,9 @@ select fact_id,
        line_no,
        input_fact_id,
        'derived:' || fact_id || ':' || rule_name || ':' || length(coalesce(object, ''))
-from standards_derived_resident
-union all
+from standards_derived_resident;
+
+create view entity_relation_engine_fact as
 select 'entity:' || entity_name,
        'entity_fact',
        entity_name,
@@ -14325,8 +14425,9 @@ select 'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(
        0,
        provenance,
        'relation:' || subject_entity || ':' || relation_name || ':' || coalesce(object_entity, object_value, '') || ':' || unit_name
-from engine_relation_resident
-union all
+from engine_relation_resident;
+
+create view tradeoff_engine_fact as
 select 'tradeoff.decision:' || decision_id,
        'tradeoff_decision_fact',
        decision_id,
@@ -14364,8 +14465,9 @@ select 'tradeoff.assessment:' || assessment_id,
        0,
        'engine_tradeoff_assessment_fact',
        'tradeoff.assessment:' || assessment_id || ':' || cast(score as text) || ':' || cast(weight as text)
-from engine_tradeoff_assessment_fact
-union all
+from engine_tradeoff_assessment_fact;
+
+create view tor_engine_fact as
 select 'tor.control.command:' || command_name,
        'tor_control_command_fact',
        'tor.control',
@@ -14507,8 +14609,9 @@ select 'tor.bandwidth.rule:' || rule_name,
        source_line,
        source_name,
        'tor.bandwidth.rule:' || rule_name || ':' || rule_kind
-from tor_bandwidth_file_rule_fact
-union all
+from tor_bandwidth_file_rule_fact;
+
+create view media_engine_fact as
 select 'media.constant:' || codec_name || ':' || symbol_name,
        'media_codec_constant_fact',
        'media.codec.' || codec_name,
@@ -14520,8 +14623,9 @@ select 'media.constant:' || codec_name || ':' || symbol_name,
        source_line,
        source_name,
        'media.constant:' || codec_name || ':' || symbol_name || ':' || value_text
-from media_codec_constant_fact
-union all
+from media_codec_constant_fact;
+
+create view repo_asm_engine_fact as
 select 'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
        'repo_asm_operation_status_fact',
        path,
@@ -14533,8 +14637,9 @@ select 'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || '
        line_no,
        raw_text,
        'repo_asm.operation_status:' || repo_file_id || ':' || cast(line_no as text) || ':' || fact_status
-from repo_asm_operation_fact_status
-union all
+from repo_asm_operation_fact_status;
+
+create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'corpus_proof_fact',
        corpus_name,
@@ -14547,6 +14652,21 @@ select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'corpus_expectation:' || corpus_name || ':' || case_name || ':' || clause_name,
        'proof:' || corpus_name || ':' || case_name || ':' || clause_name || ':' || expected_result || ':' || actual_result
 from engine_corpus_proof;
+
+create view engine_fact as
+select * from standards_engine_fact
+union all
+select * from entity_relation_engine_fact
+union all
+select * from tradeoff_engine_fact
+union all
+select * from tor_engine_fact
+union all
+select * from media_engine_fact
+union all
+select * from repo_asm_engine_fact
+union all
+select * from corpus_proof_engine_fact;
 
 create view engine_fact_resident as select * from engine_fact;
 
@@ -14565,11 +14685,12 @@ select 'apply:repo_asm.classify:' || repo_file_id || ':' || cast(line_no as text
        'repo_asm:classify_operation_status',
        'repo_asm.operation:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
        'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
-       case when fact_status in ('known_gap', 'syntax_gap') then 'gap' else 'derived' end,
+       case when status_kind.is_gap = 1 then 'gap' else 'derived' end,
        'repo.asm',
        line_no,
-       'classify_operation_status:' || fact_status || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, '')
+       'classify_operation_status:' || repo_asm_operation_fact_status.fact_status || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, '')
 from repo_asm_operation_fact_status
+join repo_asm_operation_fact_status_kind status_kind using (fact_status)
 union all
 select 'apply:repo_asm.encoding_conflict:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
        'repo_asm:detect_encoding_conflict',
@@ -14593,42 +14714,57 @@ from engine_corpus_proof;
 
 create view engine_derivation_resident as select * from engine_derivation;
 
-create view engine_gap as
+create view standards_engine_gap as
 select 'standards:' || gap_kind as gap_kind,
        namespace,
        line_no,
        evidence,
        'classification_gap' as gap_class
-from standards_fact_gap
-union all
+from standards_fact_gap;
+
+create view corpus_proof_engine_gap as
 select 'standards:proof_mismatch',
        'standards.corpus.' || corpus_name || '.cases',
        0,
        corpus_name || ':' || case_name || ':' || clause_name || ':expected=' || expected_result || ':actual=' || actual_result,
        'validation_gap'
 from engine_corpus_proof
-where matches_expectation = 0
-union all
+where matches_expectation = 0;
+
+create view predicate_engine_gap as
 select 'standards:' || gap_kind,
        'standards.clause.' || clause_name,
        0,
        atom_text,
        'predicate_parse_gap'
-from engine_clause_predicate_parse_gap
-union all
+from engine_clause_predicate_parse_gap;
+
+create view repo_asm_engine_gap as
 select 'repo_asm:' || gap_kind,
        path,
        line_no,
        coalesce(function_name, '') || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, '') || ':' || raw_text,
        'asm_import_gap'
-from repo_asm_remaining_meaning_gap
-union all
+from repo_asm_remaining_meaning_gap;
+
+create view relation_engine_gap as
 select 'engine:' || gap_kind,
        coalesce(subject_entity, ''),
        0,
        relation_name || ':' || coalesce(object_entity, object_value, '') || ':' || provenance,
        'relation_import_gap'
 from engine_relation_import_gap;
+
+create view engine_gap as
+select * from standards_engine_gap
+union all
+select * from corpus_proof_engine_gap
+union all
+select * from predicate_engine_gap
+union all
+select * from repo_asm_engine_gap
+union all
+select * from relation_engine_gap;
 
 create view engine_gap_resident as select * from engine_gap;
 
