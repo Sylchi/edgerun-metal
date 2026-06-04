@@ -14267,23 +14267,6 @@ create table catalog_stage_fact (
   default_load_policy text not null
 );
 
-create table catalog_stage_input_fact (
-  stage_id text not null references catalog_stage_fact(stage_id),
-  input_kind text not null,
-  input_name text not null,
-  input_scope text not null,
-  primary key (stage_id, input_kind, input_name)
-);
-
-create table catalog_stage_output_fact (
-  stage_id text not null references catalog_stage_fact(stage_id),
-  output_name text not null,
-  output_kind text not null,
-  artifact_path text not null,
-  receipt_key text not null,
-  primary key (stage_id, output_name)
-);
-
 create table catalog_stage_dependency_fact (
   stage_id text not null references catalog_stage_fact(stage_id),
   depends_on_stage_id text not null references catalog_stage_fact(stage_id),
@@ -14306,18 +14289,96 @@ create table catalog_stage_transform_fact (
   primary key (stage_id, transform_order)
 );
 
+create table catalog_artifact_kind_fact (
+  artifact_kind text primary key,
+  authority_role text not null,
+  storage_policy text not null,
+  purpose text not null
+);
+
+create table catalog_pipeline_artifact_fact (
+  artifact_id text primary key,
+  artifact_kind text not null references catalog_artifact_kind_fact(artifact_kind),
+  domain_name text not null,
+  artifact_name text not null,
+  relation_name text not null,
+  object_path text not null,
+  authority_status text not null,
+  retention_policy text not null
+);
+
+create table catalog_pipeline_edge_fact (
+  edge_id text primary key,
+  stage_id text not null references catalog_stage_fact(stage_id),
+  transform_kind text not null references catalog_transform_kind_fact(transform_kind),
+  input_artifact_id text not null references catalog_pipeline_artifact_fact(artifact_id),
+  output_artifact_id text not null references catalog_pipeline_artifact_fact(artifact_id),
+  invalidation_policy text not null,
+  rebuild_policy text not null,
+  receipt_required integer not null
+);
+
+create table catalog_pipeline_receipt_template_fact (
+  edge_id text primary key references catalog_pipeline_edge_fact(edge_id),
+  receipt_kind text not null,
+  receipt_key text not null,
+  records_required text not null
+);
+
 create view catalog_stage_rebuild_boundary as
 select stage.stage_id,
        stage.domain_name,
        stage.stage_name,
        stage.artifact_kind,
        stage.default_load_policy,
-       group_concat(distinct input.input_kind || ':' || input.input_name) as input_facts,
-       group_concat(distinct output.output_kind || ':' || output.output_name) as output_facts
+       group_concat(distinct input.artifact_kind || ':' || input.artifact_id) as input_facts,
+       group_concat(distinct output.artifact_kind || ':' || output.artifact_id) as output_facts
 from catalog_stage_fact stage
-left join catalog_stage_input_fact input using (stage_id)
-left join catalog_stage_output_fact output using (stage_id)
+left join catalog_pipeline_edge_fact edge using (stage_id)
+left join catalog_pipeline_artifact_fact input
+  on input.artifact_id = edge.input_artifact_id
+left join catalog_pipeline_artifact_fact output
+  on output.artifact_id = edge.output_artifact_id
 group by stage.stage_id, stage.domain_name, stage.stage_name, stage.artifact_kind, stage.default_load_policy;
+
+create view catalog_pipeline_edge_plan as
+select edge.edge_id,
+       edge.stage_id,
+       stage.domain_name,
+       edge.transform_kind,
+       input.artifact_kind as input_kind,
+       input.artifact_name as input_name,
+       output.artifact_kind as output_kind,
+       output.artifact_name as output_name,
+       edge.invalidation_policy,
+       edge.rebuild_policy,
+       edge.receipt_required,
+       receipt.receipt_key
+from catalog_pipeline_edge_fact edge
+join catalog_stage_fact stage using (stage_id)
+join catalog_pipeline_artifact_fact input
+  on input.artifact_id = edge.input_artifact_id
+join catalog_pipeline_artifact_fact output
+  on output.artifact_id = edge.output_artifact_id
+left join catalog_pipeline_receipt_template_fact receipt using (edge_id);
+
+create view catalog_pipeline_save_plan as
+select artifact.artifact_id,
+       artifact.domain_name,
+       artifact.artifact_name,
+       artifact.artifact_kind,
+       artifact.relation_name,
+       artifact.object_path,
+       artifact.authority_status,
+       artifact.retention_policy,
+       coalesce(edge.edge_id, '') as producing_edge_id,
+       coalesce(edge.rebuild_policy, '') as rebuild_policy,
+       coalesce(receipt.receipt_key, '') as receipt_key
+from catalog_pipeline_artifact_fact artifact
+left join catalog_pipeline_edge_fact edge
+  on edge.output_artifact_id = artifact.artifact_id
+left join catalog_pipeline_receipt_template_fact receipt using (edge_id)
+order by artifact.domain_name, artifact.artifact_id;
 
 insert into catalog_stage_fact(stage_id, domain_name, stage_name, purpose, artifact_kind, default_load_policy) values
   ('repo_file_import', 'repo', 'Import repository files', 'Import file metadata and source/object content from explicit filesystem roots.', 'base_fact', 'default'),
@@ -14344,6 +14405,18 @@ insert into catalog_transform_kind_fact(transform_kind, input_role, output_role,
   ('report', 'facts', 'diagnostic_facts', 'Compute opt-in diagnostics and operator ranking facts.'),
   ('project', 'facts', 'view', 'Project domain facts into a shared query surface.');
 
+insert into catalog_artifact_kind_fact(artifact_kind, authority_role, storage_policy, purpose) values
+  ('source_bytes', 'input', 'content_addressed', 'Raw source or source-object bytes entering a one-time import pipeline.'),
+  ('object_bytes', 'authority', 'content_addressed', 'Committed EROBJ bytes that carry canonical authority.'),
+  ('line_relation', 'derived', 'stage_artifact', 'Line facts decoded from source/object bytes.'),
+  ('syntax_relation', 'derived', 'stage_artifact', 'Parsed syntax and operation facts.'),
+  ('semantic_relation', 'derived', 'stage_artifact', 'Facts derived from syntax, constants, rules, or finite vocabularies.'),
+  ('encoding_relation', 'derived', 'stage_artifact', 'Facts that encode canonical records into byte materialization choices.'),
+  ('status_relation', 'derived', 'stage_artifact', 'Readiness, gap, and validation status facts.'),
+  ('diagnostic_relation', 'diagnostic', 'on_demand', 'Operator reports and rankings that are useful but not authority.'),
+  ('projection_view', 'view', 'ephemeral', 'Shared query surfaces over resident domain facts.'),
+  ('receipt_object', 'receipt', 'content_addressed', 'Receipt records proving a pipeline edge ran over specific inputs.');
+
 insert into catalog_stage_transform_fact(stage_id, transform_kind, transform_order, transform_name) values
   ('repo_file_import', 'load', 10, 'load_repo_roots'),
   ('repo_file_import', 'decode', 20, 'classify_repo_file_kinds'),
@@ -14362,49 +14435,44 @@ insert into catalog_stage_transform_fact(stage_id, transform_kind, transform_ord
   ('app_zig_facts', 'classify', 20, 'classify_zig_remaining_gaps'),
   ('engine_fact_projection', 'project', 10, 'project_engine_fact_view');
 
-insert into catalog_stage_input_fact(stage_id, input_kind, input_name, input_scope) values
-  ('repo_file_import', 'filesystem_root', 'kernel', 'repo'),
-  ('repo_file_import', 'filesystem_root', 'app', 'repo'),
-  ('repo_file_import', 'file', 'AGENTS.md', 'repo'),
-  ('repo_file_import', 'file', 'README.md', 'repo'),
-  ('repo_file_import', 'file', 'CHANGELOG.md', 'repo'),
-  ('repo_asm_lines', 'relation', 'repo_file', 'repo.asm'),
-  ('repo_asm_operations', 'relation', 'repo_asm_line', 'repo.asm'),
-  ('repo_asm_operations', 'relation', 'repo_asm_function_span', 'repo.asm'),
-  ('repo_asm_rule_match', 'relation', 'repo_asm_operation', 'repo.asm'),
-  ('repo_asm_rule_match', 'relation', 'asm_dsl_rule', 'repo.asm'),
-  ('repo_asm_rule_match', 'relation', 'encoding_pattern', 'repo.asm'),
-  ('repo_asm_constants', 'relation', 'repo_asm_constant_definition_fact', 'repo.asm'),
-  ('repo_asm_constants', 'relation', 'repo_asm_all_unique_constant_fact', 'repo.asm'),
-  ('repo_asm_parametric_encodings', 'relation', 'repo_asm_rule_match', 'repo.asm'),
-  ('repo_asm_parametric_encodings', 'relation', 'repo_asm_numeric_constant_value', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_rule_match', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_all_parametric_encoding_fact', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_relocation_fact', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_data_reference_fact', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_macro_lowering_fact', 'repo.asm'),
-  ('repo_asm_operation_status', 'relation', 'repo_asm_data_definition_fact', 'repo.asm'),
-  ('repo_asm_reports', 'relation', 'repo_asm_source_deletion_plan', 'repo.asm'),
-  ('repo_asm_reports', 'relation', 'repo_asm_remaining_meaning_gap', 'repo.asm'),
-  ('repo_asm_reports', 'relation', 'repo_asm_unresolved_constant_symbol_gap', 'repo.asm'),
-  ('app_zig_lines', 'relation', 'repo_file', 'app.zig'),
-  ('app_zig_facts', 'relation', 'app_zig_line', 'app.zig'),
-  ('engine_fact_projection', 'relation', 'standards_engine_fact', 'engine'),
-  ('engine_fact_projection', 'relation', 'repo_asm_engine_fact', 'engine'),
-  ('engine_fact_projection', 'relation', 'app_zig_engine_fact', 'engine');
+insert into catalog_pipeline_artifact_fact(artifact_id, artifact_kind, domain_name, artifact_name, relation_name, object_path, authority_status, retention_policy) values
+  ('repo.source_bytes', 'source_bytes', 'repo', 'Repository source bytes', 'repo_file', '', 'input', 'replace_with_facts_when_complete'),
+  ('repo.file_facts', 'semantic_relation', 'repo', 'Repository file facts', 'repo_file', '.build/catalog/stage/repo_file_import.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.line_facts', 'line_relation', 'repo.asm', 'ASM line facts', 'repo_asm_line', '.build/catalog/stage/repo_asm_lines.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.operation_facts', 'syntax_relation', 'repo.asm', 'ASM operation facts', 'repo_asm_operation', '.build/catalog/stage/repo_asm_operations.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.rule_match_facts', 'semantic_relation', 'repo.asm', 'ASM rule match facts', 'repo_asm_rule_match', '.build/catalog/stage/repo_asm_rule_match.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.constant_facts', 'semantic_relation', 'repo.asm', 'ASM numeric constant facts', 'repo_asm_numeric_constant_value', '.build/catalog/stage/repo_asm_constants.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.encoding_facts', 'encoding_relation', 'repo.asm', 'ASM parametric encoding facts', 'repo_asm_all_parametric_encoding_fact', '.build/catalog/stage/repo_asm_parametric_encodings.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.status_facts', 'status_relation', 'repo.asm', 'ASM operation status facts', 'repo_asm_operation_fact_status', '.build/catalog/stage/repo_asm_operation_status.erobj', 'derived', 'persist_when_changed'),
+  ('repo_asm.report_facts', 'diagnostic_relation', 'repo.asm', 'ASM operator report facts', 'repo_asm_next_operator_action', '.build/catalog/stage/repo_asm_reports.erobj', 'diagnostic', 'on_demand'),
+  ('app_zig.line_facts', 'line_relation', 'app.zig', 'Zig line facts', 'app_zig_line', '.build/catalog/stage/app_zig_lines.erobj', 'derived', 'persist_when_changed'),
+  ('app_zig.syntax_facts', 'syntax_relation', 'app.zig', 'Zig syntax facts', 'app_zig_fact_line', '.build/catalog/stage/app_zig_facts.erobj', 'derived', 'persist_when_changed'),
+  ('engine.fact_projection', 'projection_view', 'engine', 'Engine fact projection', 'engine_fact', '.build/catalog/stage/engine_fact_projection.erobj', 'view', 'on_demand'),
+  ('pipeline.receipt_objects', 'receipt_object', 'pipeline', 'Pipeline receipt objects', 'catalog_pipeline_receipt_template_fact', '.build/catalog/stage/receipts.erobj', 'receipt', 'persist_when_changed');
 
-insert into catalog_stage_output_fact(stage_id, output_name, output_kind, artifact_path, receipt_key) values
-  ('repo_file_import', 'repo_file', 'relation', '.build/catalog/stage/repo_file_import.erobj', 'catalog.stage.repo_file_import'),
-  ('repo_asm_lines', 'repo_asm_line', 'relation', '.build/catalog/stage/repo_asm_lines.erobj', 'catalog.stage.repo_asm_lines'),
-  ('repo_asm_operations', 'repo_asm_operation', 'relation', '.build/catalog/stage/repo_asm_operations.erobj', 'catalog.stage.repo_asm_operations'),
-  ('repo_asm_rule_match', 'repo_asm_rule_match', 'relation', '.build/catalog/stage/repo_asm_rule_match.erobj', 'catalog.stage.repo_asm_rule_match'),
-  ('repo_asm_constants', 'repo_asm_numeric_constant_value', 'relation', '.build/catalog/stage/repo_asm_constants.erobj', 'catalog.stage.repo_asm_constants'),
-  ('repo_asm_parametric_encodings', 'repo_asm_all_parametric_encoding_fact', 'relation', '.build/catalog/stage/repo_asm_parametric_encodings.erobj', 'catalog.stage.repo_asm_parametric_encodings'),
-  ('repo_asm_operation_status', 'repo_asm_operation_fact_status', 'relation', '.build/catalog/stage/repo_asm_operation_status.erobj', 'catalog.stage.repo_asm_operation_status'),
-  ('repo_asm_reports', 'repo_asm_next_operator_action', 'diagnostic_relation', '.build/catalog/stage/repo_asm_reports.erobj', 'catalog.stage.repo_asm_reports'),
-  ('app_zig_lines', 'app_zig_line', 'relation', '.build/catalog/stage/app_zig_lines.erobj', 'catalog.stage.app_zig_lines'),
-  ('app_zig_facts', 'app_zig_fact_line', 'relation', '.build/catalog/stage/app_zig_facts.erobj', 'catalog.stage.app_zig_facts'),
-  ('engine_fact_projection', 'engine_fact', 'projection', '.build/catalog/stage/engine_fact_projection.erobj', 'catalog.stage.engine_fact_projection');
+insert into catalog_pipeline_edge_fact(edge_id, stage_id, transform_kind, input_artifact_id, output_artifact_id, invalidation_policy, rebuild_policy, receipt_required) values
+  ('repo.load_file_facts', 'repo_file_import', 'load', 'repo.source_bytes', 'repo.file_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
+  ('repo_asm.decode_lines', 'repo_asm_lines', 'decode', 'repo.file_facts', 'repo_asm.line_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
+  ('repo_asm.parse_operations', 'repo_asm_operations', 'parse', 'repo_asm.line_facts', 'repo_asm.operation_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
+  ('repo_asm.match_rules', 'repo_asm_rule_match', 'derive', 'repo_asm.operation_facts', 'repo_asm.rule_match_facts', 'input_or_rule_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.solve_constants', 'repo_asm_constants', 'derive', 'repo_asm.operation_facts', 'repo_asm.constant_facts', 'input_or_definition_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.encode_parametric', 'repo_asm_parametric_encodings', 'encode', 'repo_asm.rule_match_facts', 'repo_asm.encoding_facts', 'input_or_vocab_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.classify_status', 'repo_asm_operation_status', 'classify', 'repo_asm.encoding_facts', 'repo_asm.status_facts', 'input_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.report_actions', 'repo_asm_reports', 'report', 'repo_asm.status_facts', 'repo_asm.report_facts', 'input_digest_changed', 'run_on_request', 0),
+  ('app_zig.decode_lines', 'app_zig_lines', 'decode', 'repo.file_facts', 'app_zig.line_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
+  ('app_zig.parse_facts', 'app_zig_facts', 'parse', 'app_zig.line_facts', 'app_zig.syntax_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
+  ('engine.project_facts', 'engine_fact_projection', 'project', 'repo_asm.status_facts', 'engine.fact_projection', 'input_digest_changed', 'run_on_request', 0);
+
+insert into catalog_pipeline_receipt_template_fact(edge_id, receipt_kind, receipt_key, records_required) values
+  ('repo.load_file_facts', 'load_receipt', 'receipt.repo.load_file_facts', 'input_digest,output_digest,row_count'),
+  ('repo_asm.decode_lines', 'decode_receipt', 'receipt.repo_asm.decode_lines', 'input_digest,output_digest,row_count'),
+  ('repo_asm.parse_operations', 'parse_receipt', 'receipt.repo_asm.parse_operations', 'input_digest,output_digest,row_count,gap_count'),
+  ('repo_asm.match_rules', 'derive_receipt', 'receipt.repo_asm.match_rules', 'input_digest,rule_digest,output_digest,row_count,gap_count'),
+  ('repo_asm.solve_constants', 'derive_receipt', 'receipt.repo_asm.solve_constants', 'input_digest,definition_digest,output_digest,row_count,gap_count'),
+  ('repo_asm.encode_parametric', 'encode_receipt', 'receipt.repo_asm.encode_parametric', 'input_digest,vocab_digest,output_digest,row_count,conflict_count'),
+  ('repo_asm.classify_status', 'classify_receipt', 'receipt.repo_asm.classify_status', 'input_digest,output_digest,row_count,gap_count'),
+  ('app_zig.decode_lines', 'decode_receipt', 'receipt.app_zig.decode_lines', 'input_digest,output_digest,row_count'),
+  ('app_zig.parse_facts', 'parse_receipt', 'receipt.app_zig.parse_facts', 'input_digest,output_digest,row_count,gap_count');
 
 insert into catalog_stage_dependency_fact(stage_id, depends_on_stage_id, dependency_kind) values
   ('repo_asm_lines', 'repo_file_import', 'source'),
@@ -15956,6 +16024,72 @@ select 'tradeoff.assessment:' || assessment_id,
        'tradeoff.assessment:' || assessment_id || ':' || cast(score as text) || ':' || cast(weight as text)
 from engine_tradeoff_assessment_fact;
 
+create view pipeline_engine_fact as
+select 'pipeline.stage:' || stage_id as fact_id,
+       'catalog_stage_fact' as fact_kind,
+       stage_id as subject,
+       domain_name as predicate,
+       artifact_kind || ':' || default_load_policy as object,
+       'text' as value_type,
+       'observed' as fact_status,
+       'engine.pipeline' as namespace,
+       0 as line_no,
+       purpose as evidence,
+       'pipeline.stage:' || stage_id || ':' || default_load_policy as stable_key
+from catalog_stage_fact
+union all
+select 'pipeline.transform:' || stage_id || ':' || cast(transform_order as text),
+       'catalog_stage_transform_fact',
+       stage_id,
+       transform_kind,
+       transform_name,
+       'text',
+       'observed',
+       'engine.pipeline',
+       0,
+       'transform_order=' || cast(transform_order as text),
+       'pipeline.transform:' || stage_id || ':' || cast(transform_order as text) || ':' || transform_kind
+from catalog_stage_transform_fact
+union all
+select 'pipeline.artifact:' || artifact_id,
+       'catalog_pipeline_artifact_fact',
+       artifact_id,
+       artifact_kind,
+       relation_name || ':' || retention_policy,
+       'text',
+       'observed',
+       'engine.pipeline',
+       0,
+       object_path,
+       'pipeline.artifact:' || artifact_id || ':' || authority_status || ':' || retention_policy
+from catalog_pipeline_artifact_fact
+union all
+select 'pipeline.edge:' || edge_id,
+       'catalog_pipeline_edge_fact',
+       edge_id,
+       transform_kind,
+       input_artifact_id || '->' || output_artifact_id,
+       'text',
+       'observed',
+       'engine.pipeline',
+       0,
+       invalidation_policy || ':' || rebuild_policy,
+       'pipeline.edge:' || edge_id || ':' || invalidation_policy || ':' || rebuild_policy
+from catalog_pipeline_edge_fact
+union all
+select 'pipeline.receipt_template:' || edge_id,
+       'catalog_pipeline_receipt_template_fact',
+       edge_id,
+       receipt_kind,
+       receipt_key || ':' || records_required,
+       'text',
+       'observed',
+       'engine.pipeline',
+       0,
+       records_required,
+       'pipeline.receipt_template:' || edge_id || ':' || receipt_key
+from catalog_pipeline_receipt_template_fact;
+
 create view tor_engine_fact as
 select 'tor.control.command:' || command_name,
        'tor_control_command_fact',
@@ -16409,6 +16543,8 @@ union all
 select * from entity_relation_engine_fact
 union all
 select * from tradeoff_engine_fact
+union all
+select * from pipeline_engine_fact
 union all
 select * from tor_engine_fact
 union all
