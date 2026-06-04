@@ -8552,7 +8552,9 @@ insert into arm32_condition_fact(op_name, base_op_name, cond_code) values
   ('subs', 'sub', 14), ('and', 'and', 14), ('orr', 'orr', 14),
   ('bic', 'bic', 14), ('mvn', 'mvn', 14), ('tst', 'tst', 14), ('lsl', 'lsl', 14),
   ('lsr', 'lsr', 14), ('ldr', 'ldr', 14), ('str', 'str', 14),
-  ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('svc', 'svc', 14);
+  ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('push', 'push', 14),
+  ('pop', 'pop', 14), ('popeq', 'pop', 0), ('popne', 'pop', 1),
+  ('svc', 'svc', 14);
 
 create table repo_asm_arm32_parametric_encoding_fact as
 with recursive operation as (
@@ -8993,6 +8995,51 @@ with recursive operation as (
   left join arm32_file_constant_value constant
     on constant.repo_file_id = memory_post_offset.repo_file_id
    and constant.symbol_name = trim(replace(memory_post_offset.offset_text, '#', ''))
+), stack_list_operand as (
+  select operation.repo_file_id,
+         operation.function_name,
+         operation.line_no,
+         operation.op_name,
+         trim(substr(operation.operand_text, 2, length(operation.operand_text) - 2)) as list_text
+  from operation
+  where operation.op_name in ('push','pop','popeq','popne')
+    and operation.operand_text like '{%}'
+), stack_list_token(repo_file_id, function_name, line_no, op_name, rest, register_name) as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         substr(list_text || ',', instr(list_text || ',', ',') + 1) as rest,
+         trim(substr(list_text || ',', 1, instr(list_text || ',', ',') - 1)) as register_name
+  from stack_list_operand
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         op_name,
+         substr(rest, instr(rest, ',') + 1) as rest,
+         trim(substr(rest, 1, instr(rest, ',') - 1)) as register_name
+  from stack_list_token
+  where rest <> ''
+    and instr(rest, ',') > 0
+), arm_stack_list as (
+  select token.repo_file_id,
+         token.function_name,
+         token.line_no,
+         token.op_name,
+         cond.cond_code,
+         count(*) as register_count,
+         sum(1 << reg.reg_code) as register_mask,
+         max(reg.reg_code) as single_reg_code
+  from stack_list_token token
+  join arm32_condition_fact cond on cond.op_name = token.op_name
+  join arm32_register_encoding_fact reg on reg.register_name = token.register_name
+  where token.register_name <> ''
+  group by token.repo_file_id,
+           token.function_name,
+           token.line_no,
+           token.op_name,
+           cond.cond_code
 ), arm_svc as (
   select operation.repo_file_id,
          operation.function_name,
@@ -9089,12 +9136,34 @@ with recursive operation as (
            + (case when op_name in ('ldrb','strb') then (1 << 22) else 0 end)
            + (case when op_name in ('ldr','ldrb') then (1 << 20) else 0 end)
            + (rn_code << 16) + (rd_code << 12) + offset_value as fixed_word
-  from arm_memory_offset
-  where offset_value between 0 and 4095
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
+	  from arm_memory_offset
+	  where offset_value between 0 and 4095
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_' || op_name || '_single_reg_list' as parametric_rule_name,
+	         (cond_code << 28) + (case
+	                                when op_name = 'push' then 86835204 + (single_reg_code << 12)
+	                                else 77398020 + (single_reg_code << 12)
+	                              end) as fixed_word
+	  from arm_stack_list
+	  where register_count = 1
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_' || op_name || '_reg_list' as parametric_rule_name,
+	         (cond_code << 28) + (case
+	                                when op_name = 'push' then 153944064
+	                                else 146604032
+	                              end) + register_mask as fixed_word
+	  from arm_stack_list
+	  where register_count > 1
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
          'param_arm32_svc_imm24' as parametric_rule_name,
          (14 << 28) + (15 << 24) + immediate_value as fixed_word
   from arm_svc
