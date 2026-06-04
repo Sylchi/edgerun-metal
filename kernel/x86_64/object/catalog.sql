@@ -4790,12 +4790,95 @@ with recursive decimal_constant as (
          immediate_value
   from octal_constant_parse
   where digit_index = length(octal_text) + 1
+), definition_decimal_constant as (
+  select symbol_name,
+         cast(expression_text as integer) as immediate_value
+  from repo_asm_constant_definition_fact
+  where (expression_text glob '[0-9]*'
+         or expression_text glob '-[0-9]*')
+    and replace(expression_text, '-', '') not glob '*[^0-9]*'
+), definition_hex_constant_seed as (
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         substr(lower(expression_text), 3) as hex_text
+  from repo_asm_constant_definition_fact
+  where lower(expression_text) glob '0x[0-9a-f]*'
+    and substr(lower(expression_text), 3) <> ''
+    and substr(lower(expression_text), 3) not glob '*[^0-9a-f]*'
+), definition_hex_constant_parse(symbol_name, repo_file_id, line_no, hex_text, digit_index, immediate_value) as (
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from definition_hex_constant_seed
+  union all
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from definition_hex_constant_parse
+  where digit_index <= length(hex_text)
+), definition_hex_constant as (
+  select symbol_name,
+         immediate_value
+  from definition_hex_constant_parse
+  where digit_index = length(hex_text) + 1
+), definition_octal_constant_seed as (
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         substr(lower(expression_text), 1, length(expression_text) - 1) as octal_text
+  from repo_asm_constant_definition_fact
+  where lower(expression_text) glob '[0-7]*o'
+    and substr(lower(expression_text), 1, length(expression_text) - 1) <> ''
+    and substr(lower(expression_text), 1, length(expression_text) - 1) not glob '*[^0-7]*'
+), definition_octal_constant_parse(symbol_name, repo_file_id, line_no, octal_text, digit_index, immediate_value) as (
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         octal_text,
+         1 as digit_index,
+         0 as immediate_value
+  from definition_octal_constant_seed
+  union all
+  select symbol_name,
+         repo_file_id,
+         line_no,
+         octal_text,
+         digit_index + 1,
+         (immediate_value * 8) + instr('01234567', substr(octal_text, digit_index, 1)) - 1
+  from definition_octal_constant_parse
+  where digit_index <= length(octal_text)
+), definition_octal_constant as (
+  select symbol_name,
+         immediate_value
+  from definition_octal_constant_parse
+  where digit_index = length(octal_text) + 1
+), definition_constant as (
+  select * from definition_decimal_constant
+  union all
+  select * from definition_hex_constant
+  union all
+  select * from definition_octal_constant
+), definition_unique_numeric_constant as (
+  select symbol_name,
+         min(immediate_value) as immediate_value
+  from definition_constant
+  group by symbol_name
+  having min(immediate_value) = max(immediate_value)
 ), value_0 as (
   select * from decimal_constant
   union all
   select * from hex_constant
   union all
   select * from octal_constant
+  union all
+  select * from definition_unique_numeric_constant
 ), value_recursive(symbol_name, immediate_value) as (
   select symbol_name,
          immediate_value
@@ -9506,14 +9589,14 @@ select path,
        case
          when op_name = 'call' or op_name = 'er_call' then 'call'
          when op_name = 'bl' then 'call'
-         when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns') then 'branch'
+         when op_name in ('jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns') then 'branch'
          when op_name in ('b','beq','bne','blo','bhi','bhs','bls') then 'branch'
          else 'unknown'
        end as target_kind
 from repo_asm_operation
 where line_kind = 3
   and operand_text is not null
-  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','js','jns',
+  and op_name in ('call','er_call','jmp','je','jne','jz','jnz','ja','jae','jb','jbe','jg','jge','jl','jle','jc','jnc','jo','jno','jp','js','jns',
                   'bl','b','beq','bne','blo','bhi','bhs','bls');
 
 create view repo_asm_control_edge_fact as
@@ -9905,6 +9988,90 @@ join (
 ) unique_definition
   on unique_definition.target_name = memory.first_symbol_term
 where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx')
+  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.symbol_term_count = 1
+  and memory.rel_marker_count = 0
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       memory.first_symbol_term as target_name,
+       'external_symbol_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_memory_addressing_fact memory
+  on memory.repo_file_id = operation.repo_file_id
+ and memory.function_name = operation.function_name
+ and memory.line_no = operation.line_no
+join repo_asm_operation extern_decl
+  on extern_decl.repo_file_id = operation.repo_file_id
+ and extern_decl.op_name = 'extern'
+ and (',' || replace(extern_decl.operand_text, ' ', '') || ',') like '%,' || memory.first_symbol_term || ',%'
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','inc')
+  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.symbol_term_count = 1
+  and memory.rel_marker_count = 0
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       memory.first_symbol_term as target_name,
+       'absolute_dotted_data_label_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_memory_addressing_fact memory
+  on memory.repo_file_id = operation.repo_file_id
+ and memory.function_name = operation.function_name
+ and memory.line_no = operation.line_no
+join (
+  select dotted.target_name
+  from (
+    select replace(anchor.label_name, ':', '') || replace(child.label_name, ':', '') as target_name,
+           child.path
+    from repo_asm_data_definition_fact anchor
+    join repo_asm_data_definition_fact child
+      on child.repo_file_id = anchor.repo_file_id
+     and child.line_no > anchor.line_no
+     and child.label_name like '.%:'
+    where anchor.label_name <> ''
+      and anchor.label_name not like '.%:'
+      and not exists (
+        select 1
+        from repo_asm_data_definition_fact next_anchor
+        where next_anchor.repo_file_id = anchor.repo_file_id
+          and next_anchor.line_no > anchor.line_no
+          and next_anchor.line_no < child.line_no
+          and next_anchor.label_name <> ''
+          and next_anchor.label_name not like '.%:'
+      )
+  ) dotted
+  group by dotted.target_name
+  having count(distinct dotted.path) = 1
+) unique_dotted_definition
+  on unique_dotted_definition.target_name = memory.first_symbol_term
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','inc')
+  and memory.addressing_kind = 'symbolic_base_memory'
+  and memory.symbol_term_count = 1
+  and memory.rel_marker_count = 0
+union all
+select operation.path,
+       operation.repo_file_id,
+       operation.function_name,
+       operation.line_no,
+       operation.op_name,
+       memory.first_symbol_term as target_name,
+       'absolute_struct_field_memory_reference' as relocation_kind
+from repo_asm_operation operation
+join repo_asm_memory_addressing_fact memory
+  on memory.repo_file_id = operation.repo_file_id
+ and memory.function_name = operation.function_name
+ and memory.line_no = operation.line_no
+join repo_asm_numeric_symbol_value value
+  on value.symbol_name = memory.first_symbol_term
+ and value.value_kind = 'struct_offset'
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','inc')
   and memory.addressing_kind = 'symbolic_base_memory'
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0;
