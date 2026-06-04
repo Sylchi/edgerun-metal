@@ -51,13 +51,13 @@ The repository has two code worlds separated by a hard boundary:
   - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This is the current dogfooding surface, not the final source authority. The final form is canonical code objects: instruction records, labels, control edges, data records, and imports stored in `.erobj` graphs and addressed by hash.
   - **App-side:** Existing Zig source compiled to WASM is legacy bootstrap code. Port app logic, UI contracts, object/grant helpers, media helpers, and host-facing app utilities to owned code-object/self-hosted source-to-WASM paths. Do not add new Zig files, tests, examples, generators, or app features. App-side code must not contain a competing WASM interpreter.
 - `kernel/x86_64/` — canonical hardware-near implementation, organized by subsystem:
-  - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
+  - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm.erobj`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
   - `drv/` — hardware drivers
-  - `rt/` — runtime library (runtime.asm, math.asm, ctype.asm, clock.asm, bytes.asm)
+  - `rt/` — runtime library (runtime.asm, runtime_conv.asm, math.asm, ctype.asm, clock.asm, bytes.asm source objects)
   - `crypto/` — blake3, preimage, identity, tor, local_cell, local_route, local_circuit
   - `wasm/` — interpreter + compiler
   - `net/` — net, arp, ipv4, tcp
-  - `tpm/` — tpm.asm, tpm_crb.asm, tpm_constants.inc
+  - `tpm/` — tpm.asm and tpm_crb.asm source objects plus tpm_constants.inc
   - `agent/` — agent protocol, display agent (da.asm)
   - `ui/` — ui_core, render_ir, sw_fb
   - `object/` — object.asm, object_constants.inc

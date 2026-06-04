@@ -9678,7 +9678,7 @@ with recursive rhs_decimal as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-	    and match.op_name in ('mov','cmp','add','sub','and','or','xor')
+	    and match.op_name in ('mov','cmp','add','sub','and','or','xor','shl','shr','sar')
     and memory.addressing_kind = 'base_memory'
     and memory.register_term_count = 1
     and memory.scaled_register_term_count = 0
@@ -9784,6 +9784,34 @@ with recursive rhs_decimal as (
 	    and ((size_name = 'byte' and immediate_value between -128 and 255)
 	         or (size_name = 'word' and immediate_value between -32768 and 65535)
 	         or (size_name in ('dword','qword') and immediate_value between -2147483648 and 4294967295))
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+	         'param_x86_' || op_name || '_' || size_name || '_base_memory_imm8' as parametric_rule_name,
+	         (
+	           case when size_name = 'word' then '66' else '' end
+	           || case
+	                when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+	                when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+                else ''
+              end
+	           || 'c1'
+	           || printf('%02x', (mod_bits << 6)
+	                           + ((case op_name
+	                                 when 'shl' then 4
+	                                 when 'shr' then 5
+	                                 when 'sar' then 7
+	                               end) << 3)
+	                           + rm_field)
+	           || sib_hex
+	           || displacement_hex
+	           || printf('%02x', immediate_value & 255)
+	         ) as fixed_hex
+	  from memory_bytes
+	  where op_name in ('shl','shr','sar')
+	    and size_name in ('word','dword','qword')
+	    and immediate_value between 0 and 255
 )
 select repo_file_id,
        function_name,
@@ -9856,7 +9884,7 @@ with register_memory as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','lea','movzx','movsx','movsxd')
+    and match.op_name in ('mov','add','sub','cmp','and','or','xor','test','lea','movzx','movsx','movsxd','imul')
     and memory.addressing_kind = 'base_memory'
     and memory.register_term_count = 1
     and memory.scaled_register_term_count = 0
@@ -9872,7 +9900,12 @@ with register_memory as (
              and memory.operand_index = 1
              and reg_encoding.width_bits = 64
              and memory.size_name = 'dword')
-         or (match.op_name not in ('lea','movzx','movsx','movsxd')
+         or (match.op_name = 'imul'
+             and memory.operand_index = 1
+             and reg_encoding.width_bits in (32,64)
+             and (memory.size_name is null
+                  or memory.size_name in ('dword','qword')))
+         or (match.op_name not in ('lea','movzx','movsx','movsxd','imul')
              and reg_encoding.width_bits in (8,16,32,64)
              and (memory.size_name is null
                   or (memory.size_name = 'byte' and reg_encoding.width_bits = 8)
@@ -9968,6 +10001,7 @@ with register_memory as (
                 when op_name = 'movsx' and size_name = 'byte' then '0fbe'
                 when op_name = 'movsx' and size_name = 'word' then '0fbf'
                 when op_name = 'movsxd' then '63'
+                when op_name = 'imul' then '0faf'
               end
            || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
            || sib_hex
@@ -9975,7 +10009,7 @@ with register_memory as (
          ) as fixed_hex
   from memory_bytes
   where memory_operand_index = 1
-    and op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd')
+    and op_name in ('mov','add','sub','cmp','and','or','xor','lea','movzx','movsx','movsxd','imul')
 )
 select repo_file_id,
        function_name,
