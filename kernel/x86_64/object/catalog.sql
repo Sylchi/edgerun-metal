@@ -4649,10 +4649,11 @@ with binary_operand as (
   where memory_text like '[%]'
     and memory_text not like '%rsp%'
 ), base_memory_bytes as (
-  select base_memory.*,
-         base_reg.reg_code as base_reg_code,
-         base_reg.requires_rex as base_requires_rex,
-         case
+	  select base_memory.*,
+	         base_reg.reg_code as base_reg_code,
+	         base_reg.requires_rex as base_requires_rex,
+	         base_reg.width_bits as address_width_bits,
+	         case
            when displacement = 0 and (base_reg.reg_code & 7) not in (5) then 0
            when displacement between -128 and 127 then 1
            else 2
@@ -4669,9 +4670,9 @@ with binary_operand as (
          case when (base_reg.reg_code & 7) = 4 then '24' else '' end as sib_hex,
          case when (base_reg.reg_code & 7) = 4 then 4 else (base_reg.reg_code & 7) end as rm_field
   from base_memory
-  join x86_register_encoding_fact base_reg
-    on base_reg.register_name = base_memory.base_register_name
-   and base_reg.width_bits = 64
+	  join x86_register_encoding_fact base_reg
+	    on base_reg.register_name = base_memory.base_register_name
+	   and base_reg.width_bits in (32,64)
   where base_memory.displacement is not null
 ), reg_to_stack as (
   select normalized.*,
@@ -4723,10 +4724,11 @@ with binary_operand as (
          reg.width_bits,
          reg.reg_code,
          reg.requires_rex,
-         mem.size_name,
-         mem.base_reg_code,
-         mem.base_requires_rex,
-         mem.mod_bits,
+	         mem.size_name,
+	         mem.base_reg_code,
+	         mem.base_requires_rex,
+	         mem.address_width_bits,
+	         mem.mod_bits,
          mem.rm_field,
          mem.sib_hex,
          mem.displacement_hex
@@ -4750,10 +4752,11 @@ with binary_operand as (
          reg.width_bits,
          reg.reg_code,
          reg.requires_rex,
-         mem.size_name,
-         mem.base_reg_code,
-         mem.base_requires_rex,
-         mem.mod_bits,
+	         mem.size_name,
+	         mem.base_reg_code,
+	         mem.base_requires_rex,
+	         mem.address_width_bits,
+	         mem.mod_bits,
          mem.rm_field,
          mem.sib_hex,
          mem.displacement_hex
@@ -4861,9 +4864,9 @@ with binary_operand as (
     and repo_asm_rule_match.line_kind = 3
     and repo_asm_rule_match.encoding_id is null
     and repo_asm_rule_match.rule_name is not null
-		    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','sete','setne')
-		    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
-		         or (repo_asm_rule_match.op_name in ('setb','setbe','sete','setne') and reg.width_bits = 8))
+			    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','setae','sete','setne','setnz')
+			    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
+			         or (repo_asm_rule_match.op_name in ('setb','setbe','setae','sete','setne','setnz') and reg.width_bits = 8))
 	), segment_mov as (
 	  select normalized.*,
 	         case when normalized.lhs_value in ('es','cs','ss','ds','fs','gs') then normalized.lhs_value else normalized.rhs_value end as segment_name,
@@ -5126,16 +5129,18 @@ with binary_operand as (
 	             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
 	             else ''
 	           end
-	           || case op_name
-	                when 'setb' then '0f92'
-	                when 'setbe' then '0f96'
-	                when 'sete' then '0f94'
-	                when 'setne' then '0f95'
-	              end
+		           || case op_name
+		                when 'setb' then '0f92'
+		                when 'setbe' then '0f96'
+		                when 'setae' then '0f93'
+		                when 'sete' then '0f94'
+		                when 'setne' then '0f95'
+		                when 'setnz' then '0f95'
+		              end
 	           || printf('%02x', 208 + (reg_code & 7))
 	         ) as fixed_hex
-		  from unary_reg
-		  where op_name in ('setb','setbe','sete','setne')
+			  from unary_reg
+			  where op_name in ('setb','setbe','setae','sete','setne','setnz')
 	  union all
 	  select repo_file_id,
 	         function_name,
@@ -5179,8 +5184,9 @@ with binary_operand as (
 	         line_no,
          'param_x86_' || op_name || '_reg_base_memory' as parametric_rule_name,
          (
-           case
-             when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+	           case when address_width_bits = 32 then '67' else '' end
+	           || case
+	             when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
@@ -5210,8 +5216,9 @@ with binary_operand as (
          line_no,
          'param_x86_' || op_name || '_base_memory_reg' as parametric_rule_name,
          (
-           case
-             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+	           case when address_width_bits = 32 then '67' else '' end
+	           || case
+	             when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              else ''
            end
