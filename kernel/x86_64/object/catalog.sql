@@ -4871,7 +4871,7 @@ with binary_operand as (
 		         or dst.width_bits in (32,64))
 		    and (normalized.op_name not in ('bsr','bsf','bt','bts')
 		         or dst.width_bits in (32,64))
-	), movzx_reg_reg as (
+	), extend_reg_reg as (
   select normalized.*,
          dst.register_name as dst_register_name,
          dst.width_bits as dst_width_bits,
@@ -4884,9 +4884,13 @@ with binary_operand as (
   from normalized
   join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
   join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
-	  where normalized.op_name = 'movzx'
-	    and dst.width_bits in (32,64)
-	    and src.width_bits in (8,16)
+	  where normalized.op_name in ('movzx','movsx','movsxd')
+	    and ((normalized.op_name in ('movzx','movsx')
+	          and dst.width_bits in (32,64)
+	          and src.width_bits in (8,16))
+	         or (normalized.op_name = 'movsxd'
+	             and dst.width_bits = 64
+	             and src.width_bits = 32))
 	), shift_cl as (
 	  select normalized.*,
 	         dst.register_name as dst_register_name,
@@ -5078,20 +5082,24 @@ with binary_operand as (
 	  select repo_file_id,
 	         function_name,
 	         line_no,
-	         'param_x86_movzx_reg_reg' as parametric_rule_name,
+	         'param_x86_' || op_name || '_reg_reg' as parametric_rule_name,
          (
            case
+             when op_name = 'movsxd' then printf('%02x', 72 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
              when dst_width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
              when dst_requires_rex = 1 or src_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
              else ''
            end
-           || case src_width_bits
-                when 8 then '0fb6'
-                when 16 then '0fb7'
+           || case
+                when op_name = 'movzx' and src_width_bits = 8 then '0fb6'
+                when op_name = 'movzx' and src_width_bits = 16 then '0fb7'
+                when op_name = 'movsx' and src_width_bits = 8 then '0fbe'
+                when op_name = 'movsx' and src_width_bits = 16 then '0fbf'
+                when op_name = 'movsxd' then '63'
               end
            || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
 	         ) as fixed_hex
-	  from movzx_reg_reg
+	  from extend_reg_reg
 	  union all
 	  select repo_file_id,
 	         function_name,
@@ -12535,7 +12543,8 @@ create index repo_asm_data_definition_fact_label_idx
 
 create table repo_asm_unique_data_definition_fact as
 select replace(label_name, ':', '') as target_name from repo_asm_data_definition_fact where label_name <> ''
-group by replace(label_name, ':', '') having count(distinct path) = 1;
+group by replace(label_name, ':', '')
+having count(distinct case when path like '%.erobj' then substr(path, 1, length(path) - 6) else path end) = 1;
 create index repo_asm_unique_data_definition_fact_target_idx on repo_asm_unique_data_definition_fact(target_name);
 
 create table repo_asm_unique_dotted_data_definition_fact as
@@ -12558,9 +12567,10 @@ select dotted.target_name from (
        and previous_anchor.line_no < child.line_no
        and previous_anchor.op_name like '%:'
        and previous_anchor.operand_text is null
-   )
+  )
   where child.label_name like '.%') dotted
-group by dotted.target_name having count(distinct dotted.path) = 1;
+group by dotted.target_name
+having count(distinct case when dotted.path like '%.erobj' then substr(dotted.path, 1, length(dotted.path) - 6) else dotted.path end) = 1;
 create index repo_asm_unique_dotted_data_definition_fact_target_idx on repo_asm_unique_dotted_data_definition_fact(target_name);
 
 create table asm_metadata_op_fact (
