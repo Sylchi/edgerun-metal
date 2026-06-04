@@ -4093,7 +4093,7 @@ with binary_operand as (
 	  join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
 		  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','test','imul','cmova','cmovb','cmovg','cmovl','cmovne','xchg','bsr','bsf','bt','bts')
 		    and dst.width_bits = src.width_bits
-		    and dst.width_bits in (8,32,64)
+			    and dst.width_bits in (8,16,32,64)
 		    and (normalized.op_name not in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
 		         or dst.width_bits in (32,64))
 		    and (normalized.op_name not in ('bsr','bsf','bt','bts')
@@ -4139,10 +4139,10 @@ with binary_operand as (
     and (normalized.rhs_value glob '[0-9]*'
          or normalized.rhs_value glob '-[0-9]*')
     and replace(normalized.rhs_value, '-', '') not glob '*[^0-9]*'
-), unary_reg as (
-  select repo_asm_rule_match.repo_file_id,
-         repo_asm_rule_match.function_name,
-         repo_asm_rule_match.line_no,
+	), unary_reg as (
+	  select repo_asm_rule_match.repo_file_id,
+	         repo_asm_rule_match.function_name,
+	         repo_asm_rule_match.line_no,
          repo_asm_rule_match.op_name,
          reg.register_name,
          reg.width_bits,
@@ -4154,20 +4154,53 @@ with binary_operand as (
     and repo_asm_rule_match.line_kind = 3
     and repo_asm_rule_match.encoding_id is null
     and repo_asm_rule_match.rule_name is not null
-	    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','sete','setne')
-	    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
-	         or (repo_asm_rule_match.op_name in ('setb','setbe','sete','setne') and reg.width_bits = 8))
-), generated as (
+		    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','sete','setne')
+		    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
+		         or (repo_asm_rule_match.op_name in ('setb','setbe','sete','setne') and reg.width_bits = 8))
+	), segment_mov as (
+	  select normalized.*,
+	         case when normalized.lhs_value in ('es','cs','ss','ds','fs','gs') then normalized.lhs_value else normalized.rhs_value end as segment_name,
+	         case when normalized.lhs_value in ('es','cs','ss','ds','fs','gs') then src.reg_code else dst.reg_code end as reg_code,
+	         case when normalized.lhs_value in ('es','cs','ss','ds','fs','gs') then 'to_segment' else 'from_segment' end as move_direction
+	  from normalized
+	  left join x86_register_encoding_fact dst
+	    on dst.register_name = normalized.lhs_value
+	   and dst.width_bits = 16
+	  left join x86_register_encoding_fact src
+	    on src.register_name = normalized.rhs_value
+	   and src.width_bits = 16
+	  where normalized.op_name = 'mov'
+	    and ((normalized.lhs_value in ('es','cs','ss','ds','fs','gs') and src.register_name is not null)
+	         or (normalized.rhs_value in ('es','cs','ss','ds','fs','gs') and dst.register_name is not null))
+	), control_mov as (
+	  select normalized.*,
+	         case when normalized.lhs_value = 'cr0' then src.reg_code else dst.reg_code end as reg_code,
+	         case when normalized.lhs_value = 'cr0' then 'to_control' else 'from_control' end as move_direction
+	  from normalized
+	  left join x86_register_encoding_fact dst
+	    on dst.register_name = normalized.lhs_value
+	   and dst.width_bits in (32,64)
+	  left join x86_register_encoding_fact src
+	    on src.register_name = normalized.rhs_value
+	   and src.width_bits in (32,64)
+	  where normalized.op_name = 'mov'
+	    and ((normalized.lhs_value = 'cr0' and src.register_name is not null)
+	         or (normalized.rhs_value = 'cr0' and dst.register_name is not null))
+	), generated as (
   select repo_file_id,
          function_name,
          line_no,
          'param_x86_' || op_name || '_reg_reg' as parametric_rule_name,
          (
            case
-             when width_bits = 64 then printf('%02x', 72 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
-             when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
-             else ''
-           end
+	             when width_bits = 64 then printf('%02x', 72 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	             when width_bits = 16 then '66' || case
+	                                           when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	                                           else ''
+	                                         end
+	             when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
            || case op_name
                 when 'mov' then case when width_bits = 8 then '88' else '89' end
                 when 'add' then case when width_bits = 8 then '00' else '01' end
@@ -4213,6 +4246,10 @@ with binary_operand as (
 	         (
 	           case
 	             when width_bits = 64 then printf('%02x', 72 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	             when width_bits = 16 then '66' || case
+	                                           when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	                                           else ''
+	                                         end
 	             when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
 	             else ''
 	           end
@@ -4389,12 +4426,49 @@ with binary_operand as (
 	              end
 	           || printf('%02x', 208 + (reg_code & 7))
 	         ) as fixed_hex
-	  from unary_reg
-	  where op_name in ('setb','setbe','sete','setne')
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
+		  from unary_reg
+		  where op_name in ('setb','setbe','sete','setne')
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_in_acc_dx' as parametric_rule_name,
+	         case lhs_value
+	           when 'al' then 'ec'
+	           when 'ax' then '66ed'
+	           when 'eax' then 'ed'
+	         end as fixed_hex
+	  from normalized
+	  where op_name = 'in'
+	    and rhs_value = 'dx'
+	    and lhs_value in ('al','ax','eax')
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_segment_reg' as parametric_rule_name,
+	         (case move_direction when 'to_segment' then '8e' else '8c' end)
+	           || printf('%02x', 192 + ((case segment_name
+	                                      when 'es' then 0
+	                                      when 'cs' then 1
+	                                      when 'ss' then 2
+	                                      when 'ds' then 3
+	                                      when 'fs' then 4
+	                                      when 'gs' then 5
+	                                    end) << 3) + (reg_code & 7)) as fixed_hex
+	  from segment_mov
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_control_reg' as parametric_rule_name,
+	         (case move_direction when 'to_control' then '0f22' else '0f20' end)
+	           || printf('%02x', 192 + (reg_code & 7)) as fixed_hex
+	  from control_mov
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
          'param_x86_' || op_name || '_reg_base_memory' as parametric_rule_name,
          (
            case
