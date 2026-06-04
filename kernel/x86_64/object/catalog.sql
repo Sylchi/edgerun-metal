@@ -7588,6 +7588,12 @@ with clean_indexed_memory as (
   where mem.operand_index = 0
     and mem.op_name in ('mov','add','sub','cmp','and','or','xor')
     and mem.size_name in ('byte','word','dword','qword')
+), unary_index_memory as (
+  select *
+  from indexed_memory_bytes
+  where operand_index = 0
+    and op_name in ('inc','dec')
+    and size_name in ('byte','word','dword','qword')
 ), lea_reg_char_memory as (
   select normalized.repo_file_id,
          normalized.function_name,
@@ -7719,6 +7725,30 @@ with clean_indexed_memory as (
            || displacement_hex
          ) as fixed_hex
   from reg_to_index
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_' || op_name || '_' || size_name || '_index_memory' as parametric_rule_name,
+         (
+           case when address_width_bits = 32 then '67' else '' end
+           || case when size_name = 'word' then '66' else '' end
+           || case
+                when size_name = 'qword' then printf('%02x', 72 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+                when base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+                else ''
+              end
+           || case when size_name = 'byte' then 'fe' else 'ff' end
+           || printf('%02x', (mod_bits << 6)
+                           + ((case op_name
+                                 when 'inc' then 0
+                                 when 'dec' then 1
+                               end) << 3)
+                           + 4)
+           || sib_hex
+           || displacement_hex
+         ) as fixed_hex
+  from unary_index_memory
   union all
   select repo_file_id,
          function_name,
@@ -9726,7 +9756,7 @@ with recursive rhs_decimal as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-	    and match.op_name in ('mov','cmp','add','sub','and','or','xor','shl','shr','sar')
+	    and match.op_name in ('mov','cmp','add','sub','and','or','xor','test','shl','shr','sar')
     and memory.addressing_kind = 'base_memory'
     and memory.register_term_count = 1
     and memory.scaled_register_term_count = 0
@@ -9829,6 +9859,39 @@ with recursive rhs_decimal as (
 	         ) as fixed_hex
 	  from memory_bytes
 	  where op_name in ('cmp','add','sub','and','or','xor')
+	    and ((size_name = 'byte' and immediate_value between -128 and 255)
+	         or (size_name = 'word' and immediate_value between -32768 and 65535)
+	         or (size_name in ('dword','qword') and immediate_value between -2147483648 and 4294967295))
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+	         'param_x86_test_' || size_name || '_base_memory_imm' as parametric_rule_name,
+	         (
+	           case when size_name = 'word' then '66' else '' end
+	           || case
+	                when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+	                when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+                else ''
+              end
+	           || case when size_name = 'byte' then 'f6' else 'f7' end
+	           || printf('%02x', (mod_bits << 6) + rm_field)
+	           || sib_hex
+	           || displacement_hex
+	           || case
+	                when size_name = 'byte' then printf('%02x', immediate_value & 255)
+	                when size_name = 'word' then printf('%02x%02x',
+                                                     immediate_value & 255,
+                                                     (immediate_value >> 8) & 255)
+                else printf('%02x%02x%02x%02x',
+                            immediate_value & 255,
+                            (immediate_value >> 8) & 255,
+                            (immediate_value >> 16) & 255,
+                            (immediate_value >> 24) & 255)
+	              end
+	         ) as fixed_hex
+	  from memory_bytes
+	  where op_name = 'test'
 	    and ((size_name = 'byte' and immediate_value between -128 and 255)
 	         or (size_name = 'word' and immediate_value between -32768 and 65535)
 	         or (size_name in ('dword','qword') and immediate_value between -2147483648 and 4294967295))
