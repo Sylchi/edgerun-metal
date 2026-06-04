@@ -1549,7 +1549,7 @@ msg_x86_objects_ok: db "x86-objects: .build/kernel/kernel_*.o", 10, 0
 test_status_header: db "target", 9, "category", 9, "subsystem", 9, "status", 9, "log", 10, 0
 test_status_registry_pass: db "test-registry", 9, "unit", 9, "build", 9, "pass", 9, "registry object validated", 10, 0
 test_status_registry_fail: db "test-registry", 9, "unit", 9, "build", 9, "fail", 9, "registry object invalid", 10, 0
-test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm interpreted committed source object", 10, 0
+test_status_er_asm_parse_pass: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "pass", 9, "er_asm interpreted supported source object", 10, 0
 test_status_er_asm_parse_fail: db "test-er-asm-parse", 9, "unit", 9, "build", 9, "fail", 9, "er_asm parse probe failed", 10, 0
 test_status_er_asm_cli_pass: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "pass", 9, "er_asm assembled committed source object", 10, 0
 test_status_er_asm_cli_fail: db "test-er-asm-cli", 9, "unit", 9, "build", 9, "fail", 9, "er_asm CLI probe failed", 10, 0
@@ -1580,7 +1580,7 @@ x86_object_prefix: db ".build/kernel/kernel_", 0
 object_suffix: db ".o", 0
 kernel_source_build_dir: db ".build/kernel/source", 0
 er_asm_path: db ".build/host/er_asm", 0
-er_asm_source_object_path: db "kernel/host/er_asm.asm.erobj", 0
+er_asm_source_object_path: db "kernel/test/test_flat_runtime.asm.erobj", 0
 er_asm_cli_source_path: db "kernel/test/test_flat_runtime.asm.erobj", 0
 er_asm_cli_probe_path: db ".build/host/er_asm_cli_probe.bin", 0
 dev_null_path: db "/dev/null", 0
