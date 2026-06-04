@@ -3554,6 +3554,7 @@ with trimmed as (
             when t glob '*:' then 2
             when t glob '%include*' then 4
             when t glob '* equ *' then 5
+            when t glob '.equ *' then 5
             when t glob 'er_fn *' then 1
             when t glob 'global *' then 4
             when substr(t,1,1) = '%' then 4
@@ -4586,6 +4587,18 @@ from repo_asm_operation operation
 join repo_file using (repo_file_id)
 where operation.line_kind = 5
   and operation.operand_text like 'equ %'
+union all
+select repo_file.path,
+       operation.repo_file_id,
+       operation.line_no,
+       trim(substr(operation.operand_text, 1, instr(operation.operand_text, ',') - 1)) as symbol_name,
+       trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1)) as expression_text,
+       'dot_equ' as definition_kind
+from repo_asm_operation operation
+join repo_file using (repo_file_id)
+where operation.line_kind = 5
+  and operation.op_name = '.equ'
+  and operation.operand_text like '%,%'
 union all
 select repo_file.path,
        operation.repo_file_id,
@@ -8542,7 +8555,7 @@ insert into arm32_condition_fact(op_name, base_op_name, cond_code) values
   ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('svc', 'svc', 14);
 
 create table repo_asm_arm32_parametric_encoding_fact as
-with operation as (
+with recursive operation as (
   select match.repo_file_id,
          match.function_name,
          match.line_no,
@@ -8556,6 +8569,56 @@ with operation as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
+), arm32_file_constant_source as (
+  select repo_file_id,
+         symbol_name,
+         lower(trim(expression_text)) as expression_text
+  from repo_asm_constant_definition_fact
+  where path like 'kernel/arm/%'
+     or path like 'kernel/test/test_pi_%'
+), arm32_file_hex_seed as (
+  select repo_file_id,
+         symbol_name,
+         substr(expression_text, 3) as hex_text
+  from arm32_file_constant_source
+  where expression_text glob '0x[0-9a-f]*'
+    and substr(expression_text, 3) <> ''
+    and substr(expression_text, 3) not glob '*[^0-9a-f]*'
+), arm32_file_hex_parse(repo_file_id, symbol_name, hex_text, digit_index, immediate_value) as (
+  select repo_file_id,
+         symbol_name,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from arm32_file_hex_seed
+  union all
+  select repo_file_id,
+         symbol_name,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from arm32_file_hex_parse
+  where digit_index <= length(hex_text)
+), arm32_file_constant_value as (
+  select repo_file_id,
+         symbol_name,
+         cast(expression_text as integer) as immediate_value
+  from arm32_file_constant_source
+  where expression_text glob '[0-9]*'
+    and expression_text not glob '*[^0-9]*'
+  union all
+  select repo_file_id,
+         symbol_name,
+         immediate_value
+  from arm32_file_hex_parse
+  where digit_index = length(hex_text) + 1
+  union all
+  select repo_file_id,
+         symbol_name,
+         (1 << cast(substr(replace(replace(replace(expression_text, ' ', ''), '(', ''), ')', ''), 4) as integer)) as immediate_value
+  from arm32_file_constant_source
+  where replace(replace(replace(expression_text, ' ', ''), '(', ''), ')', '') glob '1<<[0-9]*'
+    and substr(replace(replace(replace(expression_text, ' ', ''), '(', ''), ')', ''), 4) not glob '*[^0-9]*'
 ), split_operand as (
   select operation.*,
          trim(substr(operand_text, 1, instr(operand_text, ',') - 1)) as arg0,
@@ -8574,38 +8637,63 @@ with operation as (
   from split_operand
 ), decimal_immediate as (
   select split_operand.*,
-         trim(replace(tail0, '#', '')) as immediate_text
+         trim(replace(tail0, '#', '')) as immediate_text,
+         case
+           when trim(replace(tail0, '#', '')) glob '[0-9]*'
+            and trim(replace(tail0, '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(tail0, '#', '')) as integer)
+           else constant.immediate_value
+         end as immediate_value
   from split_operand
+  left join arm32_file_constant_value constant
+    on constant.repo_file_id = split_operand.repo_file_id
+   and constant.symbol_name = trim(replace(tail0, '#', ''))
   where tail0 like '#%'
 ), decimal_three_immediate as (
   select split_three.*,
-         trim(replace(arg2, '#', '')) as immediate_text
+         trim(replace(arg2, '#', '')) as immediate_text,
+         case
+           when trim(replace(arg2, '#', '')) glob '[0-9]*'
+            and trim(replace(arg2, '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(arg2, '#', '')) as integer)
+           else constant.immediate_value
+         end as immediate_value
   from split_three
+  left join arm32_file_constant_value constant
+    on constant.repo_file_id = split_three.repo_file_id
+   and constant.symbol_name = trim(replace(arg2, '#', ''))
   where arg2 like '#%'
 ), decimal_shift as (
   select split_three.*,
          trim(substr(arg2, 1, instr(arg2, ' ') - 1)) as shift_name,
-         trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) as shift_text
+         trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) as shift_text,
+         case
+           when trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) glob '[0-9]*'
+            and trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) as integer)
+           else constant.immediate_value
+         end as shift_value
   from split_three
+  left join arm32_file_constant_value constant
+    on constant.repo_file_id = split_three.repo_file_id
+   and constant.symbol_name = trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))
   where arg2 like '% #%'
 ), arm_dp_imm as (
-  select split_three.repo_file_id,
-         split_three.function_name,
-         split_three.line_no,
-         split_three.op_name,
+	  select decimal_three_immediate.repo_file_id,
+	         decimal_three_immediate.function_name,
+	         decimal_three_immediate.line_no,
+	         decimal_three_immediate.op_name,
          cond.base_op_name,
          cond.cond_code,
          rd.reg_code as rd_code,
          rn.reg_code as rn_code,
-         cast(trim(replace(split_three.arg2, '#', '')) as integer) as immediate_value
-  from split_three
-  join arm32_condition_fact cond on cond.op_name = split_three.op_name
-  join arm32_register_encoding_fact rd on rd.register_name = split_three.arg0
-  join arm32_register_encoding_fact rn on rn.register_name = split_three.arg1
-  where split_three.op_name in ('add','sub','subs')
-    and split_three.arg2 like '#%'
-    and trim(replace(split_three.arg2, '#', '')) glob '[0-9]*'
-    and trim(replace(split_three.arg2, '#', '')) not glob '*[^0-9]*'
+         decimal_three_immediate.immediate_value
+  from decimal_three_immediate
+  join arm32_condition_fact cond on cond.op_name = decimal_three_immediate.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = decimal_three_immediate.arg0
+  join arm32_register_encoding_fact rn on rn.register_name = decimal_three_immediate.arg1
+  where decimal_three_immediate.op_name in ('add','sub','subs')
+    and decimal_three_immediate.immediate_value is not null
 ), arm_dp_reg as (
   select split_three.repo_file_id,
          split_three.function_name,
@@ -8633,7 +8721,7 @@ with operation as (
          rn.reg_code as rn_code,
          rm.reg_code as rm_code,
          decimal_shift.shift_name,
-         cast(decimal_shift.shift_text as integer) as shift_value
+         decimal_shift.shift_value
   from decimal_shift
   join arm32_condition_fact cond on cond.op_name = decimal_shift.op_name
   join arm32_register_encoding_fact rd on rd.register_name = decimal_shift.arg0
@@ -8641,8 +8729,7 @@ with operation as (
   join arm32_register_encoding_fact rm on rm.register_name = trim(substr(decimal_shift.arg2, 1, instr(decimal_shift.arg2, ' ') - 1))
   where decimal_shift.op_name in ('add','sub','and','orr','bic')
     and decimal_shift.shift_name in ('lsl','lsr')
-    and decimal_shift.shift_text glob '[0-9]*'
-    and decimal_shift.shift_text not glob '*[^0-9]*'
+    and decimal_shift.shift_value is not null
 ), arm_mov_imm as (
   select decimal_immediate.repo_file_id,
          decimal_immediate.function_name,
@@ -8650,13 +8737,12 @@ with operation as (
          decimal_immediate.op_name,
          cond.cond_code,
          rd.reg_code as rd_code,
-         cast(decimal_immediate.immediate_text as integer) as immediate_value
+         decimal_immediate.immediate_value
   from decimal_immediate
   join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
   join arm32_register_encoding_fact rd on rd.register_name = decimal_immediate.arg0
   where decimal_immediate.op_name in ('mov','movne','moveq')
-    and decimal_immediate.immediate_text glob '[0-9]*'
-    and decimal_immediate.immediate_text not glob '*[^0-9]*'
+    and decimal_immediate.immediate_value is not null
 ), arm_mov_reg as (
   select split_two.repo_file_id,
          split_two.function_name,
@@ -8677,13 +8763,12 @@ with operation as (
          decimal_immediate.op_name,
          cond.cond_code,
          rn.reg_code as rn_code,
-         cast(decimal_immediate.immediate_text as integer) as immediate_value
+         decimal_immediate.immediate_value
   from decimal_immediate
   join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
   join arm32_register_encoding_fact rn on rn.register_name = decimal_immediate.arg0
   where decimal_immediate.op_name = 'cmp'
-    and decimal_immediate.immediate_text glob '[0-9]*'
-    and decimal_immediate.immediate_text not glob '*[^0-9]*'
+    and decimal_immediate.immediate_value is not null
 ), arm_cmp_reg as (
   select split_two.repo_file_id,
          split_two.function_name,
@@ -8706,14 +8791,13 @@ with operation as (
          cond.cond_code,
          rd.reg_code as rd_code,
          rm.reg_code as rm_code,
-         cast(decimal_three_immediate.immediate_text as integer) as immediate_value
+         decimal_three_immediate.immediate_value
   from decimal_three_immediate
   join arm32_condition_fact cond on cond.op_name = decimal_three_immediate.op_name
   join arm32_register_encoding_fact rd on rd.register_name = decimal_three_immediate.arg0
   join arm32_register_encoding_fact rm on rm.register_name = decimal_three_immediate.arg1
   where decimal_three_immediate.op_name in ('lsl','lsr')
-    and decimal_three_immediate.immediate_text glob '[0-9]*'
-    and decimal_three_immediate.immediate_text not glob '*[^0-9]*'
+    and decimal_three_immediate.immediate_value is not null
 ), memory_operand as (
   select split_operand.repo_file_id,
          split_operand.function_name,
@@ -8759,13 +8843,19 @@ with operation as (
          memory_base_offset.op_name,
          rd.reg_code as rd_code,
          rn.reg_code as rn_code,
-         cast(trim(replace(memory_base_offset.offset_text, '#', '')) as integer) as offset_value,
+         case
+           when trim(replace(memory_base_offset.offset_text, '#', '')) glob '[0-9]*'
+            and trim(replace(memory_base_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(memory_base_offset.offset_text, '#', '')) as integer)
+           else constant.immediate_value
+         end as offset_value,
          1 as pre_index
   from memory_base_offset
   join arm32_register_encoding_fact rd on rd.register_name = memory_base_offset.data_reg
   join arm32_register_encoding_fact rn on rn.register_name = memory_base_offset.base_reg
-  where trim(replace(memory_base_offset.offset_text, '#', '')) glob '[0-9]*'
-    and trim(replace(memory_base_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+  left join arm32_file_constant_value constant
+    on constant.repo_file_id = memory_base_offset.repo_file_id
+   and constant.symbol_name = trim(replace(memory_base_offset.offset_text, '#', ''))
   union all
   select memory_base_only.repo_file_id,
          memory_base_only.function_name,
@@ -8785,13 +8875,19 @@ with operation as (
          memory_post_offset.op_name,
          rd.reg_code as rd_code,
          rn.reg_code as rn_code,
-         cast(trim(replace(memory_post_offset.offset_text, '#', '')) as integer) as offset_value,
+         case
+           when trim(replace(memory_post_offset.offset_text, '#', '')) glob '[0-9]*'
+            and trim(replace(memory_post_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(memory_post_offset.offset_text, '#', '')) as integer)
+           else constant.immediate_value
+         end as offset_value,
          0 as pre_index
   from memory_post_offset
   join arm32_register_encoding_fact rd on rd.register_name = memory_post_offset.data_reg
   join arm32_register_encoding_fact rn on rn.register_name = memory_post_offset.base_reg
-  where trim(replace(memory_post_offset.offset_text, '#', '')) glob '[0-9]*'
-    and trim(replace(memory_post_offset.offset_text, '#', '')) not glob '*[^0-9]*'
+  left join arm32_file_constant_value constant
+    on constant.repo_file_id = memory_post_offset.repo_file_id
+   and constant.symbol_name = trim(replace(memory_post_offset.offset_text, '#', ''))
 ), arm_svc as (
   select operation.repo_file_id,
          operation.function_name,
