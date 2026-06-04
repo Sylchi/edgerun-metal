@@ -8232,7 +8232,7 @@ with register_operand as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-	    and match.op_name in ('inc','dec','neg','not','push')
+		    and match.op_name in ('inc','dec','neg','not','div','mul','push')
 ), unary_memory_terms as (
   select unary_memory_operand.*,
          trim(replace(substr(memory_text, 2, length(memory_text) - 2), ' - ', ' + -')) as inner_text
@@ -8257,46 +8257,72 @@ with register_operand as (
   where inner_text not like '% + % + %'
     and inner_text not like '%*%'
     and inner_text not glob '*[ABCDEFGHIJKLMNOPQRSTUVWXYZ_]*'
-), numeric_symbol_memory as (
+	), numeric_symbol_memory as (
   select unary_memory_terms.*,
          trim(substr(inner_text, 1, instr(inner_text, ' + ') - 1)) as base_register_name,
          value.immediate_value as displacement
   from unary_memory_terms
   join repo_asm_numeric_constant_value value
     on value.symbol_name = trim(substr(inner_text, instr(inner_text, ' + ') + 3))
-  where inner_text like '% + %'
-    and inner_text not like '% + % + %'
-    and inner_text not like '%*%'
-), memory_operand as (
-  select *
-  from simple_memory
-  union all
-  select *
-  from numeric_symbol_memory
-), memory_bytes as (
-  select memory_operand.*,
-         base_reg.reg_code as base_reg_code,
-         base_reg.requires_rex as base_requires_rex,
-         case
-           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then 0
-           when displacement between -128 and 127 then 1
-           else 2
-         end as mod_bits,
-         case
-           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then ''
-           when displacement between -128 and 127 then printf('%02x', displacement & 255)
-           else printf('%02x%02x%02x%02x',
+	  where inner_text like '% + %'
+	    and inner_text not like '% + % + %'
+	    and inner_text not like '%*%'
+	), pure_symbol_memory as (
+	  select unary_memory_terms.*,
+	         null as base_register_name,
+	         0 as displacement
+	  from unary_memory_terms
+	  left join x86_register_encoding_fact reg
+	    on reg.register_name = unary_memory_terms.inner_text
+	  where unary_memory_terms.inner_text not like '% + %'
+	    and unary_memory_terms.inner_text not like '%*%'
+	    and unary_memory_terms.inner_text glob '*[A-Za-z_.]*'
+	    and reg.register_name is null
+	), memory_operand as (
+	  select *
+	  from simple_memory
+	  union all
+	  select *
+	  from numeric_symbol_memory
+	  union all
+	  select *
+	  from pure_symbol_memory
+	), memory_bytes as (
+	  select memory_operand.*,
+	         coalesce(base_reg.reg_code, 4) as base_reg_code,
+	         coalesce(base_reg.requires_rex, 0) as base_requires_rex,
+	         case
+	           when memory_operand.base_register_name is null then 0
+	           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then 0
+	           when displacement between -128 and 127 then 1
+	           else 2
+	         end as mod_bits,
+	         case
+	           when memory_operand.base_register_name is null then '00000000'
+	           when displacement = 0 and (base_reg.reg_code & 7) not in (5) then ''
+	           when displacement between -128 and 127 then printf('%02x', displacement & 255)
+	           else printf('%02x%02x%02x%02x',
                        displacement & 255,
                        (displacement >> 8) & 255,
                        (displacement >> 16) & 255,
                        (displacement >> 24) & 255)
          end as displacement_hex,
-         case when (base_reg.reg_code & 7) = 4 then '24' else '' end as sib_hex,
-         case when (base_reg.reg_code & 7) = 4 then 4 else (base_reg.reg_code & 7) end as rm_field
-  from memory_operand
-  join x86_register_encoding_fact base_reg
-    on base_reg.register_name = memory_operand.base_register_name
-   and base_reg.width_bits = 64
+	         case
+	           when memory_operand.base_register_name is null then '25'
+	           when (base_reg.reg_code & 7) = 4 then '24'
+	           else ''
+	         end as sib_hex,
+	         case
+	           when memory_operand.base_register_name is null then 4
+	           when (base_reg.reg_code & 7) = 4 then 4
+	           else (base_reg.reg_code & 7)
+	         end as rm_field
+	  from memory_operand
+	  left join x86_register_encoding_fact base_reg
+	    on base_reg.register_name = memory_operand.base_register_name
+	   and base_reg.width_bits = 64
+	  where memory_operand.base_register_name is null
+	     or base_reg.register_name is not null
 ), generated as (
   select repo_file_id,
          function_name,
@@ -8368,6 +8394,10 @@ with register_operand as (
 	         'param_x86_' || op_name || '_' || size_name || '_memory' as parametric_rule_name,
 	         (
 	           case
+		             when size_name = 'word' then '66' || case
+		                                           when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+		                                           else ''
+		                                         end
 	             when op_name = 'push' and base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
 	             when op_name = 'push' then ''
 	             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
@@ -8385,15 +8415,17 @@ with register_operand as (
 	                                                  when 'inc' then 0
 	                                                  when 'dec' then 1
 	                                                  when 'not' then 2
-	                                                  when 'neg' then 3
-	                                                  when 'push' then 6
-	                                                end) << 3) + rm_field)
+		                                                  when 'neg' then 3
+		                                                  when 'push' then 6
+		                                                  when 'mul' then 4
+		                                                  when 'div' then 6
+		                                                end) << 3) + rm_field)
            || sib_hex
            || displacement_hex
          ) as fixed_hex
   from memory_bytes
-	  where ((op_name in ('inc','dec','neg','not') and size_name in ('byte','word','dword','qword'))
-	         or (op_name = 'push' and size_name = 'qword'))
+		  where ((op_name in ('inc','dec','neg','not','div','mul') and size_name in ('byte','word','dword','qword'))
+		         or (op_name = 'push' and size_name = 'qword'))
 )
 select repo_file_id,
        function_name,
@@ -10569,9 +10601,9 @@ select match.path,
 	       match.raw_text,
 	       case
 	          when match.encoding_id is not null then 'fixed_encoding'
-	          when parametric.fixed_hex is not null then 'fixed_encoding'
-	          when relocation.relocation_kind is not null then 'relocation'
-	          when data_ref.relocation_kind is not null then 'data_relocation'
+		          when relocation.relocation_kind is not null then 'relocation'
+		          when data_ref.relocation_kind is not null then 'data_relocation'
+		          when parametric.fixed_hex is not null then 'fixed_encoding'
 	          when macro.macro_name is not null then 'macro_lowered'
           when data_def.data_definition_kind is not null then 'data_definition'
           when constant_expr.symbol_name is not null then 'constant_expression'
