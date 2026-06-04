@@ -1745,6 +1745,52 @@ where isa.name = 'x86_64'
   and instruction.mnemonic in ('syscall','js','jc','movsx','out','in');
 
 insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'addsd', null, null, null, null, 'asm_x86_addsd_known_gap', null, 2),
+  (3, 'cmovae', null, null, null, null, 'asm_x86_cmovae_known_gap', null, 2),
+  (3, 'cmovbe', null, null, null, null, 'asm_x86_cmovbe_known_gap', null, 2),
+  (3, 'cmovge', null, null, null, null, 'asm_x86_cmovge_known_gap', null, 2),
+  (3, 'cmovle', null, null, null, null, 'asm_x86_cmovle_known_gap', null, 2),
+  (3, 'cvtsd2ss', null, null, null, null, 'asm_x86_cvtsd2ss_known_gap', null, 2),
+  (3, 'cvtsi2ss', null, null, null, null, 'asm_x86_cvtsi2ss_known_gap', null, 2),
+  (3, 'cvtss2sd', null, null, null, null, 'asm_x86_cvtss2sd_known_gap', null, 2),
+  (3, 'divsd', null, null, null, null, 'asm_x86_divsd_known_gap', null, 2),
+  (3, 'jnp', null, null, null, null, 'asm_x86_jnp_known_gap', null, 2),
+  (3, 'ldmxcsr', null, null, null, null, 'asm_x86_ldmxcsr_known_gap', null, 2),
+  (3, 'maxsd', null, null, null, null, 'asm_x86_maxsd_known_gap', null, 2),
+  (3, 'maxss', null, null, null, null, 'asm_x86_maxss_known_gap', null, 2),
+  (3, 'minsd', null, null, null, null, 'asm_x86_minsd_known_gap', null, 2),
+  (3, 'minss', null, null, null, null, 'asm_x86_minss_known_gap', null, 2),
+  (3, 'mulsd', null, null, null, null, 'asm_x86_mulsd_known_gap', null, 2),
+  (3, 'pxor', null, null, null, null, 'asm_x86_pxor_known_gap', null, 2),
+  (3, 'retfq', null, null, null, null, 'asm_x86_retfq_known_gap', null, 2),
+  (3, 'setae', null, null, null, null, 'asm_x86_setae_known_gap', null, 2),
+  (3, 'setc', null, null, null, null, 'asm_x86_setc_known_gap', null, 2),
+  (3, 'setg', null, null, null, null, 'asm_x86_setg_known_gap', null, 2),
+  (3, 'setge', null, null, null, null, 'asm_x86_setge_known_gap', null, 2),
+  (3, 'setl', null, null, null, null, 'asm_x86_setl_known_gap', null, 2),
+  (3, 'setle', null, null, null, null, 'asm_x86_setle_known_gap', null, 2),
+  (3, 'setnz', null, null, null, null, 'asm_x86_setnz_known_gap', null, 2),
+  (3, 'setp', null, null, null, null, 'asm_x86_setp_known_gap', null, 2),
+  (3, 'sfence', null, null, null, null, 'asm_x86_sfence_known_gap', null, 2),
+  (3, 'sqrtsd', null, null, null, null, 'asm_x86_sqrtsd_known_gap', null, 2),
+  (3, 'std', null, null, null, null, 'asm_x86_std_known_gap', null, 2),
+  (3, 'stosb', null, null, null, null, 'asm_x86_stosb_known_gap', null, 2),
+  (3, 'ucomisd', null, null, null, null, 'asm_x86_ucomisd_known_gap', null, 2);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
+  (3, 'addhs', null, null, null, null, 'asm_arm32_addhs_known_gap', null, 2),
+  (3, 'addlo', null, null, null, null, 'asm_arm32_addlo_known_gap', null, 2),
+  (3, 'bleq', null, null, null, null, 'asm_arm32_bleq_known_gap', null, 2),
+  (3, 'bxhs', null, null, null, null, 'asm_arm32_bxhs_known_gap', null, 2),
+  (3, 'bxle', null, null, null, null, 'asm_arm32_bxle_known_gap', null, 2),
+  (3, 'mla', null, null, null, null, 'asm_arm32_mla_known_gap', null, 2),
+  (3, 'orreq', null, null, null, null, 'asm_arm32_orreq_known_gap', null, 2),
+  (3, 'orrhs', null, null, null, null, 'asm_arm32_orrhs_known_gap', null, 2),
+  (3, 'rsb', null, null, null, null, 'asm_arm32_rsb_known_gap', null, 2),
+  (3, 'teq', null, null, null, null, 'asm_arm32_teq_known_gap', null, 2),
+  (3, 'wfi', null, null, null, null, 'asm_arm32_wfi_known_gap', null, 2);
+
+insert or ignore into asm_dsl_rule(line_kind, op_name, operation_kind_id, instruction_path, form_path, encoding_id, rule_name, exact_operand_text, flags) values
   (3, 'ASSERT_EQ', null, null, null, null, 'test_macro_assert_eq', null, 2),
   (3, 'ASSERT_RDX', null, null, null, null, 'test_macro_assert_rdx', null, 2),
   (3, 'ASSERT_RAX', null, null, null, null, 'test_macro_assert_rax', null, 2),
@@ -3576,7 +3622,8 @@ with trimmed as (
            when substr(t,1,1) = ';' then 0
             when t glob '*:' then 2
             when t glob '%include*' then 4
-            when t glob '* equ *' then 5
+	            when t glob '* equ *' then 5
+	            when t glob 'equ *' then 5
             when t glob '.equ *' then 5
             when t glob 'er_fn *' then 1
             when t glob 'global *' then 4
@@ -10148,6 +10195,8 @@ insert into asm_macro_lowering_rule(macro_name, lowered_operation_pattern, resul
   ('er_frame_push', 'push rbp; mov rbp, rsp', 'stack_sequence'),
   ('er_frame_pop', 'pop rbp', 'stack_sequence'),
   ('er_frame_push_regs', 'push frame then listed registers', 'stack_sequence'),
+  ('rep', 'repeat-prefixed string instruction sequence', 'prefix_sequence'),
+  ('repz', 'repeat-zero-prefixed string comparison sequence', 'prefix_sequence'),
   ('TEST', 'compare eax and edx; branch to failure on mismatch', 'test_assertion'),
   ('ASSERT_EQ', 'compare actual and expected values; fail test on mismatch', 'test_assertion'),
   ('ASSERT_RAX', 'compare rax against expected value; fail test on mismatch', 'test_assertion'),
