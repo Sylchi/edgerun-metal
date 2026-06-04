@@ -3743,10 +3743,10 @@ create view app_zig_switch_case_fact as
 select path,
        repo_file_id,
        line_no,
-       trim(rtrim(substr(raw_text, length('=>') + 1), ',')) as result_text,
+       trim(rtrim(substr(raw_text, instr(raw_text, '=>') + 2), ',')) as result_text,
        raw_text
 from app_zig_remaining_gap_classification
-where raw_text like '=> %';
+where instr(raw_text, '=>') > 0;
 
 create view app_zig_asm_operand_fact as
 select path,
@@ -3759,6 +3759,101 @@ from app_zig_remaining_gap_classification
 where raw_text like ': [%'
   and instr(raw_text, '[') > 0
   and instr(raw_text, ']') > instr(raw_text, '[');
+
+create view app_zig_syntax_boundary_fact as
+select path,
+       repo_file_id,
+       line_no,
+       'boundary' as boundary_kind,
+       raw_text as boundary_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and raw_text in (
+    ');',
+    '});',
+    '}));',
+    '));',
+    '.?;',
+    '.{',
+    '} };',
+    '} },',
+    ';'
+  );
+
+create view app_zig_control_flow_fact as
+select path,
+       repo_file_id,
+       line_no,
+       case
+         when raw_text like 'switch (%) {' then 'switch'
+         when raw_text = 'else' then 'else'
+         when raw_text = 'comptime {' then 'comptime'
+         when raw_text = 'continue;' then 'continue'
+         when raw_text = 'break;' then 'break'
+         when raw_text = 'unreachable;' then 'unreachable'
+         else 'control'
+       end as control_kind,
+       raw_text as control_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and (
+    raw_text like 'switch (%) {'
+    or raw_text in ('else', 'comptime {', 'continue;', 'break;', 'unreachable;')
+  );
+
+create view app_zig_mutation_statement_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(substr(raw_text, 1, instr(raw_text, ' ') - 1)) as target_name,
+       case
+         when instr(raw_text, ' += ') > 0 then '+='
+         when instr(raw_text, ' -= ') > 0 then '-='
+         when instr(raw_text, ' *= ') > 0 then '*='
+         when instr(raw_text, ' /= ') > 0 then '/='
+         else 'mutate'
+       end as operator_text,
+       trim(rtrim(substr(raw_text, instr(raw_text, '=') + 1), ';')) as value_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and (
+    instr(raw_text, ' += ') > 0
+    or instr(raw_text, ' -= ') > 0
+    or instr(raw_text, ' *= ') > 0
+    or instr(raw_text, ' /= ') > 0
+  );
+
+create view app_zig_data_literal_line_fact as
+select path,
+       repo_file_id,
+       line_no,
+       case
+         when raw_text like '\\%' then 'escaped_text'
+         when raw_text like '0x%,%' then 'hex_byte_row'
+         else 'data_literal'
+       end as literal_kind,
+       raw_text as literal_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and (
+    raw_text like '\\%'
+    or raw_text like '0x%,%'
+  );
+
+create view app_zig_signature_continuation_fact as
+select path,
+       repo_file_id,
+       line_no,
+       'signature_continuation' as continuation_kind,
+       trim(substr(raw_text, 2, length(raw_text) - 2)) as continuation_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and raw_text like ') %{';
 
 create view app_zig_base_fact_line as
 select repo_file_id, line_no, 'import' as fact_kind
@@ -3793,7 +3888,22 @@ select repo_file_id, line_no, 'switch_case'
 from app_zig_switch_case_fact
 union
 select repo_file_id, line_no, 'asm_operand'
-from app_zig_asm_operand_fact;
+from app_zig_asm_operand_fact
+union
+select repo_file_id, line_no, 'syntax_boundary'
+from app_zig_syntax_boundary_fact
+union
+select repo_file_id, line_no, 'control_flow'
+from app_zig_control_flow_fact
+union
+select repo_file_id, line_no, 'mutation_statement'
+from app_zig_mutation_statement_fact
+union
+select repo_file_id, line_no, 'data_literal_line'
+from app_zig_data_literal_line_fact
+union
+select repo_file_id, line_no, 'signature_continuation'
+from app_zig_signature_continuation_fact;
 
 create view app_zig_file_fact_coverage as
 select repo_file.path,
@@ -5736,12 +5846,17 @@ select memory_terms.path,
          when memory_terms.term_text = 'rel' then 'rel_marker'
          when reg.register_name is not null then 'register'
          when scale_reg.register_name is not null then 'scaled_register'
-         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[0-9]*'
-          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^0-9]*' then 'integer'
-         when lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)) glob '0x[0-9a-f]*'
-          and substr(lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)), 3) not glob '*[^0-9a-f]*' then 'integer'
-         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[A-Za-z_.%]*'
-          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^A-Za-z_.%0123456789]*' then 'symbol'
+	         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[0-9]*'
+	          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^0-9]*' then 'integer'
+	         when lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)) glob '0x[0-9a-f]*'
+	          and substr(lower(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end)), 3) not glob '*[^0-9a-f]*' then 'integer'
+	         when replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', '') like '%*%'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), 1, instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') - 1)) glob '[0-9]*'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), 1, instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') - 1)) not glob '*[^0-9]*'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) glob '[0-9]*'
+	          and trim(substr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), instr(replace(trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end), ' ', ''), '*') + 1)) not glob '*[^0-9]*' then 'integer'
+	         when trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) glob '[A-Za-z_.%]*'
+	          and trim(case when memory_terms.term_text like '-%' then substr(memory_terms.term_text, 2) else memory_terms.term_text end) not glob '*[^A-Za-z_.%0123456789]*' then 'symbol'
          else 'other'
        end as term_kind,
        scale_reg.register_name as scale_register_name,
@@ -5814,19 +5929,45 @@ with decimal_term as (
          (integer_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
   from hex_term_parse
   where digit_index <= length(hex_text)
-), hex_term as (
-  select repo_file_id,
-         function_name,
-         line_no,
-         operand_index,
-         term_index,
-         integer_value
-  from hex_term_parse
-  where digit_index = length(hex_text) + 1
-)
-select * from decimal_term
-union all
-select * from hex_term;
+	), hex_term as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         integer_value
+	  from hex_term_parse
+	  where digit_index = length(hex_text) + 1
+	), decimal_product_term as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         operand_index,
+	         term_index,
+	         cast(trim(substr(compact_text, 1, instr(compact_text, '*') - 1)) as integer)
+	           * cast(trim(substr(compact_text, instr(compact_text, '*') + 1)) as integer) as integer_value
+	  from (
+	    select repo_file_id,
+	           function_name,
+	           line_no,
+	           operand_index,
+	           term_index,
+	           replace(term_text, ' ', '') as compact_text
+	    from repo_asm_memory_operand_term_fact
+	    where term_kind = 'integer'
+	      and term_text like '%*%'
+	  )
+	  where instr(compact_text, '*') > 1
+	    and trim(substr(compact_text, 1, instr(compact_text, '*') - 1)) glob '[0-9]*'
+	    and trim(substr(compact_text, 1, instr(compact_text, '*') - 1)) not glob '*[^0-9]*'
+	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) glob '[0-9]*'
+	    and trim(substr(compact_text, instr(compact_text, '*') + 1)) not glob '*[^0-9]*'
+	)
+	select * from decimal_term
+	union all
+	select * from hex_term
+	union all
+	select * from decimal_product_term;
 
 create unique index repo_asm_memory_integer_term_value_term_idx
   on repo_asm_memory_integer_term_value(repo_file_id, function_name, line_no, operand_index, term_index);
@@ -7339,6 +7480,149 @@ where not exists (
 create unique index repo_asm_numeric_symbol_value_symbol_idx
   on repo_asm_numeric_symbol_value(symbol_name);
 
+create table repo_asm_rhs_numeric_expression_value as
+with normalized as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         trim(replace(replace(operand_value, '(', ''), ')', '')) as expression_text
+  from repo_asm_binary_operand_fact
+  where target_isa_id = 1
+    and operand_index = 1
+), decimal_mul_decimal_mul_decimal as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         cast(lhs_text as integer) * cast(mid_text as integer) * cast(rhs_text as integer) as immediate_value
+  from (
+    select repo_file_id,
+           function_name,
+           line_no,
+           trim(substr(expression_text, 1, instr(expression_text, ' * ') - 1)) as lhs_text,
+           trim(substr(rest_text, 1, instr(rest_text, ' * ') - 1)) as mid_text,
+           trim(substr(rest_text, instr(rest_text, ' * ') + 3)) as rhs_text
+    from (
+      select repo_file_id,
+             function_name,
+             line_no,
+             expression_text,
+             trim(substr(expression_text, instr(expression_text, ' * ') + 3)) as rest_text
+      from normalized
+      where expression_text like '% * % * %'
+    )
+  )
+  where lhs_text glob '[0-9]*'
+    and lhs_text not glob '*[^0-9]*'
+    and mid_text glob '[0-9]*'
+    and mid_text not glob '*[^0-9]*'
+    and rhs_text glob '[0-9]*'
+    and rhs_text not glob '*[^0-9]*'
+), decimal_div_decimal as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         cast(lhs_text as integer) / cast(rhs_text as integer) as immediate_value
+  from (
+    select repo_file_id,
+           function_name,
+           line_no,
+           trim(substr(expression_text, 1, instr(expression_text, ' / ') - 1)) as lhs_text,
+           trim(substr(expression_text, instr(expression_text, ' / ') + 3)) as rhs_text
+    from normalized
+    where expression_text like '% / %'
+      and expression_text not like '% / % / %'
+  )
+  where lhs_text glob '[0-9]*'
+    and lhs_text not glob '*[^0-9]*'
+    and rhs_text glob '[0-9]*'
+    and rhs_text not glob '*[^0-9]*'
+    and cast(rhs_text as integer) <> 0
+), symbol_div_decimal as (
+  select expr.repo_file_id,
+         expr.function_name,
+         expr.line_no,
+         value.immediate_value / cast(expr.rhs_text as integer) as immediate_value
+  from (
+    select repo_file_id,
+           function_name,
+           line_no,
+           trim(substr(expression_text, 1, instr(expression_text, ' / ') - 1)) as lhs_text,
+           trim(substr(expression_text, instr(expression_text, ' / ') + 3)) as rhs_text
+    from normalized
+    where expression_text like '% / %'
+      and expression_text not like '% / % / %'
+  ) expr
+  join repo_asm_numeric_symbol_value value
+    on value.symbol_name = expr.lhs_text
+  where expr.rhs_text glob '[0-9]*'
+    and expr.rhs_text not glob '*[^0-9]*'
+    and cast(expr.rhs_text as integer) <> 0
+), decimal_shift_left_decimal as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         cast(lhs_text as integer) << cast(rhs_text as integer) as immediate_value
+  from (
+    select repo_file_id,
+           function_name,
+           line_no,
+           trim(substr(expression_text, 1, instr(expression_text, ' << ') - 1)) as lhs_text,
+           trim(substr(expression_text, instr(expression_text, ' << ') + 4)) as rhs_text
+    from normalized
+    where expression_text like '% << %'
+      and expression_text not like '% | %'
+  )
+  where lhs_text glob '[0-9]*'
+    and lhs_text not glob '*[^0-9]*'
+    and rhs_text glob '[0-9]*'
+    and rhs_text not glob '*[^0-9]*'
+), decimal_shift_left_or_decimal as (
+  select repo_file_id,
+         function_name,
+         line_no,
+         (cast(lhs_text as integer) << cast(shift_text as integer)) | cast(rhs_text as integer) as immediate_value
+  from (
+    select repo_file_id,
+           function_name,
+           line_no,
+           trim(substr(shift_text, 1, instr(shift_text, ' << ') - 1)) as lhs_text,
+           trim(substr(shift_text, instr(shift_text, ' << ') + 4)) as shift_text,
+           rhs_text
+    from (
+      select repo_file_id,
+             function_name,
+             line_no,
+             trim(substr(expression_text, 1, instr(expression_text, ' | ') - 1)) as shift_text,
+             trim(substr(expression_text, instr(expression_text, ' | ') + 3)) as rhs_text
+      from normalized
+      where expression_text like '% << % | %'
+    )
+  )
+  where lhs_text glob '[0-9]*'
+    and lhs_text not glob '*[^0-9]*'
+    and shift_text glob '[0-9]*'
+    and shift_text not glob '*[^0-9]*'
+    and rhs_text glob '[0-9]*'
+    and rhs_text not glob '*[^0-9]*'
+)
+select repo_file_id, function_name, line_no, immediate_value
+from decimal_mul_decimal_mul_decimal
+union all
+select repo_file_id, function_name, line_no, immediate_value
+from decimal_div_decimal
+union all
+select repo_file_id, function_name, line_no, immediate_value
+from symbol_div_decimal
+union all
+select repo_file_id, function_name, line_no, immediate_value
+from decimal_shift_left_decimal
+union all
+select repo_file_id, function_name, line_no, immediate_value
+from decimal_shift_left_or_decimal;
+
+create index repo_asm_rhs_numeric_expression_value_line_idx
+  on repo_asm_rhs_numeric_expression_value(repo_file_id, function_name, line_no);
+
 create table repo_asm_numeric_symbol_memory_parametric_encoding_fact as
 with symbolic_memory as (
   select mem.*,
@@ -8006,10 +8290,12 @@ with recursive rhs_decimal as (
 	  union all
 		  select * from rhs_char_minus_decimal
 		  union all
-		  select * from rhs_char_minus_decimal_minus_char
-		  union all
-		  select * from rhs_recovered_semicolon_char
-		), rhs_unique_value as (
+			  select * from rhs_char_minus_decimal_minus_char
+			  union all
+			  select * from rhs_recovered_semicolon_char
+			  union all
+			  select * from repo_asm_rhs_numeric_expression_value
+			), rhs_unique_value as (
   select repo_file_id,
          function_name,
          line_no,
@@ -8595,8 +8881,10 @@ with recursive rhs_decimal as (
 	  union all
 	  select * from rhs_char
 	  union all
-	  select * from rhs_recovered_semicolon_char
-	), rhs_unique_value as (
+		  select * from rhs_recovered_semicolon_char
+		  union all
+		  select * from repo_asm_rhs_numeric_expression_value
+		), rhs_unique_value as (
   select repo_file_id,
          function_name,
          line_no,
@@ -15477,7 +15765,72 @@ select 'app_zig.asm_operand:' || path || ':' || cast(line_no as text) || ':' || 
        line_no,
        raw_text,
        'app_zig.asm_operand:' || repo_file_id || ':' || cast(line_no as text) || ':' || operand_name || ':' || constraint_text
-from app_zig_asm_operand_fact;
+from app_zig_asm_operand_fact
+union all
+select 'app_zig.syntax_boundary:' || path || ':' || cast(line_no as text),
+       'app_zig_syntax_boundary_fact',
+       path,
+       boundary_kind,
+       boundary_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.syntax_boundary:' || repo_file_id || ':' || cast(line_no as text) || ':' || boundary_text
+from app_zig_syntax_boundary_fact
+union all
+select 'app_zig.control_flow:' || path || ':' || cast(line_no as text) || ':' || control_kind,
+       'app_zig_control_flow_fact',
+       path,
+       control_kind,
+       control_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.control_flow:' || repo_file_id || ':' || cast(line_no as text) || ':' || control_kind || ':' || control_text
+from app_zig_control_flow_fact
+union all
+select 'app_zig.mutation_statement:' || path || ':' || cast(line_no as text) || ':' || target_name,
+       'app_zig_mutation_statement_fact',
+       path,
+       target_name || ':' || operator_text,
+       value_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.mutation_statement:' || repo_file_id || ':' || cast(line_no as text) || ':' || target_name || ':' || operator_text || ':' || length(value_text)
+from app_zig_mutation_statement_fact
+union all
+select 'app_zig.data_literal_line:' || path || ':' || cast(line_no as text),
+       'app_zig_data_literal_line_fact',
+       path,
+       literal_kind,
+       literal_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.data_literal_line:' || repo_file_id || ':' || cast(line_no as text) || ':' || literal_kind || ':' || length(literal_text)
+from app_zig_data_literal_line_fact
+union all
+select 'app_zig.signature_continuation:' || path || ':' || cast(line_no as text),
+       'app_zig_signature_continuation_fact',
+       path,
+       continuation_kind,
+       continuation_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.signature_continuation:' || repo_file_id || ':' || cast(line_no as text) || ':' || continuation_text
+from app_zig_signature_continuation_fact;
 
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
