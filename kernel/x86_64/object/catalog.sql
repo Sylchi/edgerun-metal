@@ -3797,6 +3797,7 @@ create table x86_register_encoding_fact (
 
 insert into x86_register_encoding_fact(register_name, width_bits, reg_code, requires_rex) values
   ('al', 8, 0, 0), ('cl', 8, 1, 0), ('dl', 8, 2, 0), ('bl', 8, 3, 0),
+  ('ah', 8, 4, 0), ('ch', 8, 5, 0), ('dh', 8, 6, 0), ('bh', 8, 7, 0),
   ('spl', 8, 4, 1), ('bpl', 8, 5, 1), ('sil', 8, 6, 1), ('dil', 8, 7, 1),
   ('r8b', 8, 8, 1), ('r9b', 8, 9, 1), ('r10b', 8, 10, 1), ('r11b', 8, 11, 1),
   ('r12b', 8, 12, 1), ('r13b', 8, 13, 1), ('r14b', 8, 14, 1), ('r15b', 8, 15, 1),
@@ -4088,12 +4089,14 @@ with binary_operand as (
          src.requires_rex as src_requires_rex
   from normalized
   join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
-  join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
-	  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','test','imul','cmova','cmovb','cmovg','cmovl','cmovne')
-	    and dst.width_bits = src.width_bits
-	    and dst.width_bits in (8,32,64)
-	    and (normalized.op_name not in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
-	         or dst.width_bits in (32,64))
+	  join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
+		  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','test','imul','cmova','cmovb','cmovg','cmovl','cmovne','xchg','bsr','bsf','bt','bts')
+		    and dst.width_bits = src.width_bits
+		    and dst.width_bits in (8,32,64)
+		    and (normalized.op_name not in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
+		         or dst.width_bits in (32,64))
+		    and (normalized.op_name not in ('bsr','bsf','bt','bts')
+		         or dst.width_bits in (32,64))
 	), movzx_reg_reg as (
   select normalized.*,
          dst.register_name as dst_register_name,
@@ -4130,8 +4133,8 @@ with binary_operand as (
          cast(normalized.rhs_value as integer) as immediate_value
   from normalized
   join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
-  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror')
-    and dst.width_bits in (32,64)
+	  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror','bt','bts')
+	    and dst.width_bits in (32,64)
     and (normalized.rhs_value glob '[0-9]*'
          or normalized.rhs_value glob '-[0-9]*')
     and replace(normalized.rhs_value, '-', '') not glob '*[^0-9]*'
@@ -4150,8 +4153,9 @@ with binary_operand as (
     and repo_asm_rule_match.line_kind = 3
     and repo_asm_rule_match.encoding_id is null
     and repo_asm_rule_match.rule_name is not null
-    and repo_asm_rule_match.op_name in ('inc','dec')
-    and reg.width_bits in (32,64)
+	    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','sete','setne')
+	    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
+	         or (repo_asm_rule_match.op_name in ('setb','setbe','sete','setne') and reg.width_bits = 8))
 ), generated as (
   select repo_file_id,
          function_name,
@@ -4176,7 +4180,7 @@ with binary_operand as (
 	           || printf('%02x', 192 + ((src_reg_code & 7) << 3) + (dst_reg_code & 7))
 	         ) as fixed_hex
 	  from reg_reg
-	  where op_name not in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
+		  where op_name not in ('imul','cmova','cmovb','cmovg','cmovl','cmovne','xchg','bsr','bsf','bt','bts')
 	  union all
 	  select repo_file_id,
 	         function_name,
@@ -4198,8 +4202,33 @@ with binary_operand as (
 	              end
 	           || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
 	         ) as fixed_hex
+		  from reg_reg
+		  where op_name in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_' || op_name || '_reg_reg' as parametric_rule_name,
+	         (
+	           case
+	             when width_bits = 64 then printf('%02x', 72 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	             when src_requires_rex = 1 or dst_requires_rex = 1 then printf('%02x', 64 + case when src_reg_code >= 8 then 4 else 0 end + case when dst_reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
+	           || case op_name
+	                when 'xchg' then case when width_bits = 8 then '86' else '87' end
+	                when 'bsr' then '0fbd'
+	                when 'bsf' then '0fbc'
+	                when 'bt' then '0fa3'
+	                when 'bts' then '0fab'
+	              end
+	           || case
+	                when op_name in ('bsr','bsf') then printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
+	                else printf('%02x', 192 + ((src_reg_code & 7) << 3) + (dst_reg_code & 7))
+	              end
+	         ) as fixed_hex
 	  from reg_reg
-	  where op_name in ('imul','cmova','cmovb','cmovg','cmovl','cmovne')
+	  where op_name in ('xchg','bsr','bsf','bt','bts')
 	  union all
 	  select repo_file_id,
          function_name,
@@ -4291,6 +4320,24 @@ with binary_operand as (
 	  select repo_file_id,
 	         function_name,
 	         line_no,
+	         'param_x86_' || op_name || '_reg_imm8' as parametric_rule_name,
+	         (
+	           case
+	             when width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 1 else 0 end)
+	             when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
+	           || '0fba'
+	           || printf('%02x', 192 + ((case op_name when 'bt' then 4 when 'bts' then 5 end) << 3) + (dst_reg_code & 7))
+	           || printf('%02x', immediate_value & 255)
+	         ) as fixed_hex
+	  from reg_imm
+	  where op_name in ('bt','bts')
+	    and immediate_value between 0 and 255
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
 	         'param_x86_' || op_name || '_reg_cl' as parametric_rule_name,
 	         (
 	           case
@@ -4321,7 +4368,28 @@ with binary_operand as (
            || 'ff'
            || printf('%02x', 192 + ((case op_name when 'inc' then 0 when 'dec' then 1 end) << 3) + (reg_code & 7))
          ) as fixed_hex
-  from unary_reg
+	  from unary_reg
+	  where op_name in ('inc','dec')
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_' || op_name || '_reg' as parametric_rule_name,
+	         (
+	           case
+	             when requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
+	           || case op_name
+	                when 'setb' then '0f92'
+	                when 'setbe' then '0f96'
+	                when 'sete' then '0f94'
+	                when 'setne' then '0f95'
+	              end
+	           || printf('%02x', 208 + (reg_code & 7))
+	         ) as fixed_hex
+	  from unary_reg
+	  where op_name in ('setb','setbe','sete','setne')
   union all
   select repo_file_id,
          function_name,
@@ -7727,15 +7795,29 @@ with register_operand as (
   from repo_asm_rule_match match
   join x86_register_encoding_fact reg
     on reg.register_name = match.operand_text
-  where match.target_isa_id = 1
-    and match.line_kind = 3
-    and match.encoding_id is null
-    and match.rule_name is not null
-	    and match.op_name in ('inc','dec','neg','not','div','mul','bswap','push')
-	    and ((match.op_name in ('inc','dec','neg','not') and reg.width_bits in (8,16,32,64))
-	         or (match.op_name in ('div','mul','bswap') and reg.width_bits in (32,64))
-	         or (match.op_name = 'push' and reg.width_bits = 64))
-), unary_memory_operand as (
+		  where match.target_isa_id = 1
+		    and match.line_kind = 3
+		    and match.encoding_id is null
+		    and match.rule_name is not null
+		    and match.op_name in ('inc','dec','neg','not','div','mul','bswap','push')
+		    and ((match.op_name in ('inc','dec','neg','not') and reg.width_bits in (8,16,32,64))
+		         or (match.op_name in ('div','mul','bswap') and reg.width_bits in (32,64))
+		         or (match.op_name = 'push' and reg.width_bits = 64))
+	), push_immediate as (
+	  select match.repo_file_id,
+	         match.function_name,
+	         match.line_no,
+	         cast(match.operand_text as integer) as immediate_value
+	  from repo_asm_rule_match match
+	  where match.target_isa_id = 1
+	    and match.line_kind = 3
+	    and match.encoding_id is null
+	    and match.rule_name is not null
+	    and match.op_name = 'push'
+	    and (match.operand_text glob '[0-9]*'
+	         or match.operand_text glob '-[0-9]*')
+	    and replace(match.operand_text, '-', '') not glob '*[^0-9]*'
+	), unary_memory_operand as (
   select match.repo_file_id,
          match.function_name,
          match.line_no,
@@ -7757,7 +7839,7 @@ with register_operand as (
     and match.line_kind = 3
     and match.encoding_id is null
     and match.rule_name is not null
-    and match.op_name in ('inc','dec','neg','not')
+	    and match.op_name in ('inc','dec','neg','not','push')
 ), unary_memory_terms as (
   select unary_memory_operand.*,
          trim(replace(substr(memory_text, 2, length(memory_text) - 2), ' - ', ' + -')) as inner_text
@@ -7870,34 +7952,55 @@ with register_operand as (
 	  from register_operand
 	  where op_name in ('bswap','push')
 	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_push_imm' as parametric_rule_name,
+	         (
+	           case
+	             when immediate_value between -128 and 127 then '6a' || printf('%02x', immediate_value & 255)
+	             else '68' || printf('%02x%02x%02x%02x',
+	                                  immediate_value & 255,
+	                                  (immediate_value >> 8) & 255,
+	                                  (immediate_value >> 16) & 255,
+	                                  (immediate_value >> 24) & 255)
+	           end
+	         ) as fixed_hex
+	  from push_immediate
+	  where immediate_value between -2147483648 and 2147483647
+	  union all
   select repo_file_id,
          function_name,
          line_no,
-         'param_x86_' || op_name || '_' || size_name || '_memory' as parametric_rule_name,
-         (
-           case
-             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
-             when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
-             else ''
-           end
+	         'param_x86_' || op_name || '_' || size_name || '_memory' as parametric_rule_name,
+	         (
+	           case
+	             when op_name = 'push' and base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+	             when op_name = 'push' then ''
+	             when size_name = 'qword' then printf('%02x', 72 + case when base_reg_code >= 8 then 1 else 0 end)
+	             when base_requires_rex = 1 then printf('%02x', 64 + case when base_reg_code >= 8 then 1 else 0 end)
+	             else ''
+	           end
            || case
-                when op_name in ('inc','dec') and size_name = 'byte' then 'fe'
-                when op_name in ('inc','dec') then 'ff'
-                when size_name = 'byte' then 'f6'
-                else 'f7'
-              end
-           || printf('%02x', (mod_bits << 6) + ((case op_name
-                                                  when 'inc' then 0
-                                                  when 'dec' then 1
-                                                  when 'not' then 2
-                                                  when 'neg' then 3
-                                                end) << 3) + rm_field)
+	                when op_name = 'push' then 'ff'
+	                when op_name in ('inc','dec') and size_name = 'byte' then 'fe'
+	                when op_name in ('inc','dec') then 'ff'
+	                when size_name = 'byte' then 'f6'
+	                else 'f7'
+	              end
+	           || printf('%02x', (mod_bits << 6) + ((case op_name
+	                                                  when 'inc' then 0
+	                                                  when 'dec' then 1
+	                                                  when 'not' then 2
+	                                                  when 'neg' then 3
+	                                                  when 'push' then 6
+	                                                end) << 3) + rm_field)
            || sib_hex
            || displacement_hex
          ) as fixed_hex
   from memory_bytes
-  where op_name in ('inc','dec','neg','not')
-    and size_name in ('byte','word','dword','qword')
+	  where ((op_name in ('inc','dec','neg','not') and size_name in ('byte','word','dword','qword'))
+	         or (op_name = 'push' and size_name = 'qword'))
 )
 select repo_file_id,
        function_name,
@@ -8851,7 +8954,7 @@ join repo_asm_memory_addressing_fact memory
 join repo_asm_data_definition_fact definition
   on definition.repo_file_id = operation.repo_file_id
  and replace(definition.label_name, ':', '') = memory.first_symbol_term
-where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx')
+where operation.op_name in ('mov','lea','add','sub','cmp','and','or','xor','test','movzx','push')
   and memory.addressing_kind = 'symbolic_base_memory'
   and memory.symbol_term_count = 1
   and memory.rel_marker_count = 0
@@ -8867,7 +8970,7 @@ from repo_asm_operation operation
 join repo_asm_data_definition_fact definition
   on definition.repo_file_id = operation.repo_file_id
  and replace(definition.label_name, ':', '') = trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1))
-where operation.op_name in ('mov','lea')
+where operation.op_name in ('mov','lea','push')
   and operation.operand_text like '%, %'
   and operation.operand_text not like '%[rel %]%'
 union all
