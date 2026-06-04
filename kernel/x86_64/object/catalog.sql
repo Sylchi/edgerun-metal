@@ -3397,6 +3397,8 @@ select name,
        mtime,
        length(data),
        case
+         when name like '%.zig.erobj' then 'zig.erobj'
+         when name like '%.zig' then 'zig'
          when name like '%.asm.erobj' then 'asm.erobj'
          when name like '%.asm' then 'asm'
          when name like '%.inc' then 'inc'
@@ -3406,6 +3408,8 @@ select name,
          else ''
        end,
        case
+         when name like '%.zig.erobj' then 'source_object_zig'
+         when name like '%.zig' then 'zig'
          when name like '%.asm.erobj' then 'source_object_asm'
          when name like '%.asm' then 'asm'
          when name like '%.inc' then 'asm_include'
@@ -3419,8 +3423,44 @@ from fsdir('kernel')
 where data is not null
   and length(data) < 2000000
   and (
-    name like '%.asm' or name like '%.inc' or name like '%.asm.erobj'
+    name like '%.zig' or name like '%.zig.erobj'
+    or name like '%.asm' or name like '%.inc' or name like '%.asm.erobj'
     or name like '%.sql' or name like '%.md' or name like '%.ld'
+  );
+
+insert into repo_file(path, mode, mtime, byte_len, ext, file_kind, content)
+select name,
+       mode,
+       mtime,
+       length(data),
+       case
+         when name like '%.zig.erobj' then 'zig.erobj'
+         when name like '%.zig' then 'zig'
+         when name like '%.er' then 'er'
+         when name like '%.md' then 'md'
+         when name like '%.ld' then 'ld'
+         when name like '%.bin' then 'bin'
+         when name like '%.obj' then 'obj'
+         when name like '%.png' then 'png'
+         else ''
+       end,
+       case
+         when name like '%.zig.erobj' then 'source_object_zig'
+         when name like '%.zig' then 'zig'
+         when name like '%.er' then 'er_source'
+         when name like '%.md' then 'doc'
+         when name like '%.ld' then 'linker_script'
+         when name like '%.bin' or name like '%.obj' or name like '%.png' then 'app_asset'
+         else 'other'
+       end,
+       data
+from fsdir('app')
+where data is not null
+  and length(data) < 2000000
+  and (
+    name like '%.zig' or name like '%.zig.erobj' or name like '%.er'
+    or name like '%.md' or name like '%.ld' or name like '%.bin'
+    or name like '%.obj' or name like '%.png'
   );
 
 insert into repo_file(path, mode, mtime, byte_len, ext, file_kind, content) values
@@ -3483,6 +3523,218 @@ insert into repo_asm_line(repo_file_id, line_no, text)
 select repo_file_id, line_no - 1, line
 from lines
 where line_no > 1;
+
+create table app_zig_line (
+  repo_file_id integer not null references repo_file(repo_file_id),
+  line_no integer not null,
+  text text not null,
+  primary key (repo_file_id, line_no)
+);
+
+with recursive lines(repo_file_id, line_no, rest, line) as (
+  select repo_file_id,
+         1,
+         replace(cast(case
+           when file_kind = 'source_object_zig' then substr(content, 149)
+           else content
+         end as text), char(13), '') || char(10),
+         ''
+  from repo_file
+  where file_kind in ('zig', 'source_object_zig')
+  union all
+  select repo_file_id,
+         line_no + 1,
+         substr(rest, instr(rest, char(10)) + 1),
+         substr(rest, 1, instr(rest, char(10)) - 1)
+  from lines
+  where rest <> '' and instr(rest, char(10)) > 0
+)
+insert into app_zig_line(repo_file_id, line_no, text)
+select repo_file_id, line_no - 1, line
+from lines
+where line_no > 1;
+
+create view app_zig_significant_line as
+select repo_file.path,
+       app_zig_line.repo_file_id,
+       app_zig_line.line_no,
+       app_zig_line.text,
+       trim(replace(app_zig_line.text, char(9), ' ')) as trimmed_text
+from app_zig_line
+join repo_file using (repo_file_id)
+where trim(replace(app_zig_line.text, char(9), ' ')) <> ''
+  and substr(trim(replace(app_zig_line.text, char(9), ' ')), 1, 2) <> '//';
+
+create view app_zig_import_fact as
+with import_line as (
+  select path,
+         repo_file_id,
+         line_no,
+         trimmed_text,
+         substr(trimmed_text, instr(trimmed_text, '@import(') + 8) as import_tail
+  from app_zig_significant_line
+  where instr(trimmed_text, '@import(') > 0
+), quoted_import as (
+  select path,
+         repo_file_id,
+         line_no,
+         trimmed_text,
+         import_tail,
+         instr(import_tail, char(34)) as first_quote
+  from import_line
+)
+select path,
+       repo_file_id,
+       line_no,
+       case
+         when trimmed_text like 'const % = @import(%'
+           then trim(substr(trimmed_text, 7, instr(trimmed_text, '=') - 7))
+         else ''
+       end as import_alias,
+       substr(substr(import_tail, first_quote + 1), 1, instr(substr(import_tail, first_quote + 1), char(34)) - 1) as import_path,
+       case
+         when substr(substr(import_tail, first_quote + 1), 1, instr(substr(import_tail, first_quote + 1), char(34)) - 1) like '%.zig' then 'zig_file'
+         else 'external_package'
+       end as import_kind,
+       trimmed_text as raw_text
+from quoted_import
+where first_quote > 0
+  and instr(substr(import_tail, first_quote + 1), char(34)) > 0;
+
+create view app_zig_declaration_fact as
+with declaration_line as (
+  select path,
+         repo_file_id,
+         line_no,
+         trimmed_text,
+         case
+           when trimmed_text like 'pub const %' then 'pub_const'
+           when trimmed_text like 'const %' then 'const'
+           when trimmed_text like 'pub fn %' then 'pub_fn'
+           when trimmed_text like 'fn %' then 'fn'
+           when trimmed_text like 'export fn %' then 'export_fn'
+           when trimmed_text like 'extern %' then 'extern'
+           when trimmed_text like 'test %' then 'test'
+           else ''
+         end as declaration_kind,
+         case
+           when trimmed_text like 'pub const %' then substr(trimmed_text, 11)
+           when trimmed_text like 'const %' then substr(trimmed_text, 7)
+           when trimmed_text like 'pub fn %' then substr(trimmed_text, 8)
+           when trimmed_text like 'fn %' then substr(trimmed_text, 4)
+           when trimmed_text like 'export fn %' then substr(trimmed_text, 11)
+           when trimmed_text like 'extern %' then substr(trimmed_text, 8)
+           when trimmed_text like 'test %' then substr(trimmed_text, 6)
+           else ''
+         end as declaration_tail
+  from app_zig_significant_line
+)
+select path,
+       repo_file_id,
+       line_no,
+       declaration_kind,
+       case
+         when declaration_kind in ('pub_fn','fn','export_fn') and instr(declaration_tail, '(') > 0
+           then trim(substr(declaration_tail, 1, instr(declaration_tail, '(') - 1))
+         when declaration_kind in ('pub_const','const') and instr(declaration_tail, '=') > 0
+           then trim(substr(declaration_tail, 1, instr(declaration_tail, '=') - 1))
+         when declaration_kind = 'test' and substr(trim(declaration_tail), 1, 1) = char(34)
+           then substr(substr(trim(declaration_tail), 2), 1, instr(substr(trim(declaration_tail), 2), char(34)) - 1)
+         when instr(declaration_tail, ' ') > 0
+           then trim(substr(declaration_tail, 1, instr(declaration_tail, ' ') - 1))
+         else trim(declaration_tail)
+       end as symbol_name,
+       trimmed_text as raw_text
+from declaration_line
+where declaration_kind <> '';
+
+create view app_zig_constant_fact as
+select path,
+       repo_file_id,
+       line_no,
+       declaration_kind,
+       symbol_name,
+       case
+         when instr(raw_text, '=') > 0 and instr(raw_text, ';') > instr(raw_text, '=')
+           then trim(substr(raw_text, instr(raw_text, '=') + 1, instr(raw_text, ';') - instr(raw_text, '=') - 1))
+         when instr(raw_text, '=') > 0
+           then trim(substr(raw_text, instr(raw_text, '=') + 1))
+         else ''
+       end as value_text,
+       raw_text
+from app_zig_declaration_fact
+where declaration_kind in ('pub_const', 'const')
+  and instr(raw_text, '=') > 0;
+
+create view app_zig_fact_line as
+select repo_file_id, line_no, 'import' as fact_kind
+from app_zig_import_fact
+union
+select repo_file_id, line_no, 'declaration'
+from app_zig_declaration_fact
+union
+select repo_file_id, line_no, 'constant'
+from app_zig_constant_fact;
+
+create view app_zig_file_fact_coverage as
+select repo_file.path,
+       repo_file.repo_file_id,
+       repo_file.file_kind,
+       repo_file.byte_len,
+       count(line.line_no) as significant_line_count,
+       count(distinct fact_line.line_no) as fact_backed_line_count,
+       count(line.line_no) - count(distinct fact_line.line_no) as remaining_line_count,
+       (100 * count(distinct fact_line.line_no)) / count(line.line_no) as fact_backed_percent
+from repo_file
+join app_zig_significant_line line using (repo_file_id)
+left join app_zig_fact_line fact_line
+  on fact_line.repo_file_id = line.repo_file_id
+ and fact_line.line_no = line.line_no
+where repo_file.file_kind in ('zig', 'source_object_zig')
+group by repo_file.path, repo_file.repo_file_id, repo_file.file_kind, repo_file.byte_len;
+
+create view app_zig_remaining_gap as
+select line.path,
+       line.repo_file_id,
+       line.line_no,
+       'line_without_zig_fact' as gap_kind,
+       line.trimmed_text as raw_text
+from app_zig_significant_line line
+left join app_zig_fact_line fact_line
+  on fact_line.repo_file_id = line.repo_file_id
+ and fact_line.line_no = line.line_no
+where fact_line.line_no is null;
+
+create view app_zig_remaining_gap_summary as
+select gap_kind,
+       count(*) as occurrence_count,
+       count(distinct path) as file_count
+from app_zig_remaining_gap
+group by gap_kind;
+
+create view app_zig_source_deletion_plan as
+select path,
+       file_kind,
+       byte_len,
+       significant_line_count,
+       fact_backed_line_count,
+       remaining_line_count,
+       fact_backed_percent,
+       case
+         when file_kind = 'source_object_zig' and remaining_line_count = 0 then 'text_deleted_fact_backed'
+         when file_kind = 'zig' and remaining_line_count = 0 then 'blocked_by_zig_object_materialization'
+         else 'blocked_by_fact_gaps'
+       end as deletion_state,
+       case
+         when file_kind = 'zig' then path || '.erobj'
+         else path
+       end as source_object_path,
+       exists (
+         select 1
+         from repo_file source_object
+         where source_object.path = app_zig_file_fact_coverage.path || '.erobj'
+       ) as source_object_exists
+from app_zig_file_fact_coverage;
 
 create table repo_asm_include_line (
   repo_file_id integer not null references repo_file(repo_file_id),
@@ -4242,10 +4494,10 @@ with binary_operand as (
 	  where normalized.op_name = 'mov'
 	    and ((normalized.lhs_value in ('es','cs','ss','ds','fs','gs') and src.register_name is not null)
 	         or (normalized.rhs_value in ('es','cs','ss','ds','fs','gs') and dst.register_name is not null))
-	), control_mov as (
-	  select normalized.*,
-	         case when normalized.lhs_value = 'cr0' then src.reg_code else dst.reg_code end as reg_code,
-	         case when normalized.lhs_value = 'cr0' then 'to_control' else 'from_control' end as move_direction
+), control_mov as (
+  select normalized.*,
+         case when normalized.lhs_value in ('cr0','cr3','cr4') then src.reg_code else dst.reg_code end as general_reg_code, cast(substr(case when normalized.lhs_value in ('cr0','cr3','cr4') then normalized.lhs_value else normalized.rhs_value end, 3) as integer) as control_reg_code,
+         case when normalized.lhs_value in ('cr0','cr3','cr4') then 'to_control' else 'from_control' end as move_direction
 	  from normalized
 	  left join x86_register_encoding_fact dst
 	    on dst.register_name = normalized.lhs_value
@@ -4253,9 +4505,9 @@ with binary_operand as (
 	  left join x86_register_encoding_fact src
 	    on src.register_name = normalized.rhs_value
 	   and src.width_bits in (32,64)
-	  where normalized.op_name = 'mov'
-	    and ((normalized.lhs_value = 'cr0' and src.register_name is not null)
-	         or (normalized.rhs_value = 'cr0' and dst.register_name is not null))
+  where normalized.op_name = 'mov'
+    and ((normalized.lhs_value in ('cr0','cr3','cr4') and src.register_name is not null)
+         or (normalized.rhs_value in ('cr0','cr3','cr4') and dst.register_name is not null))
 	), generated as (
   select repo_file_id,
          function_name,
@@ -4531,9 +4783,9 @@ with binary_operand as (
 	  select repo_file_id,
 	         function_name,
 	         line_no,
-	         'param_x86_mov_control_reg' as parametric_rule_name,
-	         (case move_direction when 'to_control' then '0f22' else '0f20' end)
-	           || printf('%02x', 192 + (reg_code & 7)) as fixed_hex
+         'param_x86_mov_control_reg' as parametric_rule_name,
+         (case move_direction when 'to_control' then '0f22' else '0f20' end)
+           || printf('%02x', 192 + ((control_reg_code & 7) << 3) + (general_reg_code & 7)) as fixed_hex
 	  from control_mov
 	  union all
 	  select repo_file_id,
@@ -9180,8 +9432,8 @@ insert into arm32_condition_fact(op_name, base_op_name, cond_code) values
   ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('ldrh', 'ldr', 14),
   ('strh', 'str', 14), ('streq', 'str', 0), ('strne', 'str', 1),
   ('push', 'push', 14), ('bxne', 'bx', 1), ('mul', 'mul', 14),
-  ('pop', 'pop', 14), ('popeq', 'pop', 0), ('popne', 'pop', 1),
-  ('svc', 'svc', 14);
+  ('pop', 'pop', 14), ('popeq', 'pop', 0), ('popne', 'pop', 1), ('svc', 'svc', 14),
+  ('ldreq', 'ldr', 0), ('bxhs', 'bx', 2), ('bxle', 'bx', 13), ('addlo', 'add', 3), ('addhs', 'add', 2), ('orreq', 'orr', 0), ('orrhs', 'orr', 2);
 
 create table repo_asm_arm32_parametric_encoding_fact as
 with recursive operation as (
@@ -9439,7 +9691,7 @@ with recursive operation as (
   join arm32_condition_fact cond on cond.op_name = decimal_three_immediate.op_name
   join arm32_register_encoding_fact rd on rd.register_name = decimal_three_immediate.arg0
   join arm32_register_encoding_fact rn on rn.register_name = decimal_three_immediate.arg1
-  where decimal_three_immediate.op_name in ('add','sub','subs','and','orr','bic')
+  where cond.base_op_name in ('add','sub','and','orr','bic')
     and decimal_three_immediate.immediate_value is not null
 ), arm_dp_reg as (
   select split_three.repo_file_id,
@@ -9456,7 +9708,7 @@ with recursive operation as (
   join arm32_register_encoding_fact rd on rd.register_name = split_three.arg0
   join arm32_register_encoding_fact rn on rn.register_name = split_three.arg1
   join arm32_register_encoding_fact rm on rm.register_name = split_three.arg2
-  where split_three.op_name in ('add','sub','and','orr','bic')
+  where cond.base_op_name in ('add','sub','and','orr','bic')
 ), arm_dp_shift_reg as (
   select four_shift.repo_file_id,
          four_shift.function_name,
@@ -9474,7 +9726,7 @@ with recursive operation as (
   join arm32_register_encoding_fact rd on rd.register_name = four_shift.arg0
   join arm32_register_encoding_fact rn on rn.register_name = four_shift.arg1
   join arm32_register_encoding_fact rm on rm.register_name = four_shift.arg2_reg
-  where four_shift.op_name in ('add','sub','and','orr','bic')
+  where cond.base_op_name in ('add','sub','and','orr','bic')
     and four_shift.shift_name in ('lsl','lsr')
     and four_shift.shift_value is not null
 ), arm_mov_imm as (
@@ -9775,7 +10027,7 @@ with recursive operation as (
   from operation
   join arm32_condition_fact cond on cond.op_name = operation.op_name
   join arm32_register_encoding_fact rm on rm.register_name = operation.operand_text
-  where operation.op_name in ('bxne')
+  where operation.op_name in ('bxne','bxhs','bxle')
 ), stack_list_operand as (
   select operation.repo_file_id,
          operation.function_name,
@@ -10489,7 +10741,7 @@ select path,
        'arm_literal_pool_reference' as relocation_kind
 from repo_asm_operation
 where target_isa_id = 4
-  and op_name = 'ldr'
+  and op_name in ('ldr','ldreq')
   and operand_text like '%, =%'
 union all
 select operation.path,
@@ -14765,6 +15017,46 @@ select 'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || '
        'repo_asm.operation_status:' || repo_file_id || ':' || cast(line_no as text) || ':' || fact_status
 from repo_asm_operation_fact_status;
 
+create view app_zig_engine_fact as
+select 'app_zig.import:' || path || ':' || cast(line_no as text) || ':' || import_path as fact_id,
+       'app_zig_import_fact' as fact_kind,
+       path as subject,
+       case when import_alias <> '' then import_alias else 'import' end as predicate,
+       import_kind || ':' || import_path as object,
+       'text' as value_type,
+       'observed' as fact_status,
+       'app.zig' as namespace,
+       line_no,
+       raw_text as evidence,
+       'app_zig.import:' || repo_file_id || ':' || cast(line_no as text) || ':' || import_path as stable_key
+from app_zig_import_fact
+union all
+select 'app_zig.declaration:' || path || ':' || cast(line_no as text) || ':' || declaration_kind || ':' || symbol_name,
+       'app_zig_declaration_fact',
+       path,
+       declaration_kind,
+       symbol_name,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.declaration:' || repo_file_id || ':' || cast(line_no as text) || ':' || declaration_kind || ':' || symbol_name
+from app_zig_declaration_fact
+union all
+select 'app_zig.constant:' || path || ':' || cast(line_no as text) || ':' || symbol_name,
+       'app_zig_constant_fact',
+       path,
+       symbol_name,
+       value_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.constant:' || repo_file_id || ':' || cast(line_no as text) || ':' || symbol_name || ':' || length(value_text)
+from app_zig_constant_fact;
+
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'corpus_proof_fact',
@@ -14791,6 +15083,8 @@ union all
 select * from media_engine_fact
 union all
 select * from repo_asm_engine_fact
+union all
+select * from app_zig_engine_fact
 union all
 select * from corpus_proof_engine_fact;
 
@@ -14882,6 +15176,14 @@ select 'repo_asm:' || gap_kind,
        'asm_import_gap'
 from repo_asm_remaining_meaning_gap;
 
+create view app_zig_engine_gap as
+select 'app_zig:' || gap_kind,
+       path,
+       line_no,
+       raw_text,
+       'zig_import_gap'
+from app_zig_remaining_gap;
+
 create view relation_engine_gap as
 select 'engine:' || gap_kind,
        coalesce(subject_entity, ''),
@@ -14898,6 +15200,8 @@ union all
 select * from predicate_engine_gap
 union all
 select * from repo_asm_engine_gap
+union all
+select * from app_zig_engine_gap
 union all
 select * from relation_engine_gap;
 
