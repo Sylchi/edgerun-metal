@@ -95,13 +95,6 @@ Use the runner and owned object tools from `.build/host/`:
 ./.build/host/er_obj_body kernel/host/host_tools.erobj
 ```
 
-Canonical code-record bodies can be materialized directly without parsing ASM:
-
-```sh
-./.build/host/er_build file-to-object .build/host/code-body.bin .build/host/code-body.erobj
-./.build/host/er_build materialize-code-body .build/host/code-body.erobj .build/host/code.bin .build/host/code.receipt.erobj
-```
-
 For direct source-object edits, write replacement bytes to a small file and patch the object body without materializing the full source:
 
 ```sh
@@ -128,12 +121,12 @@ Development rules:
 - If a command fails, fix the owned registry/object/tool path. Do not add fallback commands.
 - When possible, add canonical object records and materializers instead of increasing text assembler compatibility.
 - Use `file-to-isa-object` for checked `ERISA001` instruction-set bodies; malformed ISA bodies must fail before they enter the object graph.
-- Use `materialize-code-body` for the current CODE-record bridge; it consumes an EROBJ001 body containing `ERCODE01` records and emits flat bytes plus a canonical RECEIPT object.
 
 Current gaps:
 
 - `er_build x86-objects` builds the registry-owned object set; executable program work is moving toward hash-linked code-object graphs, deterministic materialization, and receipts.
 - `er_asm` is being reduced to an owned source-object interpreter/canonicalizer and record emitter; `yasm` remains a temporary fresh-checkout bootstrap tool only.
+- CODE and WASM byte materialization need a real canonical record backend; the old narrow `mov eax, imm32; ret` CODE bridge and MVP expression-to-WASM emitter have been removed.
 
 ## Current Facts
 

@@ -147,7 +147,6 @@ Owned runner checks:
 ./.build/host/er_build x86-objects
 ./.build/host/er_build validate-object kernel/test/registry.erobj
 ./.build/host/er_build file-to-isa-object .build/host/x86_64_isa.body kernel/x86_64/object/x86_64_isa.erobj
-./.build/host/er_build materialize-code-body .build/host/code-body.erobj .build/host/code.bin .build/host/code.receipt.erobj
 ```
 
 Source-object editing workflow:
@@ -176,7 +175,6 @@ Workflow rules:
 - If a workflow is missing, add an owned `er_build` command or registry object; do not add shell wrappers.
 - If a workflow can be represented as canonical records, do that instead of adding more text assembler compatibility.
 - Use `file-to-isa-object` for checked `ERISA001` instruction-set bodies; malformed ISA bodies must fail before they enter the object graph.
-- Use `materialize-code-body` as the current bridge from canonical `ERCODE01` instruction records to flat bytes plus a canonical RECEIPT object. Extend that path before adding text assembler compatibility.
 - Use `kernel/x86_64/object/catalog.sql` as the compact SQL authoring/index view for finite code-object vocabularies. Do not treat SQL as runtime authority or an external dependency; materialized `.erobj` files are still the graph objects that validators and materializers consume.
 - Keep the operand vocabulary as materialized objects too: `ERTYPE01`, `EROPK001`, `EROPSH01`, and `ERADDR01` bodies define value types, operand kinds, operand shapes, and addressing modes. Concrete CODE operands should reference these records instead of embedding ad hoc operand tags.
 - Treat functions as materialization query roots. `ERFUNC01` objects identify function graph roots; SQL may emit deterministic machine-code views from function records, but the object closure and receipts remain the authority.

@@ -8097,8 +8097,8 @@ create table repo_asm_numeric_symbol_memory_parametric_encoding_fact as
 with symbolic_memory as (
   select mem.*,
          base_term.term_text as base_register_name,
-         symbol_term.term_text as symbol_name,
-         (mem.integer_displacement + (symbol_term.term_sign * value.immediate_value)) as displacement
+         group_concat(symbol_term.term_text, '+') as symbol_name,
+         (mem.integer_displacement + sum(symbol_term.term_sign * value.immediate_value)) as displacement
   from repo_asm_memory_addressing_fact mem
   join repo_asm_memory_operand_term_fact base_term
     on base_term.repo_file_id = mem.repo_file_id
@@ -8119,8 +8119,33 @@ with symbolic_memory as (
     and mem.is_rel_memory = 0
     and mem.addressing_kind = 'symbolic_base_memory'
     and mem.register_term_count = 1
-    and mem.symbol_term_count = 1
+    and mem.symbol_term_count >= 1
     and mem.scaled_register_term_count = 0
+  group by mem.path,
+           mem.repo_file_id,
+           mem.function_name,
+           mem.line_no,
+           mem.target_isa_id,
+           mem.op_name,
+           mem.operand_text,
+           mem.operand_index,
+           mem.size_name,
+           mem.memory_text,
+           mem.is_rel_memory,
+           mem.register_term_count,
+           mem.scaled_register_term_count,
+           mem.symbol_term_count,
+           mem.integer_term_count,
+           mem.rel_marker_count,
+           mem.other_term_count,
+           mem.first_register_term,
+           mem.first_scaled_register_term,
+           mem.first_scale_value,
+           mem.first_symbol_term,
+           mem.integer_displacement,
+           mem.addressing_kind,
+           base_term.term_text
+  having count(*) = mem.symbol_term_count
 ), symbolic_memory_bytes as (
   select symbolic_memory.*,
          base_reg.reg_code as base_reg_code,

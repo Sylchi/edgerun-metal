@@ -19,8 +19,6 @@ extern er_object_envelope_validate
 extern er_object_view_decode
 extern er_object_canonical_size
 extern er_isa_validate_body
-extern er_code_validate_body
-extern er_code_materialize_flat
 extern er_object_write_bytes_node
 extern er_object_write_isa_node
 extern er_object_write_code_node
@@ -29,13 +27,13 @@ extern er_object_write_bytes_node_owned
 extern er_object_write_tree_node
 extern er_object_write_tree_node_owned
 
-CODE_BODY_LEN equ CODE_BODY_HEADER_SIZE + CODE_RECORD_SIZE * 4
+CODE_BODY_LEN equ CODE_BODY_HEADER_SIZE + CODE_RECORD_SIZE * 2
 ISA_BODY_LEN equ ISA_BODY_HEADER_SIZE + ISA_DEF_SIZE * 2
 CANONICAL_BYTES_LEN equ OBJECT_HEADER_SIZE + 5
 CANONICAL_ISA_LEN equ OBJECT_HEADER_SIZE + ISA_BODY_LEN
 CANONICAL_CODE_BODY_LEN equ OBJECT_HEADER_SIZE + CODE_BODY_LEN
 CANONICAL_CODE_LEN equ OBJECT_HEADER_SIZE + OBJECT_CHILD_SIZE + 16
-CANONICAL_RECEIPT_LEN equ OBJECT_HEADER_SIZE + CODE_RECEIPT_SIZE
+CANONICAL_RECEIPT_LEN equ OBJECT_HEADER_SIZE + 7
 CANONICAL_OWNED_LEN equ OBJECT_HEADER_SIZE + OBJECT_OWNER_SIZE + OBJECT_ENVELOPE_SIZE + 7
 CANONICAL_TREE_LEN equ OBJECT_HEADER_SIZE + OBJECT_CHILD_SIZE
 CANONICAL_OWNED_TREE_LEN equ OBJECT_HEADER_SIZE + OBJECT_OWNER_SIZE + OBJECT_ENVELOPE_SIZE + OBJECT_CHILD_SIZE
@@ -62,8 +60,6 @@ canonical_bytes: resb CANONICAL_BYTES_LEN
 canonical_isa: resb CANONICAL_ISA_LEN
 canonical_code: resb CANONICAL_CODE_BODY_LEN
 canonical_code_len: resq 1
-code_out: resb 8
-code_receipt: resb CODE_RECEIPT_SIZE
 canonical_receipt: resb CANONICAL_RECEIPT_LEN
 canonical_owned: resb CANONICAL_OWNED_LEN
 canonical_tree: resb CANONICAL_TREE_LEN
@@ -89,8 +85,6 @@ metadata_hash:
 body_hello: db "hello"
 body_payload: db "payload"
 erobj_magic: db "EROBJ001"
-expected_code_receipt_magic: dq CODE_RECEIPT_MAGIC_QWORD
-expected_code_bytes: db 0xb8, 42, 0, 0, 0, 0xc3
 x86_isa_body:
     dq ISA_BODY_MAGIC_QWORD
     dw ISA_BODY_VERSION
@@ -143,26 +137,7 @@ code_body:
     dw 0
     dd 0
     dq 0
-    dw CODE_RECORD_KIND_INSTR
-    dw CODE_OP_X86_MOV_EAX_IMM32
-    dd 0
-    dq 42
-    dw CODE_RECORD_KIND_INSTR
-    dw CODE_OP_X86_RET
-    dd 0
-    dq 0
 code_body_end:
-code_bad_opcode_body:
-    dq CODE_BODY_MAGIC_QWORD
-    dw CODE_BODY_VERSION
-    dw CODE_ISA_X86_64
-    dd 1
-    dw CODE_RECORD_KIND_INSTR
-    dw 0xffff
-    dd 0
-    dq 0
-code_bad_opcode_body_end:
-
 SECTION .text
 global _start
 _start:
@@ -290,51 +265,12 @@ _start:
     ASSERT_RDX 0
     ASSERT_QWORD [rel canonical_code_len], CANONICAL_CODE_LEN
 
-    lea     rdi, [rel code_body]
-    mov     esi, code_body_end - code_body
-    lea     rdx, [rel code_out]
-    mov     ecx, 8
-    lea     r8, [rel code_receipt]
-    call    er_code_materialize_flat
-    ASSERT_RAX 6
-    ASSERT_RDX 0
-    ASSERT_MEM_EQ [rel expected_code_bytes], [rel code_out], 6
-    ASSERT_MEM_EQ [rel expected_code_receipt_magic], [rel code_receipt + CODE_RECEIPT_OF_MAGIC], 8
-    ASSERT_QWORD [rel code_receipt + CODE_RECEIPT_OF_RECORD_COUNT], 4
-    ASSERT_QWORD [rel code_receipt + CODE_RECEIPT_OF_OUTPUT_LEN], 6
-    ASSERT_QWORD [rel code_receipt + CODE_RECEIPT_OF_ISA], CODE_ISA_X86_64
-
-    lea     rdi, [rel code_bad_opcode_body]
-    mov     esi, code_bad_opcode_body_end - code_bad_opcode_body
-    call    er_code_validate_body
-    ASSERT_RAX 0
-    ASSERT_RDX OBJECT_ERR_UNSUPPORTED
-
-    lea     rdi, [rel code_bad_opcode_body]
-    mov     esi, code_bad_opcode_body_end - code_bad_opcode_body
-    lea     rdx, [rel code_out]
-    mov     ecx, 8
-    lea     r8, [rel code_receipt]
-    call    er_code_materialize_flat
-    ASSERT_RAX 0
-    ASSERT_RDX OBJECT_ERR_UNSUPPORTED
-
-    lea     rdi, [rel canonical_code]
-    mov     esi, CANONICAL_CODE_BODY_LEN
-    lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
-    lea     rcx, [rel keeper_stamp]
-    lea     r8, [rel code_bad_opcode_body]
-    mov     r9d, code_bad_opcode_body_end - code_bad_opcode_body
-    call    er_object_write_code_node
-    ASSERT_RAX 0
-    ASSERT_RDX OBJECT_ERR_UNSUPPORTED
-
     lea     rdi, [rel canonical_receipt]
     mov     esi, CANONICAL_RECEIPT_LEN
     lea     rdx, [rel header_struct + HEADER_STRUCT_REQUIREMENTS]
     lea     rcx, [rel keeper_stamp]
-    lea     r8, [rel code_receipt]
-    mov     r9d, CODE_RECEIPT_SIZE
+    lea     r8, [rel body_payload]
+    mov     r9d, 7
     call    er_object_write_receipt_node
     ASSERT_RAX CANONICAL_RECEIPT_LEN
     ASSERT_RDX 0
@@ -345,9 +281,7 @@ _start:
     ASSERT_RAX 1
     ASSERT_RDX 0
     ASSERT_WORD [rel view + OBJECT_VIEW_HEADER + HEADER_STRUCT_KIND], OBJECT_KIND_RECEIPT
-    ASSERT_QWORD [rel view + OBJECT_VIEW_BODY_LEN], CODE_RECEIPT_SIZE
-    mov     rsi, [rel view + OBJECT_VIEW_BODY_PTR]
-    ASSERT_MEM_EQ [rel expected_code_receipt_magic], [rsi + CODE_RECEIPT_OF_MAGIC], 8
+    ASSERT_QWORD [rel view + OBJECT_VIEW_BODY_LEN], 7
 
     lea     rdi, [rel canonical_code]
     mov     esi, CANONICAL_CODE_BODY_LEN
@@ -366,15 +300,6 @@ _start:
     ASSERT_RDX 0
     ASSERT_WORD [rel view + OBJECT_VIEW_HEADER + HEADER_STRUCT_KIND], OBJECT_KIND_CODE
     ASSERT_QWORD [rel view + OBJECT_VIEW_BODY_LEN], CODE_BODY_LEN
-    mov     rdi, [rel view + OBJECT_VIEW_BODY_PTR]
-    mov     rsi, [rel view + OBJECT_VIEW_BODY_LEN]
-    lea     rdx, [rel code_out]
-    mov     ecx, 8
-    lea     r8, [rel code_receipt]
-    call    er_code_materialize_flat
-    ASSERT_RAX 6
-    ASSERT_RDX 0
-    ASSERT_MEM_EQ [rel expected_code_bytes], [rel code_out], 6
 
     mov     dword [rel owner_struct + OWNER_STRUCT_KIND], OBJECT_OWNER_KIND_APP
     call    copy_node_to_owner

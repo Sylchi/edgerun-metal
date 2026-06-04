@@ -106,7 +106,6 @@ ISA_INSTR_WASM_NOP              equ 2
 ; Canonical code body records
 ; ==================================================================
 CODE_BODY_MAGIC_QWORD           equ 0x313045444f435245  ; "ERCODE01"
-CODE_RECEIPT_MAGIC_QWORD        equ 0x313054414d435245  ; "ERCMAT01"
 CODE_BODY_VERSION               equ 1
 CODE_ISA_X86_64                 equ ISA_ID_X86_64
 
@@ -125,14 +124,6 @@ CODE_RECORD_SIZE                equ 16
 CODE_RECORD_KIND_INSTR          equ 1
 CODE_RECORD_KIND_EXPORT         equ 2
 CODE_RECORD_KIND_IMPORT         equ 3
-CODE_OP_X86_MOV_EAX_IMM32       equ 1
-CODE_OP_X86_RET                 equ 2
-
-CODE_RECEIPT_OF_MAGIC           equ 0   ; 8 bytes
-CODE_RECEIPT_OF_RECORD_COUNT    equ 8   ; u64
-CODE_RECEIPT_OF_OUTPUT_LEN      equ 16  ; u64
-CODE_RECEIPT_OF_ISA             equ 24  ; u64
-CODE_RECEIPT_SIZE               equ 32
 
 ; ==================================================================
 ; Durability enum (u32)
