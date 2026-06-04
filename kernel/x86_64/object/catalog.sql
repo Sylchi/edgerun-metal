@@ -3825,10 +3825,13 @@ select path,
          when instr(raw_text, ' -= ') > 0 then '-='
          when instr(raw_text, ' *= ') > 0 then '*='
          when instr(raw_text, ' /= ') > 0 then '/='
-         when instr(raw_text, ' >>= ') > 0 then '>>='
-         when instr(raw_text, ' <<= ') > 0 then '<<='
-         else 'mutate'
-       end as operator_text,
+	         when instr(raw_text, ' >>= ') > 0 then '>>='
+	         when instr(raw_text, ' <<= ') > 0 then '<<='
+	         when instr(raw_text, ' +%= ') > 0 then '+%='
+	         when instr(raw_text, ' ^= ') > 0 then '^='
+	         when instr(raw_text, ' |= ') > 0 then '|='
+	         else 'mutate'
+	       end as operator_text,
        trim(rtrim(substr(raw_text, instr(raw_text, '=') + 1), ';')) as value_text,
        raw_text
 from app_zig_remaining_gap_classification
@@ -3838,9 +3841,12 @@ where gap_class = 'unsupported_zig_line'
     or instr(raw_text, ' -= ') > 0
     or instr(raw_text, ' *= ') > 0
     or instr(raw_text, ' /= ') > 0
-    or instr(raw_text, ' >>= ') > 0
-    or instr(raw_text, ' <<= ') > 0
-  );
+	    or instr(raw_text, ' >>= ') > 0
+	    or instr(raw_text, ' <<= ') > 0
+	    or instr(raw_text, ' +%= ') > 0
+	    or instr(raw_text, ' ^= ') > 0
+	    or instr(raw_text, ' |= ') > 0
+	  );
 
 create view app_zig_data_literal_line_fact as
 select path,
@@ -3915,13 +3921,48 @@ select path,
 from app_zig_remaining_gap_classification
 where gap_class = 'unsupported_zig_line'
   and (
-    raw_text in ('null;', 't;', 'c.a;', 's.color.a;')
-    or raw_text like '@%('
-    or raw_text like 'try% orelse %;'
-    or raw_text like 'break :% %;'
-    or raw_text like 'break :% %{'
-    or raw_text like 'asm volatile %'
-  );
+	    raw_text in ('null;', 't;', 'c.a;', 's.color.a;')
+	    or raw_text like '@%('
+	    or raw_text like 'try% orelse %;'
+	    or raw_text like 'break :% %;'
+	    or raw_text like 'break :% %{'
+	    or raw_text like 'asm volatile %'
+	    or raw_text like '%;'
+	  );
+
+create view app_zig_argument_line_fact as
+select path,
+       repo_file_id,
+       line_no,
+       'argument_line' as argument_kind,
+       rtrim(raw_text, ',') as argument_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and raw_text like '%,';
+
+create view app_zig_inline_loop_fact as
+select path,
+       repo_file_id,
+       line_no,
+       'inline_for' as loop_kind,
+       raw_text as loop_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and raw_text like 'inline for (%)%';
+
+create view app_zig_inline_struct_field_fact as
+select path,
+       repo_file_id,
+       line_no,
+       trim(substr(raw_text, 1, instr(raw_text, ':') - 1)) as field_name,
+       'struct' as type_text,
+       raw_text
+from app_zig_remaining_gap_classification
+where gap_class = 'unsupported_zig_line'
+  and raw_text like '%: struct {'
+  and instr(raw_text, ':') > 1;
 
 create view app_zig_base_fact_line as
 select repo_file_id, line_no, 'import' as fact_kind
@@ -3977,7 +4018,16 @@ select repo_file_id, line_no, 'expression_continuation'
 from app_zig_expression_continuation_fact
 union
 select repo_file_id, line_no, 'expression_statement'
-from app_zig_expression_statement_fact;
+from app_zig_expression_statement_fact
+union
+select repo_file_id, line_no, 'argument_line'
+from app_zig_argument_line_fact
+union
+select repo_file_id, line_no, 'inline_loop'
+from app_zig_inline_loop_fact
+union
+select repo_file_id, line_no, 'inline_struct_field'
+from app_zig_inline_struct_field_fact;
 
 create view app_zig_file_fact_coverage as
 select repo_file.path,
@@ -4746,9 +4796,9 @@ with binary_operand as (
          or (mem.size_name = 'word' and reg.width_bits = 16)
          or (mem.size_name = 'dword' and reg.width_bits = 32)
          or (mem.size_name = 'qword' and reg.width_bits = 64))
-), base_to_reg as (
-  select normalized.*,
-         reg.register_name,
+	), base_to_reg as (
+	  select normalized.*,
+	         reg.register_name,
          reg.width_bits,
          reg.reg_code,
          reg.requires_rex,
@@ -4773,10 +4823,47 @@ with binary_operand as (
          or (mem.size_name is null and normalized.op_name = 'lea' and reg.width_bits in (32,64))
          or (mem.size_name = 'byte' and normalized.op_name = 'movzx' and reg.width_bits in (32,64))
          or (mem.size_name = 'word' and normalized.op_name = 'mov' and reg.width_bits = 16)
-         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx') and reg.width_bits in (32,64))
-         or (mem.size_name = 'dword' and reg.width_bits in (32,64))
-         or (mem.size_name = 'qword' and reg.width_bits = 64))
-), stack_imm as (
+	         or (mem.size_name = 'word' and normalized.op_name in ('movzx','movsx') and reg.width_bits in (32,64))
+	         or (mem.size_name = 'dword' and reg.width_bits in (32,64))
+	         or (mem.size_name = 'qword' and reg.width_bits = 64))
+	), crc32_reg_reg as (
+	  select normalized.*,
+	         dst.width_bits as dst_width_bits,
+	         dst.reg_code as dst_reg_code,
+	         dst.requires_rex as dst_requires_rex,
+	         src.width_bits as src_width_bits,
+	         src.reg_code as src_reg_code,
+	         src.requires_rex as src_requires_rex
+	  from normalized
+	  join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
+	  join x86_register_encoding_fact src on src.register_name = normalized.rhs_value
+	  where normalized.op_name = 'crc32'
+	    and ((dst.width_bits = 32 and src.width_bits in (8,16,32))
+	         or (dst.width_bits = 64 and src.width_bits in (8,64)))
+	), crc32_base_to_reg as (
+	  select normalized.*,
+	         reg.width_bits,
+	         reg.reg_code,
+	         reg.requires_rex,
+	         mem.size_name,
+	         mem.base_reg_code,
+	         mem.base_requires_rex,
+	         mem.address_width_bits,
+	         mem.mod_bits,
+	         mem.rm_field,
+	         mem.sib_hex,
+	         mem.displacement_hex
+	  from normalized
+	  join x86_register_encoding_fact reg on reg.register_name = normalized.lhs_value
+	  join base_memory_bytes mem
+	    on mem.repo_file_id = normalized.repo_file_id
+	   and mem.function_name = normalized.function_name
+	   and mem.line_no = normalized.line_no
+	   and mem.side = 'rhs'
+	  where normalized.op_name = 'crc32'
+	    and ((reg.width_bits = 32 and mem.size_name in ('byte','word','dword'))
+	         or (reg.width_bits = 64 and mem.size_name in ('byte','qword')))
+	), stack_imm as (
   select normalized.*,
          mem.size_name,
          mem.mod_bits,
@@ -4864,9 +4951,9 @@ with binary_operand as (
     and repo_asm_rule_match.line_kind = 3
     and repo_asm_rule_match.encoding_id is null
     and repo_asm_rule_match.rule_name is not null
-			    and repo_asm_rule_match.op_name in ('inc','dec','setb','setbe','setae','sete','setne','setnz')
-			    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
-			         or (repo_asm_rule_match.op_name in ('setb','setbe','setae','sete','setne','setnz') and reg.width_bits = 8))
+				    and repo_asm_rule_match.op_name in ('inc','dec','setb','setc','setbe','setae','sete','setne','setnz')
+				    and ((repo_asm_rule_match.op_name in ('inc','dec') and reg.width_bits in (32,64))
+				         or (repo_asm_rule_match.op_name in ('setb','setc','setbe','setae','sete','setne','setnz') and reg.width_bits = 8))
 	), segment_mov as (
 	  select normalized.*,
 	         case when normalized.lhs_value in ('es','cs','ss','ds','fs','gs') then normalized.lhs_value else normalized.rhs_value end as segment_name,
@@ -4979,9 +5066,9 @@ with binary_operand as (
 	  where op_name in ('xchg','bsr','bsf','bt','bts')
 	  union all
 	  select repo_file_id,
-         function_name,
-         line_no,
-         'param_x86_movzx_reg_reg' as parametric_rule_name,
+	         function_name,
+	         line_no,
+	         'param_x86_movzx_reg_reg' as parametric_rule_name,
          (
            case
              when dst_width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
@@ -4993,13 +5080,30 @@ with binary_operand as (
                 when 16 then '0fb7'
               end
            || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
-         ) as fixed_hex
-  from movzx_reg_reg
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
-         'param_x86_mov_reg_imm32' as parametric_rule_name,
+	         ) as fixed_hex
+	  from movzx_reg_reg
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_crc32_reg_reg' as parametric_rule_name,
+	         (
+	           'f2'
+	           || case
+	                when dst_width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
+	                when dst_requires_rex = 1 or src_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
+	                else ''
+	              end
+	           || '0f38'
+	           || case when src_width_bits = 8 then 'f0' else 'f1' end
+	           || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
+	         ) as fixed_hex
+	  from crc32_reg_reg
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_mov_reg_imm32' as parametric_rule_name,
          (
            case
              when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
@@ -5131,6 +5235,7 @@ with binary_operand as (
 	           end
 		           || case op_name
 		                when 'setb' then '0f92'
+		                when 'setc' then '0f92'
 		                when 'setbe' then '0f96'
 		                when 'setae' then '0f93'
 		                when 'sete' then '0f94'
@@ -5140,7 +5245,7 @@ with binary_operand as (
 	           || printf('%02x', 208 + (reg_code & 7))
 	         ) as fixed_hex
 			  from unary_reg
-			  where op_name in ('setb','setbe','setae','sete','setne','setnz')
+			  where op_name in ('setb','setc','setbe','setae','sete','setne','setnz')
 	  union all
 	  select repo_file_id,
 	         function_name,
@@ -5182,7 +5287,7 @@ with binary_operand as (
 	  select repo_file_id,
 	         function_name,
 	         line_no,
-         'param_x86_' || op_name || '_reg_base_memory' as parametric_rule_name,
+	         'param_x86_' || op_name || '_reg_base_memory' as parametric_rule_name,
          (
 	           case when address_width_bits = 32 then '67' else '' end
 	           || case
@@ -5208,12 +5313,32 @@ with binary_operand as (
            || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
            || sib_hex
            || displacement_hex
-         ) as fixed_hex
-  from base_to_reg
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
+	         ) as fixed_hex
+	  from base_to_reg
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_crc32_reg_base_memory' as parametric_rule_name,
+	         (
+	           'f2'
+	           || case when address_width_bits = 32 then '67' else '' end
+	           || case
+	                when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+	                when requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+	                else ''
+	              end
+	           || '0f38'
+	           || case when size_name = 'byte' then 'f0' else 'f1' end
+	           || printf('%02x', (mod_bits << 6) + ((reg_code & 7) << 3) + rm_field)
+	           || sib_hex
+	           || displacement_hex
+	         ) as fixed_hex
+	  from crc32_base_to_reg
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
          'param_x86_' || op_name || '_base_memory_reg' as parametric_rule_name,
          (
 	           case when address_width_bits = 32 then '67' else '' end
@@ -16001,7 +16126,46 @@ select 'app_zig.expression_statement:' || path || ':' || cast(line_no as text),
        line_no,
        raw_text,
        'app_zig.expression_statement:' || repo_file_id || ':' || cast(line_no as text) || ':' || statement_kind || ':' || length(expression_text)
-from app_zig_expression_statement_fact;
+from app_zig_expression_statement_fact
+union all
+select 'app_zig.argument_line:' || path || ':' || cast(line_no as text),
+       'app_zig_argument_line_fact',
+       path,
+       argument_kind,
+       argument_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.argument_line:' || repo_file_id || ':' || cast(line_no as text) || ':' || length(argument_text)
+from app_zig_argument_line_fact
+union all
+select 'app_zig.inline_loop:' || path || ':' || cast(line_no as text),
+       'app_zig_inline_loop_fact',
+       path,
+       loop_kind,
+       loop_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.inline_loop:' || repo_file_id || ':' || cast(line_no as text) || ':' || loop_text
+from app_zig_inline_loop_fact
+union all
+select 'app_zig.inline_struct_field:' || path || ':' || cast(line_no as text) || ':' || field_name,
+       'app_zig_inline_struct_field_fact',
+       path,
+       field_name,
+       type_text,
+       'text',
+       'observed',
+       'app.zig',
+       line_no,
+       raw_text,
+       'app_zig.inline_struct_field:' || repo_file_id || ':' || cast(line_no as text) || ':' || field_name
+from app_zig_inline_struct_field_fact;
 
 create view corpus_proof_engine_fact as
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
