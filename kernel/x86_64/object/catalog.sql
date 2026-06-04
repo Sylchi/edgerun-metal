@@ -12399,7 +12399,7 @@ order by
 create unique index repo_asm_source_deletion_plan_path_idx on repo_asm_source_deletion_plan(path);
 create index repo_asm_source_deletion_plan_state_idx on repo_asm_source_deletion_plan(deletion_state, remaining_count, byte_len);
 
-create table repo_asm_gap_delete_impact as
+create view repo_asm_gap_delete_impact as
 with per_gap_file as (
   select path,
          gap_kind,
@@ -12425,10 +12425,7 @@ where plan.deletion_state in ('blocked_by_parse_coverage', 'blocked_by_fact_gaps
 group by gap_kind, op_name, operand_text
 order by full_unlock_bytes desc, impacted_bytes desc, occurrence_count desc;
 
-create index repo_asm_gap_delete_impact_unlock_idx on repo_asm_gap_delete_impact(full_unlock_bytes, impacted_bytes);
-create index repo_asm_gap_delete_impact_gap_idx on repo_asm_gap_delete_impact(gap_kind, op_name, operand_text);
-
-create table repo_asm_gap_example as
+create view repo_asm_gap_example as
 select path,
        line_no,
        gap_kind,
@@ -12440,8 +12437,6 @@ select path,
          order by path, line_no
        ) as example_rank
 from repo_asm_remaining_gap;
-
-create index repo_asm_gap_example_gap_idx on repo_asm_gap_example(gap_kind, op_name, operand_text, example_rank);
 
 create table repo_asm_gap_operand_text as
 select path,
@@ -12482,7 +12477,7 @@ order by occurrence_count desc, file_count desc, symbol.symbol_name;
 create index repo_asm_unresolved_constant_symbol_gap_occurrence_idx
   on repo_asm_unresolved_constant_symbol_gap(occurrence_count, file_count);
 
-create table repo_asm_next_operator_action as
+create view repo_asm_next_operator_action as
 select 0 as action_rank,
        'wrap_delete_ready_source' as action_kind,
        'Wrap and delete ready text source' as action_name,
@@ -12636,9 +12631,6 @@ left join repo_asm_gap_example example
  and example.operand_text = impact.operand_text
  and example.example_rank = 1
 where impact.full_unlock_file_count = 0;
-
-create index repo_asm_next_operator_action_rank_idx on repo_asm_next_operator_action(action_rank);
-create index repo_asm_next_operator_action_kind_idx on repo_asm_next_operator_action(action_kind, action_rank);
 
 create view repo_asm_operator_dashboard as
 select 'status:' || fact_status as metric,
@@ -14265,6 +14257,169 @@ create table engine_tradeoff_assessment_fact (
   weight integer not null,
   evidence text not null
 );
+
+create table catalog_stage_fact (
+  stage_id text primary key,
+  domain_name text not null,
+  stage_name text not null,
+  purpose text not null,
+  artifact_kind text not null,
+  default_load_policy text not null
+);
+
+create table catalog_stage_input_fact (
+  stage_id text not null references catalog_stage_fact(stage_id),
+  input_kind text not null,
+  input_name text not null,
+  input_scope text not null,
+  primary key (stage_id, input_kind, input_name)
+);
+
+create table catalog_stage_output_fact (
+  stage_id text not null references catalog_stage_fact(stage_id),
+  output_name text not null,
+  output_kind text not null,
+  artifact_path text not null,
+  receipt_key text not null,
+  primary key (stage_id, output_name)
+);
+
+create table catalog_stage_dependency_fact (
+  stage_id text not null references catalog_stage_fact(stage_id),
+  depends_on_stage_id text not null references catalog_stage_fact(stage_id),
+  dependency_kind text not null,
+  primary key (stage_id, depends_on_stage_id)
+);
+
+create table catalog_transform_kind_fact (
+  transform_kind text primary key,
+  input_role text not null,
+  output_role text not null,
+  purpose text not null
+);
+
+create table catalog_stage_transform_fact (
+  stage_id text not null references catalog_stage_fact(stage_id),
+  transform_kind text not null references catalog_transform_kind_fact(transform_kind),
+  transform_order integer not null,
+  transform_name text not null,
+  primary key (stage_id, transform_order)
+);
+
+create view catalog_stage_rebuild_boundary as
+select stage.stage_id,
+       stage.domain_name,
+       stage.stage_name,
+       stage.artifact_kind,
+       stage.default_load_policy,
+       group_concat(distinct input.input_kind || ':' || input.input_name) as input_facts,
+       group_concat(distinct output.output_kind || ':' || output.output_name) as output_facts
+from catalog_stage_fact stage
+left join catalog_stage_input_fact input using (stage_id)
+left join catalog_stage_output_fact output using (stage_id)
+group by stage.stage_id, stage.domain_name, stage.stage_name, stage.artifact_kind, stage.default_load_policy;
+
+insert into catalog_stage_fact(stage_id, domain_name, stage_name, purpose, artifact_kind, default_load_policy) values
+  ('repo_file_import', 'repo', 'Import repository files', 'Import file metadata and source/object content from explicit filesystem roots.', 'base_fact', 'default'),
+  ('repo_asm_lines', 'repo.asm', 'Import ASM lines', 'Split ASM and ASM source-object bodies into line facts once per source digest.', 'line_fact', 'default'),
+  ('repo_asm_operations', 'repo.asm', 'Parse ASM operations', 'Classify significant ASM lines into operation facts, labels, metadata, and operands.', 'operation_fact', 'default'),
+  ('repo_asm_rule_match', 'repo.asm', 'Match ASM rules', 'Relate parsed operations to finite DSL rules and exact encoding facts.', 'derived_fact', 'default'),
+  ('repo_asm_constants', 'repo.asm', 'Solve ASM constants', 'Resolve imported constant expression facts into finite numeric values.', 'derived_fact', 'default'),
+  ('repo_asm_parametric_encodings', 'repo.asm', 'Materialize ASM parametric encodings', 'Emit finite checked encoding facts for supported operand shapes.', 'derived_fact', 'default'),
+  ('repo_asm_operation_status', 'repo.asm', 'Classify ASM operation status', 'Combine exact encodings, parametric encodings, relocations, data, macros, and metadata into deletion readiness facts.', 'status_fact', 'default'),
+  ('repo_asm_reports', 'repo.asm', 'Rank ASM operator reports', 'Compute expensive gap impact, examples, and next-action diagnostics only when explicitly requested.', 'diagnostic_view', 'on_demand'),
+  ('app_zig_lines', 'app.zig', 'Import Zig lines', 'Split Zig and Zig source-object bodies into line facts once per source digest.', 'line_fact', 'default'),
+  ('app_zig_facts', 'app.zig', 'Import Zig facts', 'Compress Zig source lines into finite import, declaration, statement, data, and remaining-gap facts.', 'derived_fact', 'default'),
+  ('engine_fact_projection', 'engine', 'Project engine facts', 'Union resident domain facts into the common engine fact and gap surfaces.', 'projection_view', 'default');
+
+insert into catalog_transform_kind_fact(transform_kind, input_role, output_role, purpose) values
+  ('load', 'artifact', 'bytes', 'Read explicit object, source, or fixture bytes into a relation.'),
+  ('decode', 'bytes', 'records', 'Decode object/source bytes into finite record rows.'),
+  ('parse', 'text', 'syntax_facts', 'Parse editable text bridges into finite syntax facts.'),
+  ('classify', 'facts', 'status_facts', 'Classify facts into finite status, readiness, or gap taxonomies.'),
+  ('derive', 'facts', 'facts', 'Derive additional facts from existing finite facts.'),
+  ('encode', 'records', 'bytes', 'Encode canonical records into byte representations.'),
+  ('materialize', 'facts', 'artifact', 'Materialize a requested view from finite facts.'),
+  ('save', 'artifact', 'object', 'Persist useful materialized state as an owned object or source object.'),
+  ('report', 'facts', 'diagnostic_facts', 'Compute opt-in diagnostics and operator ranking facts.'),
+  ('project', 'facts', 'view', 'Project domain facts into a shared query surface.');
+
+insert into catalog_stage_transform_fact(stage_id, transform_kind, transform_order, transform_name) values
+  ('repo_file_import', 'load', 10, 'load_repo_roots'),
+  ('repo_file_import', 'decode', 20, 'classify_repo_file_kinds'),
+  ('repo_asm_lines', 'decode', 10, 'decode_asm_source_object_body'),
+  ('repo_asm_lines', 'parse', 20, 'split_asm_lines'),
+  ('repo_asm_operations', 'parse', 10, 'parse_asm_operations'),
+  ('repo_asm_operations', 'classify', 20, 'classify_asm_line_kind'),
+  ('repo_asm_rule_match', 'derive', 10, 'match_asm_rules'),
+  ('repo_asm_constants', 'derive', 10, 'solve_constant_values'),
+  ('repo_asm_parametric_encodings', 'encode', 10, 'encode_parametric_instruction_bytes'),
+  ('repo_asm_operation_status', 'classify', 10, 'classify_operation_readiness'),
+  ('repo_asm_reports', 'report', 10, 'rank_operator_actions'),
+  ('app_zig_lines', 'decode', 10, 'decode_zig_source_object_body'),
+  ('app_zig_lines', 'parse', 20, 'split_zig_lines'),
+  ('app_zig_facts', 'parse', 10, 'parse_zig_facts'),
+  ('app_zig_facts', 'classify', 20, 'classify_zig_remaining_gaps'),
+  ('engine_fact_projection', 'project', 10, 'project_engine_fact_view');
+
+insert into catalog_stage_input_fact(stage_id, input_kind, input_name, input_scope) values
+  ('repo_file_import', 'filesystem_root', 'kernel', 'repo'),
+  ('repo_file_import', 'filesystem_root', 'app', 'repo'),
+  ('repo_file_import', 'file', 'AGENTS.md', 'repo'),
+  ('repo_file_import', 'file', 'README.md', 'repo'),
+  ('repo_file_import', 'file', 'CHANGELOG.md', 'repo'),
+  ('repo_asm_lines', 'relation', 'repo_file', 'repo.asm'),
+  ('repo_asm_operations', 'relation', 'repo_asm_line', 'repo.asm'),
+  ('repo_asm_operations', 'relation', 'repo_asm_function_span', 'repo.asm'),
+  ('repo_asm_rule_match', 'relation', 'repo_asm_operation', 'repo.asm'),
+  ('repo_asm_rule_match', 'relation', 'asm_dsl_rule', 'repo.asm'),
+  ('repo_asm_rule_match', 'relation', 'encoding_pattern', 'repo.asm'),
+  ('repo_asm_constants', 'relation', 'repo_asm_constant_definition_fact', 'repo.asm'),
+  ('repo_asm_constants', 'relation', 'repo_asm_all_unique_constant_fact', 'repo.asm'),
+  ('repo_asm_parametric_encodings', 'relation', 'repo_asm_rule_match', 'repo.asm'),
+  ('repo_asm_parametric_encodings', 'relation', 'repo_asm_numeric_constant_value', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_rule_match', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_all_parametric_encoding_fact', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_relocation_fact', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_data_reference_fact', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_macro_lowering_fact', 'repo.asm'),
+  ('repo_asm_operation_status', 'relation', 'repo_asm_data_definition_fact', 'repo.asm'),
+  ('repo_asm_reports', 'relation', 'repo_asm_source_deletion_plan', 'repo.asm'),
+  ('repo_asm_reports', 'relation', 'repo_asm_remaining_meaning_gap', 'repo.asm'),
+  ('repo_asm_reports', 'relation', 'repo_asm_unresolved_constant_symbol_gap', 'repo.asm'),
+  ('app_zig_lines', 'relation', 'repo_file', 'app.zig'),
+  ('app_zig_facts', 'relation', 'app_zig_line', 'app.zig'),
+  ('engine_fact_projection', 'relation', 'standards_engine_fact', 'engine'),
+  ('engine_fact_projection', 'relation', 'repo_asm_engine_fact', 'engine'),
+  ('engine_fact_projection', 'relation', 'app_zig_engine_fact', 'engine');
+
+insert into catalog_stage_output_fact(stage_id, output_name, output_kind, artifact_path, receipt_key) values
+  ('repo_file_import', 'repo_file', 'relation', '.build/catalog/stage/repo_file_import.erobj', 'catalog.stage.repo_file_import'),
+  ('repo_asm_lines', 'repo_asm_line', 'relation', '.build/catalog/stage/repo_asm_lines.erobj', 'catalog.stage.repo_asm_lines'),
+  ('repo_asm_operations', 'repo_asm_operation', 'relation', '.build/catalog/stage/repo_asm_operations.erobj', 'catalog.stage.repo_asm_operations'),
+  ('repo_asm_rule_match', 'repo_asm_rule_match', 'relation', '.build/catalog/stage/repo_asm_rule_match.erobj', 'catalog.stage.repo_asm_rule_match'),
+  ('repo_asm_constants', 'repo_asm_numeric_constant_value', 'relation', '.build/catalog/stage/repo_asm_constants.erobj', 'catalog.stage.repo_asm_constants'),
+  ('repo_asm_parametric_encodings', 'repo_asm_all_parametric_encoding_fact', 'relation', '.build/catalog/stage/repo_asm_parametric_encodings.erobj', 'catalog.stage.repo_asm_parametric_encodings'),
+  ('repo_asm_operation_status', 'repo_asm_operation_fact_status', 'relation', '.build/catalog/stage/repo_asm_operation_status.erobj', 'catalog.stage.repo_asm_operation_status'),
+  ('repo_asm_reports', 'repo_asm_next_operator_action', 'diagnostic_relation', '.build/catalog/stage/repo_asm_reports.erobj', 'catalog.stage.repo_asm_reports'),
+  ('app_zig_lines', 'app_zig_line', 'relation', '.build/catalog/stage/app_zig_lines.erobj', 'catalog.stage.app_zig_lines'),
+  ('app_zig_facts', 'app_zig_fact_line', 'relation', '.build/catalog/stage/app_zig_facts.erobj', 'catalog.stage.app_zig_facts'),
+  ('engine_fact_projection', 'engine_fact', 'projection', '.build/catalog/stage/engine_fact_projection.erobj', 'catalog.stage.engine_fact_projection');
+
+insert into catalog_stage_dependency_fact(stage_id, depends_on_stage_id, dependency_kind) values
+  ('repo_asm_lines', 'repo_file_import', 'source'),
+  ('repo_asm_operations', 'repo_asm_lines', 'source'),
+  ('repo_asm_rule_match', 'repo_asm_operations', 'source'),
+  ('repo_asm_constants', 'repo_asm_operations', 'source'),
+  ('repo_asm_parametric_encodings', 'repo_asm_rule_match', 'source'),
+  ('repo_asm_parametric_encodings', 'repo_asm_constants', 'source'),
+  ('repo_asm_operation_status', 'repo_asm_rule_match', 'source'),
+  ('repo_asm_operation_status', 'repo_asm_parametric_encodings', 'source'),
+  ('repo_asm_reports', 'repo_asm_operation_status', 'diagnostic'),
+  ('app_zig_lines', 'repo_file_import', 'source'),
+  ('app_zig_facts', 'app_zig_lines', 'source'),
+  ('engine_fact_projection', 'repo_asm_operation_status', 'source'),
+  ('engine_fact_projection', 'app_zig_facts', 'source');
 
 insert into engine_tradeoff_decision_fact(decision_id, decision_name, decision_goal, source_name) values
   ('asm_source_object_conversion', 'Convert tracked ASM test source to source objects', 'Delete textual source only when equivalent source-object and fact-readiness data exist.', 'catalog.sql'),
