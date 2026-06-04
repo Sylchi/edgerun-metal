@@ -7403,11 +7403,11 @@ with clean_indexed_memory as (
     on second_reg.register_name = selected_index_memory.second_register_name
   where first_reg.width_bits = second_reg.width_bits
     and first_reg.width_bits in (32,64)
-    and ((case
-            when first_reg.register_name in ('rsp','esp') then second_reg.reg_code
-            when second_reg.register_name in ('rsp','esp') then first_reg.reg_code
-            else second_reg.reg_code
-          end) & 7) <> 4
+    and case
+          when first_reg.register_name in ('rsp','esp') then second_reg.register_name
+          when second_reg.register_name in ('rsp','esp') then first_reg.register_name
+          else second_reg.register_name
+        end not in ('rsp','esp')
 ), binary_operand as (
   select match.repo_file_id,
          match.function_name,
