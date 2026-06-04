@@ -6335,11 +6335,11 @@ with clean_indexed_memory as (
          immediate_value
   from rhs_hex_parse
   where digit_index = length(hex_text) + 1
-), rhs_char as (
-  select operand.repo_file_id,
-         operand.function_name,
-         operand.line_no,
-         unicode(substr(operand.operand_value, 2, 1)) as immediate_value
+	), rhs_char as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         unicode(substr(operand.operand_value, 2, 1)) as immediate_value
   from repo_asm_binary_operand_fact operand
   where operand.target_isa_id = 1
     and operand.operand_index = 1
@@ -7277,10 +7277,23 @@ with recursive rhs_decimal as (
 	    and expr.expression_text like char(39) || '_' || char(39) || ' - % - ' || char(39) || '_' || char(39)
 	    and expr.mid_text glob '[0-9]*'
 	    and expr.mid_text not glob '*[^0-9]*'
-	    and length(expr.tail_text) = 3
-	    and substr(expr.tail_text, 1, 1) = char(39)
-	    and substr(expr.tail_text, 3, 1) = char(39)
-	), rhs_value as (
+		    and length(expr.tail_text) = 3
+		    and substr(expr.tail_text, 1, 1) = char(39)
+		    and substr(expr.tail_text, 3, 1) = char(39)
+		), rhs_recovered_semicolon_char as (
+		  select match.repo_file_id,
+		         match.function_name,
+		         match.line_no,
+		         unicode(';') as immediate_value
+		  from repo_asm_rule_match match
+		  where match.target_isa_id = 1
+		    and match.line_kind = 3
+		    and match.encoding_id is null
+		    and match.rule_name is not null
+		    and match.op_name = 'cmp'
+		    and match.operand_text like '%,' || '%' || char(39)
+		    and match.raw_text like '%' || char(39) || ';' || char(39) || '%'
+		), rhs_value as (
 	  select * from rhs_decimal
 	  union all
 	  select * from rhs_hex
@@ -7299,10 +7312,12 @@ with recursive rhs_decimal as (
 	  union all
 	  select * from rhs_decimal_mul_decimal_add_decimal
 	  union all
-	  select * from rhs_char_minus_decimal
-	  union all
-	  select * from rhs_char_minus_decimal_minus_char
-	), rhs_unique_value as (
+		  select * from rhs_char_minus_decimal
+		  union all
+		  select * from rhs_char_minus_decimal_minus_char
+		  union all
+		  select * from rhs_recovered_semicolon_char
+		), rhs_unique_value as (
   select repo_file_id,
          function_name,
          line_no,
@@ -7798,18 +7813,33 @@ with recursive rhs_decimal as (
   from repo_asm_binary_operand_fact operand
   where operand.target_isa_id = 1
     and operand.operand_index = 1
-    and length(operand.operand_value) = 3
-    and substr(operand.operand_value, 1, 1) = char(39)
-    and substr(operand.operand_value, 3, 1) = char(39)
-), rhs_value as (
-  select * from rhs_decimal
-  union all
-  select * from rhs_hex
-  union all
-  select * from rhs_symbol
-  union all
-  select * from rhs_char
-), rhs_unique_value as (
+	    and length(operand.operand_value) = 3
+	    and substr(operand.operand_value, 1, 1) = char(39)
+	    and substr(operand.operand_value, 3, 1) = char(39)
+	), rhs_recovered_semicolon_char as (
+	  select match.repo_file_id,
+	         match.function_name,
+	         match.line_no,
+	         unicode(';') as immediate_value
+	  from repo_asm_rule_match match
+	  where match.target_isa_id = 1
+	    and match.line_kind = 3
+	    and match.encoding_id is null
+	    and match.rule_name is not null
+	    and match.op_name = 'cmp'
+	    and match.operand_text like '%,' || '%' || char(39)
+	    and match.raw_text like '%' || char(39) || ';' || char(39) || '%'
+	), rhs_value as (
+	  select * from rhs_decimal
+	  union all
+	  select * from rhs_hex
+	  union all
+	  select * from rhs_symbol
+	  union all
+	  select * from rhs_char
+	  union all
+	  select * from rhs_recovered_semicolon_char
+	), rhs_unique_value as (
   select repo_file_id,
          function_name,
          line_no,
