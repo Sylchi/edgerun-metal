@@ -14245,7 +14245,21 @@ select 'standards:validate_corpus_expectation',
        'validate',
        'corpus_expectation_fact',
        'corpus_proof_fact',
-       'Validate derived corpus expectations against executable clause results.';
+       'Validate derived corpus expectations against executable clause results.'
+union all
+select 'repo_asm:classify_operation_status',
+       'classify_operation_status',
+       'classify',
+       'repo_asm_operation_fact',
+       'repo_asm_operation_status_fact',
+       'Classify imported ASM operations as fact-backed, metadata, relocation, or gap rows.'
+union all
+select 'repo_asm:detect_encoding_conflict',
+       'detect_encoding_conflict',
+       'validate',
+       'repo_asm_encoding_fact',
+       'repo_asm_encoding_conflict_fact',
+       'Detect exact/parametric ASM encoding byte conflicts.';
 
 create view engine_rule_io as
 select rule_key,
@@ -14508,6 +14522,19 @@ select 'media.constant:' || codec_name || ':' || symbol_name,
        'media.constant:' || codec_name || ':' || symbol_name || ':' || value_text
 from media_codec_constant_fact
 union all
+select 'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
+       'repo_asm_operation_status_fact',
+       path,
+       cast(line_no as text) || ':' || coalesce(function_name, ''),
+       fact_status || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, ''),
+       'text',
+       'derived',
+       'repo.asm',
+       line_no,
+       raw_text,
+       'repo_asm.operation_status:' || repo_file_id || ':' || cast(line_no as text) || ':' || fact_status
+from repo_asm_operation_fact_status
+union all
 select 'proof:' || corpus_name || ':' || case_name || ':' || clause_name,
        'corpus_proof_fact',
        corpus_name,
@@ -14533,6 +14560,26 @@ select application.application_id as derivation_id,
        application.line_no,
        application.rule_name || ':' || application.input_fact_id || '->' || application.output_fact_id as stable_key
 from standards_fact_rule_application_resident application
+union all
+select 'apply:repo_asm.classify:' || repo_file_id || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
+       'repo_asm:classify_operation_status',
+       'repo_asm.operation:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
+       'repo_asm.operation_status:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
+       case when fact_status in ('known_gap', 'syntax_gap') then 'gap' else 'derived' end,
+       'repo.asm',
+       line_no,
+       'classify_operation_status:' || fact_status || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, '')
+from repo_asm_operation_fact_status
+union all
+select 'apply:repo_asm.encoding_conflict:' || path || ':' || cast(line_no as text) || ':' || coalesce(function_name, ''),
+       'repo_asm:detect_encoding_conflict',
+       'repo_asm.encoding:' || path || ':' || cast(line_no as text),
+       'repo_asm.encoding_conflict:' || path || ':' || cast(line_no as text),
+       'conflict',
+       'repo.asm',
+       line_no,
+       'exact=' || exact_hex || ':parametric=' || parametric_hex || ':rule=' || parametric_rule_name
+from repo_asm_all_parametric_encoding_conflict
 union all
 select 'apply:validate_corpus:' || corpus_name || ':' || case_name || ':' || clause_name,
        'standards:validate_corpus_expectation',
@@ -14569,6 +14616,13 @@ select 'standards:' || gap_kind,
        'predicate_parse_gap'
 from engine_clause_predicate_parse_gap
 union all
+select 'repo_asm:' || gap_kind,
+       path,
+       line_no,
+       coalesce(function_name, '') || ':' || coalesce(op_name, '') || ':' || coalesce(operand_text, '') || ':' || raw_text,
+       'asm_import_gap'
+from repo_asm_remaining_meaning_gap
+union all
 select 'engine:' || gap_kind,
        coalesce(subject_entity, ''),
        0,
@@ -14594,7 +14648,14 @@ select 'relation_fact',
        relation_name,
        distinct_value_count,
        values_seen
-from engine_relation_conflict;
+from engine_relation_conflict
+union all
+select 'repo_asm_encoding_fact',
+       path,
+       cast(line_no as text) || ':' || coalesce(function_name, ''),
+       2,
+       'exact=' || exact_hex || ',parametric=' || parametric_hex || ',rule=' || parametric_rule_name
+from repo_asm_all_parametric_encoding_conflict;
 
 create view engine_conflict_resident as select * from engine_conflict;
 
