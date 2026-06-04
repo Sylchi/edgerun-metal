@@ -6899,7 +6899,7 @@ with recursive rhs_decimal as (
          operand.line_no,
          value.immediate_value
   from repo_asm_binary_operand_fact operand
-  join repo_asm_numeric_constant_value value
+  join repo_asm_numeric_symbol_value value
     on value.symbol_name = operand.operand_value
   where operand.target_isa_id = 1
     and operand.operand_index = 1
@@ -6993,7 +6993,7 @@ with recursive rhs_decimal as (
 	         operand.line_no,
 	         value.immediate_value
 	  from imul_ternary_operand operand
-	  join repo_asm_numeric_constant_value value
+	  join repo_asm_numeric_symbol_value value
 	    on value.symbol_name = operand.immediate_text
 	), imul_ternary_value as (
 	  select * from imul_ternary_decimal
