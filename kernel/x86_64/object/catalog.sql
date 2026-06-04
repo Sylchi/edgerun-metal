@@ -10072,7 +10072,20 @@ select repo_asm_operation.path,
        asm_macro_lowering_rule.lowered_operation_pattern,
        asm_macro_lowering_rule.result_kind
 from repo_asm_operation
-join asm_macro_lowering_rule on asm_macro_lowering_rule.macro_name = repo_asm_operation.op_name;
+join asm_macro_lowering_rule on asm_macro_lowering_rule.macro_name = repo_asm_operation.op_name
+union all
+select repo_asm_operation.path,
+       repo_asm_operation.repo_file_id,
+       repo_asm_operation.function_name,
+       repo_asm_operation.line_no,
+       repo_asm_operation.op_name as macro_name,
+       repo_asm_operation.operand_text,
+       'macro parameterized operation template' as lowered_operation_pattern,
+       'macro_template_operation' as result_kind
+from repo_asm_operation
+where repo_asm_operation.target_isa_id = 1
+  and repo_asm_operation.line_kind = 3
+  and repo_asm_operation.operand_text glob '*%[0-9]*';
 
 create view repo_asm_macro_lowering_gap as
 select repo_asm_rule_gaps.path,
