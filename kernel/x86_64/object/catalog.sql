@@ -8094,11 +8094,60 @@ create index repo_asm_rhs_numeric_expression_value_line_idx
   on repo_asm_rhs_numeric_expression_value(repo_file_id, function_name, line_no);
 
 create table repo_asm_numeric_symbol_memory_parametric_encoding_fact as
-with symbolic_memory as (
+with recursive local_decimal_constant as (
+  select repo_file_id,
+         symbol_name,
+         cast(expression_text as integer) as immediate_value
+  from repo_asm_constant_definition_fact
+  where (expression_text glob '[0-9]*'
+         or expression_text glob '-[0-9]*')
+    and replace(expression_text, '-', '') not glob '*[^0-9]*'
+), local_hex_seed as (
+  select repo_file_id,
+         symbol_name,
+         substr(lower(expression_text), 3) as hex_text
+  from repo_asm_constant_definition_fact
+  where lower(expression_text) glob '0x[0-9a-f]*'
+    and substr(lower(expression_text), 3) <> ''
+    and substr(lower(expression_text), 3) not glob '*[^0-9a-f]*'
+), local_hex_parse(repo_file_id, symbol_name, hex_text, digit_index, immediate_value) as (
+  select repo_file_id,
+         symbol_name,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from local_hex_seed
+  union all
+  select repo_file_id,
+         symbol_name,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from local_hex_parse
+  where digit_index <= length(hex_text)
+), local_hex_constant as (
+  select repo_file_id,
+         symbol_name,
+         immediate_value
+  from local_hex_parse
+  where digit_index = length(hex_text) + 1
+), local_numeric_constant as (
+  select repo_file_id,
+         symbol_name,
+         min(immediate_value) as immediate_value
+  from (
+    select repo_file_id, symbol_name, immediate_value from local_decimal_constant
+    union all
+    select repo_file_id, symbol_name, immediate_value from local_hex_constant
+  )
+  group by repo_file_id,
+           symbol_name
+  having min(immediate_value) = max(immediate_value)
+), symbolic_memory as (
   select mem.*,
          base_term.term_text as base_register_name,
          group_concat(symbol_term.term_text, '+') as symbol_name,
-         (mem.integer_displacement + sum(symbol_term.term_sign * value.immediate_value)) as displacement
+         (mem.integer_displacement + sum(symbol_term.term_sign * coalesce(local_value.immediate_value, value.immediate_value))) as displacement
   from repo_asm_memory_addressing_fact mem
   join repo_asm_memory_operand_term_fact base_term
     on base_term.repo_file_id = mem.repo_file_id
@@ -8113,7 +8162,10 @@ with symbolic_memory as (
    and symbol_term.line_no = mem.line_no
    and symbol_term.operand_index = mem.operand_index
    and symbol_term.term_kind = 'symbol'
-  join repo_asm_numeric_symbol_value value
+  left join local_numeric_constant local_value
+    on local_value.repo_file_id = mem.repo_file_id
+   and local_value.symbol_name = symbol_term.term_text
+  left join repo_asm_numeric_symbol_value value
     on value.symbol_name = symbol_term.term_text
   where mem.target_isa_id = 1
     and mem.is_rel_memory = 0
@@ -8121,6 +8173,8 @@ with symbolic_memory as (
     and mem.register_term_count = 1
     and mem.symbol_term_count >= 1
     and mem.scaled_register_term_count = 0
+    and (local_value.immediate_value is not null
+         or value.immediate_value is not null)
   group by mem.path,
            mem.repo_file_id,
            mem.function_name,
@@ -8175,7 +8229,7 @@ with symbolic_memory as (
          first_term.term_text as first_register_name,
          second_term.term_text as second_register_name,
          group_concat(symbol_term.term_text, '+') as symbol_name,
-         memory.integer_displacement + sum(symbol_term.term_sign * value.immediate_value) as displacement
+         memory.integer_displacement + sum(symbol_term.term_sign * coalesce(local_value.immediate_value, value.immediate_value)) as displacement
   from repo_asm_memory_addressing_fact memory
   join repo_asm_memory_operand_term_fact first_term
     on first_term.repo_file_id = memory.repo_file_id
@@ -8198,7 +8252,10 @@ with symbolic_memory as (
    and symbol_term.line_no = memory.line_no
    and symbol_term.operand_index = memory.operand_index
    and symbol_term.term_kind = 'symbol'
-  join repo_asm_numeric_symbol_value value
+  left join local_numeric_constant local_value
+    on local_value.repo_file_id = memory.repo_file_id
+   and local_value.symbol_name = symbol_term.term_text
+  left join repo_asm_numeric_symbol_value value
     on value.symbol_name = symbol_term.term_text
   where memory.target_isa_id = 1
     and memory.is_rel_memory = 0
@@ -8206,6 +8263,8 @@ with symbolic_memory as (
     and memory.register_term_count = 2
     and memory.scaled_register_term_count = 0
     and memory.symbol_term_count >= 1
+    and (local_value.immediate_value is not null
+         or value.immediate_value is not null)
   group by memory.path,
            memory.repo_file_id,
            memory.function_name,
@@ -11989,7 +12048,8 @@ with operation_window as (
          operand_text,
          lag(op_name) over (partition by repo_file_id order by line_no) as previous_op_name,
          lag(operand_text) over (partition by repo_file_id order by line_no) as previous_operand_text,
-         lead(op_name) over (partition by repo_file_id order by line_no) as next_op_name
+         lead(op_name) over (partition by repo_file_id order by line_no) as next_op_name,
+         lead(operand_text) over (partition by repo_file_id order by line_no) as next_operand_text
   from repo_asm_operation
   where line_kind in (2,3,5)
 )
@@ -12003,6 +12063,15 @@ from operation_window
 where op_name like '%:'
   and operand_text is null
   and (next_op_name in ('db','dw','dd','dq','incbin','times','.byte','.asciz','.space','resb','resw','resd','resq')
+       or (next_op_name like '.%'
+           and (next_operand_text like 'db %'
+                or next_operand_text like 'dw %'
+                or next_operand_text like 'dd %'
+                or next_operand_text like 'dq %'
+                or next_operand_text like 'resb %'
+                or next_operand_text like 'resw %'
+                or next_operand_text like 'resd %'
+                or next_operand_text like 'resq %'))
        or previous_op_name in ('db','dw','dd','dq','incbin','times','.byte','.asciz','.space','resb','resw','resd','resq')
        or previous_operand_text like 'db %'
        or previous_operand_text like 'dw %'
