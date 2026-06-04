@@ -1272,23 +1272,6 @@ create table abstraction_edge (
   flags integer not null default 0
 );
 
-create table pipeline_node (
-  pipeline_node_id integer primary key,
-  abstraction_id integer not null references abstraction_node(abstraction_id),
-  sequence integer not null,
-  stage_kind integer not null,
-  flags integer not null default 0,
-  unique (abstraction_id, sequence)
-);
-
-create table pipeline_edge (
-  pipeline_edge_id integer primary key,
-  from_pipeline_node_id integer not null references pipeline_node(pipeline_node_id),
-  to_pipeline_node_id integer not null references pipeline_node(pipeline_node_id),
-  edge_kind integer not null,
-  flags integer not null default 0
-);
-
 create table lowering_rule (
   lowering_rule_id integer primary key,
   abstraction_kind_id integer not null references abstraction_kind(abstraction_kind_id),
@@ -1319,13 +1302,6 @@ insert into abstraction_edge(edge_id, from_abstraction_id, to_abstraction_id, ed
   (2, 2, 3, 1, 0, 0),
   (3, 3, 4, 2, 0, 0),
   (4, 4, 5, 3, 0, 0);
-
-insert into pipeline_node(pipeline_node_id, abstraction_id, sequence, stage_kind, flags) values
-  (1, 4, 1, 1, 0),
-  (2, 5, 2, 2, 0);
-
-insert into pipeline_edge(pipeline_edge_id, from_pipeline_node_id, to_pipeline_node_id, edge_kind, flags) values
-  (1, 1, 2, 1, 0);
 
 create view importable_language_rules as
 select language.name as language_name,
@@ -7233,42 +7209,124 @@ with clean_indexed_memory as (
   union all
   select *
   from scaled_index_memory
+  union all
+  select memory.path,
+         memory.repo_file_id,
+         memory.function_name,
+         memory.line_no,
+         memory.target_isa_id,
+         memory.op_name,
+         memory.operand_text,
+         memory.operand_index,
+         memory.size_name,
+         memory.memory_text,
+         memory.is_rel_memory,
+         2 as register_term_count,
+         1 as scaled_register_term_count,
+         memory.symbol_term_count,
+         1 as integer_term_count,
+         memory.rel_marker_count,
+         memory.other_term_count,
+         'rsp' as first_register_term,
+         close_term.scale_register_name as first_scaled_register_term,
+         close_term.scale_value as first_scale_value,
+         memory.first_symbol_term,
+         cast(substr(open_term.term_text, 2) as integer) * close_term.scale_value as integer_displacement,
+         'indexed_memory' as addressing_kind,
+         'rsp' as first_register_name,
+         close_term.scale_register_name as second_register_name,
+         close_term.scale_value as scale_value
+  from repo_asm_memory_addressing_fact memory
+  join repo_asm_memory_operand_term_fact open_term
+    on open_term.repo_file_id = memory.repo_file_id
+   and open_term.function_name = memory.function_name
+   and open_term.line_no = memory.line_no
+   and open_term.operand_index = memory.operand_index
+   and open_term.term_kind = 'other'
+   and open_term.term_text glob '([0-9]*'
+   and substr(open_term.term_text, 2) not glob '*[^0-9]*'
+  join repo_asm_memory_operand_term_fact close_raw
+    on close_raw.repo_file_id = memory.repo_file_id
+   and close_raw.function_name = memory.function_name
+   and close_raw.line_no = memory.line_no
+   and close_raw.operand_index = memory.operand_index
+   and close_raw.term_kind = 'other'
+   and close_raw.term_index = open_term.term_index + 1
+   and close_raw.term_text like '%) * %'
+  join (
+    select repo_file_id,
+           function_name,
+           line_no,
+           operand_index,
+           term_index,
+           substr(term_text, 1, instr(term_text, ') * ') - 1) as scale_register_name,
+           cast(substr(term_text, instr(term_text, ') * ') + 4) as integer) as scale_value
+    from repo_asm_memory_operand_term_fact
+    where term_kind = 'other'
+      and term_text like '%) * %'
+      and substr(term_text, instr(term_text, ') * ') + 4) not glob '*[^0-9]*'
+  ) close_term
+    on close_term.repo_file_id = close_raw.repo_file_id
+   and close_term.function_name = close_raw.function_name
+   and close_term.line_no = close_raw.line_no
+   and close_term.operand_index = close_raw.operand_index
+   and close_term.term_index = close_raw.term_index
+  where memory.target_isa_id = 1
+    and memory.is_rel_memory = 0
+    and memory.memory_text like '[rsp + (% + %) * %]'
+    and close_term.scale_value in (1,2,4,8)
+    and close_term.scale_register_name glob '[abcdefghijklmnopqrstuvwxyz0123456789]*'
+    and close_term.scale_register_name not glob '*[^abcdefghijklmnopqrstuvwxyz0123456789]*'
 ), indexed_memory_bytes as (
   select selected_index_memory.*,
          case
-           when (second_reg.reg_code & 7) = 4 then second_reg.register_name
+           when first_reg.register_name = 'rsp' then first_reg.register_name
+           when second_reg.register_name = 'rsp' then second_reg.register_name
            else first_reg.register_name
          end as base_register_name,
          case
-           when (second_reg.reg_code & 7) = 4 then first_reg.register_name
+           when first_reg.register_name = 'rsp' then second_reg.register_name
+           when second_reg.register_name = 'rsp' then first_reg.register_name
            else second_reg.register_name
          end as index_register_name,
          case
-           when (second_reg.reg_code & 7) = 4 then second_reg.reg_code
+           when first_reg.register_name = 'rsp' then first_reg.reg_code
+           when second_reg.register_name = 'rsp' then second_reg.reg_code
            else first_reg.reg_code
          end as base_reg_code,
          case
-           when (second_reg.reg_code & 7) = 4 then second_reg.requires_rex
+           when first_reg.register_name = 'rsp' then first_reg.requires_rex
+           when second_reg.register_name = 'rsp' then second_reg.requires_rex
            else first_reg.requires_rex
          end as base_requires_rex,
          case
-           when (second_reg.reg_code & 7) = 4 then first_reg.reg_code
+           when first_reg.register_name = 'rsp' then second_reg.reg_code
+           when second_reg.register_name = 'rsp' then first_reg.reg_code
            else second_reg.reg_code
          end as index_reg_code,
          case
-           when (second_reg.reg_code & 7) = 4 then first_reg.requires_rex
+           when first_reg.register_name = 'rsp' then second_reg.requires_rex
+           when second_reg.register_name = 'rsp' then first_reg.requires_rex
            else second_reg.requires_rex
          end as index_requires_rex,
          case scale_value when 1 then 0 when 2 then 1 when 4 then 2 when 8 then 3 end as scale_bits,
          case
            when integer_displacement = 0
-            and ((case when (second_reg.reg_code & 7) = 4 then second_reg.reg_code else first_reg.reg_code end) & 7) not in (5) then 0
+            and ((case
+                    when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    else first_reg.reg_code
+                  end) & 7) not in (5) then 0
            when integer_displacement between -128 and 127 then 1
            else 2
          end as mod_bits,
          case
            when integer_displacement = 0
-            and ((case when (second_reg.reg_code & 7) = 4 then second_reg.reg_code else first_reg.reg_code end) & 7) not in (5) then ''
+            and ((case
+                    when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    else first_reg.reg_code
+                  end) & 7) not in (5) then ''
            when integer_displacement between -128 and 127 then printf('%02x', integer_displacement & 255)
            else printf('%02x%02x%02x%02x',
                        integer_displacement & 255,
@@ -7278,8 +7336,16 @@ with clean_indexed_memory as (
          end as displacement_hex,
          printf('%02x',
                 ((case scale_value when 1 then 0 when 2 then 1 when 4 then 2 when 8 then 3 end) << 6)
-                + (((case when (second_reg.reg_code & 7) = 4 then first_reg.reg_code else second_reg.reg_code end) & 7) << 3)
-                + ((case when (second_reg.reg_code & 7) = 4 then second_reg.reg_code else first_reg.reg_code end) & 7)) as sib_hex
+                + (((case
+                       when first_reg.register_name = 'rsp' then second_reg.reg_code
+                       when second_reg.register_name = 'rsp' then first_reg.reg_code
+                       else second_reg.reg_code
+                     end) & 7) << 3)
+                + ((case
+                      when first_reg.register_name = 'rsp' then first_reg.reg_code
+                      when second_reg.register_name = 'rsp' then second_reg.reg_code
+                      else first_reg.reg_code
+                    end) & 7)) as sib_hex
   from selected_index_memory
   join x86_register_encoding_fact first_reg
     on first_reg.register_name = selected_index_memory.first_register_name
@@ -7287,7 +7353,11 @@ with clean_indexed_memory as (
   join x86_register_encoding_fact second_reg
     on second_reg.register_name = selected_index_memory.second_register_name
    and second_reg.width_bits = 64
-  where ((case when (second_reg.reg_code & 7) = 4 then first_reg.reg_code else second_reg.reg_code end) & 7) <> 4
+  where case
+          when first_reg.register_name = 'rsp' then second_reg.register_name
+          when second_reg.register_name = 'rsp' then first_reg.register_name
+          else second_reg.register_name
+        end <> 'rsp'
 ), binary_operand as (
   select match.repo_file_id,
          match.function_name,
@@ -7466,6 +7536,51 @@ with clean_indexed_memory as (
   where mem.operand_index = 0
     and mem.op_name in ('mov','add','sub','cmp','and','or','xor')
     and mem.size_name in ('byte','word','dword','qword')
+), lea_reg_char_memory as (
+  select normalized.repo_file_id,
+         normalized.function_name,
+         normalized.line_no,
+         dst.reg_code as dst_reg_code,
+         dst.requires_rex as dst_requires_rex,
+         base.reg_code as base_reg_code,
+         base.requires_rex as base_requires_rex,
+         -unicode(substr(char_term.term_text, 2, 1)) as displacement
+  from normalized
+  join repo_asm_memory_operand_fact memory
+    on memory.repo_file_id = normalized.repo_file_id
+   and memory.function_name = normalized.function_name
+   and memory.line_no = normalized.line_no
+   and memory.operand_index = 1
+  join repo_asm_memory_addressing_fact address
+    on address.repo_file_id = memory.repo_file_id
+   and address.function_name = memory.function_name
+   and address.line_no = memory.line_no
+   and address.operand_index = memory.operand_index
+  join repo_asm_memory_operand_term_fact base_term
+    on base_term.repo_file_id = memory.repo_file_id
+   and base_term.function_name = memory.function_name
+   and base_term.line_no = memory.line_no
+   and base_term.operand_index = memory.operand_index
+   and base_term.term_kind = 'register'
+   and base_term.term_sign = 1
+  join repo_asm_memory_operand_term_fact char_term
+    on char_term.repo_file_id = memory.repo_file_id
+   and char_term.function_name = memory.function_name
+   and char_term.line_no = memory.line_no
+   and char_term.operand_index = memory.operand_index
+   and char_term.term_kind = 'other'
+   and char_term.term_sign = -1
+   and length(char_term.term_text) = 3
+   and char_term.term_text like '''_'''
+  join x86_register_encoding_fact dst
+    on dst.register_name = normalized.lhs_value
+   and dst.width_bits = 32
+  join x86_register_encoding_fact base
+    on base.register_name = base_term.term_text
+   and base.width_bits = 32
+  where normalized.op_name = 'lea'
+    and address.register_term_count = 1
+    and address.other_term_count = 1
 ), generated as (
   select repo_file_id,
          function_name,
@@ -7505,6 +7620,24 @@ with clean_indexed_memory as (
            || displacement_hex
          ) as fixed_hex
   from index_to_reg
+  union all
+  select repo_file_id,
+         function_name,
+         line_no,
+         'param_x86_lea_reg_char_memory' as parametric_rule_name,
+         (
+           '67'
+           || case
+                when dst_requires_rex = 1 or base_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 4 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
+                else ''
+              end
+           || '8d'
+           || printf('%02x', (1 << 6) + ((dst_reg_code & 7) << 3) + case when (base_reg_code & 7) = 4 then 4 else (base_reg_code & 7) end)
+           || case when (base_reg_code & 7) = 4 then printf('%02x', 32 + (base_reg_code & 7)) else '' end
+           || printf('%02x', displacement & 255)
+         ) as fixed_hex
+  from lea_reg_char_memory
+  where displacement between -128 and 127
   union all
   select repo_file_id,
          function_name,
@@ -14267,13 +14400,6 @@ create table catalog_stage_fact (
   default_load_policy text not null
 );
 
-create table catalog_stage_dependency_fact (
-  stage_id text not null references catalog_stage_fact(stage_id),
-  depends_on_stage_id text not null references catalog_stage_fact(stage_id),
-  dependency_kind text not null,
-  primary key (stage_id, depends_on_stage_id)
-);
-
 create table catalog_transform_kind_fact (
   transform_kind text primary key,
   input_role text not null,
@@ -14371,14 +14497,34 @@ select artifact.artifact_id,
        artifact.object_path,
        artifact.authority_status,
        artifact.retention_policy,
-       coalesce(edge.edge_id, '') as producing_edge_id,
-       coalesce(edge.rebuild_policy, '') as rebuild_policy,
-       coalesce(receipt.receipt_key, '') as receipt_key
+       coalesce(group_concat(distinct edge.edge_id), '') as producing_edge_id,
+       coalesce(group_concat(distinct edge.rebuild_policy), '') as rebuild_policy,
+       coalesce(group_concat(distinct receipt.receipt_key), '') as receipt_key
 from catalog_pipeline_artifact_fact artifact
 left join catalog_pipeline_edge_fact edge
   on edge.output_artifact_id = artifact.artifact_id
 left join catalog_pipeline_receipt_template_fact receipt using (edge_id)
+group by artifact.artifact_id,
+         artifact.domain_name,
+         artifact.artifact_name,
+         artifact.artifact_kind,
+         artifact.relation_name,
+         artifact.object_path,
+         artifact.authority_status,
+         artifact.retention_policy
 order by artifact.domain_name, artifact.artifact_id;
+
+create view catalog_stage_dependency_fact as
+select consumer.stage_id,
+       producer.stage_id as depends_on_stage_id,
+       case consumer.transform_kind
+         when 'report' then 'diagnostic'
+         else 'source'
+       end as dependency_kind
+from catalog_pipeline_edge_fact consumer
+join catalog_pipeline_edge_fact producer
+  on producer.output_artifact_id = consumer.input_artifact_id
+group by consumer.stage_id, producer.stage_id, dependency_kind;
 
 insert into catalog_stage_fact(stage_id, domain_name, stage_name, purpose, artifact_kind, default_load_policy) values
   ('repo_file_import', 'repo', 'Import repository files', 'Import file metadata and source/object content from explicit filesystem roots.', 'base_fact', 'default'),
@@ -14457,11 +14603,14 @@ insert into catalog_pipeline_edge_fact(edge_id, stage_id, transform_kind, input_
   ('repo_asm.match_rules', 'repo_asm_rule_match', 'derive', 'repo_asm.operation_facts', 'repo_asm.rule_match_facts', 'input_or_rule_digest_changed', 'rebuild_stage', 1),
   ('repo_asm.solve_constants', 'repo_asm_constants', 'derive', 'repo_asm.operation_facts', 'repo_asm.constant_facts', 'input_or_definition_digest_changed', 'rebuild_stage', 1),
   ('repo_asm.encode_parametric', 'repo_asm_parametric_encodings', 'encode', 'repo_asm.rule_match_facts', 'repo_asm.encoding_facts', 'input_or_vocab_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.encode_parametric_constants', 'repo_asm_parametric_encodings', 'derive', 'repo_asm.constant_facts', 'repo_asm.encoding_facts', 'input_digest_changed', 'rebuild_stage', 0),
   ('repo_asm.classify_status', 'repo_asm_operation_status', 'classify', 'repo_asm.encoding_facts', 'repo_asm.status_facts', 'input_digest_changed', 'rebuild_stage', 1),
+  ('repo_asm.classify_status_rules', 'repo_asm_operation_status', 'derive', 'repo_asm.rule_match_facts', 'repo_asm.status_facts', 'input_digest_changed', 'rebuild_stage', 0),
   ('repo_asm.report_actions', 'repo_asm_reports', 'report', 'repo_asm.status_facts', 'repo_asm.report_facts', 'input_digest_changed', 'run_on_request', 0),
   ('app_zig.decode_lines', 'app_zig_lines', 'decode', 'repo.file_facts', 'app_zig.line_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
   ('app_zig.parse_facts', 'app_zig_facts', 'parse', 'app_zig.line_facts', 'app_zig.syntax_facts', 'input_digest_changed', 'rebuild_changed_inputs', 1),
-  ('engine.project_facts', 'engine_fact_projection', 'project', 'repo_asm.status_facts', 'engine.fact_projection', 'input_digest_changed', 'run_on_request', 0);
+  ('engine.project_facts', 'engine_fact_projection', 'project', 'repo_asm.status_facts', 'engine.fact_projection', 'input_digest_changed', 'run_on_request', 0),
+  ('engine.project_zig_facts', 'engine_fact_projection', 'project', 'app_zig.syntax_facts', 'engine.fact_projection', 'input_digest_changed', 'run_on_request', 0);
 
 insert into catalog_pipeline_receipt_template_fact(edge_id, receipt_kind, receipt_key, records_required) values
   ('repo.load_file_facts', 'load_receipt', 'receipt.repo.load_file_facts', 'input_digest,output_digest,row_count'),
@@ -14473,21 +14622,6 @@ insert into catalog_pipeline_receipt_template_fact(edge_id, receipt_kind, receip
   ('repo_asm.classify_status', 'classify_receipt', 'receipt.repo_asm.classify_status', 'input_digest,output_digest,row_count,gap_count'),
   ('app_zig.decode_lines', 'decode_receipt', 'receipt.app_zig.decode_lines', 'input_digest,output_digest,row_count'),
   ('app_zig.parse_facts', 'parse_receipt', 'receipt.app_zig.parse_facts', 'input_digest,output_digest,row_count,gap_count');
-
-insert into catalog_stage_dependency_fact(stage_id, depends_on_stage_id, dependency_kind) values
-  ('repo_asm_lines', 'repo_file_import', 'source'),
-  ('repo_asm_operations', 'repo_asm_lines', 'source'),
-  ('repo_asm_rule_match', 'repo_asm_operations', 'source'),
-  ('repo_asm_constants', 'repo_asm_operations', 'source'),
-  ('repo_asm_parametric_encodings', 'repo_asm_rule_match', 'source'),
-  ('repo_asm_parametric_encodings', 'repo_asm_constants', 'source'),
-  ('repo_asm_operation_status', 'repo_asm_rule_match', 'source'),
-  ('repo_asm_operation_status', 'repo_asm_parametric_encodings', 'source'),
-  ('repo_asm_reports', 'repo_asm_operation_status', 'diagnostic'),
-  ('app_zig_lines', 'repo_file_import', 'source'),
-  ('app_zig_facts', 'app_zig_lines', 'source'),
-  ('engine_fact_projection', 'repo_asm_operation_status', 'source'),
-  ('engine_fact_projection', 'app_zig_facts', 'source');
 
 insert into engine_tradeoff_decision_fact(decision_id, decision_name, decision_goal, source_name) values
   ('asm_source_object_conversion', 'Convert tracked ASM test source to source objects', 'Delete textual source only when equivalent source-object and fact-readiness data exist.', 'catalog.sql'),

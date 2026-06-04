@@ -4,9 +4,10 @@ This document maps each Tor specification document to its equivalent
 OS-level primitive in an identity-addressed capability OS where:
 - Every process has a fixed identity (hash of binary)
 - Every device has a persistent identity (TPM-backed keypair)
-- The kernel routes cells by identity, not address
-- Same-machine IPC shares memory without encryption
-- Crypto is used only when crossing authority boundaries (user, device, app)
+- The kernel routes fixed cells by identity, not address
+- WASM apps own their Tor role behavior inside their own binary
+- The system relays cells between identities and enforces grants
+- Crypto is used when crossing authority boundaries (user, device, app)
 
 ---
 
@@ -20,9 +21,10 @@ OS-level primitive in an identity-addressed capability OS where:
 | CircID (2 or 4 bytes) | Circuit slot index (kernel-managed table) |
 | Command byte (PADDING, CREATE, RELAY, DESTROY, etc.) | Kernel cell type enum |
 
-**Kernel primitive:** Fixed-size cell (256B or 514B) as universal message unit.
-Ring buffer per (identity, identity) pair in shared memory.
-Cell header: [circuit_slot:2, flags:2, type:1, payload:251].
+**Kernel primitive:** the 514-byte Tor fixed cell is the universal message unit.
+Each identity has a grant-backed incoming mailbox. The host may validate the
+outer destination and mailbox capacity, but app role state and inner Tor
+protocol behavior remain inside the WASM binary.
 
 ### Channels (link protocol)
 | Tor | OS |
@@ -33,10 +35,10 @@ Cell header: [circuit_slot:2, flags:2, type:1, payload:251].
 | NETINFO (addresses, time) | Kernel fills routing metadata, no IP addresses |
 | Link padding (PADDING_NEGOTIATE) | Not needed at kernel level (device layer doesn't pad) |
 
-**Kernel primitive:** Channel = route table entry with
-[next_device_id, circuit_slot_map, encryption_key, state_machine].
-
-No TLS — encryption is built into the cell forwarding layer.
+**System primitive:** channel = route table entry plus receipt state. Local
+delivery writes the destination mailbox. Nonlocal delivery hands the same fixed
+cell to the device relay. The app, not the host SDK, owns any Tor link or role
+state needed inside the cell stream.
 
 ### Circuits
 | Tor | OS |
@@ -47,15 +49,15 @@ No TLS — encryption is built into the cell forwarding layer.
 | DESTROY | Circuit teardown syscall |
 | CircID management (per-connection) | Per-process circuit table (fixed size, preallocated) |
 
-**Kernel primitive:** Circuit table per process — fixed N entries.
-Each entry: [destination_id, path[5], keys[5], window_state, stream_table].
+**App primitive:** circuit state is WASM-owned data backed by explicit memory
+and key grants. The system stores only the route and mailbox state required to
+deliver fixed cells.
 
 **User API:**
 ```
-fd = open_circuit(destination_identity_hash)  // returns circuit handle
-send(fd, cell[256])                           // fire-and-forget
-recv(fd, cell[256])                           // non-blocking poll
-close(fd)                                     // DESTROY
+register_identity(identity_hash, grant_receipt)
+send_cell(destination_identity_hash, cell[514])
+recv_cell(cell[514])
 ```
 
 ### Relay Cell Encryption (Telescoping)
@@ -67,9 +69,9 @@ close(fd)                                     // DESTROY
 | Df/Db (digest seeds) | Per-hop digest state for integrity |
 | Relay command + StreamID | Encrypted inner envelope |
 
-**Kernel primitive:** For each circuit, kernel maintains [N][Kf, Kb, Df, Db].
-On send: encrypt N times from innermost hop outward.
-On recv: decrypt once per hop, check recognize+digest, forward or deliver.
+**App primitive:** for each circuit, the WASM role implementation maintains the
+Tor key schedule and digest state it is granted to hold. The system does not add
+a separate app-facing role controller.
 
 ### Streams (TCP connections)
 | Tor | OS |
@@ -80,22 +82,22 @@ On recv: decrypt once per hop, check recognize+digest, forward or deliver.
 | RELAY_RESOLVE / RELAY_RESOLVED | Not needed (no DNS) |
 | RELAY_BEGIN_DIR | App registers as identity handler (replaces directory) |
 
-**Kernel primitive:** Streams are just cells on a circuit with a StreamID.
-In this OS, every `send()` creates a stream (StreamID = seqno).
-The kernel provides stream-level window control.
+**App primitive:** streams are Tor cells interpreted by the WASM binary. The
+system provides bounded mailbox capacity, not socket emulation or stream-level
+host authority.
 
 ### Flow Control
 | Tor | OS |
 |---|---|
-| Circuit window (1000 cells, +100 per SENDME) | Kernel circuit budget (preallocated slots per circuit) |
+| Circuit window (1000 cells, +100 per SENDME) | app-owned flow-control state plus granted mailbox budget |
 | Stream window (500 cells, +50 per SENDME) | Per-stream budget within circuit budget |
 | SENDME version 1 (authenticated digest) | Kernel validates circuit integrity via rolling hash |
 | Package window / deliver window | Kernel tracks sent/received per circuit |
 | Token bucket rate limiting | Preallocated budget per process identity |
 
-**Kernel primitive:** Fixed budgets. A process declares "I support N circuits."
-When N exhausted, new circuit requests are rejected.
-No dynamic allocation. Flow control is a hard budget, not a window.
+**System primitive:** fixed mailbox and grant budgets. A process receives only
+the cell slots, memory, durable flush capacity, identity access, and key
+material granted to it. Tor flow-control state stays in app-owned WASM memory.
 
 ### Keys and Identities
 | Tor | OS |
@@ -120,13 +122,13 @@ No dynamic allocation. Flow control is a hard budget, not a window.
 ### Relay Cell Routing
 | Tor | OS |
 |---|---|
-| Recognize via zero 'recognized' field + digest | Kernel checks per-hop AES-CTR decryption |
-| Forward direction (origin → exit) | Send encrypts telescopically |
-| Backward direction (exit → origin) | Recv decrypts telescopically |
-| Digest is SHA-1 (circuits) or SHA3-256 (HS circuits) | Kernel uses same per-circuit-type hash |
+| Recognize via zero 'recognized' field + digest | app-owned Tor role checks inner relay cells |
+| Forward direction (origin → exit) | app-owned role encrypts telescopically |
+| Backward direction (exit → origin) | app-owned role decrypts telescopically |
+| Digest is SHA-1 (circuits) or SHA3-256 (HS circuits) | app-owned role tracks the digest state |
 
-**Kernel primitive:** Encryption/decryption loop is inline in kernel send/recv paths.
-No dynamic allocation. Per-circuit key schedule precomputed at circuit setup.
+**App primitive:** relay-cell encryption is part of the WASM role binary. The
+system only moves already-formed fixed cells between identities.
 
 ---
 
@@ -137,7 +139,7 @@ No dynamic allocation. Per-circuit key schedule precomputed at circuit setup.
 | Directory authority (voting, consensus) | Directory Authority process per machine |
 | Router descriptor (keys, addresses, ports) | Process registration: identity + device |
 | Network status / consensus | Routing table: identity → next_hop |
-| Server descriptor upload (HTTP POST) | `register_handler(id)` syscall |
+| Server descriptor upload (HTTP POST) | app-owned directory behavior over fixed cells |
 | Extra-info document | Not needed |
 | Microdescriptor | Minimal route entry: [id, cost, next_hop, expiry] |
 | HSDir hash ring | Not needed — routing is authoritative, not distributed |
@@ -146,19 +148,10 @@ No dynamic allocation. Per-circuit key schedule precomputed at circuit setup.
 | Bandwidth measurement | Preallocated budget (declared, not measured) |
 | Download scheduling (exponential backoff) | Not needed — DA is local |
 
-**Kernel primitive:** `set_route(id, next_hop, cost, expiry)` — privileged syscall
-for the DA process only.
-Process registration: `register_handler(id, ring_buffer_base)` — called by
-process at startup; kernel assigns an identity.
-
-**Userspace process:** Directory Authority (DA).
-One per machine. Maintains routing table for:
-- All local processes (identity → shm ring)
-- All known peer devices (device_id → MAC + link key)
-- All known remote app identities (app_id → device_id)
-- All known remote user identities (user_id → app_id → device_id)
-
-The DA does NOT do consensus voting. It is authoritative for its machine.
+**System primitive:** identity route registration plus grant receipts. A local
+authority component may maintain route entries for local and known remote
+identities, but app directory behavior remains a WASM role over the same fixed
+cell transport.
 
 ---
 
@@ -166,18 +159,17 @@ The DA does NOT do consensus voting. It is authoritative for its machine.
 
 | Tor | OS |
 |---|---|
-| Circuit building (extend N-1 hops) | Kernel extends path one hop at a time via routing table |
-| Cannibalizing circuits | Kernel reuses idle circuit slots |
+| Circuit building (extend N-1 hops) | app-owned role emits the needed fixed cells |
+| Cannibalizing circuits | app-owned circuit cache inside granted memory |
 | Path bias defense | Not needed (no guard discovery attack in this model) |
-| Stream attachment to circuits | `send()` attaches to any circuit bound for destination |
+| Stream attachment to circuits | app-owned stream-to-circuit policy |
 | SOCKS timeout → abandon | Not needed (no SOCKS, send is fire-and-forget) |
 
-**Kernel primitive:** Path extension is a kernel operation.
-When an app sends to an identity, the kernel:
-1. Looks up destination in routing table
-2. If destination is local (process on same machine), routes via shm ring directly
-3. If destination is on a peer device, extends circuit through that device
-4. If destination is N hops away, extends circuit N hops, encrypting each layer
+**App primitive:** path selection and extension are Tor role behavior inside
+the WASM binary. When an app sends a fixed cell, the system looks up only the
+outer destination identity, writes a local mailbox when local delivery is
+available, or forwards the cell to the device relay when nonlocal delivery is
+required.
 
 Path selection is deterministic — routing table says next hop.
 
@@ -212,10 +204,10 @@ Handles beacon broadcasts on raw ethernet. Updates neighbor table.
 |---|---|
 | Full vanguards (3 guard layers) | Multi-hop path through known peer devices |
 | Vanguards-lite (1 guard layer) | Single-hop path through one peer device |
-| Circuit stem (common prefix for HS circuits) | Kernel reuses established path prefix |
+| Circuit stem (common prefix for HS circuits) | app-owned role may reuse a path prefix |
 | Mesh topology (any layer-2 to any layer-3) | Any neighbor device can route to any further device |
 
-**Kernel primitive:** Not needed. Paths are N hops through the neighbor graph.
+**System primitive:** not needed for apps. Paths are app-owned Tor role data.
 Vanguard concept maps to "don't use an exit-capable device as the first hop" —
 a routing policy bit.
 
@@ -241,16 +233,14 @@ Not applicable in same authority boundary.
 | Tor | OS |
 |---|---|
 | MaxMemInQueues (RAM cap) | Preallocated fixed budgets → no memory exhaustion possible |
-| Circuit queue trimming | Kernel drops circuits when budget exhausted |
+| Circuit queue trimming | app cannot exceed granted mailbox and memory budget |
 | Token bucket rate limiting | Preallocated forwarding slots per identity |
-| CPU exhaustion (circuit handshake) | Fixed max circuits per process, enforced at kernel |
-| Half-open stream limits | Fixed stream table per circuit |
+| CPU exhaustion (circuit handshake) | app-owned work is bounded by granted runtime budget |
+| Half-open stream limits | app-owned stream state is bounded by granted memory |
 
-**Kernel primitive:** Budget enforcement is intrinsic to the fixed-allocation model.
-A process cannot exceed its declared budget because:
-- Circuits are preallocated slots
-- Streams are preallocated sub-slots
-- Memory is fixed at exec time
+**System primitive:** budget enforcement is intrinsic to the fixed-allocation model.
+A process cannot exceed its grant because mailbox cells, runtime memory, durable
+flush capacity, and identity/key access are fixed before the app runs.
 
 The DOS spec is solved by architecture, not by runtime mitigation.
 
@@ -260,22 +250,22 @@ The DOS spec is solved by architecture, not by runtime mitigation.
 
 | Tor | OS |
 |---|---|
-| SOCKS4/SOCKS5 proxy | Not needed — `send(id)` replaces SOCKS entirely |
+| SOCKS4/SOCKS5 proxy | Not needed — `send_cell(id, cell)` replaces SOCKS entirely |
 | RESOLVE command | Not needed — no DNS |
 | RESOLVE_PTR command | Not needed |
-| Optimistic data | `send()` is always fire-and-forget (always optimistic) |
-| Extended error codes (F0-F7) | Kernel return codes for circuit/send failures |
+| Optimistic data | `send_cell()` is always fire-and-forget at the relay layer |
+| Extended error codes (F0-F7) | fixed SDK return codes for cell delivery failures |
 | HTTP-resistance | Not needed |
 | Username/password auth | Not needed |
 
-**Kernel primitive:** None. SOCKS is replaced by the identity-based `send(id, cell)` API.
+**System primitive:** None. SOCKS is replaced by the identity-based
+`send_cell(id, cell[514])` API.
 
 **User API** (replaces SOCKS interface):
 ```
-open_circuit(destination_id) → fd
-send(fd, data[256])           → 0 or error
-recv(fd) → data[256]          → data or empty
-close(fd)                     → teardown
+register_identity(identity_id, grant_receipt) -> slot
+send_cell(destination_id, cell[514])          -> 0 or error
+recv_cell(cell[514])                          -> data or empty
 ```
 
 ---
@@ -341,8 +331,8 @@ as a string for out-of-band exchange (scan QR code, typed by user).
 ### Introduction & Rendezvous Protocol
 | Tor | OS |
 |---|---|
-| ESTABLISH_INTRO / INTRO_ESTABLISHED | `register_handler(id)` — process declares it accepts messages |
-| INTRODUCE1 / INTRODUCE2 | `send(id, cell)` — routed by kernel |
+| ESTABLISH_INTRO / INTRO_ESTABLISHED | app-owned behavior over `register_identity(id, grant)` |
+| INTRODUCE1 / INTRODUCE2 | app-owned behavior over `send_cell(id, cell)` |
 | ESTABLISH_RENDEZVOUS / RENDEZVOUS_ESTABLISHED | Not needed — no rendezvous point |
 | RENDEZVOUS1 / RENDEZVOUS2 | Not needed |
 | INTRODUCE_ACK | Not needed — send is fire-and-forget |
@@ -358,13 +348,10 @@ as a string for out-of-band exchange (scan QR code, typed by user).
 | N_hs_subcred (subcredential) | Not needed |
 | N_hs_cred (credential) | Not needed |
 
-**Kernel primitive:** `register_handler(id)` = "I accept cells for this identity."
-The DA stores the mapping: identity → ring buffer.
-When a cell arrives for this identity, kernel copies it to the handler's ring buffer.
-
-In this OS, every app is a "hidden service" and every app is a "client."
-There is no distinction. `register_handler` is the service side.
-`open_circuit(id)` is the client side. Both are first-class kernel primitives.
+**System primitive:** `register_identity(id, grant)` binds a granted app identity
+to its incoming mailbox. When a cell arrives for that identity, the system
+copies the fixed cell to the mailbox. Hidden-service and client distinctions are
+WASM role behavior layered on the same fixed-cell transport.
 
 **Userspace process:** The on-machine routing aspect of HSDirs is handled by the DA.
 
@@ -372,12 +359,12 @@ There is no distinction. `register_handler` is the service side.
 | Tor | OS |
 |---|---|
 | Equi-X + Blake2b puzzle | Optional: app can request PoW from sender |
-| Introduction priority queue | Kernel circuit slot priority (higher effort = higher slot) |
-| Seed / suggested effort | Consensus parameter → kernel parameter |
-| Replay protection (seed, nonce) | Kernel nonce cache per receiver |
+| Introduction priority queue | app-owned queue inside granted memory |
+| Seed / suggested effort | app-owned consensus or local policy data |
+| Replay protection (seed, nonce) | app-owned cache inside granted memory |
 
-**Kernel primitive:** Optional — kernel can require a PoW nonce in cell header
-for circuits to a particular identity. The identity sets the required effort.
+**App primitive:** optional. The receiving app can require PoW material inside
+its app-level Tor messages and reject cells that do not satisfy its policy.
 
 ---
 
@@ -388,9 +375,9 @@ Additional detail:
 
 | Tor | OS |
 |---|---|
-| v1 solver (Equi-X) | Kernel PoW verification for slot allocation |
-| Effort adjustment | DA publishes required effort per identity |
-| Queue draining (highest effort first) | Kernel circuit accept priority |
+| v1 solver (Equi-X) | app-owned PoW verification inside granted memory |
+| Effort adjustment | app-owned policy data |
+| Queue draining (highest effort first) | app-owned queue policy |
 
 ---
 
@@ -419,9 +406,9 @@ Additional detail:
 Receives cells destined for IP hosts, opens TCP connections, bridges data.
 This is the *only* place where SOCKS/DNS/IP addresses exist.
 
-**Kernel primitive:** The exit bridge registers as a handler for
-`IDENTITY_EXIT_BRIDGE`. All IP-bound traffic is addressed to this identity.
-The kernel routes it there like any other identity.
+**System primitive:** the exit bridge registers a granted identity. All
+IP-bound traffic is addressed to that identity and relayed like any other fixed
+cell destination.
 
 ---
 
@@ -435,7 +422,7 @@ The kernel routes it there like any other identity.
 | MAPADDRESS | Route table manipulation (DA-only) |
 | GETINFO (status queries) | Kernel info syscall (process stats, circuit stats) |
 | SIGNAL (NEWNYM, SHUTDOWN, etc.) | Kernel signal syscall |
-| Circuit status / stream status | Kernel circuit table introspection |
+| Circuit status / stream status | app-owned state; privileged monitors may inspect route/mailbox status |
 | Onion service commands (HSFETCH, etc.) | Route registration / lookup |
 
 **Kernel primitive:** The control protocol is replaced by kernel syscalls:
@@ -540,34 +527,31 @@ The cert format is only relevant for legacy Tor interoperability
 
 ## Summary: What the OS Actually Implements
 
-### Kernel Primitives (fixed allocations, no dynamic memory)
+### System Primitives (fixed allocations, no dynamic memory)
 
 | Primitive | Syscall / Interface | Preallocation |
 |---|---|---|
-| Open circuit | `open_circuit(dest_id) → fd` | Per-process circuit table (N entries) |
-| Send cell | `send(fd, cell[256])` | Slot in circuit window |
-| Receive cell | `recv(fd) → cell[256]` | Ring buffer per identity |
-| Close circuit | `close(fd)` | Frees circuit slot |
-| Register identity | `register_handler(id, ring_base)` | One identity per process (fixed) |
-| Encrypt data | `encrypt(data, key_slot) → ciphertext` | Per-hop key schedule (fixed) |
-| Decrypt data | `decrypt(data, key_slot) → plaintext` | Per-hop key schedule (fixed) |
-| Get message | `get_message() → cell[256]` | Ring buffer slot |
+| Register identity | `register_identity(id, grant_receipt) -> slot` | Granted identity mailbox |
+| Send cell | `send_cell(dest_id, cell[514])` | Granted outgoing cell budget |
+| Receive cell | `recv_cell(cell[514])` | Granted incoming mailbox slots |
+| Emit receipt | `receipt(edge, input, output)` | Granted object/flush capacity |
+| Relay nonlocal cell | device relay path | Device relay budget |
 
 ### Userspace Processes
 
 | Role | What it does | Identity |
 |---|---|---|
-| Directory Authority | Route table management, peer discovery | Fixed (DA binary hash) |
-| Exit bridge | Legacy IP interop | Fixed (bridge binary hash) |
-| App | User-facing process | Fixed (its own binary hash) |
+| Route authority | Route table management, peer discovery | Fixed binary hash |
+| Device relay | Nonlocal fixed-cell forwarding | Fixed binary hash |
+| App | App-owned Tor role and data transform | Fixed binary hash |
 | Device discovery | Beacon broadcasts, neighbor table | Part of kernel or DA |
 
 ### What Tor Concepts Don't Map
 
 These Tor features are solved by architectural decisions rather than protocols:
 
-- **TLS** → Replaced by per-hop encryption at kernel level
-- **SOCKS** → Replaced by `send(id, cell)` API
+- **TLS** → App-owned Tor roles handle link/relay encryption where needed
+- **SOCKS** → Replaced by `send_cell(id, cell[514])`
 - **DNS** → No hostnames, only identity hashes
 - **Consensus voting** → Replaced by local authoritative DA
 - **HSDir hash ring** → Replaced by local DA registration
