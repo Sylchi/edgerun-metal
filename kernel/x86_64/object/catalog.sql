@@ -6788,6 +6788,7 @@ with recursive binary_operand as (
          reg.reg_code,
          reg.requires_rex,
          mem.size_name,
+         mem.address_width_bits,
          mem.base_reg_code,
          mem.base_requires_rex,
          mem.mod_bits,
@@ -6814,6 +6815,7 @@ with recursive binary_operand as (
          reg.reg_code,
          reg.requires_rex,
          mem.size_name,
+         mem.address_width_bits,
          mem.base_reg_code,
          mem.base_requires_rex,
          mem.mod_bits,
@@ -7164,7 +7166,9 @@ with clean_indexed_memory as (
     and is_rel_memory = 0
     and addressing_kind = 'indexed_memory'
     and symbol_term_count = 0
-    and (register_term_count = 2 or (register_term_count = 1 and scaled_register_term_count = 1))
+    and (register_term_count = 2
+         or (register_term_count = 1 and scaled_register_term_count = 1)
+         or (register_term_count = 0 and scaled_register_term_count = 1))
 ), register_pair_memory as (
   select memory.*,
          first_term.term_text as first_register_name,
@@ -7211,12 +7215,31 @@ with clean_indexed_memory as (
   where memory.register_term_count = 1
     and memory.scaled_register_term_count = 1
     and scaled_term.scale_value in (1,2,4,8)
+), no_base_scale_two_memory as (
+  select memory.*,
+         scaled_term.scale_register_name as first_register_name,
+         scaled_term.scale_register_name as second_register_name,
+         1 as scale_value
+  from clean_indexed_memory memory
+  join repo_asm_memory_operand_term_fact scaled_term
+    on scaled_term.repo_file_id = memory.repo_file_id
+   and scaled_term.function_name = memory.function_name
+   and scaled_term.line_no = memory.line_no
+   and scaled_term.operand_index = memory.operand_index
+   and scaled_term.term_kind = 'scaled_register'
+   and scaled_term.term_sign = 1
+  where memory.register_term_count = 0
+    and memory.scaled_register_term_count = 1
+    and scaled_term.scale_value = 2
 ), selected_index_memory as (
   select *
   from register_pair_memory
   union all
   select *
   from scaled_index_memory
+  union all
+  select *
+  from no_base_scale_two_memory
   union all
   select memory.path,
          memory.repo_file_id,
@@ -7287,34 +7310,47 @@ with clean_indexed_memory as (
     and close_term.scale_register_name not glob '*[^abcdefghijklmnopqrstuvwxyz0123456789]*'
 ), indexed_memory_bytes as (
   select selected_index_memory.*,
+         first_reg.width_bits as address_width_bits,
          case
            when first_reg.register_name = 'rsp' then first_reg.register_name
+           when first_reg.register_name = 'esp' then first_reg.register_name
            when second_reg.register_name = 'rsp' then second_reg.register_name
+           when second_reg.register_name = 'esp' then second_reg.register_name
            else first_reg.register_name
          end as base_register_name,
          case
            when first_reg.register_name = 'rsp' then second_reg.register_name
+           when first_reg.register_name = 'esp' then second_reg.register_name
            when second_reg.register_name = 'rsp' then first_reg.register_name
+           when second_reg.register_name = 'esp' then first_reg.register_name
            else second_reg.register_name
          end as index_register_name,
          case
            when first_reg.register_name = 'rsp' then first_reg.reg_code
+           when first_reg.register_name = 'esp' then first_reg.reg_code
            when second_reg.register_name = 'rsp' then second_reg.reg_code
+           when second_reg.register_name = 'esp' then second_reg.reg_code
            else first_reg.reg_code
          end as base_reg_code,
          case
            when first_reg.register_name = 'rsp' then first_reg.requires_rex
+           when first_reg.register_name = 'esp' then first_reg.requires_rex
            when second_reg.register_name = 'rsp' then second_reg.requires_rex
+           when second_reg.register_name = 'esp' then second_reg.requires_rex
            else first_reg.requires_rex
          end as base_requires_rex,
          case
            when first_reg.register_name = 'rsp' then second_reg.reg_code
+           when first_reg.register_name = 'esp' then second_reg.reg_code
            when second_reg.register_name = 'rsp' then first_reg.reg_code
+           when second_reg.register_name = 'esp' then first_reg.reg_code
            else second_reg.reg_code
          end as index_reg_code,
          case
            when first_reg.register_name = 'rsp' then second_reg.requires_rex
+           when first_reg.register_name = 'esp' then second_reg.requires_rex
            when second_reg.register_name = 'rsp' then first_reg.requires_rex
+           when second_reg.register_name = 'esp' then first_reg.requires_rex
            else second_reg.requires_rex
          end as index_requires_rex,
          case scale_value when 1 then 0 when 2 then 1 when 4 then 2 when 8 then 3 end as scale_bits,
@@ -7322,7 +7358,9 @@ with clean_indexed_memory as (
            when integer_displacement = 0
             and ((case
                     when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when first_reg.register_name = 'esp' then first_reg.reg_code
                     when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    when second_reg.register_name = 'esp' then second_reg.reg_code
                     else first_reg.reg_code
                   end) & 7) not in (5) then 0
            when integer_displacement between -128 and 127 then 1
@@ -7332,7 +7370,9 @@ with clean_indexed_memory as (
            when integer_displacement = 0
             and ((case
                     when first_reg.register_name = 'rsp' then first_reg.reg_code
+                    when first_reg.register_name = 'esp' then first_reg.reg_code
                     when second_reg.register_name = 'rsp' then second_reg.reg_code
+                    when second_reg.register_name = 'esp' then second_reg.reg_code
                     else first_reg.reg_code
                   end) & 7) not in (5) then ''
            when integer_displacement between -128 and 127 then printf('%02x', integer_displacement & 255)
@@ -7346,26 +7386,30 @@ with clean_indexed_memory as (
                 ((case scale_value when 1 then 0 when 2 then 1 when 4 then 2 when 8 then 3 end) << 6)
                 + (((case
                        when first_reg.register_name = 'rsp' then second_reg.reg_code
+                       when first_reg.register_name = 'esp' then second_reg.reg_code
                        when second_reg.register_name = 'rsp' then first_reg.reg_code
+                       when second_reg.register_name = 'esp' then first_reg.reg_code
                        else second_reg.reg_code
                      end) & 7) << 3)
                 + ((case
                       when first_reg.register_name = 'rsp' then first_reg.reg_code
+                      when first_reg.register_name = 'esp' then first_reg.reg_code
                       when second_reg.register_name = 'rsp' then second_reg.reg_code
+                      when second_reg.register_name = 'esp' then second_reg.reg_code
                       else first_reg.reg_code
                     end) & 7)) as sib_hex
   from selected_index_memory
   join x86_register_encoding_fact first_reg
     on first_reg.register_name = selected_index_memory.first_register_name
-   and first_reg.width_bits = 64
   join x86_register_encoding_fact second_reg
     on second_reg.register_name = selected_index_memory.second_register_name
-   and second_reg.width_bits = 64
-  where case
-          when first_reg.register_name = 'rsp' then second_reg.register_name
-          when second_reg.register_name = 'rsp' then first_reg.register_name
-          else second_reg.register_name
-        end <> 'rsp'
+  where first_reg.width_bits = second_reg.width_bits
+    and first_reg.width_bits in (32,64)
+    and ((case
+            when first_reg.register_name in ('rsp','esp') then second_reg.reg_code
+            when second_reg.register_name in ('rsp','esp') then first_reg.reg_code
+            else second_reg.reg_code
+          end) & 7) <> 4
 ), binary_operand as (
   select match.repo_file_id,
          match.function_name,
@@ -7409,6 +7453,7 @@ with clean_indexed_memory as (
          reg.reg_code,
          reg.requires_rex,
          mem.size_name,
+         mem.address_width_bits,
          mem.base_reg_code,
          mem.base_requires_rex,
          mem.index_reg_code,
@@ -7437,6 +7482,7 @@ with clean_indexed_memory as (
          reg.reg_code,
          reg.requires_rex,
          mem.size_name,
+         mem.address_width_bits,
          mem.base_reg_code,
          mem.base_requires_rex,
          mem.index_reg_code,
@@ -7595,7 +7641,8 @@ with clean_indexed_memory as (
          line_no,
          'param_x86_' || op_name || '_reg_index_memory' as parametric_rule_name,
          (
-           case when width_bits = 16 and op_name not in ('movzx','movsx','movsxd') then '66' else '' end
+           case when address_width_bits = 32 then '67' else '' end
+           || case when width_bits = 16 and op_name not in ('movzx','movsx','movsxd') then '66' else '' end
            || case
              when op_name = 'movsxd' then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
@@ -7652,7 +7699,8 @@ with clean_indexed_memory as (
          line_no,
          'param_x86_' || op_name || '_index_memory_reg' as parametric_rule_name,
          (
-           case when width_bits = 16 then '66' else '' end
+           case when address_width_bits = 32 then '67' else '' end
+           || case when width_bits = 16 then '66' else '' end
            || case
              when width_bits = 64 then printf('%02x', 72 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when requires_rex = 1 or base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when reg_code >= 8 then 4 else 0 end + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
@@ -7679,7 +7727,8 @@ with clean_indexed_memory as (
          line_no,
          'param_x86_' || op_name || '_' || size_name || '_index_memory_imm8' as parametric_rule_name,
          (
-           case when size_name = 'word' then '66' else '' end
+           case when address_width_bits = 32 then '67' else '' end
+           || case when size_name = 'word' then '66' else '' end
            || case
              when size_name = 'qword' then printf('%02x', 72 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
@@ -7710,7 +7759,8 @@ with clean_indexed_memory as (
          line_no,
          'param_x86_mov_' || size_name || '_index_memory_imm' as parametric_rule_name,
          (
-           case when size_name = 'word' then '66' else '' end
+           case when address_width_bits = 32 then '67' else '' end
+           || case when size_name = 'word' then '66' else '' end
            || case
              when size_name = 'qword' then printf('%02x', 72 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
              when base_requires_rex = 1 or index_requires_rex = 1 then printf('%02x', 64 + case when index_reg_code >= 8 then 2 else 0 end + case when base_reg_code >= 8 then 1 else 0 end)
