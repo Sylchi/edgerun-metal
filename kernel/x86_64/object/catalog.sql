@@ -6271,9 +6271,9 @@ with clean_indexed_memory as (
     and operand.operand_index = 1
     and length(operand.operand_value) = 3
     and operand.operand_value like '''_'''
-	), rhs_unique_value as (
-	  select repo_file_id,
-	         function_name,
+), rhs_unique_value as (
+  select repo_file_id,
+         function_name,
          line_no,
          min(immediate_value) as immediate_value
   from (
@@ -6976,36 +6976,259 @@ with recursive rhs_decimal as (
          immediate_value
   from rhs_hex_parse
   where digit_index = length(hex_text) + 1
-), rhs_symbol as (
-  select operand.repo_file_id,
-         operand.function_name,
-         operand.line_no,
-         value.immediate_value
+	), rhs_symbol as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         value.immediate_value
   from repo_asm_binary_operand_fact operand
   join repo_asm_numeric_symbol_value value
-    on value.symbol_name = operand.operand_value
-  where operand.target_isa_id = 1
-    and operand.operand_index = 1
-), rhs_char as (
-  select operand.repo_file_id,
-         operand.function_name,
-         operand.line_no,
+	    on value.symbol_name = operand.operand_value
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	), rhs_file_symbol_decimal as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         cast(definition.expression_text as integer) as immediate_value
+	  from repo_asm_binary_operand_fact operand
+	  join repo_asm_constant_definition_fact definition
+	    on definition.repo_file_id = operand.repo_file_id
+	   and definition.symbol_name = operand.operand_value
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	    and (definition.expression_text glob '[0-9]*'
+	         or definition.expression_text glob '-[0-9]*')
+	    and replace(definition.expression_text, '-', '') not glob '*[^0-9]*'
+	), rhs_file_symbol_hex_seed as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         definition.line_no as definition_line_no,
+	         substr(lower(definition.expression_text), 3) as hex_text
+	  from repo_asm_binary_operand_fact operand
+	  join repo_asm_constant_definition_fact definition
+	    on definition.repo_file_id = operand.repo_file_id
+	   and definition.symbol_name = operand.operand_value
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	    and lower(definition.expression_text) glob '0x[0-9a-f]*'
+	    and substr(lower(definition.expression_text), 3) <> ''
+	    and substr(lower(definition.expression_text), 3) not glob '*[^0-9a-f]*'
+	    and length(substr(lower(definition.expression_text), 3)) <= 15
+	), rhs_file_symbol_hex_parse(repo_file_id, function_name, line_no, definition_line_no, hex_text, digit_index, immediate_value) as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         definition_line_no,
+	         hex_text,
+	         1 as digit_index,
+	         0 as immediate_value
+	  from rhs_file_symbol_hex_seed
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         definition_line_no,
+	         hex_text,
+	         digit_index + 1,
+	         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+	  from rhs_file_symbol_hex_parse
+	  where digit_index <= length(hex_text)
+	), rhs_file_symbol_hex as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         immediate_value
+	  from rhs_file_symbol_hex_parse
+	  where digit_index = length(hex_text) + 1
+	), rhs_file_symbol_octal_seed as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         definition.line_no as definition_line_no,
+	         substr(lower(definition.expression_text), 1, length(definition.expression_text) - 1) as octal_text
+	  from repo_asm_binary_operand_fact operand
+	  join repo_asm_constant_definition_fact definition
+	    on definition.repo_file_id = operand.repo_file_id
+	   and definition.symbol_name = operand.operand_value
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	    and lower(definition.expression_text) glob '[0-7]*o'
+	    and substr(lower(definition.expression_text), 1, length(definition.expression_text) - 1) <> ''
+	    and substr(lower(definition.expression_text), 1, length(definition.expression_text) - 1) not glob '*[^0-7]*'
+	), rhs_file_symbol_octal_parse(repo_file_id, function_name, line_no, definition_line_no, octal_text, digit_index, immediate_value) as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         definition_line_no,
+	         octal_text,
+	         1 as digit_index,
+	         0 as immediate_value
+	  from rhs_file_symbol_octal_seed
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         definition_line_no,
+	         octal_text,
+	         digit_index + 1,
+	         (immediate_value * 8) + instr('01234567', substr(octal_text, digit_index, 1)) - 1
+	  from rhs_file_symbol_octal_parse
+	  where digit_index <= length(octal_text)
+	), rhs_file_symbol_octal as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         immediate_value
+	  from rhs_file_symbol_octal_parse
+	  where digit_index = length(octal_text) + 1
+	), rhs_char as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
          unicode(substr(operand.operand_value, 2, 1)) as immediate_value
   from repo_asm_binary_operand_fact operand
   where operand.target_isa_id = 1
     and operand.operand_index = 1
-    and length(operand.operand_value) = 3
-    and substr(operand.operand_value, 1, 1) = char(39)
-    and substr(operand.operand_value, 3, 1) = char(39)
-), rhs_value as (
-  select * from rhs_decimal
-  union all
-  select * from rhs_hex
-  union all
-  select * from rhs_symbol
-  union all
-  select * from rhs_char
-), rhs_unique_value as (
+	    and length(operand.operand_value) = 3
+	    and substr(operand.operand_value, 1, 1) = char(39)
+	    and substr(operand.operand_value, 3, 1) = char(39)
+	), rhs_symbol_plus_symbol as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         lhs.immediate_value + rhs.immediate_value as immediate_value
+	  from repo_asm_binary_operand_fact operand
+	  join repo_asm_numeric_symbol_value lhs
+	    on lhs.symbol_name = trim(substr(operand.operand_value, 1, instr(operand.operand_value, ' + ') - 1))
+	  join repo_asm_numeric_symbol_value rhs
+	    on rhs.symbol_name = trim(substr(operand.operand_value, instr(operand.operand_value, ' + ') + 3))
+	  where operand.target_isa_id = 1
+	    and operand.operand_index = 1
+	    and operand.operand_value like '% + %'
+	    and trim(substr(operand.operand_value, instr(operand.operand_value, ' + ') + 3)) not like '% + %'
+	    and operand.operand_value not like '% - %'
+	    and operand.operand_value not like '%*%'
+	), rhs_decimal_mul_decimal_add_decimal as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         (cast(trim(substr(expr.product_text, 1, instr(expr.product_text, ' * ') - 1)) as integer)
+	          * cast(trim(substr(expr.product_text, instr(expr.product_text, ' * ') + 3)) as integer))
+	         + cast(expr.add_text as integer) as immediate_value
+	  from (
+	    select operand.*,
+	           trim(substr(operand.operand_value, 1, instr(operand.operand_value, ' + ') - 1)) as product_text,
+	           trim(substr(operand.operand_value, instr(operand.operand_value, ' + ') + 3)) as add_text
+	    from repo_asm_binary_operand_fact operand
+	    where operand.target_isa_id = 1
+	      and operand.operand_index = 1
+	      and operand.operand_value like '% * % + %'
+	      and trim(substr(operand.operand_value, instr(operand.operand_value, ' + ') + 3)) not like '% + %'
+	  ) expr
+	  join repo_asm_binary_operand_fact operand
+	    on operand.repo_file_id = expr.repo_file_id
+	   and operand.function_name = expr.function_name
+	   and operand.line_no = expr.line_no
+	   and operand.operand_index = expr.operand_index
+	  where trim(substr(expr.product_text, 1, instr(expr.product_text, ' * ') - 1)) glob '[0-9]*'
+	    and trim(substr(expr.product_text, 1, instr(expr.product_text, ' * ') - 1)) not glob '*[^0-9]*'
+	    and trim(substr(expr.product_text, instr(expr.product_text, ' * ') + 3)) glob '[0-9]*'
+	    and trim(substr(expr.product_text, instr(expr.product_text, ' * ') + 3)) not glob '*[^0-9]*'
+	    and expr.add_text glob '[0-9]*'
+	    and expr.add_text not glob '*[^0-9]*'
+	), rhs_char_minus_decimal as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         unicode(substr(expr.expression_text, 2, 1))
+	           - cast(trim(substr(expr.expression_text, instr(expr.expression_text, ' - ') + 3)) as integer) as immediate_value
+	  from (
+	    select repo_file_id,
+	           function_name,
+	           line_no,
+	           operand_index,
+	           trim(replace(replace(operand_value, '(', ''), ')', '')) as expression_text
+	    from repo_asm_binary_operand_fact
+	    where target_isa_id = 1
+	      and operand_index = 1
+	  ) expr
+	  join repo_asm_binary_operand_fact operand
+	    on operand.repo_file_id = expr.repo_file_id
+	   and operand.function_name = expr.function_name
+	   and operand.line_no = expr.line_no
+	   and operand.operand_index = expr.operand_index
+	  where length(expr.expression_text) >= 7
+	    and substr(expr.expression_text, 1, 1) = char(39)
+	    and substr(expr.expression_text, 3, 1) = char(39)
+	    and expr.expression_text like char(39) || '_' || char(39) || ' - %'
+	    and trim(substr(expr.expression_text, instr(expr.expression_text, ' - ') + 3)) glob '[0-9]*'
+	    and trim(substr(expr.expression_text, instr(expr.expression_text, ' - ') + 3)) not glob '*[^0-9]*'
+	), rhs_char_minus_decimal_minus_char as (
+	  select operand.repo_file_id,
+	         operand.function_name,
+	         operand.line_no,
+	         unicode(substr(expr.expression_text, 2, 1))
+	           - cast(expr.mid_text as integer)
+	           - unicode(substr(expr.tail_text, 2, 1)) as immediate_value
+	  from (
+	    select repo_file_id,
+	           function_name,
+	           line_no,
+	           operand_index,
+	           trim(substr(rest_text, 1, instr(rest_text, ' - ') - 1)) as mid_text,
+	           trim(substr(rest_text, instr(rest_text, ' - ') + 3)) as tail_text,
+	           expression_text
+	    from (
+	      select repo_file_id,
+	             function_name,
+	             line_no,
+	             operand_index,
+	             trim(replace(replace(operand_value, '(', ''), ')', '')) as expression_text,
+	             trim(substr(trim(replace(replace(operand_value, '(', ''), ')', '')), 7)) as rest_text
+	      from repo_asm_binary_operand_fact
+	      where target_isa_id = 1
+	        and operand_index = 1
+	    )
+	    where rest_text like '% - %'
+	  ) expr
+	  join repo_asm_binary_operand_fact operand
+	    on operand.repo_file_id = expr.repo_file_id
+	   and operand.function_name = expr.function_name
+	   and operand.line_no = expr.line_no
+	   and operand.operand_index = expr.operand_index
+	  where substr(expr.expression_text, 1, 1) = char(39)
+	    and substr(expr.expression_text, 3, 1) = char(39)
+	    and expr.expression_text like char(39) || '_' || char(39) || ' - % - ' || char(39) || '_' || char(39)
+	    and expr.mid_text glob '[0-9]*'
+	    and expr.mid_text not glob '*[^0-9]*'
+	    and length(expr.tail_text) = 3
+	    and substr(expr.tail_text, 1, 1) = char(39)
+	    and substr(expr.tail_text, 3, 1) = char(39)
+	), rhs_value as (
+	  select * from rhs_decimal
+	  union all
+	  select * from rhs_hex
+	  union all
+	  select * from rhs_symbol
+	  union all
+	  select * from rhs_file_symbol_decimal
+	  union all
+	  select * from rhs_file_symbol_hex
+	  union all
+	  select * from rhs_file_symbol_octal
+	  union all
+	  select * from rhs_char
+	  union all
+	  select * from rhs_symbol_plus_symbol
+	  union all
+	  select * from rhs_decimal_mul_decimal_add_decimal
+	  union all
+	  select * from rhs_char_minus_decimal
+	  union all
+	  select * from rhs_char_minus_decimal_minus_char
+	), rhs_unique_value as (
   select repo_file_id,
          function_name,
          line_no,
