@@ -11915,7 +11915,7 @@ from repo_asm_operation operation
 join repo_asm_data_definition_fact definition
   on definition.repo_file_id = operation.repo_file_id
  and replace(definition.label_name, ':', '') = trim(substr(operation.operand_text, instr(operation.operand_text, ',') + 1))
-where operation.op_name in ('mov','lea','push')
+where operation.op_name in ('mov','lea','push','add','sub','cmp')
   and operation.operand_text like '%, %'
   and operation.operand_text not like '%[rel %]%'
 union all
