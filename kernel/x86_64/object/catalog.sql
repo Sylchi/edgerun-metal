@@ -8550,7 +8550,7 @@ insert into arm32_condition_fact(op_name, base_op_name, cond_code) values
   ('mov', 'mov', 14), ('movne', 'mov', 1), ('moveq', 'mov', 0),
   ('cmp', 'cmp', 14), ('add', 'add', 14), ('sub', 'sub', 14),
   ('subs', 'sub', 14), ('and', 'and', 14), ('orr', 'orr', 14),
-  ('bic', 'bic', 14), ('tst', 'tst', 14), ('lsl', 'lsl', 14),
+  ('bic', 'bic', 14), ('mvn', 'mvn', 14), ('tst', 'tst', 14), ('lsl', 'lsl', 14),
   ('lsr', 'lsr', 14), ('ldr', 'ldr', 14), ('str', 'str', 14),
   ('ldrb', 'ldr', 14), ('strb', 'str', 14), ('svc', 'svc', 14);
 
@@ -8635,6 +8635,79 @@ with recursive operation as (
   select split_operand.*,
          tail0 as arg1
   from split_operand
+), arm32_hex_literal_seed as (
+  select distinct lower(trim(replace(tail0, '#', ''))) as token_text,
+         substr(lower(trim(replace(tail0, '#', ''))), 3) as hex_text
+  from split_operand
+  where lower(trim(replace(tail0, '#', ''))) glob '0x[0-9a-f]*'
+    and substr(lower(trim(replace(tail0, '#', ''))), 3) <> ''
+    and substr(lower(trim(replace(tail0, '#', ''))), 3) not glob '*[^0-9a-f]*'
+  union
+  select distinct lower(trim(replace(arg2, '#', ''))) as token_text,
+         substr(lower(trim(replace(arg2, '#', ''))), 3) as hex_text
+  from split_three
+  where lower(trim(replace(arg2, '#', ''))) glob '0x[0-9a-f]*'
+    and substr(lower(trim(replace(arg2, '#', ''))), 3) <> ''
+    and substr(lower(trim(replace(arg2, '#', ''))), 3) not glob '*[^0-9a-f]*'
+  union
+  select distinct lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))) as token_text,
+         substr(lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))), 3) as hex_text
+  from split_three
+  where arg2 like '% #%'
+    and lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))) glob '0x[0-9a-f]*'
+    and substr(lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))), 3) <> ''
+    and substr(lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))), 3) not glob '*[^0-9a-f]*'
+  union
+  select distinct lower(trim(replace(operand_text, '#', ''))) as token_text,
+         substr(lower(trim(replace(operand_text, '#', ''))), 3) as hex_text
+  from operation
+  where lower(trim(replace(operand_text, '#', ''))) glob '0x[0-9a-f]*'
+    and substr(lower(trim(replace(operand_text, '#', ''))), 3) <> ''
+    and substr(lower(trim(replace(operand_text, '#', ''))), 3) not glob '*[^0-9a-f]*'
+), arm32_hex_literal_parse(token_text, hex_text, digit_index, immediate_value) as (
+  select token_text,
+         hex_text,
+         1 as digit_index,
+         0 as immediate_value
+  from arm32_hex_literal_seed
+  union all
+  select token_text,
+         hex_text,
+         digit_index + 1,
+         (immediate_value * 16) + instr('0123456789abcdef', substr(hex_text, digit_index, 1)) - 1
+  from arm32_hex_literal_parse
+  where digit_index <= length(hex_text)
+), arm32_hex_literal_value as (
+  select token_text,
+         immediate_value
+  from arm32_hex_literal_parse
+  where digit_index = length(hex_text) + 1
+), arm32_rotate(rot) as (
+  select 0
+  union all
+  select rot + 1
+  from arm32_rotate
+  where rot < 15
+), arm32_imm8(imm8) as (
+  select 0
+  union all
+  select imm8 + 1
+  from arm32_imm8
+  where imm8 < 255
+), arm32_modified_immediate as (
+  select immediate_value,
+         min((rot << 8) + imm8) as encoded_immediate
+  from (
+    select case
+             when rot = 0 then imm8
+             else (((imm8 >> (rot * 2)) | ((imm8 << (32 - (rot * 2))) & 4294967295)) & 4294967295)
+           end as immediate_value,
+           rot,
+           imm8
+    from arm32_rotate
+    cross join arm32_imm8
+  )
+  group by immediate_value
 ), decimal_immediate as (
   select split_operand.*,
          trim(replace(tail0, '#', '')) as immediate_text,
@@ -8642,12 +8715,18 @@ with recursive operation as (
            when trim(replace(tail0, '#', '')) glob '[0-9]*'
             and trim(replace(tail0, '#', '')) not glob '*[^0-9]*'
              then cast(trim(replace(tail0, '#', '')) as integer)
+           when lower(trim(replace(tail0, '#', ''))) glob '0x[0-9a-f]*'
+            and substr(lower(trim(replace(tail0, '#', ''))), 3) <> ''
+            and substr(lower(trim(replace(tail0, '#', ''))), 3) not glob '*[^0-9a-f]*'
+             then hex_value.immediate_value
            else constant.immediate_value
          end as immediate_value
   from split_operand
   left join arm32_file_constant_value constant
     on constant.repo_file_id = split_operand.repo_file_id
    and constant.symbol_name = trim(replace(tail0, '#', ''))
+  left join arm32_hex_literal_value hex_value
+    on hex_value.token_text = lower(trim(replace(split_operand.tail0, '#', '')))
   where tail0 like '#%'
 ), decimal_three_immediate as (
   select split_three.*,
@@ -8656,12 +8735,18 @@ with recursive operation as (
            when trim(replace(arg2, '#', '')) glob '[0-9]*'
             and trim(replace(arg2, '#', '')) not glob '*[^0-9]*'
              then cast(trim(replace(arg2, '#', '')) as integer)
+           when lower(trim(replace(arg2, '#', ''))) glob '0x[0-9a-f]*'
+            and substr(lower(trim(replace(arg2, '#', ''))), 3) <> ''
+            and substr(lower(trim(replace(arg2, '#', ''))), 3) not glob '*[^0-9a-f]*'
+             then hex_value.immediate_value
            else constant.immediate_value
          end as immediate_value
   from split_three
   left join arm32_file_constant_value constant
     on constant.repo_file_id = split_three.repo_file_id
    and constant.symbol_name = trim(replace(arg2, '#', ''))
+  left join arm32_hex_literal_value hex_value
+    on hex_value.token_text = lower(trim(replace(split_three.arg2, '#', '')))
   where arg2 like '#%'
 ), decimal_shift as (
   select split_three.*,
@@ -8671,12 +8756,18 @@ with recursive operation as (
            when trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) glob '[0-9]*'
             and trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) not glob '*[^0-9]*'
              then cast(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', '')) as integer)
+           when lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))) glob '0x[0-9a-f]*'
+            and substr(lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))), 3) <> ''
+            and substr(lower(trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))), 3) not glob '*[^0-9a-f]*'
+             then hex_value.immediate_value
            else constant.immediate_value
          end as shift_value
   from split_three
   left join arm32_file_constant_value constant
     on constant.repo_file_id = split_three.repo_file_id
    and constant.symbol_name = trim(replace(substr(arg2, instr(arg2, '#') + 1), '#', ''))
+  left join arm32_hex_literal_value hex_value
+    on hex_value.token_text = lower(trim(replace(substr(split_three.arg2, instr(split_three.arg2, '#') + 1), '#', '')))
   where arg2 like '% #%'
 ), arm_dp_imm as (
 	  select decimal_three_immediate.repo_file_id,
@@ -8692,7 +8783,7 @@ with recursive operation as (
   join arm32_condition_fact cond on cond.op_name = decimal_three_immediate.op_name
   join arm32_register_encoding_fact rd on rd.register_name = decimal_three_immediate.arg0
   join arm32_register_encoding_fact rn on rn.register_name = decimal_three_immediate.arg1
-  where decimal_three_immediate.op_name in ('add','sub','subs')
+  where decimal_three_immediate.op_name in ('add','sub','subs','and','orr','bic')
     and decimal_three_immediate.immediate_value is not null
 ), arm_dp_reg as (
   select split_three.repo_file_id,
@@ -8743,6 +8834,19 @@ with recursive operation as (
   join arm32_register_encoding_fact rd on rd.register_name = decimal_immediate.arg0
   where decimal_immediate.op_name in ('mov','movne','moveq')
     and decimal_immediate.immediate_value is not null
+), arm_mvn_imm as (
+  select decimal_immediate.repo_file_id,
+         decimal_immediate.function_name,
+         decimal_immediate.line_no,
+         decimal_immediate.op_name,
+         cond.cond_code,
+         rd.reg_code as rd_code,
+         decimal_immediate.immediate_value
+  from decimal_immediate
+  join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
+  join arm32_register_encoding_fact rd on rd.register_name = decimal_immediate.arg0
+  where decimal_immediate.op_name = 'mvn'
+    and decimal_immediate.immediate_value is not null
 ), arm_mov_reg as (
   select split_two.repo_file_id,
          split_two.function_name,
@@ -8761,13 +8865,14 @@ with recursive operation as (
          decimal_immediate.function_name,
          decimal_immediate.line_no,
          decimal_immediate.op_name,
+         cond.base_op_name,
          cond.cond_code,
          rn.reg_code as rn_code,
          decimal_immediate.immediate_value
   from decimal_immediate
   join arm32_condition_fact cond on cond.op_name = decimal_immediate.op_name
   join arm32_register_encoding_fact rn on rn.register_name = decimal_immediate.arg0
-  where decimal_immediate.op_name = 'cmp'
+  where decimal_immediate.op_name in ('cmp','tst')
     and decimal_immediate.immediate_value is not null
 ), arm_cmp_reg as (
   select split_two.repo_file_id,
@@ -8892,35 +8997,48 @@ with recursive operation as (
   select operation.repo_file_id,
          operation.function_name,
          operation.line_no,
-         cast(trim(replace(operation.operand_text, '#', '')) as integer) as immediate_value
+         case
+           when trim(replace(operation.operand_text, '#', '')) glob '[0-9]*'
+            and trim(replace(operation.operand_text, '#', '')) not glob '*[^0-9]*'
+             then cast(trim(replace(operation.operand_text, '#', '')) as integer)
+           else hex_value.immediate_value
+         end as immediate_value
   from operation
+  left join arm32_hex_literal_value hex_value
+    on hex_value.token_text = lower(trim(replace(operation.operand_text, '#', '')))
   where operation.op_name = 'svc'
     and operation.operand_text like '#%'
-    and trim(replace(operation.operand_text, '#', '')) glob '[0-9]*'
-    and trim(replace(operation.operand_text, '#', '')) not glob '*[^0-9]*'
 ), generated as (
-  select repo_file_id,
-         function_name,
-         line_no,
-         'param_arm32_' || op_name || '_imm8' as parametric_rule_name,
-         (cond_code << 28) + (1 << 25) + (13 << 21) + (rd_code << 12) + immediate_value as fixed_word
-  from arm_mov_imm
-  where immediate_value between 0 and 255
-  union all
-  select repo_file_id,
-         function_name,
-         line_no,
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_' || op_name || '_modified_imm' as parametric_rule_name,
+	         (cond_code << 28) + (1 << 25) + (13 << 21) + (rd_code << 12) + encoded_immediate as fixed_word
+	  from arm_mov_imm
+	  join arm32_modified_immediate using (immediate_value)
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_mvn_modified_imm' as parametric_rule_name,
+	         (cond_code << 28) + (1 << 25) + (15 << 21) + (rd_code << 12) + encoded_immediate as fixed_word
+	  from arm_mvn_imm
+	  join arm32_modified_immediate using (immediate_value)
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
          'param_arm32_' || op_name || '_reg' as parametric_rule_name,
          (cond_code << 28) + (13 << 21) + (rd_code << 12) + rm_code as fixed_word
   from arm_mov_reg
   union all
-  select repo_file_id,
-         function_name,
-         line_no,
-         'param_arm32_cmp_imm8' as parametric_rule_name,
-         (cond_code << 28) + (1 << 25) + (10 << 21) + (1 << 20) + (rn_code << 16) + immediate_value as fixed_word
-  from arm_cmp_imm
-  where immediate_value between 0 and 255
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_' || op_name || '_modified_imm' as parametric_rule_name,
+	         (cond_code << 28) + (1 << 25) + ((case base_op_name when 'cmp' then 10 when 'tst' then 8 end) << 21) + (1 << 20) + (rn_code << 16) + encoded_immediate as fixed_word
+	  from arm_cmp_imm
+	  join arm32_modified_immediate using (immediate_value)
   union all
   select repo_file_id,
          function_name,
@@ -8929,14 +9047,14 @@ with recursive operation as (
          (cond_code << 28) + ((case base_op_name when 'cmp' then 10 when 'tst' then 8 end) << 21) + (1 << 20) + (rn_code << 16) + rm_code as fixed_word
   from arm_cmp_reg
   union all
-  select repo_file_id,
-         function_name,
-         line_no,
-         'param_arm32_' || op_name || '_imm8' as parametric_rule_name,
-         (cond_code << 28) + (1 << 25) + ((case base_op_name when 'add' then 4 when 'sub' then 2 end) << 21)
-           + (case when op_name = 'subs' then (1 << 20) else 0 end) + (rn_code << 16) + (rd_code << 12) + immediate_value as fixed_word
-  from arm_dp_imm
-  where immediate_value between 0 and 255
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_arm32_' || op_name || '_modified_imm' as parametric_rule_name,
+	         (cond_code << 28) + (1 << 25) + ((case base_op_name when 'add' then 4 when 'sub' then 2 when 'and' then 0 when 'orr' then 12 when 'bic' then 14 end) << 21)
+	           + (case when op_name = 'subs' then (1 << 20) else 0 end) + (rn_code << 16) + (rd_code << 12) + encoded_immediate as fixed_word
+	  from arm_dp_imm
+	  join arm32_modified_immediate using (immediate_value)
   union all
   select repo_file_id,
          function_name,
