@@ -4034,10 +4034,10 @@ select repo_file.path,
        repo_file.repo_file_id,
        repo_file.file_kind,
        repo_file.byte_len,
-       count(line.line_no) as significant_line_count,
+       count(distinct line.line_no) as significant_line_count,
        count(distinct fact_line.line_no) as fact_backed_line_count,
-       count(line.line_no) - count(distinct fact_line.line_no) as remaining_line_count,
-       (100 * count(distinct fact_line.line_no)) / count(line.line_no) as fact_backed_percent
+       count(distinct line.line_no) - count(distinct fact_line.line_no) as remaining_line_count,
+       (100 * count(distinct fact_line.line_no)) / count(distinct line.line_no) as fact_backed_percent
 from repo_file
 join app_zig_significant_line line using (repo_file_id)
 left join app_zig_fact_line fact_line
@@ -4919,9 +4919,9 @@ with binary_operand as (
 	         dst.requires_rex as dst_requires_rex
 	  from normalized
 	  join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
-	  where normalized.op_name in ('shl','shr','sar','ror')
+	  where normalized.op_name in ('shl','shr','sar','ror','rol')
 	    and normalized.rhs_value = 'cl'
-	    and dst.width_bits in (8,32,64)
+	    and dst.width_bits in (8,16,32,64)
 	), reg_imm as (
   select normalized.*,
          dst.register_name as dst_register_name,
@@ -4931,11 +4931,45 @@ with binary_operand as (
          cast(normalized.rhs_value as integer) as immediate_value
   from normalized
   join x86_register_encoding_fact dst on dst.register_name = normalized.lhs_value
-	  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror','bt','bts')
-	    and dst.width_bits in (32,64)
+	  where normalized.op_name in ('mov','add','sub','cmp','and','or','xor','shl','shr','sar','ror','rol','bt','bts')
+	    and (dst.width_bits in (32,64)
+	         or (normalized.op_name in ('shl','shr','sar','ror','rol') and dst.width_bits = 16))
     and (normalized.rhs_value glob '[0-9]*'
          or normalized.rhs_value glob '-[0-9]*')
     and replace(normalized.rhs_value, '-', '') not glob '*[^0-9]*'
+	), pxor_xmm_reg_reg as (
+	  select normalized.*,
+	         cast(substr(normalized.lhs_value, 4) as integer) as dst_reg_code,
+	         cast(substr(normalized.rhs_value, 4) as integer) as src_reg_code
+	  from normalized
+	  where normalized.op_name = 'pxor'
+	    and normalized.lhs_value glob 'xmm[0-9]*'
+	    and normalized.rhs_value glob 'xmm[0-9]*'
+	    and substr(normalized.lhs_value, 4) not glob '*[^0-9]*'
+	    and substr(normalized.rhs_value, 4) not glob '*[^0-9]*'
+	    and cast(substr(normalized.lhs_value, 4) as integer) between 0 and 15
+	    and cast(substr(normalized.rhs_value, 4) as integer) between 0 and 15
+	), fixed_string_op as (
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         op_name,
+	         operand_text,
+	         case
+	           when op_name = 'stosb' and coalesce(operand_text, '') = '' then 'aa'
+	           when op_name = 'sfence' and coalesce(operand_text, '') = '' then '0faef8'
+	           when op_name = 'repe' and operand_text = 'cmpsb' then 'f3a6'
+	           when op_name = 'repe' and operand_text = 'scasb' then 'f3ae'
+	           when op_name = 'repe' and operand_text = 'scasd' then 'f3af'
+	           when op_name = 'repe' and operand_text = 'scasq' then 'f348af'
+	         end as fixed_hex
+	  from repo_asm_rule_match
+	  where target_isa_id = 1
+	    and line_kind = 3
+	    and encoding_id is null
+	    and rule_name is not null
+	    and ((op_name in ('stosb','sfence') and coalesce(operand_text, '') = '')
+	         or (op_name = 'repe' and operand_text in ('cmpsb','scasb','scasd','scasq')))
 	), unary_reg as (
 	  select repo_asm_rule_match.repo_file_id,
 	         repo_asm_rule_match.function_name,
@@ -5103,6 +5137,29 @@ with binary_operand as (
 	  select repo_file_id,
 	         function_name,
 	         line_no,
+	         'param_x86_pxor_xmm_reg_reg' as parametric_rule_name,
+	         (
+	           '66'
+	           || case
+	                when dst_reg_code >= 8 or src_reg_code >= 8 then printf('%02x', 64 + case when dst_reg_code >= 8 then 4 else 0 end + case when src_reg_code >= 8 then 1 else 0 end)
+	                else ''
+	              end
+	           || '0fef'
+	           || printf('%02x', 192 + ((dst_reg_code & 7) << 3) + (src_reg_code & 7))
+	         ) as fixed_hex
+	  from pxor_xmm_reg_reg
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
+	         'param_x86_' || op_name || '_fixed' as parametric_rule_name,
+	         fixed_hex
+	  from fixed_string_op
+	  where fixed_hex is not null
+	  union all
+	  select repo_file_id,
+	         function_name,
+	         line_no,
 	         'param_x86_mov_reg_imm32' as parametric_rule_name,
          (
            case
@@ -5153,11 +5210,16 @@ with binary_operand as (
          (
            case
              when width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 1 else 0 end)
+             when width_bits = 16 then '66' || case
+                                           when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+                                           else ''
+                                         end
              when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
              else ''
            end
            || 'c1'
            || printf('%02x', 192 + ((case op_name
+                                      when 'rol' then 0
                                       when 'ror' then 1
                                       when 'shl' then 4
                                       when 'shr' then 5
@@ -5166,7 +5228,7 @@ with binary_operand as (
            || printf('%02x', immediate_value & 255)
          ) as fixed_hex
 	  from reg_imm
-	  where op_name in ('shl','shr','sar','ror')
+	  where op_name in ('shl','shr','sar','ror','rol')
 	    and immediate_value between 0 and 255
 	  union all
 	  select repo_file_id,
@@ -5194,11 +5256,16 @@ with binary_operand as (
 	         (
 	           case
 	             when width_bits = 64 then printf('%02x', 72 + case when dst_reg_code >= 8 then 1 else 0 end)
+	             when width_bits = 16 then '66' || case
+	                                           when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
+	                                           else ''
+	                                         end
 	             when dst_requires_rex = 1 then printf('%02x', 64 + case when dst_reg_code >= 8 then 1 else 0 end)
 	             else ''
 	           end
 	           || case when width_bits = 8 then 'd2' else 'd3' end
 	           || printf('%02x', 192 + ((case op_name
+	                                      when 'rol' then 0
 	                                      when 'ror' then 1
 	                                      when 'shl' then 4
 	                                      when 'shr' then 5
